@@ -7,6 +7,7 @@ export function SnakeCommissionerTrade(props: {
   teams: readonly SnakeTradeGuideTeam[];
   ownedPicksByTeamId: Readonly<Record<string, readonly number[]>>;
   sessionRevision: number;
+  showHelp?: boolean;
   onAsk: (buyerTeamId: string, targetPick: number) => AskedPickGuideResult | Promise<AskedPickGuideResult>;
   onExecute: (proposal: SnakeGuidePackage) => ExecutedAskedPickTrade | Promise<ExecutedAskedPickTrade>;
 }) {
@@ -64,7 +65,7 @@ export function SnakeCommissionerTrade(props: {
     <section aria-label="Commissioner trade">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMMISSIONER</p>
       <h2 className="ballpark-title mt-1 text-2xl">TRADE PICKS</h2>
-      <p className="mt-2 text-sm">BOTH GMS AGREE IN THE ROOM. THE COMMISSIONER CHECKS THE GUIDE, THEN MAKES THE TRADE OR SAYS NO.</p>
+      {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">BOTH GMS AGREE IN THE ROOM. THE COMMISSIONER CHECKS THE GUIDE, THEN MAKES THE TRADE OR SAYS NO.</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-bold">BUYING CLUB
           <select aria-label="BUYING CLUB" className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={buyerTeamId} onChange={(event) => { setBuyerTeamId(event.target.value); resetPackage(); }}>

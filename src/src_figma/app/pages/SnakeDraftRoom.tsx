@@ -277,7 +277,7 @@ function FarmSnakeRoom() {
       livePickMoved: before !== after,
       receipts: [proposal.buyerTeamId, proposal.sellerTeamId].map((teamId) => ({
         teamId,
-        text: `THE FARM PICK TRADE IS RECORDED — SLOT SALARIES STAY WITH THE PICKS.`,
+        text: `THE FARM PICK TRADE IS RECORDED.`,
       })),
     };
   }, [cards.length, farmBudgets, persist, session]);
@@ -301,8 +301,9 @@ function FarmSnakeRoom() {
     paused={Boolean(session.paused)} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
     practiceMode={false}
     privateDesk={<FarmPrivateDesk cards={cards} selectedId={selected?.id ?? null} slotPick={currentSlot.pick} slotSalary={farmPickSalary(session, currentSlot.pick)} farmMoneyLeft={(farmBudgets[currentTeam?.id ?? ''] ?? 0) - teamSpent} advisorLog={farmAdvisorLogBySeat[currentTeam?.id ?? ''] ?? []} onChoose={setSelectedId} />}
-    tradeGuide={<SnakeTradeGuide teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} pickValueChart={pickValueChart} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} />}
-    commissionerTrade={<SnakeCommissionerTrade teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} ownedPicksByTeamId={ownedPicksByTeamId} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} onExecute={executeTrade} />}
+    tradeGuide={(showHelp) => <SnakeTradeGuide showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} pickValueChart={pickValueChart} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} />}
+    commissionerTrade={(showHelp) => <SnakeCommissionerTrade showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} ownedPicksByTeamId={ownedPicksByTeamId} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} onExecute={executeTrade} />}
+    roomHelpNotes={['SLOT SALARIES STAY WITH THE PICKS.']}
     onPauseChange={(paused) => { void persist({ ...session, paused, revision: (session.revision ?? 0) + 1 }); }}
     onRecordPick={recordPick}
     onCorrectLatest={() => { void persist(restoreLatestSnakeCorrection(session)); }}
@@ -501,7 +502,6 @@ function MlbSnakeDraftRoom() {
       position: player.primaryPosition,
       consequence: blockReason ?? `AFTER THIS PICK AND A LEGAL FINISH: $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`,
       blockReason,
-      privateNote: 'THIS PLAYER CAME FROM YOUR SAVED BOARD ORDER.',
     };
   }, [candidateId, currentLocked, currentTeam, leagueTeams.length, playerById, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
 
@@ -896,11 +896,11 @@ function MlbSnakeDraftRoom() {
       practiceMode={session.workflowVersion.toLowerCase().includes('practice')}
       privateSnipeKey={privateSnipeKey}
       dangerKey={candidate?.blockReason ? `${candidate.id}:${candidate.blockReason}` : null}
-      privateDesk={deskState?.board ? (
+      privateDesk={deskState?.board ? ((showHelp) => (
         <PrivateDesk
           candidates={deskState.candidates}
-          rankings={deskState.board.rankings.byPosition ?? {}}
-          boardSlots={deskState.board.slots}
+          rankings={deskState.board!.rankings.byPosition ?? {}}
+          boardSlots={deskState.board!.slots}
           brokenSlots={deskState.brokenSlots}
           planBill={deskState.planBill}
           advisorLog={[
@@ -910,12 +910,14 @@ function MlbSnakeDraftRoom() {
           taxCoreRows={deskState.taxCoreRows}
           slotDepth={deskState.slotDepth}
           whatIf={whatIf?.view ?? null}
+          showHelp={showHelp}
           resolveLegalFinishLine={deskState.legalFinishLineForCandidate}
           onReorder={(position, orderedIds) => { void reorderRanking(position, orderedIds); }}
           onStartWhatIf={startWhatIf}
           onKeepWhatIf={() => { void keepWhatIf(); }}
           onRevertWhatIf={() => setWhatIf(null)}
           tradeGuide={<SnakeTradeGuide
+            showHelp={showHelp}
             teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
             fixedBuyerTeamId={currentTeam?.id ?? null}
             pickValueChart={pickValueChart}
@@ -923,20 +925,23 @@ function MlbSnakeDraftRoom() {
             onAsk={askTradeGuide}
           />}
         />
-      ) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
-      tradeGuide={<SnakeTradeGuide
+      )) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
+      tradeGuide={(showHelp) => <SnakeTradeGuide
+        showHelp={showHelp}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
         pickValueChart={pickValueChart}
         sessionRevision={session.revision ?? 0}
         onAsk={askTradeGuide}
       />}
-      commissionerTrade={<SnakeCommissionerTrade
+      commissionerTrade={(showHelp) => <SnakeCommissionerTrade
+        showHelp={showHelp}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
         ownedPicksByTeamId={ownedPicksByTeamId}
         sessionRevision={session.revision ?? 0}
         onAsk={askTradeGuide}
         onExecute={executeTrade}
       />}
+      roomHelpNotes={candidate ? ['THIS PLAYER CAME FROM YOUR SAVED BOARD ORDER.'] : []}
       companionApproval={<CompanionApprovalCard
         session={session}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}

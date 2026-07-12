@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
@@ -299,8 +299,8 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     if (!input.savedDraftChecked) return ['Checking for a saved draft.'];
     if (input.savedDraftLookupError) return [input.savedDraftLookupError];
     if (input.hasSavedDraft) return [];
-    if (!pool?.locked) return ['Choose each player version, then LOCK POOL. The room check runs on those locked players and prices.'];
-    if (checking) return ['Checking whether every club can finish a legal 22 with its chosen team identity.'];
+    if (!pool?.locked) return [];
+    if (checking) return ['CHECKING THE ROOM…'];
     if (!proof) return ['The snake room check did not finish.'];
     if (!proof.feasible) return [proof.message];
     if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];
@@ -402,11 +402,20 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
   };
 }
 
-export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled }: {
+function HelpNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="mb-4 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs leading-relaxed text-[var(--ballpark-chalk)]/75">
+      {children}
+    </div>
+  );
+}
+
+export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHelp = false }: {
   adapter: ReturnType<typeof useSnakeDraftSetupAdapter>;
   teams: readonly Team[];
   locked: boolean;
   disabled: boolean;
+  showHelp?: boolean;
 }) {
   const teamById = new Map(teams.map((team) => [team.id, team]));
   const turn = adapter.order.length > 1
@@ -417,7 +426,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled }: {
       <section className="ballpark-panel" aria-label="Snake versions">
         <div className="ballpark-panel-strip"><strong>5 · VERSIONS</strong></div>
         <div className="space-y-3 p-4">
-          <p className="text-sm font-bold">Pick one card for each real person before you lock the pool.</p>
+          {showHelp ? <HelpNote>Pick one card for each real person before you lock the pool. Choose each player version, then LOCK POOL. The room check runs on those locked players and prices.</HelpNote> : null}
           {adapter.groups.filter(({ cards }) => cards.length > 1).map(({ groupId, cards }) => (
             <label key={groupId} className="grid gap-2 sm:grid-cols-[1fr_240px] sm:items-center">
               <span className="font-bold">{fullName(cards[0]).toUpperCase()}</span>
@@ -470,14 +479,15 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled }: {
             {adapter.order.map((teamId, index) => <button key={teamId} type="button" disabled={disabled} onClick={() => adapter.tapOrder(teamId)} aria-pressed={adapter.swapFirst === teamId} className="border-4 border-[var(--ballpark-panel-border)] p-3 text-left font-bold disabled:opacity-45">{index + 1}. {teamById.get(teamId)?.name.toUpperCase() ?? teamId}</button>)}
           </div>
           <p className="font-bold text-[var(--ballpark-brass)]">R1: 1→{adapter.order.length} · R2: {adapter.order.length}→1</p>
-          {turn ? <p className="text-sm font-bold">{turn}</p> : null}
+          {showHelp && turn ? <HelpNote>{turn}</HelpNote> : null}
         </div>
       </section>
 
       <section className="ballpark-panel" aria-label="Snake readiness">
         <div className="ballpark-panel-strip"><strong>8 · READINESS</strong></div>
         <div className="space-y-2 p-4" aria-live="polite">
-          <p className="font-bold">{adapter.checking ? 'CHECKING…' : adapter.proof?.message ?? 'LOCK THE POOL TO CHECK THE ROOM.'}</p>
+          <p className="font-bold">{adapter.checking ? 'CHECKING THE ROOM…' : adapter.proof?.message ?? 'LOCK THE POOL TO CHECK THE ROOM.'}</p>
+          {showHelp ? <HelpNote>Checking whether every club can finish a legal 22 with its chosen team identity.</HelpNote> : null}
           {adapter.readinessReasons.map((reason) => <p key={reason} className="text-sm text-[var(--ballpark-warn-text)]">• {reason}</p>)}
         </div>
       </section>

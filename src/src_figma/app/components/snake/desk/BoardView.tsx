@@ -11,6 +11,7 @@ export function BoardView(props: {
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   resolveLegalFinishLine?: (candidateId: string) => string;
+  showHelp?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
@@ -36,7 +37,7 @@ export function BoardView(props: {
             <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
             <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
           </div>
-          <p className="mt-2 text-xs font-bold">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p>
+          {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p> : null}
         </div>
       )}
       <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
