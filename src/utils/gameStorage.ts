@@ -575,6 +575,8 @@ export interface CompletedGameRecord {
   gameId: string;
   date: number;
   completedCivilDate?: string;
+  /** Dev-only provenance. Absent means a normal hand-scored archive (including legacy rows). */
+  devSynthetic?: boolean;
   seasonId?: string;
   statsScopeId?: string;
   competitionType?: CompetitionType;
@@ -808,6 +810,7 @@ interface ArchiveCompletedGameContext {
   aggregationStatus?: CompletedGameRecord["aggregationStatus"];
   aggregationError?: string;
   completedCivilDate?: string;
+  devSynthetic?: boolean;
   livingSeasonProcessing?: LivingSeasonProcessing;
 }
 
@@ -931,6 +934,7 @@ export async function archiveCompletedGame(
       context?.completedCivilDate ??
       gameState.completedCivilDate ??
       getDeviceLocalCivilDate(),
+    devSynthetic: context?.devSynthetic,
     seasonId,
     statsScopeId: context?.statsScopeId ?? gameState.statsScopeId ?? seasonId,
     competitionType: context?.competitionType ?? gameState.competitionType,

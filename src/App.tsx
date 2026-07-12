@@ -256,6 +256,11 @@ const Phase2ActivationConsole = lazy(() =>
     default: module.Phase2ActivationConsole,
   })),
 );
+const LivingSeasonTestDrive = lazy(() =>
+  import("./src_figma/app/pages/LivingSeasonTestDrive").then((module) => ({
+    default: module.LivingSeasonTestDrive,
+  })),
+);
 const enablePreviewRoutes = import.meta.env.DEV || import.meta.env.MODE === "test";
 const enableFranchiseVisualSmokePreviewRoute =
   import.meta.env.DEV || import.meta.env.MODE === "test";
@@ -483,6 +488,10 @@ function App() {
             <Route
               path="/__preview/phase2-activation"
               element={<Phase2ActivationConsole />}
+            />
+            <Route
+              path="/__preview/living-season-test-drive"
+              element={<LivingSeasonTestDrive />}
             />
           </>
         ) : null}
