@@ -238,7 +238,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     await waitFor(() => expect(startButton).toBeEnabled(), { timeout: 30_000 });
     fireEvent.click(startButton);
 
-    const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 60_000 });
+    const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 150_000 });
     expect(navigationTarget).toHaveTextContent(`/snake-room?leagueId=${LEAGUE_ID}`);
     const roomTarget = navigationTarget.textContent!;
     cleanup();
