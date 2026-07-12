@@ -389,3 +389,29 @@ exit 0
    `hasOpenRoom` so a phone signed in BEFORE the main device opens the room flips from "NO OPEN
    SNAKE ROOM" to ready without a manual reload.
 Verified: tsc clean; SyncModal + companion suites 17/17 green post-edit.
+
+## AUDIT VERDICT (opus, independent, 2026-07-12) — APPROVE-WITH-NOTES
+
+Re-ran self: tsc exit 0; syncEngine.dynamicElimination 84/84; companion+SyncModal 17/17;
+snakeRoomPersistence 3/3. Auth gate fail-closed and race-free (verified). Clobber fix correct:
+zero raw whole-session writes in SnakeCompanion.tsx; patchMlbDraftSessionSeatBoard replaces only
+seatBoards[teamId], board-rev-only check, carries fields forward; board auth derives teamId from
+the device's own approved claim (A cannot write B; unapproved rejected).
+
+NOTE 1 (primary, non-blocking): the two-origin test (syncEngine.dynamicElimination.test.ts:1098-1310)
+did NOT discriminate the field-patch fix — it pulled before the phone's board write, so a whole-row
+save converged identically. Proven empirically by the auditor (mutation still passed). Real proof
+lives in snakeRoomPersistence.test.ts:146-181 (discriminating) + zero-raw-writes grep.
+NOTE 2: LoginForm extraction adds role="alert" + try/finally vs old inline form — inert for SyncModal,
+not strictly byte-identical on the error path. Accepted.
+NOTE 3: companionModel.ts updateApprovedCompanionBoard now orphaned (test-only) — cleanup candidate.
+
+Merge-safe. JK's real-phone walk remains the acceptance gate.
+
+## CAPTAIN RESOLUTION OF NOTE 1 (Fable, 2026-07-12)
+
+Strengthened the two-origin test: the board payload now comes from the phone's STALE pre-pick UI
+snapshot (the exact shape the old code path wrote), so the patch's internal fresh re-read is what
+carries the main pick forward. Captain mutation-verified: swapping the patch for a whole-session
+save from that snapshot FAILS the test (sync push rejects/converges wrong); reverting passes 84/84.
+The centerpiece test now discriminates the fix.

@@ -1259,8 +1259,13 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(phoneAfterPull?.completedPicks).toEqual([
       expect.objectContaining({ playerId: "player-main-pick" }),
     ]);
-    const phoneBoard = phoneAfterPull?.seatBoards?.["team-a"];
+    // Discriminator: the board payload deliberately comes from the phone's STALE
+    // UI snapshot (pre-pick), exactly as the old whole-session save path would have
+    // used it. The patch's internal fresh re-read must carry the main pick forward;
+    // a whole-session save built from this snapshot drops the pick and fails below.
+    const phoneBoard = stalePhoneSession.seatBoards?.["team-a"];
     expect(phoneBoard?.revision).toBe(1);
+    expect(phoneAfterPull?.seatBoards?.["team-a"]?.revision).toBe(1);
     await storage.patchMlbDraftSessionSeatBoard({
       leagueId: "companion-league",
       seasonNumber: 1,
