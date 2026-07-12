@@ -6,9 +6,9 @@ import {
 } from "../../../engines/auctionReservePrice";
 
 export function mlbDraftRouteForFormat(
-  _format: LeagueTemplate["draftFormat"],
-): "/league-builder/auction-draft" {
-  return "/league-builder/auction-draft";
+  format: LeagueTemplate["draftFormat"],
+): "/league-builder/auction-draft" | "/snake-setup" {
+  return format === "snake" ? "/snake-setup" : "/league-builder/auction-draft";
 }
 
 export const draftRouteForFormat = mlbDraftRouteForFormat;

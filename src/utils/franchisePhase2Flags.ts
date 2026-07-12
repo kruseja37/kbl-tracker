@@ -145,7 +145,7 @@ export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean
 
 // CONTRACT_SNAKE_POC_2026-07-09: house Phase-2 activation pattern, deliberately default ON for
 // JK's isolated viability test. Persisted/global activation and the test override still win.
-export const SNAKE_DRAFT_POC_ENABLED_DEFAULT = true;
+export const SNAKE_DRAFT_POC_ENABLED_DEFAULT = false;
 
 let snakeDraftPocEnabledOverride: boolean | null = null;
 
