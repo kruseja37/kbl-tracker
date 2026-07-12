@@ -300,7 +300,7 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     if (input.savedDraftLookupError) return [input.savedDraftLookupError];
     if (input.hasSavedDraft) return [];
     if (!pool?.locked) return [];
-    if (checking) return ['CHECKING THE ROOM…'];
+    if (checking) return [];
     if (!proof) return ['The snake room check did not finish.'];
     if (!proof.feasible) return [proof.message];
     if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];

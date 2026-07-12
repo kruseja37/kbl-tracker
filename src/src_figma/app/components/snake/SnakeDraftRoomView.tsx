@@ -300,7 +300,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                   <p className={`mb-3 border-4 p-3 font-bold ${props.candidate.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>
                     {props.candidate.consequence}
                   </p>
-                  <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p>
+                  {props.candidate.privateNote ? <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p> : null}
                   {!props.candidate.blockReason && !props.paused && (
                     <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mb-3" onClick={() => { reveal.cover(); dispatch({ type: 'ARM', candidateId: props.candidate!.id }); }}>
                       COVER &amp; ARM
