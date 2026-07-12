@@ -89,7 +89,9 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | 'COMPANIONS' | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedHold = useRef(false);
+  const completionRequested = useRef(false);
   const armedCandidate = useRef<SnakeReviewCandidate | null>(null);
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
@@ -110,11 +112,28 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     holdTimer.current = null;
     completedHold.current = false;
   };
+  const cancelAdvance = () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    advanceTimer.current = null;
+  };
 
   useEffect(() => {
-    if (props.paused) cancelHold();
+    if (props.paused) {
+      cancelHold();
+      cancelAdvance();
+    }
     dispatch({ type: props.paused ? 'PAUSE' : 'RESUME' });
   }, [props.paused]);
+
+  useEffect(() => {
+    cancelAdvance();
+    if (state.phase !== 'RECORDED' || state.paused || props.paused || props.currentPickIndex >= props.order.length) return;
+    advanceTimer.current = setTimeout(() => {
+      advanceTimer.current = null;
+      dispatch({ type: 'ADVANCE', candidateId: props.candidate?.id ?? null });
+    }, 1_200);
+    return cancelAdvance;
+  }, [props.candidate?.id, props.currentPickIndex, props.order.length, props.paused, state.paused, state.phase]);
 
   useEffect(() => {
     armedCandidate.current = null;
@@ -126,8 +145,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
     if (nextRevision !== priorLivePickMoveRevision.current) {
-      cancelHold();
-      dispatch({ type: 'LIVE_PICK_MOVED' });
+      // A recorded pick is already persisted and latched for the public beat.
+      // A trade of the *next* live pick must not cancel that beat's scheduled
+      // advance, while a move during the gavel ritual still invalidates it.
+      if (stateRef.current.phase !== 'RECORDED') {
+        cancelHold();
+        cancelAdvance();
+        dispatch({ type: 'LIVE_PICK_MOVED' });
+      }
     }
     priorLivePickMoveRevision.current = nextRevision;
   }, [props.livePickMoveRevision, props.tradeRevision]);
@@ -144,7 +169,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     props.onPrivateSeatRevealedChange?.(reveal.revealed);
   }, [props.onPrivateSeatRevealedChange, reveal.revealed]);
 
-  useEffect(() => () => cancelHold(), []);
+  useEffect(() => () => {
+    cancelHold();
+    cancelAdvance();
+  }, []);
+
+  useEffect(() => {
+    if (props.currentPickIndex < props.order.length) completionRequested.current = false;
+  }, [props.currentPickIndex, props.order.length]);
 
   const selectLens = (teamId: string) => {
     setLensId(teamId);
@@ -154,6 +186,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const requestPauseChange = () => {
     if (!props.paused) {
       cancelHold();
+      cancelAdvance();
       dispatch({ type: 'PAUSE' });
     } else {
       dispatch({ type: 'RESUME' });
@@ -373,12 +406,15 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               )}
               {state.phase === 'ANNOUNCE' && <div className="mt-4 h-4 w-full border-2 border-current"><div className="h-full animate-[snakeHold_1s_linear_forwards] bg-current" /></div>}
               {state.phase === 'RECORDED' && (
-                <button className="ballpark-press-button ballpark-press-lg mt-7 border-current bg-black/30" onClick={() => {
-                  dispatch({ type: 'ADVANCE', candidateId: props.candidate?.id ?? null });
-                  if (props.currentPickIndex >= props.order.length) void props.onDraftComplete?.();
-                }}>
-                  ADVANCE TO NEXT PICK
-                </button>
+                props.currentPickIndex >= props.order.length ? (
+                  <button className="ballpark-press-button ballpark-press-lg mt-7 border-current bg-black/30" onClick={() => {
+                    if (completionRequested.current) return;
+                    completionRequested.current = true;
+                    void props.onDraftComplete?.();
+                  }}>
+                    VIEW DRAFT RECAP
+                  </button>
+                ) : null
               )}
             </div>
           )}

@@ -42,3 +42,35 @@ Final verification:
 - Whole snake production-path pronoun/theme grep: clean.
 
 Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate and will occur after the complete mock-draft program is assembled.
+
+## Slice 1B — final recap and durable handoff
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`
+
+Built:
+
+- Auto-advance after the non-final recorded-pick beat; no manual next-pick control.
+- Final MLB/farm picks stop at `VIEW DRAFT RECAP`.
+- Completed saved sessions reopen directly on the recap after reload.
+- Shared public recap lists every team and persisted pick with team branding, roster count, salary, tax, and all-in truth; farm omits tax and hidden prospect detail.
+- Explicit `CONFIRM MLB DRAFT` and `CONFIRM FARM DRAFT` gates before existing roster commit functions run.
+- MLB success routes to Scout Hire; farm success routes to Staff Hire; failure stays retryable and does not navigate.
+- Concurrent confirmation is locked to one in-flight commit.
+- Missing legacy money values display as unknown, not fabricated `$0`; explicit zero and signed negative tax remain exact.
+
+Independent audit findings fixed:
+
+1. A trade of the next live pick during the recorded beat canceled the auto-advance timer but left the reducer latched in `RECORDED`, creating a permanent dead end.
+2. Undefined legacy salary/tax values were reduced into false `$0` totals.
+
+Final verification:
+
+- View/recap/completion gate: 3 files / 25 tests passed.
+- Real setup -> room -> non-default gavel integration: 2 tests passed in 7.2 seconds on the independent quiet run. Two prior loaded-machine attempts timed out before entering any 1B code.
+- Draft pipeline + zero-row franchise initialization + Living Season schedule affordances: 3 files / 28 tests passed.
+- Route/Scout Hire/Franchise Setup gate: 3 files / 37 tests passed.
+- Performance/private-desk gate: 2 files / 5 tests passed; 250-player/8-club reveal measured 356 ms.
+- Production build: passed after audited fixes.
+- `git diff --check`: clean.
+
+Status: **INDEPENDENTLY APPROVED**. The remaining approved board, roster-intelligence, chemistry, team-first, farm-parity, and manifest slices are not claimed complete here.

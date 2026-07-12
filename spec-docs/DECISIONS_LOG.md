@@ -7,6 +7,10 @@
 
 ## July 2026
 
+### 2026-07-12 (snake completion law): recorded beat auto-advances; final pick stops at a durable recap and explicit roster commit
+
+**The ruling:** every non-final snake pick displays its recorded-pick beat and then advances automatically; there is no redundant manual next-pick button. The final MLB and farm picks never auto-advance. They stop at `VIEW DRAFT RECAP`, and the recap is recoverable directly from the completed saved session after reload. League Builder rosters are not written merely by rendering the recap: `CONFIRM MLB DRAFT` commits and routes to Scout Hire, while `CONFIRM FARM DRAFT` commits and routes to Staff Hire. A failed commit stays on a retryable recap and never navigates. **Rationale:** the draft ceremony remains readable without turning every pick into extra tapping, and finalization can no longer be lost in React-only state or silently mutate rosters before the commissioner confirms what was drafted.
+
 ### 2026-07-12 (draft-to-franchise schedule law): no schedule is required to finish the draft or launch a franchise
 
 **JK's ruling:** for mock-draft testing and the real product path, the MLB and farm drafts must be allowed to finish with no schedule present. The app shows the completed-draft recap, continues through Franchise Setup, and launches the franchise with zero schedule rows. Once inside Living Season, `SCHEDULE NEEDED` is a normal actionable state: the user may upload the schedule CSV or enter games manually there. **Consequences:** schedule presence is never a draft-completion, recap, Franchise Setup, or franchise-initialization gate; regular-season play and schedule-dependent systems remain unavailable until valid schedule rows exist. The existing empty-schedule initialization and Living Season CSV/manual entry surfaces are the canonical destination, not a setup-time schedule workaround.

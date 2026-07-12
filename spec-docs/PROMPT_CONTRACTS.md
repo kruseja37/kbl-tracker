@@ -30726,3 +30726,17 @@ selection with the existing gavel ritual without candidate changes triggering th
 privacy cover. Separate builder and auditor are mandatory. No farm, completion,
 recap, franchise, schedule, chemistry, ledger, auction, or schema work is in scope.
 <!-- ===== END CONTRACT: SNAKE-MOCK-1A ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-1B ===== -->
+# SNAKE-MOCK-1B — FINAL RECAP AND DURABLE HANDOFF
+
+**Date:** 2026-07-12 | **Base checkpoint:** `809a8212`
+
+The complete binding contract is
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`. It covers only
+automatic non-final advance, final-pick recap, reload recovery, explicit MLB/farm
+roster commit, and the existing Scout Hire -> farm -> Staff Hire -> Franchise Setup
+route chain. Schedule presence is never a gate; franchise initialization remains
+zero-row and Living Season remains the CSV/manual entry owner. Separate builder
+and auditor are mandatory.
+<!-- ===== END CONTRACT: SNAKE-MOCK-1B ===== -->

@@ -204,7 +204,7 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByText('PICK RECORDED')).not.toBeInTheDocument();
   });
 
-  it('shows the latched player and team until explicit ADVANCE', async () => {
+  it('shows the recorded beat, removes manual advance, then auto-advances a non-final pick once', async () => {
     vi.useFakeTimers();
     const { rerender } = render(<SnakeDraftRoomView {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
@@ -221,12 +221,35 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('SAM SLUGGER')).toBeInTheDocument();
     expect(screen.getByText('THE KODIAKS SELECT…')).toBeInTheDocument();
     expect(screen.queryByText('PAT PITCHER')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'ADVANCE TO NEXT PICK' }));
+    expect(screen.queryByRole('button', { name: 'ADVANCE TO NEXT PICK' })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(screen.queryByText('SAM SLUGGER')).not.toBeInTheDocument();
     expect(screen.getByText('COMETS IS REVIEWING THE BOARD')).toBeInTheDocument();
   });
 
-  it('hands a completed farm room off only after the final recorded-pick advance', async () => {
+  it('keeps the recorded beat and its one auto-advance when the next live pick moves', async () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<SnakeDraftRoomView {...props({ livePickMoveRevision: 0 })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+
+    rerender(<SnakeDraftRoomView {...props({
+      activeSeatId: 'b',
+      currentPickIndex: 1,
+      livePickMoveRevision: 1,
+      candidate: { id: 'p2', name: 'Pat Pitcher', position: 'SP', consequence: 'A different legal finish.' },
+    })} />);
+
+    expect(screen.getByText('SAM SLUGGER')).toBeInTheDocument();
+    expect(screen.queryByText('PAT PITCHER')).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.queryByText('SAM SLUGGER')).not.toBeInTheDocument();
+    expect(screen.getAllByText('COMETS IS REVIEWING THE BOARD')).toHaveLength(1);
+  });
+
+  it('holds the final recorded beat and opens recap only from VIEW DRAFT RECAP', async () => {
     vi.useFakeTimers();
     const onDraftComplete = vi.fn();
     const finalProps = props({ order: [{ pick: 1, teamId: 'a' }], onDraftComplete });
@@ -238,7 +261,9 @@ describe('SnakeDraftRoomView', () => {
     rerender(<SnakeDraftRoomView {...finalProps} currentPickIndex={1} candidate={null} />);
 
     expect(onDraftComplete).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'ADVANCE TO NEXT PICK' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(onDraftComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'VIEW DRAFT RECAP' }));
     expect(onDraftComplete).toHaveBeenCalledTimes(1);
   });
 

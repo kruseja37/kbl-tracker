@@ -322,7 +322,8 @@ describe('ROOMFIX setup to playable snake room', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     expect(await screen.findByText('PICK RECORDED')).toBeInTheDocument();
     expect(screen.getByText(selectedName.toUpperCase())).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'ADVANCE TO NEXT PICK' }));
+    expect(screen.queryByRole('button', { name: 'ADVANCE TO NEXT PICK' })).not.toBeInTheDocument();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_300)); });
 
     await waitFor(async () => {
       const stored = await getMlbDraftSession(LEAGUE_ID, 1);
