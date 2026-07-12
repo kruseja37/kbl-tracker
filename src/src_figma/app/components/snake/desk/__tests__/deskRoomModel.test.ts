@@ -14,6 +14,7 @@ import {
   fitWord,
   rationalRisksForRoom,
   rationalRisksForRoomUncached,
+  reconcileExistingSeatBoards,
   resolveLockedSeat,
   updateSessionSeatBoard,
 } from '../deskRoomModel';
@@ -100,6 +101,44 @@ function board(playerId: string): SnakeSeatBoardRecord {
 }
 
 describe('private desk room assembly', () => {
+  it('backfills every existing seat board in one next session without revealing a private seat', () => {
+    const sourceBoards = Object.fromEntries(['a', 'b', 'c'].map((teamId) => {
+      const source = board(teamId);
+      return [teamId, {
+        ...source,
+        slots: { ...source.slots, C: 'drafted-catcher' },
+        rankings: {
+          global: [`${teamId}-replacement`],
+          byPosition: { C: ['drafted-catcher', `${teamId}-replacement`] },
+          frozenPlayerIds: [`${teamId}-frozen`],
+        },
+      }];
+    })) as Record<string, SnakeSeatBoardRecord>;
+    const source = { ...session(), seatBoards: sourceBoards };
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: ['a', 'b', 'c'].map((teamId) => ({
+        id: `${teamId}-replacement`,
+        position: 'C' as const,
+        eligiblePositions: ['C'] as const,
+      })),
+      unavailablePlayerIds: new Set(['drafted-catcher']),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.revision).toBe(source.revision + 1);
+    expect(result.eventsByTeamId).toEqual({
+      a: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'a-replacement' }],
+      b: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'b-replacement' }],
+      c: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'c-replacement' }],
+    });
+    for (const teamId of ['a', 'b', 'c']) {
+      expect(result.session.seatBoards?.[teamId].slots.C).toBe(`${teamId}-replacement`);
+      expect(result.session.seatBoards?.[teamId].rankings).toBe(sourceBoards[teamId].rankings);
+      expect(sourceBoards[teamId].slots.C).toBe('drafted-catcher');
+    }
+  });
+
   it('uses the canonical player bands so rival locked archetypes materially change the risk read', () => {
     const powerStored = storedPlayer('power', { power: 99, contact: 1, speed: 1, fielding: 1, arm: 1 });
     const speedStored = storedPlayer('speed', { power: 1, contact: 1, speed: 99, fielding: 1, arm: 1 });

@@ -13,10 +13,17 @@ import type {
   SnakeSeatBoardRecord,
   Team,
 } from '../../../../../utils/leagueBuilderStorage';
+import {
+  canonicalDeskEligiblePositions,
+  reconcileBoardAvailability,
+  type BoardBackfillEvent,
+  type DeskEligibilityCandidate,
+} from './deskModel';
 
 export interface DeskRoomPlayer extends SnakeRationalPlayer {
   stored: Player;
   position: TaxonomyPosition;
+  eligiblePositions: readonly TaxonomyPosition[];
   fitKnown: boolean;
 }
 
@@ -69,6 +76,7 @@ export function buildDeskRoomPlayer(input: {
     archetypeWeights,
     stored: input.player,
     position: input.player.primaryPosition,
+    eligiblePositions: canonicalDeskEligiblePositions(input.player.primaryPosition, input.player.secondaryPosition),
     fitKnown,
   };
 }
@@ -207,6 +215,44 @@ export function updateSessionSeatBoard(
     ...session,
     seatBoards: { ...session.seatBoards, [teamId]: board },
     revision: (session.revision ?? 0) + 1,
+  };
+}
+
+export function reconcileExistingSeatBoards(input: {
+  session: LeagueBuilderMlbDraftSession;
+  candidates: readonly DeskEligibilityCandidate[];
+  unavailablePlayerIds: ReadonlySet<string>;
+}): {
+  session: LeagueBuilderMlbDraftSession;
+  changed: boolean;
+  eventsByTeamId: Record<string, BoardBackfillEvent[]>;
+} {
+  const sourceBoards = input.session.seatBoards;
+  if (!sourceBoards || Object.keys(sourceBoards).length === 0) {
+    return { session: input.session, changed: false, eventsByTeamId: {} };
+  }
+
+  let changed = false;
+  const nextBoards = { ...sourceBoards };
+  const eventsByTeamId: Record<string, BoardBackfillEvent[]> = {};
+  for (const [teamId, board] of Object.entries(sourceBoards)) {
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates: input.candidates,
+      unavailablePlayerIds: input.unavailablePlayerIds,
+    });
+    if (reconciled.events.length > 0) eventsByTeamId[teamId] = reconciled.events;
+    if (reconciled.board === board) continue;
+    nextBoards[teamId] = reconciled.board;
+    changed = true;
+  }
+
+  return {
+    session: changed
+      ? { ...input.session, seatBoards: nextBoards, revision: (input.session.revision ?? 0) + 1 }
+      : input.session,
+    changed,
+    eventsByTeamId,
   };
 }
 

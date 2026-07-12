@@ -74,3 +74,31 @@ Final verification:
 - `git diff --check`: clean.
 
 Status: **INDEPENDENTLY APPROVED**. The remaining approved board, roster-intelligence, chemistry, team-first, farm-parity, and manifest slices are not claimed complete here.
+
+## Slice 2A — one board, secondary eligibility, all-seat backfill
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2A_2026-07-12.md`
+
+Built:
+
+- One persisted overall board with compact position views of the same player universe.
+- Primary plus valid secondary-position eligibility in rankings, slots, what-if legality, refit, and backfill.
+- Deterministic 22-slot refit after either overall or position reorder, feeding the existing plan cost, tax, cushion, depth, and legal-finish displays.
+- Feasibility-preserving assignment that protects scarce catcher and swing-pitcher supply rather than consuming it in a more flexible slot.
+- Slot-role-first backfill when a drafted player qualified through a secondary position.
+- One hidden all-seat reconciliation pass and one persisted session write after player availability changes; no private board reveal.
+- Byte-stable saved rankings during automatic backfill and retained per-seat advisor events for later reveal.
+
+Independent audit findings fixed:
+
+1. The initial display-order greedy refit could falsely break a legal 22-player plan by assigning the only remaining catcher-eligible player to first base before `BACKUP_C`.
+2. The same greedy path could consume the only `SP/RP` in a flexible slot before the required `SWING` slot.
+
+Final verification:
+
+- Focused model/private-desk/page gate: 4 files / 27 tests passed.
+- Completed snake, recap, farm, performance, and auction regression gate: 7 files / 55 tests passed.
+- Production build: passed after the audited assignment fix.
+- `git diff --check`: clean.
+
+Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate and will occur after the complete mock-draft program is assembled.

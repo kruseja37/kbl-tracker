@@ -11,10 +11,14 @@ import {
   type SnakeSeatBoardRecord,
 } from '../../../../../utils/leagueBuilderStorage';
 
-export interface DeskCandidate {
+export interface DeskEligibilityCandidate {
   id: string;
-  name: string;
   position: TaxonomyPosition;
+  eligiblePositions?: readonly TaxonomyPosition[];
+}
+
+export interface DeskCandidate extends DeskEligibilityCandidate {
+  name: string;
   advisorWorth: number;
   iv: number;
   marginalTax: number;
@@ -53,6 +57,15 @@ const POSITION_ORDER: readonly TaxonomyPosition[] = [
   'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP',
 ];
 
+export function canonicalDeskEligiblePositions(primary: unknown, secondary?: unknown): TaxonomyPosition[] {
+  const eligible: TaxonomyPosition[] = [];
+  for (const position of [primary, secondary]) {
+    if (typeof position !== 'string' || !POSITION_ORDER.includes(position as TaxonomyPosition)) continue;
+    if (!eligible.includes(position as TaxonomyPosition)) eligible.push(position as TaxonomyPosition);
+  }
+  return eligible;
+}
+
 export function boardSlotPosition(slotId: SnakeBoardSlotId): TaxonomyPosition | null {
   if (POSITION_ORDER.includes(slotId as TaxonomyPosition)) return slotId as TaxonomyPosition;
   if (slotId === 'BACKUP_C') return 'C';
@@ -68,16 +81,17 @@ function sortedByAdvisorWorth(candidates: readonly DeskCandidate[]): DeskCandida
   ));
 }
 
-function eligibleForSlot(slotId: SnakeBoardSlotId, candidate: DeskCandidate): boolean {
-  if (slotId === 'BACKUP_C') return candidate.position === 'C';
-  if (slotId.startsWith('SP')) return candidate.position === 'SP' || candidate.position === 'SP/RP';
-  if (slotId.startsWith('RP')) return candidate.position === 'RP' || candidate.position === 'SP/RP';
-  if (slotId === 'SWING') return candidate.position === 'SP/RP';
+function eligibleForSlot(slotId: SnakeBoardSlotId, candidate: DeskEligibilityCandidate): boolean {
+  const eligible = candidate.eligiblePositions ?? [candidate.position];
+  if (slotId === 'BACKUP_C') return eligible.includes('C');
+  if (slotId.startsWith('SP')) return eligible.includes('SP') || eligible.includes('SP/RP');
+  if (slotId.startsWith('RP')) return eligible.includes('RP') || eligible.includes('SP/RP');
+  if (slotId === 'SWING') return eligible.includes('SP/RP');
   if (slotId.startsWith('FLEX')) return true;
-  return candidate.position === slotId;
+  return eligible.includes(slotId as TaxonomyPosition);
 }
 
-export function isCandidateEligibleForBoardSlot(slotId: SnakeBoardSlotId, candidate: DeskCandidate): boolean {
+export function isCandidateEligibleForBoardSlot(slotId: SnakeBoardSlotId, candidate: DeskEligibilityCandidate): boolean {
   return eligibleForSlot(slotId, candidate);
 }
 
@@ -86,8 +100,82 @@ export function seedPositionalRankings(
 ): Partial<Record<TaxonomyPosition, string[]>> {
   return Object.fromEntries(POSITION_ORDER.map((position) => [
     position,
-    sortedByAdvisorWorth(candidates.filter((candidate) => candidate.position === position)).map((candidate) => candidate.id),
+    sortedByAdvisorWorth(candidates.filter((candidate) => (
+      candidate.eligiblePositions ?? [candidate.position]
+    ).includes(position))).map((candidate) => candidate.id),
   ]));
+}
+
+export function refitBoardSlots(input: {
+  rankings: SnakeSeatBoardRecord['rankings'];
+  candidates: readonly DeskCandidate[];
+  unavailablePlayerIds?: ReadonlySet<string>;
+}): { slots: Partial<Record<SnakeBoardSlotId, string>>; brokenSlots: SnakeBoardSlotId[] } {
+  const byId = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
+  const unavailable = input.unavailablePlayerIds ?? new Set<string>();
+  const canonicalIndex = new Map(SNAKE_BOARD_SLOT_IDS.map((slotId, index) => [slotId, index]));
+  const rankedBySlot = new Map<SnakeBoardSlotId, string[]>();
+  for (const slotId of SNAKE_BOARD_SLOT_IDS) {
+    const position = boardSlotPosition(slotId);
+    const rankedIds = [...new Set([
+      ...(position ? input.rankings.byPosition?.[position] ?? [] : []),
+      ...(input.rankings.global ?? []),
+    ])].filter((id) => {
+      const candidate = byId.get(id);
+      return Boolean(candidate && !unavailable.has(id) && eligibleForSlot(slotId, candidate));
+    });
+    rankedBySlot.set(slotId, rankedIds);
+  }
+
+  const assignmentOrder = [...SNAKE_BOARD_SLOT_IDS].sort((left, right) => (
+    (rankedBySlot.get(left)?.length ?? 0) - (rankedBySlot.get(right)?.length ?? 0)
+      || (canonicalIndex.get(left) ?? 0) - (canonicalIndex.get(right) ?? 0)
+  ));
+
+  const canMatchEverySlot = (slotIds: readonly SnakeBoardSlotId[], reserved: ReadonlySet<string>): boolean => {
+    const playerOwner = new Map<string, SnakeBoardSlotId>();
+    const tryAssign = (slotId: SnakeBoardSlotId, visitedPlayers: Set<string>): boolean => {
+      for (const playerId of rankedBySlot.get(slotId) ?? []) {
+        if (reserved.has(playerId) || visitedPlayers.has(playerId)) continue;
+        visitedPlayers.add(playerId);
+        const owner = playerOwner.get(playerId);
+        if (owner && !tryAssign(owner, visitedPlayers)) continue;
+        playerOwner.set(playerId, slotId);
+        return true;
+      }
+      return false;
+    };
+    return slotIds.every((slotId) => tryAssign(slotId, new Set()));
+  };
+
+  const assigned = new Map<SnakeBoardSlotId, string>();
+  const used = new Set<string>();
+  const fullyFeasible = canMatchEverySlot(assignmentOrder, used);
+  for (const [index, slotId] of assignmentOrder.entries()) {
+    const remainingSlots = assignmentOrder.slice(index + 1);
+    for (const playerId of rankedBySlot.get(slotId) ?? []) {
+      if (used.has(playerId)) continue;
+      if (fullyFeasible) {
+        used.add(playerId);
+        if (!canMatchEverySlot(remainingSlots, used)) {
+          used.delete(playerId);
+          continue;
+        }
+      } else {
+        used.add(playerId);
+      }
+      assigned.set(slotId, playerId);
+      break;
+    }
+  }
+
+  const slots: Partial<Record<SnakeBoardSlotId, string>> = {};
+  for (const slotId of SNAKE_BOARD_SLOT_IDS) {
+    const playerId = assigned.get(slotId);
+    if (playerId) slots[slotId] = playerId;
+  }
+  const brokenSlots = SNAKE_BOARD_SLOT_IDS.filter((slotId) => !assigned.has(slotId));
+  return { slots, brokenSlots };
 }
 
 /** Advisor seed only. This creates no recommendation/search API; the GM confirms it in the UI. */
@@ -96,53 +184,31 @@ export function buildSeededSeatBoard(candidates: readonly DeskCandidate[]): {
   brokenSlots: SnakeBoardSlotId[];
 } {
   const rankings = seedPositionalRankings(candidates);
-  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
-  const used = new Set<string>();
-  const slots = {} as Record<SnakeBoardSlotId, string>;
-  const brokenSlots: SnakeBoardSlotId[] = [];
+  const fullRankings: SnakeSeatBoardRecord['rankings'] = {
+    byPosition: rankings,
+    global: sortedByAdvisorWorth(candidates).map((candidate) => candidate.id),
+    frozenPlayerIds: [],
+  };
+  const refit = refitBoardSlots({ rankings: fullRankings, candidates });
 
-  for (const slotId of SNAKE_BOARD_SLOT_IDS) {
-    const ranked = sortedByAdvisorWorth(candidates.filter((candidate) => eligibleForSlot(slotId, candidate)))
-      .map((candidate) => candidate.id);
-    const playerId = ranked.find((id) => !used.has(id) && byId.has(id));
-    if (!playerId) {
-      brokenSlots.push(slotId);
-      continue;
-    }
-    slots[slotId] = playerId;
-    used.add(playerId);
-  }
-
-  if (brokenSlots.length > 0) return { board: null, brokenSlots };
+  if (refit.brokenSlots.length > 0) return { board: null, brokenSlots: refit.brokenSlots };
   return {
     board: {
-      slots,
-      rankings: {
-        byPosition: rankings,
-        global: sortedByAdvisorWorth(candidates).map((candidate) => candidate.id),
-        frozenPlayerIds: [],
-      },
+      slots: refit.slots as Record<SnakeBoardSlotId, string>,
+      rankings: fullRankings,
       revision: 0,
     },
     brokenSlots: [],
   };
 }
 
-function backfillPosition(
-  slotId: SnakeBoardSlotId,
-  gonePlayerId: string,
-  byId: ReadonlyMap<string, DeskCandidate>,
-): TaxonomyPosition | null {
-  return byId.get(gonePlayerId)?.position ?? boardSlotPosition(slotId) ?? null;
-}
-
 function rankedBackfillIds(input: {
   slotId: SnakeBoardSlotId;
   board: SnakeSeatBoardRecord;
-  candidates: readonly DeskCandidate[];
+  candidates: readonly DeskEligibilityCandidate[];
 }): string[] {
   const eligibleIds = new Set(input.candidates.filter((candidate) => eligibleForSlot(input.slotId, candidate)).map((candidate) => candidate.id));
-  const position = backfillPosition(input.slotId, input.board.slots[input.slotId], new Map(input.candidates.map((candidate) => [candidate.id, candidate])));
+  const position = boardSlotPosition(input.slotId);
   const ownPositionOrder = position ? input.board.rankings.byPosition?.[position] ?? [] : [];
   return [...new Set([
     ...ownPositionOrder.filter((id) => eligibleIds.has(id)),
@@ -153,7 +219,7 @@ function rankedBackfillIds(input: {
 /** Frozen-touch law: only the unavailable slot changes; rankings and every survivor stay byte-stable. */
 export function reconcileBoardAvailability(input: {
   board: SnakeSeatBoardRecord;
-  candidates: readonly DeskCandidate[];
+  candidates: readonly DeskEligibilityCandidate[];
   unavailablePlayerIds: ReadonlySet<string>;
 }): { board: SnakeSeatBoardRecord; events: BoardBackfillEvent[]; brokenSlots: SnakeBoardSlotId[] } {
   const byId = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));

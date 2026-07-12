@@ -13,6 +13,7 @@ type DeskTab = 'BOARD' | 'RANKINGS' | 'LOG' | 'GUIDE';
 export function PrivateDesk(props: {
   candidates: readonly DeskCandidate[];
   rankings: Partial<Record<TaxonomyPosition, string[]>>;
+  overallRankings?: readonly string[];
   boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
   brokenSlots: readonly SnakeBoardSlotId[];
   planBill: SnakePlanBill | null;
@@ -27,6 +28,7 @@ export function PrivateDesk(props: {
   onSelectCandidate?: (candidateId: string) => void;
   isCandidateSelectable?: (candidateId: string) => boolean;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
+  onReorderOverall?: (orderedIds: readonly string[]) => void;
   onStartWhatIf: (slotId: SnakeBoardSlotId, playerId: string) => void;
   onKeepWhatIf: () => void;
   onRevertWhatIf: () => void;
@@ -43,7 +45,7 @@ export function PrivateDesk(props: {
         <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} showHelp={props.showHelp ?? false} />
         <div className="mt-4"><WhatIfSandbox candidates={props.candidates} boardSlots={props.boardSlots} whatIf={props.whatIf ?? null} onStart={props.onStartWhatIf} onKeep={props.onKeepWhatIf} onRevert={props.onRevertWhatIf} showHelp={props.showHelp ?? false} /></div>
       </>}
-      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} onReorder={props.onReorder} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} />}
+      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} />}
       {tab === 'LOG' && <AdvisorLog entries={props.advisorLog} />}
       {tab === 'GUIDE' && props.tradeGuide}
     </section>

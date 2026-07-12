@@ -30740,3 +30740,15 @@ route chain. Schedule presence is never a gate; franchise initialization remains
 zero-row and Living Season remains the CSV/manual entry owner. Separate builder
 and auditor are mandatory.
 <!-- ===== END CONTRACT: SNAKE-MOCK-1B ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2A ===== -->
+# SNAKE-MOCK-2A — ONE BOARD, SECONDARY ELIGIBILITY, ALL-SEAT BACKFILL
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2A_2026-07-12.md`. One persisted
+overall board and position views share secondary-position eligibility; either
+reorder refits the 22-slot plan and recalculates existing consequences; every
+saved team board backfills after picks without requiring private reveal. No
+team-first selector, chemistry/ledger, farm redesign, manifest, franchise,
+schedule, staffing, auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2A ===== -->

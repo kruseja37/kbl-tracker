@@ -3767,3 +3767,12 @@ and are unchanged. Checkpoint cadence must stop being an input to relationship v
 
 **Build:** contract `spec-docs/contracts/CONTRACT_RELORGANIC_2026-07-11.md` (Codex Sol lane,
 flag-gated L13 dark path, no store-shape change).
+
+## 2026-07-12 — Snake draft board is one overall ranking with position views
+
+JK approved the mock-draft recommendations. Each team owns one persisted overall player ranking and
+position views of that same universe; a player appears in every valid stored primary/secondary
+position. Reordering either view immediately refits the 22-slot plan and recalculates its existing
+money and legality consequences. Drafted or retired players backfill every saved team board without
+revealing another team's private information. The implementation must preserve scarce-role
+feasibility, especially catcher depth and the required `SP/RP` swing slot.

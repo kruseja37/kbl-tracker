@@ -8,6 +8,7 @@ const candidate: DeskCandidate = {
   id: 'muraski',
   name: 'MURASKI',
   position: 'SS',
+  eligiblePositions: ['SS'],
   advisorWorth: 90,
   iv: 80,
   marginalTax: 10,
@@ -24,6 +25,40 @@ const candidate: DeskCandidate = {
 };
 
 describe('PrivateDesk', () => {
+  it('shows one chosen overall or position ranking and routes each reorder to the matching persisted list', () => {
+    const onReorder = vi.fn();
+    const onReorderOverall = vi.fn();
+    const available = { ...candidate, id: 'available', name: 'AVAILABLE PLAYER' };
+    render(<PrivateDesk
+      candidates={[candidate, available]}
+      rankings={{ SS: ['muraski', 'available'] }}
+      overallRankings={['muraski', 'available']}
+      boardSlots={{ SS: 'muraski' }}
+      brokenSlots={[]}
+      planBill={null}
+      advisorLog={[]}
+      taxCoreRows={[]}
+      slotDepth={{ SS: 2 }}
+      onReorder={onReorder}
+      onReorderOverall={onReorderOverall}
+      onStartWhatIf={() => undefined}
+      onKeepWhatIf={() => undefined}
+      onRevertWhatIf={() => undefined}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'SS RANKINGS' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Move AVAILABLE PLAYER up' }));
+    expect(onReorderOverall).toHaveBeenLastCalledWith(['available', 'muraski']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SS' }));
+    expect(screen.getByRole('heading', { name: 'SS RANKINGS' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'OVERALL RANKINGS' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Move AVAILABLE PLAYER up' }));
+    expect(onReorder).toHaveBeenLastCalledWith('SS', ['available', 'muraski']);
+  });
+
   it('selects an available non-default player from both the board and rankings but never selects a drafted card', () => {
     const onSelectCandidate = vi.fn();
     const available = { ...candidate, id: 'available', name: 'AVAILABLE PLAYER' };
@@ -32,6 +67,7 @@ describe('PrivateDesk', () => {
     const common = {
       candidates: [candidate, available, drafted, blocked],
       rankings: { SS: ['muraski', 'available', 'drafted', 'blocked'] } as const,
+      overallRankings: ['muraski', 'available', 'drafted', 'blocked'] as const,
       boardSlots: { SS: 'available' } as const,
       brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 3 },
       selectedCandidateId: 'muraski', onSelectCandidate,
@@ -54,6 +90,7 @@ describe('PrivateDesk', () => {
     render(<PrivateDesk
       candidates={[candidate]}
       rankings={{ SS: ['muraski'] }}
+      overallRankings={['muraski']}
       boardSlots={{ SS: 'muraski' }}
       brokenSlots={[]}
       planBill={{ planCost: 80, planTax: 10, planCushion: 30, playerIds: ['muraski'] }}

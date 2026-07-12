@@ -6,14 +6,17 @@ import {
   buildTaxCoreRows,
   isCandidateEligibleForBoardSlot,
   reconcileBoardAvailability,
+  refitBoardSlots,
+  seedPositionalRankings,
   type DeskCandidate,
 } from '../deskModel';
 
-function candidate(id: string, position: DeskCandidate['position'], worth: number): DeskCandidate {
+function candidate(id: string, position: DeskCandidate['position'], worth: number, eligiblePositions = [position]): DeskCandidate {
   return {
     id,
     name: id.toUpperCase(),
     position,
+    eligiblePositions,
     advisorWorth: worth,
     iv: worth,
     marginalTax: 0,
@@ -67,6 +70,103 @@ describe('private desk model', () => {
     expect(isCandidateEligibleForBoardSlot('SP1', candidate('swing', 'SP/RP', 50))).toBe(true);
   });
 
+  it('uses canonical primary and secondary eligibility in rankings, slots, and no unrelated roles', () => {
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const rankings = buildSeededSeatBoard([...fullPool(), dual]).board!.rankings.byPosition!;
+    expect(rankings.C).toContain(dual.id);
+    expect(rankings['1B']).toContain(dual.id);
+    expect(isCandidateEligibleForBoardSlot('C', dual)).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('1B', dual)).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SS', dual)).toBe(false);
+    expect(isCandidateEligibleForBoardSlot('SP1', dual)).toBe(false);
+  });
+
+  it('deterministically refits overall and position reorders, changes plan totals, and never duplicates a player', () => {
+    const pool = fullPool();
+    const seeded = buildSeededSeatBoard(pool).board!;
+    const total = (slots: Partial<Record<string, string>>) => Object.values(slots)
+      .reduce((sum, id) => sum + (pool.find((row) => row.id === id)?.iv ?? 0), 0);
+
+    const overallTarget = '1B-6';
+    const overall = refitBoardSlots({
+      candidates: pool,
+      rankings: { ...seeded.rankings, global: [overallTarget, ...seeded.rankings.global.filter((id) => id !== overallTarget)] },
+    });
+    expect(overall.brokenSlots).toEqual([]);
+    expect(overall.slots.FLEX1).toBe(overallTarget);
+    expect(total(overall.slots)).not.toBe(total(seeded.slots));
+    expect(new Set(Object.values(overall.slots)).size).toBe(22);
+
+    const positionTarget = 'SS-6';
+    const position = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        ...seeded.rankings,
+        byPosition: { ...seeded.rankings.byPosition, SS: [positionTarget, ...(seeded.rankings.byPosition?.SS ?? []).filter((id) => id !== positionTarget)] },
+      },
+    });
+    expect(position.brokenSlots).toEqual([]);
+    expect(position.slots.SS).toBe(positionTarget);
+    expect(total(position.slots)).not.toBe(total(seeded.slots));
+    expect(new Set(Object.values(position.slots)).size).toBe(22);
+  });
+
+  it('reports the exact broken slot instead of inventing a player', () => {
+    const full = fullPool();
+    const rankings = buildSeededSeatBoard(full).board!.rankings;
+    const refit = refitBoardSlots({ candidates: full.filter((row) => row.position !== 'CP'), rankings });
+    expect(refit.brokenSlots).toEqual(['CP']);
+    expect(refit.slots.CP).toBeUndefined();
+  });
+
+  it('protects a scarce C/1B dual from the 1B slot when only that player can finish BACKUP_C', () => {
+    const pureC = candidate('pure-c', 'C', 3_000);
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const pureFirst = candidate('pure-first', '1B', 1_000);
+    const pool = [
+      ...fullPool().filter((row) => row.position !== 'C' && row.position !== '1B'),
+      pureC,
+      dual,
+      pureFirst,
+    ];
+    const byPosition = seedPositionalRankings(pool);
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: [pureC.id, dual.id, pureFirst.id, ...pool.map((row) => row.id).filter((id) => ![pureC.id, dual.id, pureFirst.id].includes(id))],
+        byPosition: {
+          ...byPosition,
+          C: [pureC.id, dual.id],
+          '1B': [dual.id, pureFirst.id],
+        },
+      },
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.slots.C).toBe(pureC.id);
+    expect(refit.slots['1B']).toBe(pureFirst.id);
+    expect(refit.slots.BACKUP_C).toBe(dual.id);
+  });
+
+  it('reserves the only SP/RP for SWING instead of consuming it in a FLEX slot', () => {
+    const swing = candidate('only-swing', 'SP/RP', 5_000);
+    const pool = [
+      ...fullPool().filter((row) => row.position !== 'SP/RP'),
+      swing,
+    ];
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: [swing.id, ...pool.map((row) => row.id).filter((id) => id !== swing.id)],
+        byPosition: seedPositionalRankings(pool),
+      },
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.slots.SWING).toBe(swing.id);
+    expect(Object.entries(refit.slots).find(([slotId]) => slotId.startsWith('FLEX'))?.[1]).not.toBe(swing.id);
+  });
+
   it('never moves a hand-touched survivor and only backfills the unavailable slot from the GM ranking', () => {
     const seeded = buildSeededSeatBoard(fullPool());
     const board = seeded.board!;
@@ -84,6 +184,31 @@ describe('private desk model', () => {
     expect(reconciled.board.slots['2B']).toBe(untouchedSecondBase);
     expect(reconciled.events).toEqual([{ slotId: 'SS', gonePlayerId: gone, promotedPlayerId: expected }]);
     expect(reconciled.board.rankings.byPosition?.SS).toEqual(board.rankings.byPosition?.SS);
+  });
+
+  it('backfills by the board slot role when the gone player qualified there by secondary position', () => {
+    const pool = fullPool();
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const seeded = buildSeededSeatBoard(pool).board!;
+    const board = {
+      ...seeded,
+      slots: { ...seeded.slots, C: dual.id },
+      rankings: {
+        ...seeded.rankings,
+        byPosition: {
+          ...seeded.rankings.byPosition,
+          C: [dual.id, 'C-1', 'C-2'],
+          '1B': ['1B-6', dual.id],
+        },
+      },
+    };
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates: [...pool, dual],
+      unavailablePlayerIds: new Set([dual.id]),
+    });
+    expect(reconciled.board.slots.C).toBe('C-1');
+    expect(reconciled.events).toContainEqual({ slotId: 'C', gonePlayerId: dual.id, promotedPlayerId: 'C-1' });
   });
 
   it('marks PLAN BROKEN when the GM ranking has no available replacement', () => {

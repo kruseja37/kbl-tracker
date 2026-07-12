@@ -34,7 +34,9 @@ import {
   buildTaxCoreRows,
   isCandidateEligibleForBoardSlot,
   reconcileBoardAvailability,
+  refitBoardSlots,
   type AdvisorLogEntry,
+  type BoardBackfillEvent,
   type DeskCandidate,
 } from '../components/snake/desk/deskModel';
 import {
@@ -43,11 +45,13 @@ import {
   fitWord,
   openRosterSlots,
   rationalRisksForRoom,
+  reconcileExistingSeatBoards,
   resolveLockedSeat,
   updateSessionSeatBoard,
 } from '../components/snake/desk/deskRoomModel';
+import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import type { DeskWhatIf } from '../components/snake/desk/WhatIfSandbox';
-import type { SnakeBoardSlotId, SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
+import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId, type SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
 import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
@@ -379,6 +383,7 @@ function MlbSnakeDraftRoom() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [advisorLogBySeat, setAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
+  const [backfillEventsBySeat, setBackfillEventsBySeat] = useState<Record<string, BoardBackfillEvent[]>>({});
   const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
   const [livePickMoveRevision, setLivePickMoveRevision] = useState(0);
@@ -534,6 +539,11 @@ function MlbSnakeDraftRoom() {
     return deskPlayer ? [deskPlayer] : [];
   }), [activePoolRows, playerById, seatingById]);
   const deskRoomById = useMemo(() => new Map(deskRoomPlayers.map((player) => [player.playerId, player])), [deskRoomPlayers]);
+  const boardEligibilityCandidates = useMemo(() => deskRoomPlayers.map((player) => ({
+    id: player.playerId,
+    position: player.position,
+    eligiblePositions: player.eligiblePositions,
+  })), [deskRoomPlayers]);
 
   const candidate = useMemo<SnakeReviewCandidate | null>(() => {
     if (!candidateId || !session || !pool || !currentTeam) return null;
@@ -601,6 +611,43 @@ function MlbSnakeDraftRoom() {
     setSession(saved);
   }, []);
 
+  const rememberBackfillEvents = useCallback((eventsByTeamId: Record<string, BoardBackfillEvent[]>) => {
+    if (Object.keys(eventsByTeamId).length === 0) return;
+    setBackfillEventsBySeat((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const [teamId, events] of Object.entries(eventsByTeamId)) {
+        const previous = next[teamId] ?? [];
+        const known = new Set(previous.map((event) => `${event.slotId}:${event.gonePlayerId}`));
+        const additions = events.filter((event) => !known.has(`${event.slotId}:${event.gonePlayerId}`));
+        if (additions.length === 0) continue;
+        next[teamId] = [...previous, ...additions];
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, []);
+
+  const reconcileAllExistingBoards = useCallback((source: NonNullable<typeof session>) => {
+    const sourceUnavailable = new Set(source.completedPicks.map((pick) => pick.playerId));
+    for (const id of unavailableVersionPlayerIds(source.versionState)) sourceUnavailable.add(id);
+    return reconcileExistingSeatBoards({
+      session: source,
+      candidates: boardEligibilityCandidates,
+      unavailablePlayerIds: sourceUnavailable,
+    });
+  }, [boardEligibilityCandidates]);
+
+  useEffect(() => {
+    if (!session || boardEligibilityCandidates.length === 0) return;
+    const reconciled = reconcileAllExistingBoards(session);
+    rememberBackfillEvents(reconciled.eventsByTeamId);
+    if (!reconciled.changed) return;
+    void persist(reconciled.session).catch((cause) => {
+      setActionError(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, [boardEligibilityCandidates.length, persist, reconcileAllExistingBoards, rememberBackfillEvents, session]);
+
   const acceptCompanionSession = useCallback((saved: NonNullable<typeof session>) => {
     setSession(saved);
   }, []);
@@ -656,6 +703,7 @@ function MlbSnakeDraftRoom() {
         id: player.playerId,
         name: fullName(player.stored.firstName, player.stored.lastName).toUpperCase(),
         position: player.position,
+        eligiblePositions: player.eligiblePositions,
         advisorWorth: advisorWorthById.get(player.playerId) ?? player.price,
         iv: player.price,
         marginalTax,
@@ -678,7 +726,10 @@ function MlbSnakeDraftRoom() {
         ? reconcileBoardAvailability({ board: seeded.board, candidates, unavailablePlayerIds: unavailable })
         : null;
     const board = availability?.board ?? seeded?.board ?? null;
-    const brokenSlots = availability?.brokenSlots ?? seeded?.brokenSlots ?? [];
+    const brokenSlots = [...new Set([
+      ...(availability?.brokenSlots ?? seeded?.brokenSlots ?? []),
+      ...SNAKE_BOARD_SLOT_IDS.filter((slotId) => !board?.slots[slotId]),
+    ])];
     const planBill = board && brokenSlots.length === 0
       ? evaluateSnakePlan({
           boardPlayerIds: Object.values(board.slots),
@@ -693,7 +744,7 @@ function MlbSnakeDraftRoom() {
     const displayCandidates = candidates.map((candidate): DeskCandidate => {
       const boardSlot = boardSlotByPlayerId.get(candidate.id);
       const targetSlot = Object.keys(board?.slots ?? {}).find((slotId) => (
-        boardSlotPosition(slotId as SnakeBoardSlotId) === candidate.position
+        isCandidateEligibleForBoardSlot(slotId as SnakeBoardSlotId, candidate)
       ));
       return {
         ...candidate,
@@ -737,8 +788,12 @@ function MlbSnakeDraftRoom() {
       const ranked = position ? board?.rankings.byPosition?.[position] ?? [] : [];
       return [slotId, ranked.filter((id) => !unavailable.has(id)).length];
     }));
+    const seatBackfillEvents = [...new Map([
+      ...(backfillEventsBySeat[currentTeam.id] ?? []),
+      ...(availability?.events ?? []),
+    ].map((event) => [`${event.slotId}:${event.gonePlayerId}`, event])).values()];
     const activeLog: AdvisorLogEntry[] = [
-      ...(availability?.events ?? []).map((event) => {
+      ...seatBackfillEvents.map((event) => {
         const gone = candidateById.get(event.gonePlayerId)?.name ?? event.gonePlayerId;
         const promoted = event.promotedPlayerId ? candidateById.get(event.promotedPlayerId)?.name : undefined;
         return {
@@ -781,13 +836,12 @@ function MlbSnakeDraftRoom() {
       legalFinishLineForCandidate,
       canSelectCandidate,
     };
-  }, [currentBoard, currentLocked, currentTeam, deskRoomById, deskRoomPlayers, leagueTeams, playerById, pool, privateDeskReady, session, unavailable]);
+  }, [backfillEventsBySeat, currentBoard, currentLocked, currentTeam, deskRoomById, deskRoomPlayers, leagueTeams, playerById, pool, privateDeskReady, session, unavailable]);
 
   useEffect(() => {
     if (!session || !currentTeam || !deskState?.board) return;
     const needsSeed = !currentBoard;
-    const needsBackfill = Boolean(deskState.availability && deskState.availability.board !== currentBoard);
-    if (!needsSeed && !needsBackfill) return;
+    if (!needsSeed) return;
     void persist(updateSessionSeatBoard(session, currentTeam.id, deskState.board)).catch((cause) => {
       setActionError(cause instanceof Error ? cause.message : String(cause));
     });
@@ -822,21 +876,30 @@ function MlbSnakeDraftRoom() {
 
   useEffect(() => { setWhatIf(null); }, [currentTeam?.id, session?.currentPickIndex]);
 
-  const reorderRanking = useCallback(async (position: DeskCandidate['position'], orderedIds: readonly string[]) => {
+  const reorderRanking = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!session || !currentTeam || !deskState?.board) return;
     const frozen = new Set(deskState.board.rankings.frozenPlayerIds ?? []);
     for (const id of orderedIds) frozen.add(id);
+    const rankings: SnakeSeatBoardRecord['rankings'] = view === 'OVERALL'
+      ? { ...deskState.board.rankings, global: [...orderedIds], frozenPlayerIds: [...frozen] }
+      : {
+          ...deskState.board.rankings,
+          byPosition: { ...deskState.board.rankings.byPosition, [view]: [...orderedIds] },
+          frozenPlayerIds: [...frozen],
+        };
+    const refit = refitBoardSlots({
+      rankings,
+      candidates: deskState.candidates,
+      unavailablePlayerIds: unavailable,
+    });
     const board: SnakeSeatBoardRecord = {
       ...deskState.board,
-      rankings: {
-        ...deskState.board.rankings,
-        byPosition: { ...deskState.board.rankings.byPosition, [position]: [...orderedIds] },
-        frozenPlayerIds: [...frozen],
-      },
+      slots: refit.slots as SnakeSeatBoardRecord['slots'],
+      rankings,
       revision: deskState.board.revision + 1,
     };
     await persist(updateSessionSeatBoard(session, currentTeam.id, board));
-  }, [currentTeam, deskState, persist, session]);
+  }, [currentTeam, deskState, persist, session, unavailable]);
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!deskState?.board || !pool || !currentTeam || !session) return;
@@ -902,9 +965,11 @@ function MlbSnakeDraftRoom() {
       marginalTax,
       versionPool: seatingPlayers,
     });
+    const reconciled = reconcileAllExistingBoards(next);
+    rememberBackfillEvents(reconciled.eventsByTeamId);
     setPrivateDeskRevealed(false);
-    await persist(next);
-  }, [currentTeam, leagueTeams.length, persist, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+    await persist(reconciled.session);
+  }, [currentTeam, leagueTeams.length, persist, pool, poolById, reconcileAllExistingBoards, rememberBackfillEvents, seatingById, seatingPlayers, session, unavailable]);
 
   const confirmMlb = useCallback(async () => {
     if (recapCommitInFlight.current || !league || !session || !pool || session.currentPickIndex < session.pickOrder.length) return;
@@ -1030,6 +1095,7 @@ function MlbSnakeDraftRoom() {
         <PrivateDesk
           candidates={deskState.candidates}
           rankings={deskState.board!.rankings.byPosition ?? {}}
+          overallRankings={deskState.board!.rankings.global ?? []}
           boardSlots={deskState.board!.slots}
           brokenSlots={deskState.brokenSlots}
           planBill={deskState.planBill}
@@ -1046,6 +1112,7 @@ function MlbSnakeDraftRoom() {
           isCandidateSelectable={deskState.canSelectCandidate}
           resolveLegalFinishLine={deskState.legalFinishLineForCandidate}
           onReorder={(position, orderedIds) => { void reorderRanking(position, orderedIds); }}
+          onReorderOverall={(orderedIds) => { void reorderRanking('OVERALL', orderedIds); }}
           onStartWhatIf={startWhatIf}
           onKeepWhatIf={() => { void keepWhatIf(); }}
           onRevertWhatIf={() => setWhatIf(null)}
