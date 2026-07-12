@@ -12,3 +12,11 @@ ground truth at writing time) from CARRIED (Fable's session memory — re-verify
 House rules that do not change on crossing: builder≠auditor; JK's browser walk is the sole
 acceptance gate; plain language to JK (bottom line first, no engineer-speak); write-first;
 UNKNOWN = stop-and-report, never improvise. Full ritual: `spec-docs/SESSION_RULES.md`.
+
+## The morning kickoff prompt (paste this to start any thread)
+> Read `spec-docs/NOW/README.md` and the brief for your thread (LIVING_SEASON / SNAKE_DRAFT /
+> LEGENDS_LIBRARY) in full, then the standard session ritual. Load the `working-with-jk` skill.
+> Verify every "state" claim against current origin/main before acting (fetch first — main moves).
+> Restate: which thread you're in, its next move, and what you need from me. Then execute.
+> House rules: builder≠auditor; my browser walk is the only gate; plain language to me;
+> help-button law is ratified canon.
