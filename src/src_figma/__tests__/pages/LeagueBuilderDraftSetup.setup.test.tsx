@@ -223,6 +223,28 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.queryByText("PLAYER POOL")).not.toBeInTheDocument();
   });
 
+  test("auction format renders only the auction adapter", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText("ENTER AUCTION DRAFT")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Increase shill bidders" })).toBeInTheDocument();
+    expect(screen.queryByTestId("snake-setup-adapter")).not.toBeInTheDocument();
+    expect(screen.queryByText("ENTER SNAKE DRAFT")).not.toBeInTheDocument();
+  });
+
+  test("snake format renders its panels and no auction-only floor controls", async () => {
+    mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByTestId("snake-setup-adapter")).toBeInTheDocument();
+    for (const heading of ["5 · VERSIONS", "6 · CLUB SEATS", "7 · ORDER", "8 · READINESS", "9 · ENTER SNAKE DRAFT"]) {
+      expect(screen.getByText(heading)).toBeInTheDocument();
+    }
+    expect(screen.getByRole("button", { name: "ENTER SNAKE DRAFT" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Increase shill bidders" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/START SNAKE DRAFT \(POC\)/i)).not.toBeInTheDocument();
+  });
+
   test("disables player edits while the pool is locked", async () => {
     render(<LeagueBuilderDraftSetup />);
 
@@ -231,6 +253,15 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Unlock to Edit/i })).toBeDisabled();
     });
+  });
+
+  test("pool shuttle player rows open the full profile including personality and chemistry", async () => {
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByText("Avery Anchor"));
+    expect(await screen.findByText("Competitive")).toBeInTheDocument();
+    expect(screen.getByText("Crafty")).toBeInTheDocument();
+    expect(screen.getAllByText("POW").length).toBeGreaterThan(1);
   });
 
   test("starts at the MLB auction once the pool is locked and every club has both identities", async () => {

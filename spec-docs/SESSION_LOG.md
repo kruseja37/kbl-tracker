@@ -6997,3 +6997,37 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Net state:** S0 through S7 are all built and independently audited APPROVE or APPROVE-WITH-NOTES. The snake v1 draft program is **CODE-COMPLETE**; #74/#75 remain open pending merge with no further build work queued. The auction stays frozen-for-v2, routed, and testable, untouched by any snake lane. **JK's own browser walkthrough with the flag ON is the sole remaining acceptance gate for the whole program.**
 - **V2/ledger items opened across S4-S7 (not yet dispatched):** guest-device companion transport/ACL infrastructure (S5 Amendment 1); upgrading the auction's own fit computation to consume `derivePlayerBandWeights` (still computing neutral fit); `liquidityAwareBidding.ts`'s conservative tax-decrease clamp; S7 audit notes (a sound-toggle re-fire quirk on revealed seats with a live snipe condition; an unreachable-in-practice snake-MLB+auction-farm config gap); two legends-library carry-forwards (version labels, cross-namespace person IDs); S3's own cosmetic notes (backfill LOG lines, CPU-seat board writes, a bare try/catch in `startWhatIf`).
 - Docs updated this pass: `V1_BUILD_STATUS.md` (banner + new §0 item 2aj), `CURRENT_STATE.md` (new LATEST banner), `SESSION_LOG.md` (this entry), `DECISIONS_LOG.md` (S5 same-account ruling, S6 slot-table ruling, S7 farm-morale seam ruling), `CONTINUITY_CHECKPOINT.md` (new COLD-START SUMMARY). Shipped as a docs-only commit direct to `main` per standing scribe authority.
+
+## 2026-07-11 (Codex, attended) — UNIFYSETUP implemented; STOP at non-amended Gate 5 reds
+
+- Resumed lane `UNIFYSETUP` in `/private/tmp/kbl-unify` after the captain's explicit
+  confirmation and Amendment 1 ruling. No git write command was used.
+- Implemented one `/league-builder/draft-setup` surface with thin format adapters:
+  auction retains its shill/reserve/start behavior, while snake adds version selection,
+  GM/seat declarations, seeded order + tap-two-swap, archetype-honest simultaneous
+  seating proof, locked-IV truth, and a single ENTER SNAKE DRAFT action.
+- Ported ROOMFIX's exact-pool registration ahead of session creation, flushed pending
+  setup board writes into initial `seatBoards`, preserved the existing `snakeSetup`
+  and `seatBoards` shapes, routed snake MLB drafts to `/snake-room`, redirected the
+  retired `/snake-setup` path with its query intact, deleted the old setup page, and
+  upgraded shared pool rows to the full profile popover.
+- Owned verification passed: snake/ROOMFIX gate 19 files / 110 tests; corrected auction
+  firewall 40 passed files / 3 opt-in skipped and 482 passed tests / 6 skipped. TSC was
+  clean and build exited 0. All new tests passed in the definitive full run, including
+  ROOMFIX 2/2 and adapter tests 4/4.
+- Amendment 1 was followed exactly and every attempt recorded in
+  `CONTRACT_UNIFYSETUP_2026-07-11.md`. The load signature was severe: poolLock reached
+  101.90s in a solo run but passed 21/21 on allowed attempt 2.
+- **STOP / pending:** the definitive Gate 5 run ended 654 files passed / 2 failed / 8
+  skipped; 9,736 tests passed / 2 failed / 15 skipped. The failures were
+  `RosterDesigner.test.tsx`'s 10-second TWO-WAY test timeout and
+  `EliminationTeamHub.test.tsx` asserting its partial-data warning while the component
+  still showed its loading state. Neither file is in Amendment 1's exact grace list
+  and neither production surface was touched by this lane, so the builder did not
+  retry or modify them. UNIFYSETUP is implemented but **not certifiable / not ready for
+  independent audit** until the captain rules on or resolves those two Gate 5 reds.
+- Full file map, copy inventory, exact gate ledger, and auditor attack list are appended
+  to `spec-docs/contracts/CONTRACT_UNIFYSETUP_2026-07-11.md`.
+- Next session must start with the captain ruling on the two non-amended Gate 5 failures;
+  do not silently characterize them. If unblocked, rerun Gate 5 once, then dispatch the
+  required independent builder≠auditor review before any landing.

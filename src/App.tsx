@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { Navigate, Routes, Route } from "react-router-dom";
+import { Navigate, Routes, Route, useLocation } from "react-router-dom";
 import { PostGameRouteBoundary } from "./components/PostGameRouteBoundary";
 import { FRANCHISE_MANUAL_SMOKE_SETUP_ROUTE } from "./utils/franchiseManualSmokeFixtureGate";
 import { hydrateFranchisePhase2ActivationCache } from "./utils/franchisePhase2Activation";
@@ -117,13 +117,13 @@ const LeagueBuilderSnakeDraft = lazy(() =>
     default: module.LeagueBuilderSnakeDraft,
   })),
 );
-const SnakeDraftSetup = lazy(() =>
-  import("./src_figma/app/pages/SnakeDraftSetup").then((module) => ({
-    default: module.SnakeDraftSetup,
-  })),
-);
 const SnakeDraftRoom = lazy(() => import("./src_figma/app/pages/SnakeDraftRoom"));
 const SnakeCompanion = lazy(() => import("./src_figma/app/pages/SnakeCompanion"));
+
+function SnakeSetupRedirect() {
+  const location = useLocation();
+  return <Navigate to={{ pathname: "/league-builder/draft-setup", search: location.search }} replace />;
+}
 const SeasonRulesPreview = lazy(() =>
   import("./src_figma/app/pages/SeasonRulesPreview").then((module) => ({
     default: module.SeasonRulesPreview,
@@ -408,9 +408,7 @@ function App() {
         {isSnakeDraftPocEnabled() ? (
           <Route path="/league-builder/snake-draft" element={<LeagueBuilderSnakeDraft />} />
         ) : null}
-        {isSnakeDraftV1Enabled() ? (
-          <Route path="/snake-setup" element={<SnakeDraftSetup />} />
-        ) : null}
+        <Route path="/snake-setup" element={<SnakeSetupRedirect />} />
         {isSnakeDraftV1Enabled() ? (
           <Route path="/snake-room" element={<SnakeDraftRoom />} />
         ) : null}

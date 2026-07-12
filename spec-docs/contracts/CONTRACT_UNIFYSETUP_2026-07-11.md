@@ -197,3 +197,151 @@ RATIFIED FIREWALL PROTOCOL (this lane, this environment):
 4. Note the machine-load context in your report so the auditor re-runs accordingly.
 Resume from the firewall (it now passes under this protocol — the captain's run 1 is
 the evidence) and build the contract as written.
+
+---
+
+## BUILDER REPORT — IMPLEMENTED, BLOCKED AT GATE 5 (2026-07-11)
+
+**Verdict:** BLOCKED, not complete. UNIFYSETUP is implemented in the worktree and its
+owned tests, snake suites, characterized Draft Setup firewall, and auction firewall
+are green. Gate 5 cannot be certified: the definitive single full-suite rerun ended
+with two failures outside Amendment 1's exact grace list. Per `UNKNOWN = STOP`, the
+builder did not retry, loosen, or repair those unrelated suites. No git write command
+was used.
+
+### File:line map
+
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx:46-114` —
+  version grouping/selection and archetype-derived cap identity.
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx:116-190` —
+  locked RegisteredPool-IV seating input and initial per-seat board snapshots.
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx:220-243` —
+  ROOMFIX registration-before-session ordering.
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx:245-403` —
+  snake setup state, proof revision guard, readiness, session creation, and room entry.
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx:405-486` —
+  VERSIONS, CLUB SEATS, ORDER, and READINESS panels.
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:2946-2977` — ranking debounce
+  flush, format-gated snake adapter, and snake-only readiness gate.
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:3200-3255` — exact selected-id
+  lock, unlock law, and format-specific start action.
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:4864-4918` — snake panels and
+  the sole format-matched ENTER SNAKE DRAFT action.
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx:5446-5494` — shared pool rows
+  use the full profile popover for both formats.
+- `src/App.tsx:123-128,411-413` — retired `/snake-setup` redirect preserving the
+  query string; `/snake-room` remains the room route.
+- `src/src_figma/app/utils/draftRouting.ts:5-31` — snake MLB routing targets the
+  existing room while auction routing remains unchanged.
+- Deleted `src/src_figma/app/pages/SnakeDraftSetup.tsx` and migrated its coverage;
+  the `snakeSetup` and `seatBoards` storage shapes were not changed.
+- `src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx:1-129` — version,
+  frozen-IV, heavy-tax proof, and board-snapshot coverage.
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.registration.integration.test.tsx:217-329`
+  — migrated unified setup → room → private desk → guide → first-pick crawl.
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.setup.test.tsx:226-275` —
+  adapter isolation and full-profile parity.
+- `src/src_figma/__tests__/pages/SnakeDraftSetup.route.test.tsx:1-58` — redirect and
+  `leagueId` preservation.
+
+### Gate outputs
+
+1. `NODE_ENV= npx tsc -b --pretty false` — exit 0, no diagnostics.
+2. `NODE_ENV= npm run build` — exit 0; 2,687 modules transformed; built in 12.30s.
+   Existing Browserslist, dynamic-import, and chunk-size warnings only.
+   Gates 1-2 ran before the final one-line auction/snake proof-isolation repair and
+   later test-only expectation/timeout edits. The subsequent Gate 4 and both full
+   suites transformed/executed that corrected source, but the Gate 5 STOP prevented a
+   refreshed final tsc/build certification; treat Gates 1-2 as earlier green evidence,
+   not a claim that the blocked worktree is fully certified.
+3. Serialized migrated crawl + owned + snake suites — **19 files passed; 110 tests
+   passed; duration 75.16s.** New adapter tests were 4/4 and migrated ROOMFIX was 2/2.
+4. Serialized six-file characterized set + every auction-named suite — **40 files
+   passed, 3 opt-in diagnostics skipped; 482 tests passed, 6 skipped; duration
+   497.19s.** A prior attempt exposed a real format-isolation bug (snake proof was
+   touching synthetic auction pool ids); fixed by passing no proof pool outside the
+   snake adapter, then the complete Gate 4 command passed.
+5. **BLOCKED.** First full run: 653 files passed / 3 failed / 8 skipped; 9,734 tests
+   passed / 4 failed / 15 skipped; 1,209.94s. The owned ROOMFIX test exceeded its
+   60-second whole-test allowance under load, two route expectations were stale, and
+   the Amendment-covered poolLock family timed out. The route expectations were
+   corrected, ROOMFIX kept all assertions and received a 180-second load allowance,
+   and its exact file passed 2/2 in 17.20s. PoolLock passed solo on Amendment attempt 2,
+   21/21 in 101.90s.
+
+   Definitive full rerun: **654 files passed / 2 failed / 8 skipped; 9,736 tests
+   passed / 2 failed / 15 skipped; duration 1,367.43s.** All UNIFYSETUP-owned tests
+   passed in this full run, including ROOMFIX 2/2 in 31.10s and adapter 4/4. The two
+   non-amended failures were:
+
+   - `src/src_figma/__tests__/components/RosterDesigner.test.tsx:315` — `D1: TWO-WAY
+     toggle only renders where a two-way player is eligible` hit its 10,000ms test
+     timeout (file duration 21.25s).
+   - `src/src_figma/__tests__/app/EliminationTeamHub.test.tsx:159` — `renders partial
+     data warnings honestly` asserted while the panel still rendered `LOADING TEAM
+     IMPACT...`.
+
+   Neither file is in Amendment 1's exact list, and neither production surface was
+   touched by this lane. They were therefore not retried or changed.
+
+Amendment attempt ledger used during the lane:
+
+- Pre-change six-file firewall: setup 26/26 attempt 1; money 16/16 attempt 1;
+  poolLock attempt 1 red on a moving option wait, attempt 2 green 21/21; board 24/24
+  attempt 1; universe 15/15 attempt 1; RankYourBoardZone 7/7 attempt 1.
+- Gate 4 first run: board attempt 1 red, then solo attempt 2 green 24/24; universe's
+  first red was contaminated by the builder's auction/snake isolation bug, then green
+  15/15 after that bug was fixed. The complete corrected Gate 4 rerun was green.
+- Gate 5 first run: poolLock attempt 1 red; exact solo attempt 2 green 21/21. The
+  definitive full rerun then passed poolLock 21/21 without needing the amendment.
+
+Machine-load context: the captain reported three concurrent heavy lanes. Timings in
+this run confirm severe contention (for example, a normally ~37s poolLock file reached
+101.90s solo, while still passing fully).
+
+### Copy inventory
+
+- New snake headings/actions: `5 · VERSIONS`, `6 · CLUB SEATS`, `7 · ORDER`,
+  `8 · READINESS`, `9 · ENTER SNAKE DRAFT`, `ENTER SNAKE DRAFT`, and
+  `RESUME SNAKE DRAFT`.
+- Version lock law: `PICK ONE CARD FOR EACH PERSON BEFORE YOU LOCK THE POOL.` and
+  `UNLOCK THE POOL TO CHANGE VERSIONS.`
+- Seat/order controls: `GM NAME`, `HOTSEAT`, `COMPANION`, `DRAFT SEED`, `SHUFFLE`,
+  visible round-direction preview, and tap-two-swap order buttons.
+- Readiness states: `CHECKING…`, `LOCK THE POOL TO CHECK THE ROOM.`, and the existing
+  proof engine's plain-language verdict/shortfall message.
+- Auction-only shill/reserve copy remains format-gated; no percentages were added.
+
+### Auditor attack list
+
+1. First resolve Gate 5's two non-amended reds under the captain's firewall rules.
+   Do not silently add them to Amendment 1 or retry them as characterized without a
+   captain ruling.
+2. Re-run the single full suite on a quiet machine and compare the exact two failures
+   against untouched base `8f6c215a`; the builder cannot certify causation either way.
+3. Attack format isolation with synthetic auction pool ids: auction setup must never
+   construct or run snake seating proof.
+4. Mutate live player salary/IV after lock and confirm proof/session still use the
+   RegisteredPool IV; verify version changes require UNLOCK.
+5. Verify simultaneous proof receives each club's chosen archetype-derived cap
+   identity and blocks the constructed balanced-pass/heavy-tax-fail pool.
+6. Interrupt a debounced board edit immediately before GO and confirm the initial
+   `seatBoards` record contains the hand-touched rank.
+7. Falsify the no-orphan law by forcing registration failure; no snake session may be
+   created before the exact picked pool is registered and locked.
+8. Confirm auction routes, saved-auction resume, shills, reserve pricing, and one
+   format-matched action remain byte-behavior compatible apart from additive full
+   profile parity.
+9. Confirm deleted `SnakeDraftSetup` has no live import and `/snake-setup` preserves
+   every query parameter while redirecting to unified setup.
+
+---
+
+## CAPTAIN CERTIFICATION OF GATE 5 (2026-07-11)
+The two non-amended full-run reds (RosterDesigner two-way toggle timeout;
+EliminationTeamHub loading-race assertion) were solo-verified by the captain under the
+Amendment 1 protocol: BOTH GREEN on attempt 1 (untouched by this lane's diff; same
+machine-load flake class — the characterized list is hereby extended to include them).
+Captain also re-ran Gate 1 (tsc exit 0) and Gate 2 (build exit 0) on the FINAL
+worktree, closing the builder's stale-certification caveat. Gate 5 is CERTIFIED:
+zero deterministic reds attributable to this lane. → Independent audit next.

@@ -19,7 +19,6 @@ import {
   Plus,
   Minus,
   RefreshCw,
-  Shuffle,
 } from "lucide-react";
 import { ArchetypePicker, type ArchetypeSlot } from "../components/draft/ArchetypePicker";
 import { BallparkShell, PanelWithHeaderStrip, PressButton } from "../components/ballpark";
@@ -64,6 +63,7 @@ import {
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
+import type { RegisteredPool } from "../../../engines/leagueConstruction";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
 import {
   historicalToSimArchetype,
@@ -106,7 +106,6 @@ import {
 } from "../../../utils/leagueBuilderStorage";
 import { readMlbDraftCompletion } from "../../../utils/mlbDraftCompletion";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
-import { isSnakeDraftPocEnabled } from "../../../utils/franchisePhase2Flags";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { scaledShillDefault } from "../../../data/auctionEngineConstants";
 import { TRAIT_PRICING } from "../../../data/traitPricing";
@@ -161,6 +160,10 @@ import {
 import type { TaxonomyPosition } from "../../../data/playerArchetypeTaxonomy";
 import { RankReorderList, materializeRankOrder } from "../components/shared/RankReorderList";
 import { PlayerProfilePopover } from "../components/shared/PlayerProfilePopover";
+import {
+  SnakeDraftSetupPanels,
+  useSnakeDraftSetupAdapter,
+} from "../components/snake/setup/SnakeDraftSetupAdapter";
 import {
   formatSalaryCapInput,
   formatSalaryCapMoney,
@@ -290,10 +293,7 @@ type TeamConfig = {
   farmKey?: string;
 };
 
-type LeaguePoolRecord = {
-  locked?: boolean;
-  players: readonly unknown[];
-};
+type LeaguePoolRecord = RegisteredPool;
 
 type ClubEditorMode = "identity" | "design" | "board" | null;
 type IdentityAutoFillSlot = "mlb" | "farm";
@@ -2348,6 +2348,7 @@ export function LeagueBuilderDraftSetup() {
     );
   }, [includeHumanIdentityAutoFill, leagueTeams, seats]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey) && Boolean(team.farmArchetypeKey));
+  const isSnakeFormat = league?.draftFormat === "snake";
   const poolReady = locked && sufficiency.meetsFloor;
   const allHumanDesignsLocked = designsLocked >= humanTeams.length;
   // CONTRACT_STALEPARITY_2026-07-09: poolTrailing used to be skipped entirely for pool-first
@@ -2942,6 +2943,40 @@ export function LeagueBuilderDraftSetup() {
     };
   }, [flushBoardRankOverrides]);
 
+  const flushBoardRankingsForSnake = useCallback(async (): Promise<Team[]> => {
+    const pending = pendingBoardRankOverridesRef.current;
+    if (!pending) return leagueTeams;
+    await flushBoardRankOverrides(pending.team, pending.overrides);
+    setPendingBoardRankOverrides((current) => (current === pending ? null : current));
+    return leagueTeams.map((team) => (
+      team.id === pending.team.id ? { ...pending.team, boardRankOverrides: pending.overrides } : team
+    ));
+  }, [flushBoardRankOverrides, leagueTeams]);
+
+  const snakeAdapter = useSnakeDraftSetupAdapter({
+    league,
+    teams: leagueTeams,
+    players,
+    poolPlayers: inPoolPlayers,
+    // Keep snake-only proof work completely outside the auction adapter. Several
+    // auction fixtures intentionally use synthetic pool ids that do not exist in
+    // the live player table; they are valid for the auction diagnostics but not
+    // for snake seating proof.
+    pool: isSnakeFormat ? poolRecord : null,
+    hasSavedDraft,
+    savedDraftChecked,
+    savedDraftLookupError,
+    flushBoardRankings: flushBoardRankingsForSnake,
+    navigateToRoom: (leagueId) => navigate(`/snake-room?leagueId=${encodeURIComponent(leagueId)}`),
+  });
+
+  const effectiveStartReady = isSnakeFormat
+    ? Boolean(hasSavedDraft || (startReady && snakeAdapter.ready))
+    : startReady;
+  const effectiveStartBlocker = isSnakeFormat && !hasSavedDraft
+    ? snakeAdapter.readinessReasons[0] ?? startBlocker
+    : startBlocker;
+
   const handleAdd = () =>
     runAction(async () => {
       assertPoolCanMutate();
@@ -3165,7 +3200,16 @@ export function LeagueBuilderDraftSetup() {
   const handleLock = () =>
     runAction(async () => {
       assertPoolCanMutate();
-      const lockedPool = await lockLeaguePool(activeLeagueId, { expectedPlayerIds: displayedPoolIds });
+      const expectedIds = isSnakeFormat ? snakeAdapter.selectedPoolIds : displayedPoolIds;
+      if (isSnakeFormat) {
+        const selectedIds = new Set(expectedIds);
+        const unpickedVersionIds = displayedPoolIds.filter((id) => !selectedIds.has(id));
+        if (unpickedVersionIds.length > 0) {
+          const changedPlayers = await removePlayersFromLeaguePool(unpickedVersionIds, activeLeagueId);
+          replacePlayersLocal(changedPlayers);
+        }
+      }
+      const lockedPool = await lockLeaguePool(activeLeagueId, { expectedPlayerIds: expectedIds });
       setPoolRecord(lockedPool);
       setLockConfirm(false);
       // CONTRACT_STALEPARITY_2026-07-09: pool-first has no separate "extract" step -- LOCK is its
@@ -3201,19 +3245,16 @@ export function LeagueBuilderDraftSetup() {
     });
 
   const handleStartDraft = () => {
-    if (!league || !startReady) return;
-    if (league.draftFormat === "snake" && hasSavedDraft) {
-      // An in-progress snake draft resumes in THE ROOM; re-entering setup's GO
-      // would overwrite the saved session (walkthrough finding, 2026-07-11).
-      navigate(`/snake-room?leagueId=${encodeURIComponent(league.id)}`);
+    if (!league || !effectiveStartReady) return;
+    if (isSnakeFormat) {
+      // The adapter's enterDraft handles both fresh GO and resume-to-room —
+      // it supersedes the PR #96 early return (audit merge recipe, 2026-07-11).
+      void runAction(async () => {
+        await snakeAdapter.enterDraft();
+      }, { refreshData: false, refreshPool: false });
       return;
     }
     navigate(draftRouteForLeague(league, { shillCount: shills, reservePriceK }));
-  };
-
-  const handleStartSnakeDraftPoc = () => {
-    if (!league || !startReady || !isSnakeDraftPocEnabled()) return;
-    navigate(`/league-builder/snake-draft?leagueId=${encodeURIComponent(league.id)}`);
   };
 
   const handleSaveEditedPlayer = useCallback(
@@ -3437,6 +3478,13 @@ export function LeagueBuilderDraftSetup() {
       }
     }
   }
+
+  const displayedReadinessReasons = isSnakeFormat
+    ? [...new Set([
+        ...readinessReasons.map((reason) => reason.replaceAll("auction", "draft").replaceAll("AUCTION", "DRAFT")),
+        ...snakeAdapter.readinessReasons,
+      ])]
+    : readinessReasons;
 
   const runModeALock = () => {
     if (!canModeALock) return;
@@ -4815,8 +4863,17 @@ export function LeagueBuilderDraftSetup() {
             )}
           </PanelWithHeaderStrip>
 
-          <PanelWithHeaderStrip title="5 · THE FLOOR" rightSlot={<Gavel className="w-4 h-4 text-[var(--ballpark-brass)]" />}>
-            {showHelp ? (
+          {isSnakeFormat ? (
+            <SnakeDraftSetupPanels
+              adapter={snakeAdapter}
+              teams={leagueTeams}
+              locked={locked}
+              disabled={Boolean(setupMutationBlockMessage) || busy}
+            />
+          ) : null}
+
+          <PanelWithHeaderStrip title={isSnakeFormat ? "9 · ENTER SNAKE DRAFT" : "5 · THE FLOOR"} rightSlot={<Gavel className="w-4 h-4 text-[var(--ballpark-brass)]" />}>
+            {showHelp && !isSnakeFormat ? (
               <HelpNote>
                 Set shill pressure, check the room, then start. A live draft resumes from here.
               </HelpNote>
@@ -4825,7 +4882,7 @@ export function LeagueBuilderDraftSetup() {
                 any specific pool-mode zone -- it names EVERY unmet condition across LOCK POOL and
                 START THE DRAFT so "no way to start the draft" always has a plain-language answer
                 right where the user is looking for it. Empty on the happy path -- nothing renders. */}
-            {readinessReasons.length > 0 ? (
+            {displayedReadinessReasons.length > 0 ? (
               <div
                 className="border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] px-4 py-3 mb-4"
                 data-testid="draft-readiness-panel"
@@ -4834,12 +4891,34 @@ export function LeagueBuilderDraftSetup() {
                   WHAT'S HOLDING THE DRAFT UP
                 </div>
                 <ul className="grid gap-1 text-sm text-[var(--ballpark-warn-text)]">
-                  {readinessReasons.map((reason, index) => (
+                  {displayedReadinessReasons.map((reason, index) => (
                     <li key={`${index}-${reason}`}>• {reason}</li>
                   ))}
                 </ul>
               </div>
             ) : null}
+            {isSnakeFormat ? (
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="text-sm text-[var(--ballpark-chalk)]/75">
+                  {leagueTeams.length} clubs · {poolReady ? "locked pool" : "pool open"} · {snakeAdapter.proof?.feasible ? "room ready" : "room check needed"}
+                </div>
+                <div className="flex flex-col items-start gap-2 lg:items-end">
+                  <PressButton
+                    onClick={handleStartDraft}
+                    disabled={busy || !effectiveStartReady}
+                    aria-label={hasSavedDraft ? "RESUME DRAFT" : "ENTER SNAKE DRAFT"}
+                    variant="gold"
+                    size="lg"
+                    shadow={4}
+                  >
+                    <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME SNAKE DRAFT" : "ENTER SNAKE DRAFT"}
+                  </PressButton>
+                  {!effectiveStartReady && effectiveStartBlocker ? (
+                    <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{effectiveStartBlocker}</span>
+                  ) : null}
+                </div>
+              </div>
+            ) : (
             <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(220px,280px)_1fr_auto] gap-4 items-center">
               <div className="flex items-center gap-3">
                 <button
@@ -4877,30 +4956,21 @@ export function LeagueBuilderDraftSetup() {
                 <div className="flex flex-wrap justify-start lg:justify-end gap-2">
                   <PressButton
                     onClick={handleStartDraft}
-                    disabled={busy || !startReady}
+                    disabled={busy || !effectiveStartReady}
+                    aria-label={hasSavedDraft ? "RESUME DRAFT" : "START THE DRAFT"}
                     variant="gold"
                     size="lg"
                     shadow={4}
                   >
-                    <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "START THE DRAFT"}
+                    <Play className="w-5 h-5" /> {hasSavedDraft ? "RESUME DRAFT" : "ENTER AUCTION DRAFT"}
                   </PressButton>
-                  {isSnakeDraftPocEnabled() ? (
-                    <PressButton
-                      onClick={handleStartSnakeDraftPoc}
-                      disabled={busy || !startReady}
-                      variant="affirm"
-                      size="lg"
-                      shadow={4}
-                    >
-                      <Shuffle className="w-5 h-5" /> START SNAKE DRAFT (POC)
-                    </PressButton>
-                  ) : null}
                 </div>
-                {!startReady && startBlocker ? (
-                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{startBlocker}</span>
+                {!effectiveStartReady && effectiveStartBlocker ? (
+                  <span className="text-[11px] text-[var(--ballpark-chalk)]/55">{effectiveStartBlocker}</span>
                 ) : null}
               </div>
             </div>
+            )}
           </PanelWithHeaderStrip>
 
           {busy ? <Loader2 className="w-5 h-5 animate-spin text-[var(--ballpark-chalk)]/70" /> : null}
@@ -5394,18 +5464,8 @@ const Row = memo(function Row({
   onToggle: (playerId: string) => void;
   onFocus: (playerId: string) => void;
 }) {
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onFocus(player.id);
-  };
-
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onFocus(player.id)}
-      onKeyDown={handleKeyDown}
       className={`w-full flex items-center gap-2 px-2 py-1.5 text-left border-b border-[#4A6844] text-sm transition cursor-pointer ${
         focused ? "bg-[#C4A853]/20 outline outline-2 outline-[#C4A853] -outline-offset-2" : checked ? "bg-[#5A8352]" : "hover:bg-[#4A6844]"
       }`}
@@ -5425,11 +5485,15 @@ const Row = memo(function Row({
       >
         {checked && <Check className="w-3 h-3 text-[#1A1A1A]" />}
       </button>
-      <span className="flex-1 truncate text-[#E8E8D8]">{playerName(player)}</span>
-      <span className="w-10 text-xs text-[#E8E8D8]/60">{player.primaryPosition}</span>
-      <span className="w-24 text-right text-xs font-bold text-[#E8E8D8]" title={rightTitle}>
-        {rightLabel}
-      </span>
+      <PlayerProfilePopover player={player} revealFull>
+        <span className="flex min-w-0 flex-1 items-center gap-2" onClick={() => onFocus(player.id)}>
+          <span className="flex-1 truncate text-[#E8E8D8]">{playerName(player)}</span>
+          <span className="w-10 text-xs text-[#E8E8D8]/60">{player.primaryPosition}</span>
+          <span className="w-24 text-right text-xs font-bold text-[#E8E8D8]" title={rightTitle}>
+            {rightLabel}
+          </span>
+        </span>
+      </PlayerProfilePopover>
     </div>
   );
 });
