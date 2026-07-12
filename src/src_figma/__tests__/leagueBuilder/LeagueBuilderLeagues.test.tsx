@@ -385,8 +385,8 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(deleteButtons.length).toBe(2);
     });
 
-    test('draft route helper maps every legacy format to auction routes', () => {
-      expect(draftRouteForFormat('snake')).toBe('/league-builder/auction-draft');
+    test('draft route helper maps each format to its own draft entry', () => {
+      expect(draftRouteForFormat('snake')).toBe('/snake-setup');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
       expect(farmDraftRouteForFormat('snake')).toBe('/snake-room');
@@ -394,9 +394,9 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(farmDraftRouteForFormat(undefined)).toBe('/league-builder/farm-auction-draft');
     });
 
-    test('per-league Draft action opens Draft Setup threading leagueId; retired formats fall back to auction', async () => {
+    test('per-league Draft action opens Draft Setup threading leagueId; snake leagues route to the snake setup', async () => {
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/league-builder/auction-draft?leagueId=league-2',
+        '/snake-setup?leagueId=league-2',
       );
       expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/snake-room?leagueId=league-2&phase=farm',

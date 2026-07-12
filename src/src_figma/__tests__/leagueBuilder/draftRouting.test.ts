@@ -11,7 +11,7 @@ import {
 describe("draftRouting", () => {
   test("routes every MLB draft format to auction", () => {
     expect(mlbDraftRouteForFormat("auction")).toBe("/league-builder/auction-draft");
-    expect(mlbDraftRouteForFormat("snake")).toBe("/league-builder/auction-draft");
+    expect(mlbDraftRouteForFormat("snake")).toBe("/snake-setup");
     expect(mlbDraftRouteForFormat(undefined)).toBe("/league-builder/auction-draft");
   });
 
@@ -21,9 +21,9 @@ describe("draftRouting", () => {
     expect(farmDraftRouteForFormat(undefined)).toBe("/league-builder/farm-auction-draft");
   });
 
-  test("threads legacy snake league ids through auction fallback routes", () => {
+  test("threads snake league ids to the snake setup", () => {
     expect(draftRouteForLeague({ id: "legacy-snake", draftFormat: "snake" })).toBe(
-      "/league-builder/auction-draft?leagueId=legacy-snake",
+      "/snake-setup?leagueId=legacy-snake",
     );
     expect(farmDraftRouteForLeague({ id: "legacy-snake", draftFormat: "snake" })).toBe(
       "/snake-room?leagueId=legacy-snake&phase=farm",
