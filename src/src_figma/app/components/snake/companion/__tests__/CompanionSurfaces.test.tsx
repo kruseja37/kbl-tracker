@@ -1,5 +1,12 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+
+const patchCompanions = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../../../utils/leagueBuilderStorage')>();
+  return { ...actual, patchMlbDraftSessionSnakeCompanions: patchCompanions };
+});
 
 import type { LeagueBuilderMlbDraftSession } from '../../../../../../utils/leagueBuilderStorage';
 import { CompanionApprovalCard } from '../CompanionApprovalCard';
@@ -19,22 +26,27 @@ const session = {
 } satisfies LeagueBuilderMlbDraftSession;
 
 describe('S5 companion surfaces', () => {
-  it('lets the main device approve, refuse, and revoke from a standalone card', () => {
+  it('lets the main device approve, refuse, and revoke from a standalone card', async () => {
     const onChange = vi.fn();
+    patchCompanions.mockImplementation(async (input) => ({
+      ...session,
+      snakeCompanions: input.patch(session.snakeCompanions),
+    }));
     render(<CompanionApprovalCard
       session={session}
       teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
       onChange={onChange}
     />);
     expect(screen.getByText('ROOM CODE 4821')).toBeInTheDocument();
+    expect(screen.getByText(`ON YOUR PHONE, GO TO: ${window.location.origin}/snake-companion — SAME WI-FI`)).toBeInTheDocument();
     expect(screen.getByText('LET ALEX SEE THE KODIAKS DESK?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       snakeCompanions: expect.objectContaining({ claims: expect.arrayContaining([expect.objectContaining({ deviceId: 'ipad-a', status: 'approved' })]) }),
-    }));
+    })));
     fireEvent.click(screen.getByRole('button', { name: 'REFUSE' }));
     fireEvent.click(screen.getByRole('button', { name: 'REVOKE BLAIR' }));
-    expect(onChange).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
   });
 
   it('renders only the supplied claimed-seat desk and public read surfaces, with no execute controls', () => {

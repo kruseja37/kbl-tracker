@@ -1978,6 +1978,115 @@ export async function saveMlbDraftSession(
   });
 }
 
+export type SnakeCompanionState = NonNullable<LeagueBuilderMlbDraftSession['snakeCompanions']>;
+
+async function updateMlbDraftSessionAtomically(
+  leagueId: string,
+  seasonNumber: number,
+  update: (current: LeagueBuilderMlbDraftSession) => LeagueBuilderMlbDraftSession,
+): Promise<LeagueBuilderMlbDraftSession> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(leagueId, seasonNumber);
+  const now = nowISO();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
+    const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const read = store.get(id);
+    let saved: LeagueBuilderMlbDraftSession | null = null;
+    let wrote = false;
+
+    read.onsuccess = () => {
+      const current = read.result as LeagueBuilderMlbDraftSession | undefined;
+      if (!current) {
+        reject(new Error(`MLB draft session ${id} does not exist.`));
+        tx.abort();
+        return;
+      }
+      const updated = update(current);
+      if (updated === current) {
+        saved = current;
+        return;
+      }
+      saved = {
+        ...updated,
+        id: current.id,
+        leagueId: current.leagueId,
+        seasonNumber: current.seasonNumber,
+        createdDate: current.createdDate,
+        lastModified: now,
+      };
+      wrote = true;
+      store.put(saved);
+    };
+    read.onerror = () => reject(read.error);
+    tx.oncomplete = () => {
+      if (!saved) {
+        reject(new Error(`MLB draft session ${id} was not updated.`));
+        return;
+      }
+      if (wrote && !syncEngine.isSuppressed()) {
+        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
+      }
+      resolve(saved);
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Companion writer: re-read the freshest session and replace only snakeCompanions.
+ * Once a valid room code exists, this helper preserves it for the session lifetime.
+ */
+export async function patchMlbDraftSessionSnakeCompanions(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  patch: (current: SnakeCompanionState | undefined) => SnakeCompanionState;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    const requested = input.patch(current.snakeCompanions);
+    const currentCode = current.snakeCompanions?.roomCode;
+    const snakeCompanions = currentCode && /^\d{4}$/.test(currentCode)
+      ? { ...requested, roomCode: currentCode }
+      : requested;
+    if (JSON.stringify(snakeCompanions) === JSON.stringify(current.snakeCompanions)) return current;
+    return {
+      ...current,
+      snakeCompanions,
+      revision: (current.revision ?? 0) + 1,
+    };
+  });
+}
+
+function mergeFreshSeatBoards(
+  fresh: LeagueBuilderMlbDraftSession['seatBoards'],
+  incoming: LeagueBuilderMlbDraftSession['seatBoards'],
+): LeagueBuilderMlbDraftSession['seatBoards'] {
+  if (!fresh) return incoming;
+  if (!incoming) return fresh;
+  const merged = { ...fresh };
+  for (const [teamId, board] of Object.entries(incoming)) {
+    const current = fresh[teamId];
+    if (!current || board.revision > current.revision) merged[teamId] = board;
+  }
+  return merged;
+}
+
+/**
+ * Main-room writer: saves room-owned state while carrying forward the freshest
+ * companion field and the newest revision of every seat board.
+ */
+export async function saveMlbDraftRoomSession(
+  incoming: LeagueBuilderMlbDraftSession,
+): Promise<LeagueBuilderMlbDraftSession> {
+  return updateMlbDraftSessionAtomically(incoming.leagueId, incoming.seasonNumber, (fresh) => ({
+    ...incoming,
+    snakeCompanions: fresh.snakeCompanions ?? incoming.snakeCompanions,
+    seatBoards: mergeFreshSeatBoards(fresh.seatBoards, incoming.seatBoards),
+    revision: Math.max(incoming.revision ?? 0, (fresh.revision ?? 0) + 1),
+  }));
+}
+
 export async function deleteMlbDraftSession(leagueId: string, seasonNumber = 1): Promise<void> {
   const db = await initLeagueBuilderDatabase();
   const id = createMlbDraftSessionId(leagueId, seasonNumber);

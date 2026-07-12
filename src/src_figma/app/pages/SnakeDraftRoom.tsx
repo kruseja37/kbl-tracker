@@ -17,6 +17,7 @@ import {
 } from '../../../engines/snakeFarmSlots';
 import { evaluateSnakeLegalFinish, evaluateSnakePlan, evaluateSnakePlanWhatIf } from '../../../engines/snakeEconomics';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../../engines/snakeSession';
+import { primeSnakeGuideSeatingProof } from '../../../engines/snakeGuideTrade';
 import type { SimultaneousSnakeSeatingInput } from '../../../engines/snakeSeatingProof';
 import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../engines/rosterNeed';
@@ -60,6 +61,7 @@ import { buildFarmAuctionPool, FARM_AUCTION_ROSTER_SLOTS_PER_TEAM, type FarmAuct
 import { computeFarmTierCap, computeMlbToFarmCarryover } from '../../../utils/farmAuctionWallet';
 import {
   getScoutProfilesForLeague,
+  saveMlbDraftRoomSession,
   resolveLeagueSalaryCap,
   type LeagueBuilderScoutProfile,
 } from '../../../utils/leagueBuilderStorage';
@@ -231,7 +233,7 @@ function FarmSnakeRoom() {
       }]),
     }));
   }, [currentTeam, pressure, selected, session]);
-  const persist = useCallback(async (next: NonNullable<typeof session>) => setSession(await saveMlbDraftSession(next)), [saveMlbDraftSession]);
+  const persist = useCallback(async (next: NonNullable<typeof session>) => setSession(await saveMlbDraftRoomSession(next)), []);
   const recordPick = useCallback(async (playerId: string) => {
     if (!session || !currentSlot || !farmPool) return;
     const prospect = farmPool.prospects.find((row) => row.id === playerId);
@@ -339,6 +341,22 @@ function MlbSnakeDraftRoom() {
   const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
   const [livePickMoveRevision, setLivePickMoveRevision] = useState(0);
+  const [privateDeskRevealed, setPrivateDeskRevealed] = useState(false);
+  const [privateDeskReady, setPrivateDeskReady] = useState(false);
+
+  useEffect(() => {
+    if (!privateDeskRevealed) {
+      setPrivateDeskReady(false);
+      return;
+    }
+    const ready = () => setPrivateDeskReady(true);
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(ready);
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(ready, 0);
+    return () => globalThis.clearTimeout(id);
+  }, [privateDeskRevealed]);
 
   const loadSession = useCallback(async () => {
     if (!league) return;
@@ -431,6 +449,16 @@ function MlbSnakeDraftRoom() {
       versionState: session.versionState,
     };
   }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+  useEffect(() => {
+    if (!seatingProofInput) return;
+    const run = () => { primeSnakeGuideSeatingProof(seatingProofInput); };
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(run);
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = globalThis.setTimeout(run, 0);
+    return () => globalThis.clearTimeout(id);
+  }, [seatingProofInput]);
   const deskRoomPlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -503,12 +531,16 @@ function MlbSnakeDraftRoom() {
     : null;
 
   const persist = useCallback(async (next: NonNullable<typeof session>) => {
-    const saved = await saveMlbDraftSession(next);
+    const saved = await saveMlbDraftRoomSession(next);
     setSession(saved);
-  }, [saveMlbDraftSession]);
+  }, []);
+
+  const acceptCompanionSession = useCallback((saved: NonNullable<typeof session>) => {
+    setSession(saved);
+  }, []);
 
   const deskState = useMemo(() => {
-    if (!session || !pool || !currentTeam) return null;
+    if (!privateDeskReady || !session || !pool || !currentTeam) return null;
     const locked = currentLocked ?? resolveLockedSeat({ team: currentTeam, session });
     const caps = normalizeAuctionLuxuryCapsForLeagueSize(pool.luxuryCaps, leagueTeams.length);
     const seats = buildRationalSeats({ teams: leagueTeams, session, playersById: deskRoomById, budget: pool.tierCap });
@@ -553,22 +585,7 @@ function MlbSnakeDraftRoom() {
         locked.capIdentity,
         caps,
       );
-      const remaining = available.filter((entry) => entry.playerId !== player.playerId);
-      const finish = evaluateSnakeLegalFinish({
-        currentRoster: [...ownSeat.roster, player],
-        committedSpent: ownSeat.committedSpent + player.price,
-        availablePool: remaining,
-        budget: pool.tierCap,
-        baseCaps: pool.luxuryCaps,
-        realTeamCount: leagueTeams.length,
-        capIdentity: locked.capIdentity,
-      });
       const risk = riskById.get(player.playerId);
-      const legalFinishLine = !finish.feasible
-        ? 'THIS PICK LEAVES NO LEGAL 22.'
-        : finish.legalFinishCushion < 0
-        ? `YOU ARE $${Math.abs(Math.round(finish.legalFinishCushion)).toLocaleString()} SHORT AFTER SAVING ENOUGH TO FINISH YOUR TEAM.`
-        : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`;
       return {
         id: player.playerId,
         name: fullName(player.stored.firstName, player.stored.lastName).toUpperCase(),
@@ -583,7 +600,7 @@ function MlbSnakeDraftRoom() {
         riskReason: risk
           ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.`
           : 'NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.',
-        legalFinishLine,
+        legalFinishLine: '',
         construction: player.construction,
         drafted: unavailable.has(player.playerId),
       };
@@ -622,6 +639,29 @@ function MlbSnakeDraftRoom() {
       };
     });
     const candidateById = new Map(displayCandidates.map((candidate) => [candidate.id, candidate]));
+    const legalFinishLineCache = new Map<string, string>();
+    const legalFinishLineForCandidate = (candidateId: string): string => {
+      const cached = legalFinishLineCache.get(candidateId);
+      if (cached) return cached;
+      const player = deskRoomById.get(candidateId);
+      if (!player) return 'THIS PLAYER IS NO LONGER IN THE DRAFT POOL.';
+      const finish = evaluateSnakeLegalFinish({
+        currentRoster: [...ownSeat.roster, player],
+        committedSpent: ownSeat.committedSpent + player.price,
+        availablePool: available.filter((entry) => entry.playerId !== player.playerId),
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: locked.capIdentity,
+      });
+      const line = !finish.feasible
+        ? 'THIS PICK LEAVES NO LEGAL 22.'
+        : finish.legalFinishCushion < 0
+          ? `YOU ARE $${Math.abs(Math.round(finish.legalFinishCushion)).toLocaleString()} SHORT AFTER SAVING ENOUGH TO FINISH YOUR TEAM.`
+          : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`;
+      legalFinishLineCache.set(candidateId, line);
+      return line;
+    };
     const slotDepth = Object.fromEntries(Object.keys(board?.slots ?? {}).map((slotId) => {
       const position = boardSlotPosition(slotId as SnakeBoardSlotId)
         ?? candidateById.get(board?.slots[slotId as SnakeBoardSlotId] ?? '')?.position;
@@ -669,8 +709,9 @@ function MlbSnakeDraftRoom() {
       availability,
       slotDepth,
       taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps }) : [],
+      legalFinishLineForCandidate,
     };
-  }, [currentBoard, currentLocked, currentTeam, deskRoomById, deskRoomPlayers, leagueTeams, playerById, pool, session, unavailable]);
+  }, [currentBoard, currentLocked, currentTeam, deskRoomById, deskRoomPlayers, leagueTeams, playerById, pool, privateDeskReady, session, unavailable]);
 
   useEffect(() => {
     if (!session || !currentTeam || !deskState?.board) return;
@@ -739,7 +780,7 @@ function MlbSnakeDraftRoom() {
         planCushion: bill.planCushion,
         legal,
         legalityLine: legal ? 'THE CHOSEN BOARD SLOTS STILL WORK.' : `PLAN BROKEN — ${candidate.name} CANNOT FILL ${slotId}.`,
-        legalFinishLine: candidate.legalFinishLine,
+        legalFinishLine: deskState.legalFinishLineForCandidate(candidate.id),
       },
       board,
     });
@@ -769,6 +810,7 @@ function MlbSnakeDraftRoom() {
       marginalTax,
       versionPool: seatingPlayers,
     });
+    setPrivateDeskRevealed(false);
     await persist(next);
   }, [currentTeam, leagueTeams.length, persist, pool, poolById, seatingById, seatingPlayers, session]);
 
@@ -868,6 +910,7 @@ function MlbSnakeDraftRoom() {
           taxCoreRows={deskState.taxCoreRows}
           slotDepth={deskState.slotDepth}
           whatIf={whatIf?.view ?? null}
+          resolveLegalFinishLine={deskState.legalFinishLineForCandidate}
           onReorder={(position, orderedIds) => { void reorderRanking(position, orderedIds); }}
           onStartWhatIf={startWhatIf}
           onKeepWhatIf={() => { void keepWhatIf(); }}
@@ -880,7 +923,7 @@ function MlbSnakeDraftRoom() {
             onAsk={askTradeGuide}
           />}
         />
-      ) : null}
+      ) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
       tradeGuide={<SnakeTradeGuide
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
         pickValueChart={pickValueChart}
@@ -897,12 +940,13 @@ function MlbSnakeDraftRoom() {
       companionApproval={<CompanionApprovalCard
         session={session}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
-        onChange={(next) => void persist(next)}
+        onChange={acceptCompanionSession}
       />}
       onPauseChange={(paused) => void setPaused(paused)}
       onRecordPick={recordPick}
       onCorrectLatest={correctLatest}
       onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
+      onPrivateSeatRevealedChange={setPrivateDeskRevealed}
     />
   );
 }

@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 
-import type { LeagueBuilderMlbDraftSession } from '../../../../../utils/leagueBuilderStorage';
+import {
+  patchMlbDraftSessionSnakeCompanions,
+  type LeagueBuilderMlbDraftSession,
+  type SnakeCompanionState,
+} from '../../../../../utils/leagueBuilderStorage';
 import { approveCompanionClaim, ensureCompanionRoom } from './companionModel';
 
 export interface CompanionApprovalCardProps {
@@ -12,22 +16,37 @@ export interface CompanionApprovalCardProps {
 
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   useEffect(() => {
-    if (!props.session.snakeCompanions?.roomCode) {
-      void props.onChange(ensureCompanionRoom(props.session, props.createRoomCode));
-    }
-  }, [props]);
+    if (props.session.snakeCompanions?.roomCode) return;
+    void patchMlbDraftSessionSnakeCompanions({
+      leagueId: props.session.leagueId,
+      seasonNumber: props.session.seasonNumber,
+      patch: (current) => ensureCompanionRoom(
+        { ...props.session, snakeCompanions: current },
+        props.createRoomCode,
+      ).snakeCompanions as SnakeCompanionState,
+    }).then(props.onChange);
+  }, [props.createRoomCode, props.onChange, props.session.leagueId, props.session.seasonNumber, props.session.snakeCompanions?.roomCode]);
 
   const companions = props.session.snakeCompanions;
   if (!companions) return <section className="ballpark-panel"><p>OPENING THE COMPANION ROOM…</p></section>;
   const teamName = (teamId: string) => props.teams.find((team) => team.id === teamId)?.name ?? 'CLUB';
   const update = (deviceId: string, status: 'approved' | 'revoked') => {
-    void props.onChange(approveCompanionClaim(props.session, deviceId, status));
+    void patchMlbDraftSessionSnakeCompanions({
+      leagueId: props.session.leagueId,
+      seasonNumber: props.session.seasonNumber,
+      patch: (current) => approveCompanionClaim(
+        { ...props.session, snakeCompanions: current },
+        deviceId,
+        status,
+      ).snakeCompanions as SnakeCompanionState,
+    }).then(props.onChange);
   };
 
   return (
     <section className="ballpark-panel" aria-label="Companion approvals">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
+      <p className="mt-2 font-bold">ON YOUR PHONE, GO TO: {`${window.location.origin}/snake-companion`} — SAME WI-FI</p>
       <p className="mt-2 text-sm">USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
       <div className="mt-4 grid gap-3">
         {companions.claims.filter((claim) => claim.status === 'pending').map((claim) => (

@@ -136,7 +136,7 @@ export function buildRationalSeats(input: {
   });
 }
 
-export function rationalRisksForRoom(input: {
+export function rationalRisksForRoomUncached(input: {
   session: LeagueBuilderMlbDraftSession;
   askingTeamId: string;
   askedPlayerIds: readonly string[];
@@ -155,6 +155,47 @@ export function rationalRisksForRoom(input: {
     baseCaps: input.baseCaps,
     realTeamCount: input.realTeamCount,
   }).risks;
+}
+
+const rationalRiskCache = new Map<string, ReturnType<typeof rationalRisksForRoomUncached>>();
+
+function rationalRiskCacheKey(input: Parameters<typeof rationalRisksForRoomUncached>[0]): string {
+  const poolSignature = input.availablePlayers.map((player) => [
+    player.playerId,
+    player.sourceId ?? '',
+    player.price,
+    player.worth ?? '',
+    JSON.stringify(player.archetypeWeights ?? {}),
+    JSON.stringify(player.construction),
+  ].join(':')).join('|');
+  const seatSignature = input.seats.map((seat) => (
+    `${seat.teamId}:${seat.committedSpent}:${seat.budget}:${JSON.stringify(seat.lockedArchetype)}:${JSON.stringify(seat.capIdentity ?? {})}:${seat.roster.map((player) => player.playerId).join(',')}`
+  )).join('|');
+  return [
+    input.session.id,
+    input.session.revision ?? 0,
+    input.session.currentPickIndex,
+    input.askingTeamId,
+    input.askedPlayerIds.join(','),
+    poolSignature,
+    seatSignature,
+    JSON.stringify(input.baseCaps),
+    input.realTeamCount,
+  ].join('::');
+}
+
+export function rationalRisksForRoom(input: Parameters<typeof rationalRisksForRoomUncached>[0]) {
+  const key = rationalRiskCacheKey(input);
+  const cached = rationalRiskCache.get(key);
+  if (cached) return cached;
+  const risks = rationalRisksForRoomUncached(input);
+  rationalRiskCache.set(key, risks);
+  if (rationalRiskCache.size > 8) rationalRiskCache.delete(rationalRiskCache.keys().next().value!);
+  return risks;
+}
+
+export function __resetRationalRiskCacheForTests(): void {
+  rationalRiskCache.clear();
 }
 
 export function updateSessionSeatBoard(

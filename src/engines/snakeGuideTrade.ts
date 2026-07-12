@@ -5,6 +5,7 @@ import {
 } from './leagueConstruction';
 import {
   proveSimultaneousSnakeSeating,
+  type SnakeSeatingProof,
   type SimultaneousSnakeSeatingInput,
 } from './snakeSeatingProof';
 import { withLatestSnakeCorrection } from './snakeSession';
@@ -30,6 +31,16 @@ interface SnakeGuideCommonInput {
   pickValueChart: readonly PickValue[];
   /** W3's current mid-draft public state; every searched/revalidated package runs this proof. */
   seatingProofInput: SimultaneousSnakeSeatingInput;
+}
+
+const seatingProofCache = new WeakMap<SimultaneousSnakeSeatingInput, SnakeSeatingProof>();
+
+export function primeSnakeGuideSeatingProof(input: SimultaneousSnakeSeatingInput): SnakeSeatingProof {
+  const cached = seatingProofCache.get(input);
+  if (cached) return cached;
+  const proof = proveSimultaneousSnakeSeating(input);
+  seatingProofCache.set(input, proof);
+  return proof;
 }
 
 export interface SearchSnakeGuidePackageInput extends SnakeGuideCommonInput {
@@ -93,7 +104,7 @@ function futureOwnedPicks(session: LeagueBuilderMlbDraftSession, teamId: string)
  * and decision-value layers are intentionally absent. Equal pick counts preserve snake geometry;
  * balancing return picks are searched explicitly and every candidate package is rechecked by W3.
  */
-export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
+export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
   const targetSlot = input.session.pickOrder
     .slice(input.session.currentPickIndex)
     .find((slot) => slot.pick === input.targetPick);
@@ -145,6 +156,96 @@ export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): Sn
     || left.receivePickNumbers.join(',').localeCompare(right.receivePickNumbers.join(','))
   ))[0];
   if (!best) return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
+  const { imbalance: _discarded, ...tradePackage } = best;
+  return {
+    package: tradePackage,
+    message: `OFFER ${tradePackage.offerPickNumbers.join('+')}; RECEIVE ${tradePackage.receivePickNumbers.join('+')} — guide-matched and legal now.`,
+  };
+}
+
+function packageLex(left: readonly number[], right: readonly number[]): number {
+  return left.join(',').localeCompare(right.join(','));
+}
+
+function closestReceivePackages(input: {
+  rows: readonly { picks: number[]; value: number }[];
+  offerValue: number;
+}): Array<{ picks: number[]; value: number }> {
+  if (input.rows.length === 0) return [];
+  let low = 0;
+  let high = input.rows.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (input.rows[middle].value < input.offerValue) low = middle + 1;
+    else high = middle;
+  }
+  const values = new Set<number>();
+  if (low < input.rows.length) values.add(input.rows[low].value);
+  if (low > 0) values.add(input.rows[low - 1].value);
+  return [...values].flatMap((value) => (
+    input.rows.filter((row) => row.value === value).sort((left, right) => packageLex(left.picks, right.picks))[0] ?? []
+  ));
+}
+
+/**
+ * Exact posted-price search. For a fixed offer value, imbalance is monotonic on either side of
+ * that value, so only the nearest receive total below and above can win. This prunes the old
+ * Cartesian product without changing its length/imbalance/lexicographic winner rules.
+ */
+export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
+  const targetSlot = input.session.pickOrder
+    .slice(input.session.currentPickIndex)
+    .find((slot) => slot.pick === input.targetPick);
+  if (!targetSlot || targetSlot.teamId === input.buyerTeamId) {
+    return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
+  }
+  const sellerTeamId = targetSlot.teamId;
+  const buyerPicks = futureOwnedPicks(input.session, input.buyerTeamId);
+  const sellerReturns = futureOwnedPicks(input.session, sellerTeamId).filter((pick) => pick !== input.targetPick);
+  const values = valueMap(input.pickValueChart);
+  const candidates: Array<SnakeGuidePackage & { imbalance: number }> = [];
+
+  for (let count = 1; count <= 3; count += 1) {
+    const receives = combinations(sellerReturns, count - 1)
+      .map((returnExtras) => {
+        const picks = [input.targetPick, ...returnExtras].sort((left, right) => left - right);
+        return { picks, value: packageValue(picks, values) };
+      })
+      .sort((left, right) => left.value - right.value || packageLex(left.picks, right.picks));
+    for (const offerPickNumbers of combinations(buyerPicks, count)) {
+      const offerValue = packageValue(offerPickNumbers, values);
+      for (const receive of closestReceivePackages({ rows: receives, offerValue })) {
+        const verdict = validateTrade(
+          offerPickNumbers.map((pick) => ({ pick })),
+          receive.picks.map((pick) => ({ pick })),
+          [...input.pickValueChart],
+        );
+        if (!verdict.balanced) continue;
+        candidates.push({
+          buyerTeamId: input.buyerTeamId,
+          sellerTeamId,
+          targetPick: input.targetPick,
+          offerPickNumbers,
+          receivePickNumbers: receive.picks,
+          offerValue,
+          receiveValue: receive.value,
+          sessionRevision: input.session.revision ?? 0,
+          imbalance: verdict.imbalancePct,
+        });
+      }
+    }
+    if (candidates.length > 0) break;
+  }
+
+  const best = candidates.sort((left, right) => (
+    left.offerPickNumbers.length - right.offerPickNumbers.length
+    || left.imbalance - right.imbalance
+    || packageLex(left.offerPickNumbers, right.offerPickNumbers)
+    || packageLex(left.receivePickNumbers, right.receivePickNumbers)
+  ))[0];
+  if (!best || !primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
+    return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
+  }
   const { imbalance: _discarded, ...tradePackage } = best;
   return {
     package: tradePackage,
