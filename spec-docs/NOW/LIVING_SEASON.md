@@ -33,3 +33,4 @@
 threshold/window edges; (c) harness invariants asserting a retired model; (d) checkpoint-coupling
 of anything that should be organic. Full audit lessons: Fable memory `audit-lessons-2026-07-11`
 (incl. the stale-base trap: base-verify against CURRENT origin/main, name the SHA).
+- `LIVING_SEASON_NARRATIVE_MATHEMATICS_2026-07-11.md` — Fable's final design: the v1.1 magic layer (stakes, memory, arcs, camera, pacing) — read at the tuning sit-down, build order §8.
