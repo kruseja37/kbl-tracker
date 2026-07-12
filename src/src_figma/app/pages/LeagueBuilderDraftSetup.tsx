@@ -3202,6 +3202,12 @@ export function LeagueBuilderDraftSetup() {
 
   const handleStartDraft = () => {
     if (!league || !startReady) return;
+    if (league.draftFormat === "snake" && hasSavedDraft) {
+      // An in-progress snake draft resumes in THE ROOM; re-entering setup's GO
+      // would overwrite the saved session (walkthrough finding, 2026-07-11).
+      navigate(`/snake-room?leagueId=${encodeURIComponent(league.id)}`);
+      return;
+    }
     navigate(draftRouteForLeague(league, { shillCount: shills, reservePriceK }));
   };
 
