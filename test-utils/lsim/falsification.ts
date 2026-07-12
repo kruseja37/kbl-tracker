@@ -147,7 +147,7 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
     mutate: (s) => { s.lastGameDelta = { battingIncreasedPlayerIds: [], pitchingIncreasedPlayerIds: [], afterFirstProcessDigest: 'a', afterReplayDigest: 'b' }; } },
   { name: 'soul.checkpoint-cadence-matches-setting',
     mutate: (s) => { s.gamesSimulated = s.totalScheduledGames; s.gameNumber = s.totalScheduledGames; s.ratingsOverlays = [{ sourceEventId: 'checkpoint-2' } as never]; /* only 1 of 5 boundaries */ } },
-  { name: 'soul.l13-relationship-formation-checkpoint-write',
+  { name: 'soul.l13-relationship-formation-organic',
     mutate: (s) => {
       s.gameNumber = 2;
       s.gamesSimulated = 2;
@@ -174,7 +174,7 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
       };
       s.relationshipEdges = [row, row] as never;
     } },
-  { name: 'soul.l13-relationship-formation-checkpoint-write',
+  { name: 'soul.l13-relationship-formation-organic',
     mutate: (s) => {
       s.gameNumber = 3;
       s.gamesSimulated = 3;
@@ -194,13 +194,14 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         intensity: 0.9,
         potential: false,
         accuracy: 0.8,
-        formedAtGameNumber: 3,
+        // R-F organic model: any PAST game is a legal formedAt; a FUTURE game is not.
+        formedAtGameNumber: 5,
         dissolvedAtGameNumber: null,
         createdAt: 3,
         updatedAt: 3,
       }] as never;
     } },
-  { name: 'soul.l13-relationship-formation-checkpoint-write',
+  { name: 'soul.l13-relationship-formation-organic',
     mutate: (s) => {
       s.gameNumber = 2;
       s.gamesSimulated = 2;
@@ -227,7 +228,7 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         updatedAt: 2,
       }] as never;
     } },
-  { name: 'soul.l13-relationship-formation-checkpoint-write',
+  { name: 'soul.l13-relationship-formation-organic',
     mutate: (s) => {
       s.gameNumber = 2;
       s.gamesSimulated = 2;
@@ -254,7 +255,7 @@ const CASES: Array<{ name: string; mutate: (s: LsimStateSnapshot) => void }> = [
         updatedAt: 2,
       }] as never;
     } },
-  { name: 'soul.l13-relationship-formation-checkpoint-write',
+  { name: 'soul.l13-relationship-formation-organic',
     mutate: (s) => {
       s.gameNumber = 2;
       s.gamesSimulated = 2;
@@ -534,7 +535,7 @@ describe('L-SIM invariant falsification audit', () => {
     expect(result.pass, `frequent cadence mismatch stayed GREEN; detail=${result.detail}`).toBe(false);
   });
 
-  test('soul.l13-relationship-formation-checkpoint-write PASSES valid active cross-team edges', () => {
+  test('soul.l13-relationship-formation-organic PASSES valid active cross-team edges', () => {
     const snap = base();
     snap.teamIds = ['t1', 't2'];
     snap.gameNumber = 2;
@@ -561,7 +562,7 @@ describe('L-SIM invariant falsification audit', () => {
       updatedAt: 2,
     }] as never;
 
-    const result = resultFor('soul.l13-relationship-formation-checkpoint-write', snap);
+    const result = resultFor('soul.l13-relationship-formation-organic', snap);
     expect(result.pass, `valid cross-team relationship edge was rejected; detail=${result.detail}`).toBe(true);
   });
 
