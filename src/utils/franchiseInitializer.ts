@@ -672,7 +672,10 @@ export async function repairFranchisePersistence(
  *
  * @returns The new franchise ID for navigation
  */
-export async function initializeFranchise(config: FranchiseConfig): Promise<string> {
+export async function initializeFranchise(
+  config: FranchiseConfig,
+  options?: { livingSeason?: boolean },
+): Promise<string> {
   // Validate required fields
   if (!config.league) {
     throw new Error('No league selected');
@@ -693,7 +696,7 @@ export async function initializeFranchise(config: FranchiseConfig): Promise<stri
   await assertMlbDraftReadyForFranchise(franchiseLeagueId);
 
   // 1. Create franchise metadata record in kbl-app-meta
-  const franchiseId = await createFranchise(franchiseConfig.franchiseName);
+  const franchiseId = await createFranchise(franchiseConfig.franchiseName, options);
 
   try {
     // 2. Load the league template and team data

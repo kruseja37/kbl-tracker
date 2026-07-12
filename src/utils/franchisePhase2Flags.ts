@@ -1,7 +1,16 @@
 import {
+  LIVING_SEASON_FLAG_FAMILY,
   resolveFranchisePhase2FlagActivation,
   type FranchisePhase2FlagKey,
 } from './franchisePhase2Activation';
+
+let franchiseLivingSeasonContext: { enabled: boolean } | null = null;
+
+export function setFranchiseLivingSeasonContext(
+  ctx: { enabled: boolean } | null,
+): void {
+  franchiseLivingSeasonContext = ctx;
+}
 
 export const FRANCHISE_PHASE2_MORALE_ENABLED_DEFAULT = false;
 
@@ -12,7 +21,12 @@ function resolvePhase2Flag(
   testOverride: boolean | null,
   compiledDefault: boolean,
 ): boolean {
-  return testOverride ?? resolveFranchisePhase2FlagActivation(flagKey, compiledDefault);
+  const livingSeasonFallback =
+    franchiseLivingSeasonContext?.enabled === true
+    && LIVING_SEASON_FLAG_FAMILY.includes(flagKey)
+      ? true
+      : compiledDefault;
+  return testOverride ?? resolveFranchisePhase2FlagActivation(flagKey, livingSeasonFallback);
 }
 
 export function isFranchisePhase2MoraleEnabled(): boolean {

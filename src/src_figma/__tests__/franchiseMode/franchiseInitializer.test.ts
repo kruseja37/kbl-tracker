@@ -363,6 +363,18 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     );
   });
 
+  test('passes the living-season creation choice only to franchise metadata creation', async () => {
+    await initializeFranchise(franchiseConfig, { livingSeason: true });
+
+    expect(mocks.createFranchise).toHaveBeenCalledWith(
+      franchiseConfig.franchiseName,
+      { livingSeason: true },
+    );
+    expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(
+      expect.not.objectContaining({ livingSeason: expect.anything() }),
+    );
+  });
+
   test('franchise v1 no-DH seal overrides DH-on input and Ron Charles is LF', async () => {
     await initializeFranchise({
       ...franchiseConfig,

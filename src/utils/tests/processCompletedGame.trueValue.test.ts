@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   persistFranchiseAllStarRosterForCompletedGame: vi.fn(),
   persistDarkStadiumRecordsForCompletedGame: vi.fn(),
   persistDarkHomeParkRivalForCompletedGame: vi.fn(),
+  loadFranchise: vi.fn(),
   archiveRecord: null as Record<string, unknown> | null,
 }));
 
@@ -151,6 +152,7 @@ vi.mock('../franchiseHomeParkRivalStorage', () => ({
 }));
 vi.mock('../franchiseManager', () => ({
   getFranchiseConfig: vi.fn(async () => null),
+  loadFranchise: mocks.loadFranchise,
 }));
 vi.mock('../franchisePlayerStorage', () => ({
   getAllFranchiseTeams: vi.fn(async () => []),
@@ -163,6 +165,7 @@ vi.mock('../franchiseTradeDemandStorage', () => ({
 import { processCompletedGame } from '../processCompletedGame';
 import { SOUL_BRANCH_KEYS } from '../gameStorage';
 import {
+  isFranchisePhase2FameEnabled,
   setFranchisePhase2CheckpointEnabledForTests,
   setFranchisePhase2FameEnabledForTests,
   setFranchisePhase2FlashpointEnabledForTests,
@@ -339,7 +342,13 @@ describe('processCompletedGame True Value persistence gate', () => {
     mocks.calculateAndPersistFranchiseTrueValueForSeason.mockResolvedValue({ rows: [{ playerId: 'batter-1' }], skippedRows: [], persisted: true, blockers: [] });
     mocks.getFranchiseTrueValueRows.mockResolvedValue([]);
     mocks.saveFranchiseTrueValueSnapshotRows.mockResolvedValue([]);
-    mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mockResolvedValue({ rows: [], skippedRows: [], persisted: true, blockers: [] });
+    mocks.calculateAndPersistProjectedFranchiseDesignationsForSeason.mockResolvedValue({
+      rows: [],
+      skippedRows: [],
+      persisted: true,
+      blockers: [],
+      designationEvents: [],
+    });
     mocks.getScheduledGame.mockResolvedValue(null);
     mocks.persistDarkFameRecordsForCompletedGame.mockResolvedValue({ written: 0, playerHeatDeltas: [] });
     mocks.persistDarkFlashpointDecayForCompletedGame.mockResolvedValue({ changes: 0 });
@@ -355,6 +364,129 @@ describe('processCompletedGame True Value persistence gate', () => {
     mocks.persistFranchiseAllStarRosterForCompletedGame.mockResolvedValue({ status: 'persisted' });
     mocks.persistDarkStadiumRecordsForCompletedGame.mockResolvedValue({ changeList: [] });
     mocks.persistDarkHomeParkRivalForCompletedGame.mockResolvedValue({ written: 0 });
+    mocks.loadFranchise.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      livingSeason: undefined,
+    });
+  });
+
+  test('franchise metadata switch runs every family-controlled pipeline branch without console overrides', async () => {
+    setAllLivingSeasonFlags(null);
+    mocks.loadFranchise.mockResolvedValueOnce({
+      franchiseId: 'franchise-1',
+      livingSeason: {
+        enabled: true,
+        activatedAt: '2026-07-11T00:00:00.000Z',
+        tuningProfileVersion: 'ls-tune0-2026-07-11',
+      },
+    });
+
+    await processCompletedGame(gameState({ gameId: 'living-season-on' }), {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    });
+
+    const processing = mocks.archiveRecord?.livingSeasonProcessing as {
+      overall: string;
+      branches: Record<string, { status: string }>;
+    };
+    expect(processing.overall).toBe('complete');
+    for (const branch of SOUL_BRANCH_KEYS) {
+      expect(processing.branches[branch]?.status).not.toBe('OFF');
+    }
+    expect(mocks.persistDarkFameRecordsForCompletedGame).toHaveBeenCalled();
+    expect(mocks.persistDarkCheckpointSweepForCompletedGame).toHaveBeenCalled();
+    expect(mocks.persistDarkRelationshipFormationForCompletedGame).toHaveBeenCalled();
+    expect(mocks.persistDarkL10ForCompletedGame).toHaveBeenCalled();
+    expect(mocks.persistDarkL11AutoBackstopForCompletedGame).toHaveBeenCalled();
+    expect(mocks.recomputeFranchiseL12StandingsForCompletedGame).toHaveBeenCalled();
+  });
+
+  test('legacy franchise metadata leaves every family-controlled outcome OFF', async () => {
+    setAllLivingSeasonFlags(null);
+    mocks.loadFranchise.mockResolvedValueOnce({ franchiseId: 'franchise-1' });
+
+    await processCompletedGame(gameState({ gameId: 'living-season-legacy' }), {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    });
+
+    const processing = mocks.archiveRecord?.livingSeasonProcessing as {
+      branches: Record<string, { status: string }>;
+    };
+    for (const branch of SOUL_BRANCH_KEYS.filter((branch) => branch !== 'trueValueSnapshot')) {
+      expect(processing.branches[branch]).toEqual({ status: 'OFF' });
+    }
+  });
+
+  test('exhibition and elimination games never load or retain franchise context', async () => {
+    setAllLivingSeasonFlags(null);
+
+    for (const competitionType of ['exhibition', 'elimination'] as const) {
+      await processCompletedGame(gameState({
+        gameId: `non-franchise-${competitionType}`,
+        competitionType,
+        isEliminationGame: competitionType === 'elimination',
+      }), { seasonId: 'season-1', detectMilestones: false });
+      expect(isFranchisePhase2FameEnabled()).toBe(false);
+      mocks.archiveRecord = null;
+    }
+
+    expect(mocks.loadFranchise).not.toHaveBeenCalled();
+  });
+
+  test('pipeline context clears in finally when completion throws', async () => {
+    setAllLivingSeasonFlags(null);
+    mocks.loadFranchise.mockResolvedValueOnce({
+      franchiseId: 'franchise-1',
+      livingSeason: { enabled: true },
+    });
+    mocks.aggregateGameToSeason.mockRejectedValueOnce(new Error('pipeline exploded'));
+
+    await expect(processCompletedGame(gameState({ gameId: 'living-season-throw' }), {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    })).rejects.toThrow('pipeline exploded');
+
+    expect(isFranchisePhase2FameEnabled()).toBe(false);
+  });
+
+  test('archive recovery reloads and honors the living-season franchise switch', async () => {
+    setAllLivingSeasonFlags(null);
+    mocks.loadFranchise.mockResolvedValue({
+      franchiseId: 'franchise-1',
+      livingSeason: { enabled: true },
+    });
+    mocks.archiveRecord = {
+      gameId: 'living-season-recovery',
+      aggregationStatus: 'aggregated',
+      franchiseId: 'franchise-1',
+      seasonId: 'season-1',
+      statsScopeId: 'season-1',
+      seasonNumber: 1,
+      fameEvents: [],
+      livingSeasonProcessing: {
+        version: '1',
+        overall: 'partial-failure',
+        branches: {},
+      },
+    };
+    mocks.getFranchiseTrueValueRows.mockResolvedValueOnce([{ playerId: 'batter-1' }]);
+
+    await processCompletedGame(gameState({ gameId: 'living-season-recovery' }), {
+      seasonId: 'season-1',
+      detectMilestones: false,
+    });
+
+    const processing = mocks.archiveRecord?.livingSeasonProcessing as {
+      overall: string;
+      branches: Record<string, { status: string }>;
+    };
+    expect(processing.overall).toBe('complete');
+    for (const branch of SOUL_BRANCH_KEYS) {
+      expect(processing.branches[branch]?.status).not.toBe('OFF');
+    }
+    expect(mocks.aggregateGameToSeason).not.toHaveBeenCalled();
   });
 
   test('persists True Value and projected designations immediately after successful season WAR persistence', async () => {

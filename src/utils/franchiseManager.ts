@@ -45,6 +45,11 @@ export interface FranchiseMetadata {
   controlledTeamName?: string;
   gmName?: string;
   currentSeason?: number;
+  livingSeason?: {
+    enabled: boolean;
+    activatedAt: string;
+    tuningProfileVersion: string;
+  };
 }
 
 export interface FranchiseSummary {
@@ -80,6 +85,8 @@ const META_DB_VERSION = 3;
 const DB_PREFIX = FRANCHISE_DATABASE_PREFIX;
 const CURRENT_SCHEMA_VERSION = 1;
 const APP_VERSION = '1.0.0';
+
+export const LIVING_SEASON_TUNING_PROFILE_VERSION = 'ls-tune0-2026-07-11';
 
 const META_STORES = {
   franchiseList: 'franchiseList',
@@ -152,7 +159,10 @@ export async function initMetaDatabase(): Promise<IDBDatabase> {
 /**
  * Create a new franchise. Returns the new franchise ID.
  */
-export async function createFranchise(name: string): Promise<FranchiseId> {
+export async function createFranchise(
+  name: string,
+  options?: { livingSeason?: boolean },
+): Promise<FranchiseId> {
   const db = await initMetaDatabase();
   const franchiseId = generateFranchiseId();
 
@@ -163,6 +173,15 @@ export async function createFranchise(name: string): Promise<FranchiseId> {
     lastPlayedAt: Date.now(),
     schemaVersion: CURRENT_SCHEMA_VERSION,
     appVersionCreated: APP_VERSION,
+    ...(options?.livingSeason === true
+      ? {
+          livingSeason: {
+            enabled: true,
+            activatedAt: new Date().toISOString(),
+            tuningProfileVersion: LIVING_SEASON_TUNING_PROFILE_VERSION,
+          },
+        }
+      : {}),
   };
 
   return new Promise((resolve, reject) => {

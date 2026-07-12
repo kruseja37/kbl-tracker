@@ -3,12 +3,19 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 
 import {
+  LIVING_SEASON_FLAG_FAMILY,
   hydrateFranchisePhase2ActivationCache,
   resetFranchisePhase2ActivationRecord,
   resetFranchisePhase2ActivationCacheForTests,
   saveFranchisePhase2ActivationRecord,
 } from '../franchisePhase2Activation';
 import {
+  createFranchise,
+  LIVING_SEASON_TUNING_PROFILE_VERSION,
+  loadFranchise,
+} from '../franchiseManager';
+import {
+  isAuctionAdvisorColorEnabled,
   isFranchisePhase2CheckpointEnabled,
   isFranchisePhase2FameEnabled,
   isFranchisePhase2FlashpointEnabled,
@@ -32,7 +39,10 @@ import {
   setFranchisePhase2MoraleEnabledForTests,
   setFranchisePhase2StadiumRecordsEnabledForTests,
   setFranchisePhase2TraitsEnabledForTests,
+  setFranchiseLivingSeasonContext,
+  setAuctionAdvisorColorEnabledForTests,
   setSnakeDraftPocEnabledForTests,
+  setSnakeDraftV1EnabledForTests,
 } from '../franchisePhase2Flags';
 
 function deleteDatabase(name: string): Promise<void> {
@@ -59,6 +69,7 @@ const getters = [
 ];
 
 const resetTestSetters = () => {
+  setFranchiseLivingSeasonContext(null);
   setFranchisePhase2MoraleEnabledForTests(null);
   setFranchisePhase2FameEnabledForTests(null);
   setFranchisePhase2FlashpointEnabledForTests(null);
@@ -70,7 +81,9 @@ const resetTestSetters = () => {
   setFranchisePhase2L13EnabledForTests(null);
   setFranchisePhase2L14EnabledForTests(null);
   setFranchisePhase2StadiumRecordsEnabledForTests(null);
+  setAuctionAdvisorColorEnabledForTests(null);
   setSnakeDraftPocEnabledForTests(null);
+  setSnakeDraftV1EnabledForTests(null);
 };
 
 describe('franchise Phase-2 activation', () => {
@@ -92,6 +105,67 @@ describe('franchise Phase-2 activation', () => {
 
   test('compiled defaults remain off without persisted activation', () => {
     expect(getters.map((getter) => getter())).toEqual(Array(getters.length).fill(false));
+  });
+
+  test('living-season family is explicit and excludes unrelated draft toggles', () => {
+    expect(LIVING_SEASON_FLAG_FAMILY).toEqual([
+      'morale', 'fame', 'flashpoint', 'checkpoint', 'traits', 'l10', 'l11',
+      'l12', 'l13', 'l14', 'stadiumRecords',
+    ]);
+    expect(LIVING_SEASON_FLAG_FAMILY).not.toContain('auctionAdvisorColor');
+    expect(LIVING_SEASON_FLAG_FAMILY).not.toContain('snakeDraftPoc');
+  });
+
+  test('creation stamps the immutable living-season provenance only when enabled', async () => {
+    const enabledId = await createFranchise('Living Season', { livingSeason: true });
+    const legacyId = await createFranchise('Legacy Season');
+
+    expect(await loadFranchise(enabledId)).toMatchObject({
+      livingSeason: {
+        enabled: true,
+        activatedAt: expect.any(String),
+        tuningProfileVersion: LIVING_SEASON_TUNING_PROFILE_VERSION,
+      },
+    });
+    expect(Number.isNaN(Date.parse((await loadFranchise(enabledId))!.livingSeason!.activatedAt))).toBe(false);
+    expect((await loadFranchise(legacyId))?.livingSeason).toBeUndefined();
+  });
+
+  test('franchise switch enables only the family beneath console activation', () => {
+    setFranchiseLivingSeasonContext({ enabled: true });
+
+    expect(getters.map((getter) => getter())).toEqual(Array(getters.length).fill(true));
+    expect(isAuctionAdvisorColorEnabled()).toBe(true);
+    expect(isSnakeDraftPocEnabled()).toBe(false);
+  });
+
+  test('console per-flag overrides win in both directions over the franchise switch', async () => {
+    setFranchiseLivingSeasonContext({ enabled: true });
+    await saveFranchisePhase2ActivationRecord({
+      globalEnabled: null,
+      flagOverrides: { fame: false },
+    });
+    expect(isFranchisePhase2FameEnabled()).toBe(false);
+
+    setFranchiseLivingSeasonContext({ enabled: false });
+    await saveFranchisePhase2ActivationRecord({
+      globalEnabled: null,
+      flagOverrides: { fame: true },
+    });
+    expect(isFranchisePhase2FameEnabled()).toBe(true);
+  });
+
+  test('test overrides remain authoritative over console and franchise context', async () => {
+    setFranchiseLivingSeasonContext({ enabled: true });
+    await saveFranchisePhase2ActivationRecord({
+      globalEnabled: true,
+      flagOverrides: { fame: true, l13: false },
+    });
+    setFranchisePhase2FameEnabledForTests(false);
+    setFranchisePhase2L13EnabledForTests(true);
+
+    expect(isFranchisePhase2FameEnabled()).toBe(false);
+    expect(isFranchisePhase2L13Enabled()).toBe(true);
   });
 
   test('snake draft POC follows the house activation pattern and compiles OFF (retired from view; the real snake draft shipped)', async () => {

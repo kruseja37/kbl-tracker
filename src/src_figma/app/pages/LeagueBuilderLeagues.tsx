@@ -144,6 +144,7 @@ export function LeagueBuilderLeagues() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  // SWITCH-3A: League Builder has no franchise record yet, so this stays console-gated in v1.
   const showCheckpointCadenceControl = isFranchisePhase2L13Enabled();
   const allLeagueIds = useMemo(() => leagues.map((league) => league.id), [leagues]);
   const loadedTeamIds = useMemo(() => new Set(teams.map((team) => team.id)), [teams]);
