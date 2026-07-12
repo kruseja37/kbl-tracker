@@ -21,3 +21,10 @@
   frozen for v2.
 - General state: "code-complete but messy" — expect polish/wiring gaps found by walkthrough,
   not missing systems. JK walkthrough findings drive the queue.
+
+## ADDENDUM (2026-07-12 early AM)
+JK holds a paste-ready walkthrough prompt (delivered in the living-season thread's chat) that
+opens with the now-RATIFIED help-button law + density corollary (SESSION_RULES canon) and orders
+a pre-walkthrough explainer-text sweep of every snake screen, then the companion sign-in fix,
+then the wave protocol. If the prompt is lost: reconstruct from SESSION_RULES "Help-Button UI
+Law" + this folder's briefs.

@@ -26,3 +26,12 @@ is a pointer.**
 - Next moves on crossing: (1) run the examiner + freeze in the backlog repo per the SEASON-GRADE
   contract; (2) then the research/curation continues against frozen truth; (3) main-app wiring
   is a separate, later lane.
+
+## CORRECTION (2026-07-12 early AM — that repo moved past this brief the same night)
+Verified at its HEAD `9debc6d2`: **the exam+freeze already happened** — `cd4867a8` promoted
+`goldfinal-2026-07-11` as the FROZEN reference edition per JK's explicit freeze ruling
+(supersedes gold2), and manual **§7.4** now defines a per-batch examiner protocol (any fresh
+independent AI session can examine; builder never takes its own exam; promotion only on JK's
+freeze ruling). The live phase is BATCH RESEARCH/ASSEMBLY per manual §7 (remaining ~200 players;
+known open lane: batch-1 ACC HALT). That repo's own CURRENT_STATE/SESSION_LOG are authoritative —
+read them first; treat everything in the section above as historical context.
