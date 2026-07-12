@@ -191,6 +191,7 @@ describe('FranchiseSetup extra innings runner delay', () => {
           extraInningsRunnerDelay: 2,
         }),
       }),
+      undefined,
     );
   });
 
@@ -238,6 +239,7 @@ describe('FranchiseSetup extra innings runner delay', () => {
           extraInningsRule: 'Standard',
         }),
       }),
+      undefined,
     );
   });
 });

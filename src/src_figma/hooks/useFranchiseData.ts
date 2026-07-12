@@ -337,6 +337,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
   // Franchise config loaded from IndexedDB
   const [franchiseConfig, setFranchiseConfig] = useState<StoredFranchiseConfig | null>(null);
   const [franchiseLeagueName, setFranchiseLeagueName] = useState<string>('');
+  const [livingSeasonEnabled, setLivingSeasonEnabled] = useState(false);
   const [rivalTeamId, setRivalTeamId] = useState<string | null>(null);
   const lensTeamId = franchiseConfig?.controlledTeams?.[0]?.teamId ?? null;
 
@@ -345,8 +346,12 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     if (!franchiseId) {
       setFranchiseConfig(null);
       setFranchiseLeagueName('');
+      setLivingSeasonEnabled(false);
       return;
     }
+    // The incoming franchise must not inherit a prior franchise's cached switch
+    // while its own metadata is still loading.
+    setLivingSeasonEnabled(false);
     let cancelled = false;
     async function load() {
       try {
@@ -359,9 +364,10 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
         }
         // Also load franchise metadata for additional fields
         const meta = await loadFranchise(franchiseId!);
-        if (!cancelled && meta) {
+        if (!cancelled) {
+          setLivingSeasonEnabled(meta?.livingSeason?.enabled === true);
           // Prefer metadata leagueName if available (set during initialization)
-          if (meta.leagueName) {
+          if (meta?.leagueName) {
             setFranchiseLeagueName(meta.leagueName);
           }
         }
@@ -410,7 +416,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
       setRivalTeamId(null);
       return;
     }
-    if (!isFranchisePhase2StadiumRecordsEnabled()) {
+    if (!isFranchisePhase2StadiumRecordsEnabled() && !livingSeasonEnabled) {
       setRivalTeamId(null);
       return;
     }
@@ -436,7 +442,7 @@ export function useFranchiseData(franchiseId?: string, currentSeason: number = 1
     }
     loadRival();
     return () => { cancelled = true; };
-  }, [franchiseId, lensTeamId, seasonId, currentSeason]);
+  }, [franchiseId, lensTeamId, seasonId, currentSeason, livingSeasonEnabled]);
 
   // Compute hasRealData based on whether we have actual stats
   const hasRealData = useMemo(() => {

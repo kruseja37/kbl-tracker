@@ -232,4 +232,39 @@ describe('useFranchiseData franchise scoped reads', () => {
     expect(mocks.mockGetAllTeams).not.toHaveBeenCalled();
     expect(mocks.mockGetAllLeagueTemplates).not.toHaveBeenCalled();
   });
+
+  test('loads a home-park rival for a living-season franchise while the console is dark', async () => {
+    mocks.mockIsFranchisePhase2StadiumRecordsEnabled.mockReturnValue(false);
+    mocks.mockLoadFranchise.mockResolvedValue({
+      leagueName: 'Copied League',
+      livingSeason: {
+        enabled: true,
+        activatedAt: '2026-07-11T00:00:00.000Z',
+        tuningProfileVersion: 'ls-tune0-2026-07-11',
+      },
+    });
+
+    const { result } = renderHook(() => useFranchiseData('franchise-1', 1));
+
+    await waitFor(() => {
+      expect(result.current.rivalTeamId).toBe('team-b');
+    });
+    expect(mocks.mockGetHomeParkRival).toHaveBeenCalledWith(
+      expect.objectContaining({ franchiseId: 'franchise-1' }),
+      'team-a',
+    );
+  });
+
+  test('keeps the home-park rival hidden for a legacy franchise while the console is dark', async () => {
+    mocks.mockIsFranchisePhase2StadiumRecordsEnabled.mockReturnValue(false);
+    mocks.mockLoadFranchise.mockResolvedValue({ leagueName: 'Copied League' });
+
+    const { result } = renderHook(() => useFranchiseData('franchise-1', 1));
+
+    await waitFor(() => {
+      expect(mocks.mockLoadFranchise).toHaveBeenCalledWith('franchise-1');
+    });
+    expect(result.current.rivalTeamId).toBeNull();
+    expect(mocks.mockGetHomeParkRival).not.toHaveBeenCalled();
+  });
 });

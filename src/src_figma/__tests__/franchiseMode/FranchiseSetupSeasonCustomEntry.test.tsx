@@ -169,6 +169,7 @@ describe('FranchiseSetup Season Settings custom games/innings entry', () => {
       expect.objectContaining({
         season: expect.objectContaining({ gamesPerTeam: 50 }),
       }),
+      undefined,
     );
   });
 
@@ -209,6 +210,7 @@ describe('FranchiseSetup Season Settings custom games/innings entry', () => {
       expect.objectContaining({
         season: expect.objectContaining({ inningsPerGame: 5 }),
       }),
+      undefined,
     );
   });
 

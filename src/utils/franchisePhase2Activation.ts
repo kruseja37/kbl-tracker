@@ -21,6 +21,20 @@ export const FRANCHISE_PHASE2_FLAG_KEYS = [
 
 export type FranchisePhase2FlagKey = (typeof FRANCHISE_PHASE2_FLAG_KEYS)[number];
 
+export const LIVING_SEASON_FLAG_FAMILY: readonly FranchisePhase2FlagKey[] = [
+  'morale',
+  'fame',
+  'flashpoint',
+  'checkpoint',
+  'traits',
+  'l10',
+  'l11',
+  'l12',
+  'l13',
+  'l14',
+  'stadiumRecords',
+];
+
 export interface FranchisePhase2FlagDescriptor {
   key: FranchisePhase2FlagKey;
   label: string;

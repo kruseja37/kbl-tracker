@@ -75,6 +75,11 @@ vi.mock('../../../utils/registerAlmanacPlayers', () => ({
   registerAlmanacPlayers: mockRegisterAlmanacPlayers,
 }));
 
+vi.mock('../../../utils/franchiseManager', () => ({
+  getFranchiseConfig: vi.fn(async () => null),
+  loadFranchise: vi.fn(async (franchiseId: string) => ({ franchiseId })),
+}));
+
 import { processCompletedGame } from '../../../utils/processCompletedGame';
 
 function createGameState() {

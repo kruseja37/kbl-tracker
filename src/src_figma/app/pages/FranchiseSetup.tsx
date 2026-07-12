@@ -155,6 +155,7 @@ export function FranchiseSetup() {
   } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
+  const [livingSeasonEnabled, setLivingSeasonEnabled] = useState(false);
   const [postFreezeSummary, setPostFreezeSummary] = useState<FranchiseFreezeSummary | null>(null);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
   const [draftedLeagueIds, setDraftedLeagueIds] = useState<Set<string>>(() => new Set());
@@ -292,7 +293,10 @@ export function FranchiseSetup() {
             ...handoffValidation.warnings,
           ].join(' ')}`);
         }
-        const franchiseId = await initializeFranchise(config);
+        const franchiseId = await initializeFranchise(
+          config,
+          livingSeasonEnabled ? { livingSeason: true } : undefined,
+        );
         const summary = await loadFranchiseFreezeSummary(franchiseId);
         setPostFreezeSummary(summary);
         setIsInitializing(false);
@@ -500,7 +504,7 @@ export function FranchiseSetup() {
                   {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
                   {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
                   {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
-                  {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+                  {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} livingSeasonEnabled={livingSeasonEnabled} setLivingSeasonEnabled={setLivingSeasonEnabled} />}
                 </>
               )}
             </>
@@ -1653,6 +1657,8 @@ function Step6Confirm({
   farmScoutingReport,
   farmScoutingLoading,
   farmScoutingError,
+  livingSeasonEnabled,
+  setLivingSeasonEnabled,
 }: {
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
@@ -1662,6 +1668,8 @@ function Step6Confirm({
   farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
   farmScoutingLoading: boolean;
   farmScoutingError: string | null;
+  livingSeasonEnabled: boolean;
+  setLivingSeasonEnabled: (enabled: boolean) => void;
 }) {
   const selectedTeams = leagueTeams.filter((t) => config.teams.selectedTeams.includes(t.id));
   const farmScoutingSummary = farmScoutingLoading
@@ -1698,6 +1706,39 @@ function Step6Confirm({
           placeholder="Enter franchise name..."
         />
       </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={livingSeasonEnabled}
+        onClick={() => setLivingSeasonEnabled(!livingSeasonEnabled)}
+        className={`mb-6 w-full border-4 p-4 text-left transition-all ${
+          livingSeasonEnabled
+            ? "border-[#C4A853] bg-[#3A5A32]"
+            : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
+        }`}
+      >
+        <span className="flex items-start gap-4">
+          <span
+            aria-hidden="true"
+            className={`mt-0.5 flex h-6 w-11 shrink-0 items-center border-2 p-0.5 transition-colors ${
+              livingSeasonEnabled
+                ? "justify-end border-[#C4A853] bg-[#C4A853]"
+                : "justify-start border-[#E8E8D8] bg-[#2A4A22]"
+            }`}
+          >
+            <span className="h-4 w-4 bg-[#E8E8D8]" />
+          </span>
+          <span>
+            <span className="block text-xs font-bold tracking-[0.16em] text-[#E8E8D8]">
+              LIVING SEASON
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-[#E8E8D8]/70">
+              Ratings, fame, morale, relationships, and narrative evolve as you play. Locked in at creation for this season.
+            </span>
+          </span>
+        </span>
+      </button>
 
       {/* GM Name — the user IS the GM (§8) */}
       <div className="mb-6">

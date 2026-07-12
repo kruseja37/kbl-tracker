@@ -418,7 +418,7 @@ describe('FranchiseSetup Component', () => {
       await waitFor(() => {
         expect(mockInitializeFranchise).toHaveBeenCalled();
       });
-      expect(mockInitializeFranchise).toHaveBeenCalled();
+      expect(mockInitializeFranchise).toHaveBeenCalledWith(expect.any(Object), undefined);
       expect(mockLoadFranchiseFreezeSummary).toHaveBeenCalledWith('franchise-1');
       expect(await screen.findByText('FREEZE SUMMARY')).toBeInTheDocument();
       expect(screen.getByText('Kruse Baseball League')).toBeInTheDocument();
@@ -455,7 +455,32 @@ describe('FranchiseSetup Component', () => {
 
       await waitFor(() => {
         expect(mockInitializeFranchise).toHaveBeenCalledWith(
-          expect.objectContaining({ gmName: 'Casey Ledger' })
+          expect.objectContaining({ gmName: 'Casey Ledger' }),
+          undefined,
+        );
+      });
+    });
+
+    test('keeps living season off by default and locks an enabled choice into creation', async () => {
+      render(<FranchiseSetup />);
+      selectLeagueAndAdvance(3);
+      fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+
+      const livingSeason = screen.getByRole('switch', { name: /LIVING SEASON/i });
+      expect(livingSeason).toHaveAttribute('aria-checked', 'false');
+      expect(screen.getByText(/Locked in at creation for this season/i)).toBeInTheDocument();
+      fireEvent.click(livingSeason);
+      expect(livingSeason).toHaveAttribute('aria-checked', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
+
+      await waitFor(() => {
+        expect(mockInitializeFranchise).toHaveBeenCalledWith(
+          expect.any(Object),
+          { livingSeason: true },
         );
       });
     });

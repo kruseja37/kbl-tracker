@@ -41,7 +41,7 @@ import {
   SOUL_BRANCH_KEYS,
 } from './gameStorage';
 import { getGameHeader, markAggregationFailed, markGameAggregated } from './eventLog';
-import { getFranchiseConfig } from './franchiseManager';
+import { getFranchiseConfig, loadFranchise } from './franchiseManager';
 import { getEffectivePlayer } from './playerOverrides';
 import { getAllFranchiseTeams, getFranchisePlayer } from './franchisePlayerStorage';
 import { registerAlmanacPlayers } from './registerAlmanacPlayers';
@@ -87,6 +87,7 @@ import {
   isFranchisePhase2L12Enabled,
   isFranchisePhase2L13Enabled,
   isFranchisePhase2StadiumRecordsEnabled,
+  setFranchiseLivingSeasonContext,
 } from './franchisePhase2Flags';
 import {
   persistDarkFameRecordsForCompletedGame,
@@ -1517,7 +1518,7 @@ async function processLivingSeasonBranches(
  * Accepts a fully-built PersistedGameState (with pitcher decisions
  * already calculated) and runs it through aggregation + archival.
  */
-export async function processCompletedGame(
+async function processCompletedGameWithinLivingSeasonContext(
   gameState: PersistedGameState,
   options?: ProcessCompletedGameAggregationOptions,
   leagueId?: string,
@@ -1716,4 +1717,33 @@ export async function processCompletedGame(
   }
 
   return { aggregation };
+}
+
+export async function processCompletedGame(
+  gameState: PersistedGameState,
+  options?: ProcessCompletedGameAggregationOptions,
+  leagueId?: string,
+  archiveOptions?: CompletedGameArchiveOptions,
+): Promise<ProcessGameResult> {
+  const franchiseId = shouldAggregateToRegularSeasonStats(gameState, archiveOptions)
+    && livingSeasonApplies(gameState, archiveOptions)
+    ? getCompletedGameFranchiseId(gameState, archiveOptions)
+    : null;
+  setFranchiseLivingSeasonContext(null);
+  try {
+    if (franchiseId) {
+      const franchise = await loadFranchise(franchiseId);
+      setFranchiseLivingSeasonContext({
+        enabled: franchise?.livingSeason?.enabled === true,
+      });
+    }
+    return await processCompletedGameWithinLivingSeasonContext(
+      gameState,
+      options,
+      leagueId,
+      archiveOptions,
+    );
+  } finally {
+    setFranchiseLivingSeasonContext(null);
+  }
 }
