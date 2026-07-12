@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "tune1-relationship-variant-v1",
+  "generatedAt": "2026-07-11T20:00:00.000Z",
+  "variantId": "relationship-formation-threshold-low",
+  "knobId": "relationship-formation-threshold",
+  "setting": "low (0.5x)",
+  "factor": 0.5,
+  "status": "UNSTABLE-RUNTIME",
+  "reason": "The same-seed 4-games/team (12 scheduled games) leg exceeded six minutes without completing. It was terminated at the pre-declared TUNE-0 runaway boundary; no numeric relationship metrics are claimed.",
+  "seed": "lsim-fidelity-1",
+  "gamesPerTeam": 4,
+  "totalScheduledGames": 12,
+  "checkpointCadence": "standard",
+  "checkpointCount": 5,
+  "injected": {
+    "thresholds": {
+      "RIVALRY": 0.39,
+      "FEUD": 0.39,
+      "MENTORSHIP": 0.4,
+      "FRIENDSHIP": 0.42
+    },
+    "seededThresholdWindowHeld": 0.03
+  },
+  "runtimeMsLowerBound": 360000,
+  "relationships": null
+}

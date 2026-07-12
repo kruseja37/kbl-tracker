@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "tune1-relationship-variant-v1",
+  "generatedAt": "2026-07-11T20:00:00.000Z",
+  "variantId": "relationship-active-slope-per-point-low",
+  "knobId": "relationship-active-slope-per-point",
+  "setting": "low (0.5x)",
+  "factor": 0.5,
+  "seed": "lsim-fidelity-1",
+  "gamesPerTeam": 4,
+  "totalScheduledGames": 12,
+  "checkpointCadence": "standard",
+  "checkpointCount": 5,
+  "checkpointGameNumbers": [
+    3,
+    5,
+    8,
+    10,
+    12
+  ],
+  "injected": {
+    "activeSlopePerPoint": 1.5,
+    "activeBaseHeld": 0.02,
+    "activeCapHeld": 0.35
+  },
+  "runtimeMs": 34416.91,
+  "finalDigest": "3980601:c5d9b14f",
+  "relationships": {
+    "uniqueFormedEdges": 2,
+    "uniqueFormedEdgesByType": {
+      "RIVALRY": 0,
+      "FEUD": 0,
+      "MENTORSHIP": 2,
+      "FRIENDSHIP": 0
+    },
+    "activeEdgesAtEnd": 2,
+    "formationGameSpread": {
+      "distinctGames": 2,
+      "firstGame": 1,
+      "lastGame": 10,
+      "largestSingleGameBatch": 1,
+      "batchesByGame": {
+        "1": 1,
+        "10": 1
+      }
+    },
+    "perTeamEdgeCounts": {
+      "teamCount": 6,
+      "min": 0,
+      "median": 0,
+      "max": 2,
+      "byTeam": {
+        "lsim-team-01": 0,
+        "lsim-team-02": 0,
+        "lsim-team-03": 2,
+        "lsim-team-04": 0,
+        "lsim-team-05": 0,
+        "lsim-team-06": 0
+      },
+      "unassignedEdges": 0
+    },
+    "candidateCoverage": {
+      "candidateEdges": 11,
+      "formedCandidateEdges": 2,
+      "formedFraction": 0.181818,
+      "strictSubset": true
+    },
+    "compatibilityTiming": {
+      "marginal": {
+        "candidateCount": 3,
+        "formedCount": 0,
+        "meanGameWithUnformedCensored": 13,
+        "meanFormationGame": null,
+        "minThresholdMargin": 0.0014,
+        "maxThresholdMargin": 0.0028
+      },
+      "middle": {
+        "candidateCount": 4,
+        "formedCount": 0,
+        "meanGameWithUnformedCensored": 13,
+        "meanFormationGame": null,
+        "minThresholdMargin": 0.0028,
+        "maxThresholdMargin": 0.0256
+      },
+      "strong": {
+        "candidateCount": 4,
+        "formedCount": 2,
+        "meanGameWithUnformedCensored": 9.25,
+        "meanFormationGame": 5.5,
+        "minThresholdMargin": 0.0444,
+        "maxThresholdMargin": 0.0444
+      },
+      "strongerFormsEarlierMonotone": true
+    },
+    "moraleCascade": {
+      "relationshipHits": 30,
+      "relationshipRecoveries": 0,
+      "relationshipChargedMatchups": 2,
+      "relationshipPlayerGroups": 6,
+      "duplicateSourceIds": 0,
+      "recoveredGroups": 0,
+      "recoveredGroupsNetZero": 0,
+      "nonZeroRecoveredGroups": 0,
+      "hitDeltaTotal": 120,
+      "recoveryDeltaTotal": 0,
+      "chargedDeltaTotal": 0,
+      "chargedPositiveDeltas": 1,
+      "chargedNegativeDeltas": 1,
+      "recoveredGroupsNetDelta": 0,
+      "ratingsDevelopmentRows": 203,
+      "moraleToWarLeaks": 0,
+      "sampleSourceEventIds": [
+        "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-02-mlb-05-3B:lsim-team-05-mlb-01-C:RIVALRY:game-8",
+        "relationship-charged:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-02-mlb-05-3B:lsim-team-05-mlb-01-C:RIVALRY:game-8",
+        "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-1",
+        "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-1",
+        "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-10",
+        "relationship-hit:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-franchise-h1:lsim-franchise-h1-season-step3-3:lsim-franchise-h1-season-step3-3:lsim-team-03-mlb-01-C:lsim-team-03-mlb-11-1B:MENTORSHIP:game-10"
+      ]
+    }
+  }
+}

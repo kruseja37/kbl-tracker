@@ -12,6 +12,9 @@ export type Tune0SweepableKnobId =
   | 'fame-decay-per-update'
   | 'morale-personality-spread'
   | 'relationship-formation-threshold'
+  | 'relationship-active-base'
+  | 'relationship-active-slope-per-point'
+  | 'relationship-active-cap'
   | 'k5-backlash-curve';
 
 export interface Tune0OverrideSpec {
@@ -23,6 +26,10 @@ type MutableRecord = Record<string, unknown>;
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function cloneIfPresent<T>(value: T | undefined): T | undefined {
+  return value === undefined ? undefined : clone(value);
 }
 
 function restoreObject(target: object, snapshot: object): void {
@@ -60,6 +67,24 @@ export function describeTune0Override(spec: Tune0OverrideSpec): Record<string, u
         ),
         seededThresholdWindowHeld: RELATIONSHIP_FORMATION_TUNING.seededThresholdWindow,
       };
+    case 'relationship-active-base':
+      return {
+        activeBase: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeBase * spec.factor,
+        activeSlopePerPointHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeSlopePerPoint,
+        activeCapHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeCap,
+      };
+    case 'relationship-active-slope-per-point':
+      return {
+        activeSlopePerPoint: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeSlopePerPoint * spec.factor,
+        activeBaseHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeBase,
+        activeCapHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeCap,
+      };
+    case 'relationship-active-cap':
+      return {
+        activeCap: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeCap * spec.factor,
+        activeBaseHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeBase,
+        activeSlopePerPointHeld: RELATIONSHIP_FORMATION_TUNING.perGameHazard.activeSlopePerPoint,
+      };
     case 'k5-backlash-curve':
       return {
         maxBacklashMagnitude: 4 * spec.factor,
@@ -77,7 +102,9 @@ export async function withTune0Override<T>(
   const fameSnapshot = clone(FAME_TUNING);
   const moraleSnapshot = clone(MORALE_TUNING);
   const relationshipSnapshot = clone(RELATIONSHIP_FORMATION_TUNING);
-  const backlashSnapshot = clone(FRANCHISE_L11_FIRING_BACKLASH_TUNING);
+  // The K5 object is absent on some post-TUNE-0 branches. Do not let that
+  // unrelated legacy knob prevent relationship-only harness injection.
+  const backlashSnapshot = cloneIfPresent(FRANCHISE_L11_FIRING_BACKLASH_TUNING);
 
   try {
     switch (spec.knobId) {
@@ -111,7 +138,22 @@ export async function withTune0Override<T>(
           current[type] = baseline[type] * spec.factor;
         }
         break;
+      case 'relationship-active-base':
+        (RELATIONSHIP_FORMATION_TUNING.perGameHazard as { activeBase: number }).activeBase =
+          relationshipSnapshot.perGameHazard.activeBase * spec.factor;
+        break;
+      case 'relationship-active-slope-per-point':
+        (RELATIONSHIP_FORMATION_TUNING.perGameHazard as { activeSlopePerPoint: number }).activeSlopePerPoint =
+          relationshipSnapshot.perGameHazard.activeSlopePerPoint * spec.factor;
+        break;
+      case 'relationship-active-cap':
+        (RELATIONSHIP_FORMATION_TUNING.perGameHazard as { activeCap: number }).activeCap =
+          relationshipSnapshot.perGameHazard.activeCap * spec.factor;
+        break;
       case 'k5-backlash-curve':
+        if (!backlashSnapshot) {
+          throw new Error('K5 backlash tuning is not injectable on this branch.');
+        }
         (FRANCHISE_L11_FIRING_BACKLASH_TUNING as unknown as { maxBacklashMagnitude: number }).maxBacklashMagnitude =
           backlashSnapshot.maxBacklashMagnitude * spec.factor;
         break;
@@ -123,6 +165,8 @@ export async function withTune0Override<T>(
     restoreObject(FAME_TUNING, fameSnapshot);
     restoreObject(MORALE_TUNING, moraleSnapshot);
     restoreObject(RELATIONSHIP_FORMATION_TUNING, relationshipSnapshot);
-    restoreObject(FRANCHISE_L11_FIRING_BACKLASH_TUNING, backlashSnapshot);
+    if (backlashSnapshot) {
+      restoreObject(FRANCHISE_L11_FIRING_BACKLASH_TUNING, backlashSnapshot);
+    }
   }
 }

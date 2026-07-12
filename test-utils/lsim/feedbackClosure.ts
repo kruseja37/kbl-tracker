@@ -257,7 +257,7 @@ export async function runLsimFeedbackClosure(
         ),
         trackedProposalCount: trackedRatings.length,
         storeDigest: dump?.digest ?? 'not-captured',
-        tune0Metrics: buildTune0CheckpointMetrics(snapshot, previousCheckpointSnapshot),
+        tune0Metrics: buildTune0CheckpointMetrics(snapshot, previousCheckpointSnapshot, context.scope),
       });
       previousCheckpointSnapshot = snapshot;
     }

@@ -1,0 +1,186 @@
+{
+  "schemaVersion": "tune1-relationship-ranking-v1",
+  "generatedAt": "2026-07-11T20:00:00.000Z",
+  "formula": "Per metric abs(variant-baseline)/max(1,abs(baseline)); mean within each of volume/spread/timing/moraleCascade; equal-weight mean across four groups; knob score=max(completed non-default variants).",
+  "runtimeDisposition": "UNSTABLE-RUNTIME knobs rank before numerically completed knobs; their normalizedImpact remains the maximum of completed numeric variants and is not fabricated from the timed-out leg.",
+  "baselineVariantId": "baseline-default",
+  "ranking": [
+    {
+      "rank": 1,
+      "knobId": "relationship-formation-threshold",
+      "normalizedImpact": 0.667749,
+      "unstableRuntime": true,
+      "variants": [
+        {
+          "variantId": "relationship-formation-threshold-default",
+          "factor": 1,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-formation-threshold-high",
+          "factor": 2,
+          "normalizedImpact": 0.667749,
+          "groups": {
+            "volume": 0.623377,
+            "spread": 0.714286,
+            "timing": 1,
+            "moraleCascade": 0.333333
+          },
+          "exactOrganicCoreMatch": false,
+          "shapeSignals": [
+          "no-eligible-candidates"
+          ]
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "knobId": "relationship-active-slope-per-point",
+      "normalizedImpact": 0.192633,
+      "unstableRuntime": false,
+      "variants": [
+        {
+          "variantId": "relationship-active-slope-per-point-low",
+          "factor": 0.5,
+          "normalizedImpact": 0.166836,
+          "groups": {
+            "volume": 0.359307,
+            "spread": 0.142857,
+            "timing": 0.061111,
+            "moraleCascade": 0.10407
+          },
+          "exactOrganicCoreMatch": false,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-slope-per-point-default",
+          "factor": 1,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-slope-per-point-high",
+          "factor": 2,
+          "normalizedImpact": 0.192633,
+          "groups": {
+            "volume": 0.132035,
+            "spread": 0.214286,
+            "timing": 0.157407,
+            "moraleCascade": 0.266805
+          },
+          "exactOrganicCoreMatch": false,
+          "shapeSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "knobId": "relationship-active-base",
+      "normalizedImpact": 0.105575,
+      "unstableRuntime": false,
+      "variants": [
+        {
+          "variantId": "relationship-active-base-low",
+          "factor": 0.5,
+          "normalizedImpact": 0.105575,
+          "groups": {
+            "volume": 0.227273,
+            "spread": 0.035714,
+            "timing": 0.051852,
+            "moraleCascade": 0.107462
+          },
+          "exactOrganicCoreMatch": false,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-base-default",
+          "factor": 1,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-base-high",
+          "factor": 2,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "knobId": "relationship-active-cap",
+      "normalizedImpact": 0,
+      "unstableRuntime": false,
+      "variants": [
+        {
+          "variantId": "relationship-active-cap-low",
+          "factor": 0.5,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-cap-default",
+          "factor": 1,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        },
+        {
+          "variantId": "relationship-active-cap-high",
+          "factor": 2,
+          "normalizedImpact": 0,
+          "groups": {
+            "volume": 0,
+            "spread": 0,
+            "timing": 0,
+            "moraleCascade": 0
+          },
+          "exactOrganicCoreMatch": true,
+          "shapeSignals": []
+        }
+      ]
+    }
+  ]
+}
