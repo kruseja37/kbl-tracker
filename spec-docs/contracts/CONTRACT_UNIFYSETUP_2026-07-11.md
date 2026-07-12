@@ -345,3 +345,21 @@ machine-load flake class — the characterized list is hereby extended to includ
 Captain also re-ran Gate 1 (tsc exit 0) and Gate 2 (build exit 0) on the FINAL
 worktree, closing the builder's stale-certification caveat. Gate 5 is CERTIFIED:
 zero deterministic reds attributable to this lane. → Independent audit next.
+
+---
+
+## AUDIT — opus, independent, 2026-07-11 — VERDICT: APPROVE-WITH-NOTES
+Auction identity verified hunk-by-hunk (every change format-gated or the one
+sanctioned popover parity; the adapter inert under auction — structural, both
+directions); the migrated crawl drives real storage end-to-end incl. LOCK truth,
+version-picker unlock law, board snapshot; frozen-IV and archetype-honest gating
+fixtures real; characterized set green under the ratified load protocol (the one red
+= the poolLock family collapsing under load avg 161 — contention signature, solo-green
+standing).
+MERGE RECIPE (binding on the captain rebase): (1) draftRouting snake target — MAIN's
+/snake-setup WINS (redirects to the unified setup); the branch's direct /snake-room is
+a latent unstarted-league dead-end; flip the branch's two route assertions back.
+(2) PR #96's handleStartDraft resume hunk is SUPERSEDED by the adapter's enterDraft
+resume-to-room — branch wins, drop the #96 hunk. (3) No franchisePhase2Activation
+overlap. NOTES: align aria-labels to visible button text post-merge (+2 fixture
+queries); bump the crawl's 60s inner wait toward its 180s budget.
