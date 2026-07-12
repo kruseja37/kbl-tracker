@@ -468,6 +468,12 @@ describe("useFranchiseLensData schedule reflection", () => {
       from: 50,
       to: 55,
     });
+    expect(result.current.hub.home?.impactCards[0]?.detail).toContain("2 changes across 1 players");
+    expect(result.current.hub.bigMoments?.[0]).toMatchObject({
+      kicker: "Checkpoint 2 of 5 — game 24",
+      title: "2 changes across 1 players",
+      action: "checkpoint",
+    });
   });
 
   test("routes confirm-adjusted through the mirror service with the currently displayed prior value", async () => {
@@ -546,6 +552,9 @@ describe("useFranchiseLensData schedule reflection", () => {
       { id: "ours", playerId: "player-1", seasonId: "franchise-reflect-season-1", achievedDate: 2, description: "Our milestone", tier: 1 },
       { id: "theirs", playerId: "player-1", seasonId: "other-franchise-season-1", achievedDate: 1, description: "Bleed milestone", tier: 1 },
     ]);
+    mocks.mockGetFranchiseFameRecordRowsByScope.mockResolvedValue([
+      { playerId: "player-1", heat: 55, reachFloor: 1, wasNegative: false, channelTotal: 12, updatedAtCheckpoint: "24" },
+    ]);
 
     const { result } = renderHook(() => useFranchiseLensData("franchise-reflect", 1, "home-team"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -558,6 +567,8 @@ describe("useFranchiseLensData schedule reflection", () => {
     ]);
     expect(result.current.hub.moments?.ceremony?.champion).toBe("Home Team");
     expect(result.current.hub.roster[0].detail?.milestones?.map((milestone) => milestone.label)).toEqual(["Our milestone"]);
+    expect(result.current.hub.bigMoments?.map((moment) => moment.id)).toContain("milestone-ours");
+    expect(result.current.hub.bigMoments?.map((moment) => moment.id)).toContain("fame-player-1");
   });
 
   test("shares the run-differential tiebreak for table order and pulse rank and reports real L10 length", async () => {

@@ -131,6 +131,7 @@ import { listReporters } from "../../utils/reporterStorage";
 import type { BeatReporter, GameStory, SeasonNewsItem } from "../../types/reporter";
 import type { StoredFranchiseConfig } from "../../types/franchise";
 import type { ManagerProfile } from "../../types/managerWpa";
+import { getCheckpointWorklistCounts, type BigMomentVM } from "../app/components/franchise/FranchiseLensHub";
 import type {
   ActiveTeamVM,
   AlmanacVM,
@@ -194,6 +195,7 @@ const NAVY = "#1A2433";
 interface TeamMeta {
   abbr: string;
   name: string;
+  stadium?: string;
 }
 
 interface RawData {
@@ -1233,6 +1235,7 @@ function reporterAvatar(avatarEra: BeatReporter["avatarEra"]): "fedora" | "heads
 function buildCheckpointVM(
   unresolved: UnresolvedDevelopmentCheckpoint[],
   players: Player[],
+  teamMeta: Map<string, TeamMeta>,
 ): CheckpointVM | undefined {
   if (unresolved.length === 0) return undefined;
   const playerById = new Map(players.map((player) => [player.id, player]));
@@ -1290,10 +1293,15 @@ function buildCheckpointVM(
     }
     const checkpointPlayers: CheckpointPlayerVM[] = [...byPlayer.entries()].map(([playerId, proposals]) => {
       const player = playerById.get(playerId);
+      const teamId = player?.leagueAssignments?.find((assignment) => teamMeta.has(assignment.teamId))?.teamId;
+      const team = teamId ? teamMeta.get(teamId) : undefined;
       return {
         id: playerId,
         name: player ? `${player.firstName} ${player.lastName}`.trim() : playerId,
         position: player?.primaryPosition ?? "",
+        teamId,
+        teamName: team?.name,
+        teamAbbr: team?.abbr,
         proposals,
       };
     });
@@ -1349,6 +1357,8 @@ function buildNextGameVM(
     homeAbbr: abbrOf(next.homeTeamId),
     homeRecord: rec(next.homeTeamId),
     meta: next.date ? `Up next · ${next.date}` : "Up next",
+    civilDate: next.date || undefined,
+    park: teamMeta.get(next.homeTeamId)?.stadium,
   };
 }
 
@@ -1398,11 +1408,12 @@ function buildHomeVM(
 
   const impactCards: ImpactCardVM[] = [];
   if (checkpoint) {
+    const counts = getCheckpointWorklistCounts(checkpoint);
     impactCards.push({
       kind: "dated",
       icon: "📋",
       title: `${checkpoint.label} — development to enter`,
-      detail: `${checkpoint.players.length} player change${checkpoint.players.length === 1 ? "" : "s"} to transcribe into SMB4 at ${checkpoint.pctLabel ?? "this checkpoint"}.`,
+      detail: `${counts.changes} changes across ${counts.players} players to transcribe into SMB4 at ${checkpoint.pctLabel ?? "this checkpoint"}.`,
       cta: "Open the worklist",
       action: "checkpoint",
     });
@@ -1512,6 +1523,82 @@ function buildMomentsVM(
   return { ceremony };
 }
 
+/**
+ * The clubhouse feed deliberately consumes only rows the Lens already loaded.
+ * It is presentation-only: a checkpoint action opens the existing worklist and
+ * every other row is a receipt/readout of an existing store row.
+ */
+function buildBigMomentsVM(
+  checkpoint: CheckpointVM | undefined,
+  fameRecords: FranchiseFameRecordRow[],
+  milestones: CareerMilestone[],
+  seasonNews: SeasonNewsItem[],
+  players: Player[],
+  takeovers: MomentsVM | undefined,
+): BigMomentVM[] {
+  const nameById = new Map(players.map((player) => [player.id, `${player.firstName} ${player.lastName}`.trim()]));
+  const rows: BigMomentVM[] = [];
+  if (checkpoint) {
+    const counts = getCheckpointWorklistCounts(checkpoint);
+    if (counts.changes > 0) {
+      rows.push({
+        id: `checkpoint-${checkpoint.number}-${checkpoint.label}`,
+        icon: "🔔",
+        kicker: checkpoint.label,
+        title: `${counts.changes} changes across ${counts.players} players`,
+        detail: "The league just shifted. Open the worklist to enter what SMB4 accepted.",
+        tone: "urgent",
+        action: "checkpoint",
+      });
+    }
+  }
+  for (const milestone of [...milestones].sort((left, right) => right.achievedDate - left.achievedDate).slice(0, 3)) {
+    rows.push({
+      id: `milestone-${milestone.id}`,
+      icon: "🏅",
+      kicker: "Milestone",
+      title: milestone.description,
+      detail: `${milestone.playerName || nameById.get(milestone.playerId) || "A player"} reached ${milestone.actualValue ?? milestone.thresholdValue}.`,
+      tone: "good",
+    });
+  }
+  for (const fame of [...fameRecords]
+    .filter((row) => row.channelTotal !== 0 || row.reachFloor > 0 || row.heat !== 0)
+    .sort((left, right) => Math.abs(right.channelTotal) - Math.abs(left.channelTotal))
+    .slice(0, 3)) {
+    rows.push({
+      id: `fame-${fame.playerId}`,
+      icon: fame.wasNegative ? "↓" : "✦",
+      kicker: "Fame watch",
+      title: `${nameById.get(fame.playerId) ?? fame.playerId} ${fame.wasNegative ? "lost ground" : "is building a name"}`,
+      detail: `Heat ${Math.round(fame.heat)} · checkpoint ${fame.updatedAtCheckpoint}`,
+      tone: fame.wasNegative ? "neutral" : "good",
+    });
+  }
+  for (const story of [...seasonNews].sort((left, right) => right.dramaticWeight - left.dramaticWeight).slice(0, 2)) {
+    rows.push({
+      id: `news-${story.id}`,
+      icon: "📰",
+      kicker: prettyEvent(story.eventType),
+      title: story.headline,
+      detail: story.body,
+      tone: "neutral",
+    });
+  }
+  if (takeovers?.ceremony) {
+    rows.push({
+      id: `ceremony-${takeovers.ceremony.title}`,
+      icon: "🏆",
+      kicker: "Season end",
+      title: takeovers.ceremony.title,
+      detail: `${takeovers.ceremony.champion} finished on top.`,
+      tone: "good",
+      action: "ceremony",
+    });
+  }
+  return rows.slice(0, 6);
+}
+
 function buildReturn(
   raw: RawData | null,
   viewedTeamId: string | undefined,
@@ -1583,7 +1670,7 @@ function buildReturn(
   }
 
   const teamMeta = new Map<string, TeamMeta>(
-    teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name }]),
+    teams.map((team) => [team.id, { abbr: team.abbreviation, name: team.name, stadium: team.stadium }]),
   );
 
   const teamPicker: TeamPickerVM[] = teams.map((team) => ({
@@ -1700,10 +1787,11 @@ function buildReturn(
   };
 
   const payroll = teamPlayers.reduce((sum, player) => sum + (Number(player.salary) || 0), 0);
-  const checkpointVM = buildCheckpointVM(unresolvedDevelopment, players);
+  const checkpointVM = buildCheckpointVM(unresolvedDevelopment, players, teamMeta);
   const franchiseTeamIds = new Set(teams.map((team) => team.id));
   const franchiseChampionships = championships.filter((record) => franchiseTeamIds.has(record.championId));
   const franchiseAwards = awards.filter((award) => franchiseTeamIds.has(award.teamId));
+  const momentTakeovers = buildMomentsVM(franchiseChampionships, franchiseAwards, teamMeta);
   const standingsVM = buildStandingsVM(teams, standingByTeam, config, raceScores, players, teamMeta);
 
   const hub: HubVM = {
@@ -1735,7 +1823,8 @@ function buildReturn(
     almanac: buildAlmanacVM(seasonStats, statsReady, teamMeta, franchiseChampionships, franchiseAwards),
     news: buildNewsVM(seasonNews, gameStories, activeReporter, teamMeta, schedule, seasonNumber),
     checkpoint: checkpointVM,
-    moments: buildMomentsVM(franchiseChampionships, franchiseAwards, teamMeta),
+    moments: momentTakeovers,
+    bigMoments: buildBigMomentsVM(checkpointVM, fameRecords, milestones, seasonNews, players, momentTakeovers),
     lineups: buildLineupsContextVM(schedule, activeTeam.id, standingByTeam, teamMeta, config),
     loading: false,
   };
