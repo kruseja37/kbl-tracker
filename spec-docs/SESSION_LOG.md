@@ -2,6 +2,25 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-12 — BLOCKFIX: Draft Setup blocked-pool message now names the REAL constraint (built + browser-verified, UNCOMMITTED — awaiting JK's word to PR)
+
+**Trigger:** the chip from the previous booking pass — the pool-first "can't legally seat every club at 22 under the cap — add players or raise the cap" readiness line misdirected JK's SML repro (raising cap 1.2M→10M changed nothing; the true constraint was role supply).
+
+**Root cause found (both halves):**
+1. The blocked line was a single hardcoded string keyed only off `legalCompletionFeasible === false` (a `seatAllClubs` verdict that can fail on shape OR budget), so it always prescribed cap/players regardless of the real failure.
+2. "Regenerate production-shaped pool" can never repair a position-starved source universe: `enforcePositionSupplyFloors` (src/engines/poolFromDemand.ts:762) only *selects* from the imported universe — there is no synthetic generation in this path. It already recorded the truth as `result.shortfalls` ("The uploaded universe has X closers; Y required…") but pool-first mode never rendered them anywhere.
+
+**The fix (src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx):**
+- The readiness panel's blocked branch now splits `sufficiency.positionFloorReasons` against the source universe (`splitFloorsByUniverseSupply` + `matchesPositionSupplyFloor`): floors the universe CAN cover → "REGENERATE … or add players at those spots"; floors the universe CANNOT cover → "The source universe itself is short on X — regenerating can't create them; check more source leagues or add players who cover those spots."
+- Cap advice now appears ONLY when it's true: floors all met AND the seat verdict failed with a budget `overrun` (the diagnostics memo now keeps the whole `seatAllClubs` verdict as `seatFailing`, not just `.holds`). Third case (positions covered but same players carrying too many spots) gets its own honest line.
+- The Help-gated pool-first shape report now renders `result.shortfalls` after a regenerate, so the universe-shortage fact is visible at the point where regenerate "silently did nothing."
+
+**Verification (all externally observed):** `npm run build` exit 0. All 6 LeagueBuilderDraftSetup test files green solo (board 25/25 incl. 2 new BLOCKFIX tests — supply-shape-blocked names floors + asserts NO "raise the cap"; genuinely cap-blocked still points at the cap; poolLock 21/21 ×2 runs after one timing flake; universe 15/15; money+setup+RankYourBoardZone 52/52). Live browser repro on a CLEAN origin (own dev server :5233, fresh IndexedDB): IMPORT SML (20 teams/506 players) → auto-fill identities → pool auto-seeded 440 → readiness panel reads "The source universe itself is short on CLOSERS (16 available, 27 needed for 20 clubs) — regenerating can't create them…" (SML genuinely has only 16 CP-capable players; THAT is why no cap ever helped), LOCK POOL disabled; after Regenerate, the Help panel shows "The uploaded universe has 16 closers; 27 required for 20 clubs plus hoarding slack." Screenshots unavailable this session (Browser pane returned blank captures) — all proof is DOM-read evidence.
+
+**State:** changes live UNCOMMITTED in the main working tree (page + board test file + this log + .claude/launch.json dev-alt port). Per the no-direct-push rule they should go out as a branch-per-slice PR — waiting on JK's word. NOTE for parallel threads: don't `git commit -a` over these.
+
+---
+
 ## 2026-07-12 (post-midnight — scribe booking pass, docs-only) — COMPANIONAUTH (PR #110) + HELPSWEEP (PR #111) BOTH MERGED; HELP-BUTTON UI LAW RATIFIED
 
 **Trigger:** the two lanes dispatched off tonight's evening close-out (companion sign-in fix + a help-button-law sweep) came back built, opus-audited, and — as of this booking pass — already merged to `main` by JK. (Note for the record: the booking brief handed to this pass said both PRs were still open awaiting merge; git and `gh pr view` show otherwise — both were merged within the same minute this pass started, at `2026-07-12T05:59-06:00 UTC`. This entry books what git actually shows.)
