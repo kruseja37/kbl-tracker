@@ -1,6 +1,8 @@
 # SNAKE DRAFT TRUTH — 2026-07-11 (the one-page pickup doc)
 
-**Read this first if you're picking up the snake draft tomorrow.** It answers one question: what is the snake draft, really, right now — verified against git, not against what any brief claims. Where a claim couldn't be independently checked, that's said plainly below rather than assumed.
+**Read this first if you're picking up the snake draft.** It answers one question: what is the snake draft, really, right now — verified against git, not against what any brief claims. Where a claim couldn't be independently checked, that's said plainly below rather than assumed.
+
+**UPDATE (2026-07-12, post-midnight, docs-only scribe pass):** the two lanes queued at the bottom of this doc are done — PR #110 (companion sign-in + a captain-found cross-device clobber fix) and PR #111 (help-button-law sweep + JK's ruled board-first room layout) are both MERGED to `main` (`3116ddc9`, `d6c988e9`). The Help-Button UI Law referenced below is now RATIFIED canon in `SESSION_RULES.md` (`beaad38f`). The "WHAT IT ISN'T" section below is updated accordingly — the companion fix is now built+merged, but still UNVERIFIED on real hardware.
 
 ---
 
@@ -24,18 +26,17 @@ The whole path is ONE flow, verified end to end through real code and JK's own l
 
 **Verification levels, stated plainly:**
 - Everything above is engine/integration-tested end-to-end through real storage (not mocked), independently adversarially audited (APPROVE or APPROVE-WITH-NOTES on every lane), and merged to `main`.
-- JK's own hands-on browser walkthrough has verified: setup → room entry → picks, plus a first real fix wave covering five seam-level bugs his walkthrough surfaced (PRs #90 ROOMFIX, #91 routing, #96 resume-overwrite hotfix, #97 UNIFYSETUP, #98 PERFROOM — the room-code churn + a real-league-scale performance fix). Contracts for the whole build: `spec-docs/contracts/CONTRACT_S0_TRANSFER_AUDIT_2026-07-10.md` through `CONTRACT_S7_GAUNTLET_2026-07-10.md`, plus `CONTRACT_ROOMFIX_2026-07-11.md`, `CONTRACT_UNIFYSETUP_2026-07-11.md`, `CONTRACT_PERFROOM_2026-07-11.md`.
+- JK's own hands-on browser walkthrough has verified: setup → room entry → picks, plus a first real fix wave covering five seam-level bugs his walkthrough surfaced (PRs #90 ROOMFIX, #91 routing, #96 resume-overwrite hotfix, #97 UNIFYSETUP, #98 PERFROOM — the room-code churn + a real-league-scale performance fix). A second wave (PRs #110 COMPANIONAUTH, #111 HELPSWEEP) is now also merged — companion sign-in + a cross-device clobber fix, plus the newly-ratified help-button law swept across every snake screen and JK's ruled board-first room layout — but is NOT yet walked by JK live (see below). Contracts for the whole build: `spec-docs/contracts/CONTRACT_S0_TRANSFER_AUDIT_2026-07-10.md` through `CONTRACT_S7_GAUNTLET_2026-07-10.md`, plus `CONTRACT_ROOMFIX_2026-07-11.md`, `CONTRACT_UNIFYSETUP_2026-07-11.md`, `CONTRACT_PERFROOM_2026-07-11.md`, `CONTRACT_COMPANIONAUTH_2026-07-12.md`, `CONTRACT_HELPSWEEP_2026-07-12.md`.
 - **JK has NOT yet walked the farm snake, trades, or a full multi-round season handoff live in the browser.** Those are engine-verified only so far. His continued walkthrough is the sole real acceptance gate — nothing above is "done" until he's clicked through it himself.
 
 ---
 
 ## WHAT IT ISN'T (honest)
 
-**COMPANION CROSS-DEVICE: NOT WORKING on real devices.** This is tonight's finding — JK's own phone couldn't use the companion feature. Root cause identified by code inspection (not yet fixed, not yet confirmed by a live retest):
-- The companion page (`/snake-companion`, `SnakeCompanion.tsx`) has no sign-in screen anywhere in it. It never imports or shows the app's existing sign-in surface (the `SyncModal`/login flow that lives on the home screen).
-- The data sync it depends on is account-based cloud sync (Supabase). Every sync operation silently does nothing — no error, no message — if the device isn't signed into an account. So an unsigned-in phone polls forever, never finds the league, and just sits on "that room code does not match" with zero explanation of why.
-- This was actually a known, named tradeoff, not an oversight: the original build (PR #72, S5) explicitly assumed every companion device is the league owner's OWN hardware, already signed into the same account (their spare phone/iPad, handed around the table) — a real friend's own unregistered phone was intentionally deferred to a future version. JK's phone tonight was presumably not already signed in, which exposes the gap: there's no way for a phone in that state to even find out it needs to sign in, let alone do it, from the companion page itself.
-- Same-browser / same-device companion flows are test-green only — they haven't been proven on a second physical device either, beyond this one real-world data point.
+**COMPANION CROSS-DEVICE: BUILT + MERGED, but UNVERIFIED on real hardware.** Last night's finding was that JK's own phone couldn't use the companion feature. The fix (PR #110, COMPANIONAUTH) is now merged to `main` (`3116ddc9`):
+- The companion page (`/snake-companion`) now shows a real sign-in screen when the device isn't authenticated (fail-closed), with the signed-in account's email + a sign-out control on the claim screen, plus honest "pulling your leagues…" / "no open room on this account" / "code doesn't match" states — replacing the old silent no-op.
+- A second, captain-found bug was fixed in the same lane: companion claim and board saves had been writing the WHOLE session row against a row-last-write-wins cloud store, so a pick made on the main device inside the sync staleness window could be silently erased by a companion write. Both writes now go through atomic field-patch helpers with pull-before-write, so a companion save can only ever touch its own field.
+- Verification so far is a two-origin automated test on the real sync engine (opus-audited, the clobber regression made discriminating and mutation-verified) plus a full green suite — **not yet a real phone-to-Mac round-trip.** JK's own phone is still the first real test of this fix: `http://192.168.68.54:5173/snake-companion` on the same Wi-Fi, signed into the SAME account as the Mac, then enter the room code. The phone will now show a sign-in screen it didn't show last night.
 
 **Also NOT in v1 (by design, not oversight):**
 - CPU-controlled room members — practice mode only, no CPU seats in a real room.
@@ -46,8 +47,9 @@ The whole path is ONE flow, verified end to end through real code and JK's own l
 
 ---
 
-## TOMORROW'S PICKUP (in order)
+## PICKUP ORDER (2026-07-12 morning, updated)
 
-1. **Companion live-debug, first priority.** Add a real sign-in path onto the companion page (or surface the existing sign-in screen there), then verify an actual round-trip on JK's own phone and the Mac — a real device test, not just automated tests passing.
-2. **Continue JK's walkthrough, wave 2** — farm snake, trades, and a fuller season-handoff pass in the real browser are still unwalked.
-3. **Smaller ledger items, lowest priority:** a couple of on-screen button labels don't exactly match their accessibility labels; refresh the Browserslist data; add a code comment about the room's cache-key bump rule; do a real-browser idle-jank check while the room's assistant warms its cache; a few cosmetic S3 notes; legends-library carry-forwards (human-readable version labels, cross-namespace player IDs); and eventually upgrading the auction's own advisor to use the same real archetype-fit adapter the snake desk got.
+1. **JK's real-phone companion round-trip, first priority.** The sign-in fix is merged — now verify it live: Mac at `http://192.168.68.54:5173` + phone on the same Wi-Fi, both at `/snake-companion`, phone signs into the SAME account as the Mac, then enters the room code. This is the actual test that last night's finding demanded; nothing before this step has touched real hardware.
+2. **Continue JK's walkthrough, wave 2** — farm snake, trades, and a fuller season-handoff pass in the real browser are still unwalked, and he'll now see the merged board-first room layout (his own draft board as the primary column) for the first time live.
+3. **The ticketed side finding** — the Draft Setup "can't legally seat every club at 22 under the cap" blocker message misdirects (an SML-import repro showed raising the cap 1.2M→10M changed nothing; the real constraint is the shape of position supply, not the cap number). Flagged as a background-task chip, not a queued lane.
+4. **Smaller ledger items, lowest priority:** a couple of on-screen button labels don't exactly match their accessibility labels; refresh the Browserslist data; add a code comment about the room's cache-key bump rule; do a real-browser idle-jank check while the room's assistant warms its cache; a few cosmetic S3 notes; legends-library carry-forwards (human-readable version labels, cross-namespace player IDs); and eventually upgrading the auction's own advisor to use the same real archetype-fit adapter the snake desk got.
