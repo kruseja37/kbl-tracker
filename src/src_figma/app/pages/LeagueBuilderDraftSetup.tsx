@@ -4869,6 +4869,7 @@ export function LeagueBuilderDraftSetup() {
               teams={leagueTeams}
               locked={locked}
               disabled={Boolean(setupMutationBlockMessage) || busy}
+              showHelp={showHelp}
             />
           ) : null}
 
@@ -4876,6 +4877,11 @@ export function LeagueBuilderDraftSetup() {
             {showHelp && !isSnakeFormat ? (
               <HelpNote>
                 Set shill pressure, check the room, then start. A live draft resumes from here.
+              </HelpNote>
+            ) : null}
+            {showHelp && isSnakeFormat ? (
+              <HelpNote>
+                Choose player versions, lock the pool, wait for the room check, then GO to enter the snake room.
               </HelpNote>
             ) : null}
             {/* BOARDFIX2 (Item A): an ALWAYS-visible readiness panel, not gated on showHelp or on

@@ -30,12 +30,38 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
 }
 
 describe('SnakeDraftRoomView', () => {
+  it('keeps room explainers behind the Help toggle', () => {
+    render(<SnakeDraftRoomView {...props()} />);
+    expect(screen.queryByText('THE SHARED ROOM STAYS COVERED UNTIL THE CLUB ARMS ITS PICK.')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'HELP' }));
+    expect(screen.getByText('THE SHARED ROOM STAYS COVERED UNTIL THE CLUB ARMS ITS PICK.')).toBeInTheDocument();
+  });
+
   it('keeps the private desk absent while covered and renders it only after reveal', () => {
     render(<SnakeDraftRoomView {...props({ privateDesk: <div>SECRET BOARD CONTENT</div> })} />);
     expect(screen.queryByText('SECRET BOARD CONTENT')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /REVEAL .* SEAT/ }));
     expect(screen.getByText('SECRET BOARD CONTENT')).toBeInTheDocument();
   });
+
+  it('puts the private desk first in the wide room layout and compacts the sticky ritual rail', () => {
+    render(<SnakeDraftRoomView {...props()} />);
+    const privateSeat = screen.getByRole('region', { name: 'Private seat' });
+    const ritual = screen.getByRole('region', { name: 'Draft ritual' });
+
+    expect(privateSeat.parentElement).toHaveClass('xl:grid-cols-[1fr_400px]');
+    expect(privateSeat.compareDocumentPosition(ritual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(ritual.parentElement).toHaveClass('self-start', 'xl:sticky', 'xl:top-4');
+    expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD').parentElement).toHaveClass('min-h-36');
+    expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toHaveClass('text-xl');
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    expect(screen.getByTestId('ritual-card')).toHaveClass('min-h-44', 'p-4');
+    expect(screen.getByAltText('Kodiaks logo')).toHaveClass('h-14', 'w-14');
+    expect(screen.getByText('THE KODIAKS SELECT…')).toHaveClass('text-lg');
+  });
+
   it('opens the public guide and commissioner trade from separate shared-main buttons', () => {
     render(<SnakeDraftRoomView {...props({
       tradeGuide: <div>PUBLIC POSTED PRICE CHART</div>,

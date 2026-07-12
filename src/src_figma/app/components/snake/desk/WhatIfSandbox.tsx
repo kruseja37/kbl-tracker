@@ -20,6 +20,7 @@ export function WhatIfSandbox(props: {
   onStart: (slotId: SnakeBoardSlotId, playerId: string) => void;
   onKeep: () => void;
   onRevert: () => void;
+  showHelp?: boolean;
 }) {
   const firstSlot = Object.keys(props.boardSlots)[0] as SnakeBoardSlotId | undefined;
   const [slotId, setSlotId] = useState<SnakeBoardSlotId | ''>(firstSlot ?? '');
@@ -27,7 +28,7 @@ export function WhatIfSandbox(props: {
   return (
     <div className="border-4 border-[var(--ballpark-panel-border)] p-3">
       <h3 className="font-black">WHAT-IF</h3>
-      <p className="mb-3 text-sm">CHOOSE ONE CHANGE. THE DESK SHOWS THE MONEY. YOU DECIDE.</p>
+      {props.showHelp ? <p className="mb-3 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">CHOOSE ONE CHANGE. THE DESK SHOWS THE MONEY. YOU DECIDE.</p> : null}
       {!props.whatIf ? (
         <div className="flex flex-wrap gap-2">
           <select aria-label="What-if board slot" value={slotId} onChange={(event) => setSlotId(event.target.value as SnakeBoardSlotId)}>
@@ -41,7 +42,6 @@ export function WhatIfSandbox(props: {
       ) : (
         <div>
           <p className="font-bold">PLAN COST ${Math.round(props.whatIf.planCost).toLocaleString()} · PLAN TAX ${Math.round(props.whatIf.planTax).toLocaleString()} · PLAN CUSHION ${Math.round(props.whatIf.planCushion).toLocaleString()}</p>
-          <p className="mt-1 text-xs font-bold">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p>
           <p className={`mt-2 font-bold ${props.whatIf.legal ? '' : 'text-[var(--ballpark-warn-text)]'}`}>{props.whatIf.legalityLine}</p>
           <p className="mt-2">{props.whatIf.legalFinishLine}</p>
           <div className="mt-3 flex gap-2">

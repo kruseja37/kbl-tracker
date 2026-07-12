@@ -8,6 +8,7 @@ export function SnakeTradeGuide(props: {
   fixedBuyerTeamId?: string | null;
   pickValueChart: readonly PickValue[];
   sessionRevision: number;
+  showHelp?: boolean;
   onAsk: (buyerTeamId: string, targetPick: number) => AskedPickGuideResult | Promise<AskedPickGuideResult>;
 }) {
   const [buyerTeamId, setBuyerTeamId] = useState(props.fixedBuyerTeamId ?? props.teams[0]?.id ?? '');
@@ -36,7 +37,7 @@ export function SnakeTradeGuide(props: {
     <section aria-label="The trade guide">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">POSTED PICK PRICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">THE GUIDE</h2>
-      <p className="mt-2 text-sm">CHOOSE A PICK. THE GUIDE CHECKS THE PRICE AND MAKES SURE BOTH CLUBS CAN STILL FINISH THEIR TEAMS.</p>
+      {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">CHOOSE A PICK. THE GUIDE CHECKS THE PRICE AND MAKES SURE BOTH CLUBS CAN STILL FINISH THEIR TEAMS.</p> : null}
 
       {!props.fixedBuyerTeamId && (
         <label className="mt-4 block text-sm font-bold">
@@ -49,7 +50,6 @@ export function SnakeTradeGuide(props: {
 
       <label className="mt-4 block text-sm font-bold">
         WHAT WOULD IT COST TO REACH PICK N?
-        <span className="mt-1 block text-xs">ENTER THE PICK NUMBER YOU WANT.</span>
         <input
           aria-label="WHAT WOULD IT COST TO REACH PICK N?"
           className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2"
@@ -66,7 +66,7 @@ export function SnakeTradeGuide(props: {
 
       {answer && <TradePackageCard answer={answer} teams={props.teams} />}
 
-      <details className="mt-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3" open>
+      <details className="mt-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
         <summary className="cursor-pointer font-bold">FULL POSTED PRICE CHART</summary>
         <div className="mt-3 grid max-h-72 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3">
           {props.pickValueChart.map((row) => (
