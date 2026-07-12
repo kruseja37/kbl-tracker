@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ScheduleContent } from "../ScheduleContent";
 import { FranchiseLineupsBoard } from "./FranchiseLineupsBoard";
 import { FITNESS_STATES, type FitnessState } from "../../../../engines/fitnessEngine";
@@ -64,6 +64,9 @@ export interface NextGameVM {
   awayName: string; awayAbbr: string; awayRecord: string;
   homeName: string; homeAbbr: string; homeRecord: string;
   meta?: string;
+  /** Civil schedule date and host park are display-only details for the Clubhouse strip. */
+  civilDate?: string;
+  park?: string;
   pulse?: React.ReactNode;
 }
 
@@ -293,6 +296,10 @@ export interface CheckpointPlayerVM {
   id: string;
   name: string;
   position: string;
+  /** Team identity keeps the transcription worklist in the same order as SMB4's club rosters. */
+  teamId?: string;
+  teamName?: string;
+  teamAbbr?: string;
   ratingChanges?: RatingChangeVM[];
   traitChanges?: TraitChangeVM[];
   proposals?: CheckpointProposalVM[];
@@ -341,6 +348,17 @@ export interface MomentsVM {
   rebrand?: RebrandMomentVM;
   ceremony?: CeremonyMomentVM;
   event?: EventMomentVM;
+}
+
+/** A read-only clubhouse feed row. Actions only open existing takeovers; they never mutate data. */
+export interface BigMomentVM {
+  id: string;
+  icon: string;
+  kicker: string;
+  title: string;
+  detail: string;
+  tone?: "urgent" | "good" | "neutral";
+  action?: "checkpoint" | "event" | "firing" | "rebrand" | "ceremony";
 }
 
 /* ===== Schedule (team-scoped — the club's fixtures + results) ===== */
@@ -492,6 +510,7 @@ export interface HubVM {
   tradeCandidates?: TradeCandidateTeamVM[];   // all clubs' MLB rosters, for the trade builder
   checkpoint?: CheckpointVM;
   moments?: MomentsVM;
+  bigMoments?: BigMomentVM[];
   lineups?: LineupsContextVM;
   loading?: boolean;
   emptyNote?: string;
@@ -703,6 +722,7 @@ export function FranchiseLensHub({ teams, active, hub, onSelectTeam, actions, sc
           cp={openCheckpoint}
           onResolve={actions?.onResolveDevelopment}
           onClose={() => { setOpenMoment(null); setOpenCheckpoint(null); }}
+          helpOn={helpOn}
         />
       ) : null}
       {openMoment === "firing" && hub.moments?.firing ? <FiringTakeover m={hub.moments.firing} onClose={() => setOpenMoment(null)} /> : null}
@@ -778,70 +798,86 @@ function SeasonHome({ hub, actions, onAction }: { hub: HubVM; actions?: Franchis
         </div>
       ) : null}
       <div className="fen-homegrid">
-        <div>
+        <section>
           <div className="fen-sectlab">Needs you now <span className="lite fen-help">· ranked by impact</span></div>
           <div className="fen-icards">
             {home.impactCards.map((c, i) => (
-              <button type="button" className={`fen-icard ${c.kind}${c.action ? " act" : ""}`} key={i} onClick={() => c.action && onAction?.(c.action)}>
+              <button
+                type="button"
+                className={`fen-icard ${c.kind}${c.action ? " act" : ""}`}
+                key={i}
+                aria-label={`${c.title}. ${c.detail}${c.cta ? ` ${c.cta}.` : ""}`}
+                onClick={() => c.action && onAction?.(c.action)}
+              >
                 <span className="ic">{c.icon}</span>
-                <div className="bd"><div className="t">{c.title}</div><div className="d">{c.detail}</div></div>
+                <div className="bd">
+                  {c.action === "checkpoint" ? <div className="fen-icard-alert">The league just shifted</div> : null}
+                  <div className="t">{c.title}</div><div className="d">{c.detail}</div>
+                </div>
                 {c.cta ? <span className={`go${c.action ? "" : " fen-help"}`}>{c.cta} →</span> : null}
               </button>
             ))}
           </div>
-        </div>
-        {home.nextGame ? (
-          <div>
-            <div className="fen-sectlab">Tonight</div>
-            <div className="fen-nextgame">
-              <div className="fen-mteams">
-                <div className={`fen-mt${home.nextGame.activeTeamId === home.nextGame.awayTeamId ? " you" : ""}`}><div className="lg">{home.nextGame.awayAbbr}</div><div className="nm">{home.nextGame.awayName}</div><div className="rc">{home.nextGame.awayRecord}</div></div>
-                <div className="fen-vs">@</div>
-                <div className={`fen-mt${home.nextGame.activeTeamId === home.nextGame.homeTeamId || !home.nextGame.activeTeamId ? " you" : ""}`}><div className="lg">{home.nextGame.homeAbbr}</div><div className="nm">{home.nextGame.homeName}</div><div className="rc">{home.nextGame.homeRecord}</div></div>
-              </div>
-              <button
-                type="button"
-                className="fen-bigplay"
-                onClick={() => actions?.onScoreGame?.(home.nextGame?.scheduleGameId)}
-                disabled={!actions?.onScoreGame}
-              >
-                SCORE
-              </button>
-              <div className="fen-simrow">
-                <button
-                  type="button"
-                  className="fen-simbtn"
-                  onClick={() => actions?.onScoreOnlyGame?.(home.nextGame?.scheduleGameId)}
-                  disabled={!actions?.onScoreOnlyGame}
-                >
-                  SCORE ONLY
-                </button>
-                <button
-                  type="button"
-                  className="fen-simbtn"
-                  onClick={() => actions?.onSkipGame?.(home.nextGame?.scheduleGameId)}
-                  disabled={!actions?.onSkipGame}
-                >
-                  SKIP
-                </button>
-              </div>
-              {home.nextGame.pulse ? <div className="fen-gpulse">{home.nextGame.pulse}</div> : null}
-            </div>
-          </div>
-        ) : null}
+        </section>
+        <aside className="fen-home-side">
+          <BigMomentsFeed moments={hub.bigMoments ?? []} onAction={onAction} />
+          {home.nextGame ? <NextGameStrip game={home.nextGame} actions={actions} /> : null}
+        </aside>
       </div>
-      {hub.checkpoint || hub.moments ? (
-        <div className="fen-moments-launch">
-          <span className="lab">The season's big moments</span>
-          {hub.checkpoint ? <button type="button" onClick={() => onAction?.("checkpoint")}>🔔 Checkpoint</button> : null}
-          {hub.moments?.event ? <button type="button" onClick={() => onAction?.("event")}>📋 Event to confirm</button> : null}
-          {hub.moments?.firing ? <button type="button" onClick={() => onAction?.("firing")}>⚠ Manager firing</button> : null}
-          {hub.moments?.rebrand ? <button type="button" onClick={() => onAction?.("rebrand")}>🏟 Rebrand</button> : null}
-          {hub.moments?.ceremony ? <button type="button" onClick={() => onAction?.("ceremony")}>🏆 Season-end</button> : null}
-        </div>
-      ) : null}
       <div className="fen-calm fen-help-b">Your <b>roster</b>, the <b>farm</b>, <b>stadium</b>, <b>standings &amp; races</b>, the <b>Almanac</b> — all a tap away. The home only shows what's earned its place today.</div>
     </>
+  );
+}
+
+function BigMomentsFeed({ moments, onAction }: { moments: BigMomentVM[]; onAction?: (action: string) => void }) {
+  return (
+    <section className="fen-big-moments" aria-labelledby="big-moments-heading">
+      <div className="fen-sectlab" id="big-moments-heading">The season's big moments</div>
+      {moments.length === 0 ? (
+        <div className="fen-big-moments-empty">Big moments land here as the season breathes — none yet.</div>
+      ) : (
+        <div className="fen-big-moments-feed">
+          {moments.map((moment) => {
+            const body = <><span className="fen-big-moment-icon" aria-hidden="true">{moment.icon}</span><span><span className="fen-big-moment-kicker">{moment.kicker}</span><strong>{moment.title}</strong><span className="fen-big-moment-detail">{moment.detail}</span></span></>;
+            return moment.action ? (
+              <button
+                key={moment.id}
+                type="button"
+                className={`fen-big-moment ${moment.tone ?? "neutral"}`}
+                aria-label={`${moment.kicker}: ${moment.title}. ${moment.detail}`}
+                onClick={() => onAction?.(moment.action!)}
+              >
+                {body}
+              </button>
+            ) : <article key={moment.id} className={`fen-big-moment ${moment.tone ?? "neutral"}`}>{body}</article>;
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function NextGameStrip({ game, actions }: { game: NextGameVM; actions?: FranchiseLensActions }) {
+  const activeAway = game.activeTeamId === game.awayTeamId;
+  const opponentName = activeAway ? game.homeName : game.awayName;
+  const opponentAbbr = activeAway ? game.homeAbbr : game.awayAbbr;
+  const opponentRecord = activeAway ? game.homeRecord : game.awayRecord;
+  return (
+    <section className="fen-next-strip" aria-labelledby="next-game-heading">
+      <div className="fen-sectlab" id="next-game-heading">Next game</div>
+      <div className="fen-nextgame compact">
+        <div className="fen-next-strip-main">
+          <span className="fen-next-opponent">{activeAway ? "@" : "vs"} <b>{opponentName}</b> <span>{opponentAbbr} · {opponentRecord}</span></span>
+          <span>{game.park ?? "Park pending"}</span>
+          <span>{game.civilDate ?? game.meta ?? "Date pending"}</span>
+        </div>
+        <div className="fen-next-strip-actions">
+          <button type="button" className="fen-bigplay" aria-label={`Score next game against ${opponentName}`} onClick={() => actions?.onScoreGame?.(game.scheduleGameId)} disabled={!actions?.onScoreGame}>SCORE</button>
+          <button type="button" className="fen-simbtn" aria-label={`Enter score only for next game against ${opponentName}`} onClick={() => actions?.onScoreOnlyGame?.(game.scheduleGameId)} disabled={!actions?.onScoreOnlyGame}>SCORE ONLY</button>
+          <button type="button" className="fen-simbtn" aria-label={`Skip next game against ${opponentName}`} onClick={() => actions?.onSkipGame?.(game.scheduleGameId)} disabled={!actions?.onSkipGame}>SKIP</button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -2295,14 +2331,50 @@ function normalizedCheckpointGroups(cp: CheckpointVM): CheckpointGroupVM[] {
   }];
 }
 
+/** One count selector for the Clubhouse card and transcription cockpit. */
+export function getCheckpointWorklistCounts(cp: CheckpointVM): { changes: number; players: number } {
+  const playerIds = new Set<string>();
+  let changes = 0;
+  for (const group of normalizedCheckpointGroups(cp)) {
+    for (const player of group.players) {
+      const proposals = player.proposals ?? [];
+      if (proposals.length) playerIds.add(player.id);
+      changes += proposals.length;
+    }
+  }
+  return { changes, players: playerIds.size };
+}
+
+function numericDelta(from: number | undefined, to: number | undefined): string {
+  if (from === undefined || to === undefined) return "";
+  const delta = to - from;
+  if (delta === 0) return " (0)";
+  return ` (${delta > 0 ? "+" : "−"}${Math.abs(delta)})`;
+}
+
+function proposalSummary(proposal: CheckpointProposalVM, currentValue?: number | TraitSlotsVM): string {
+  if (proposal.kind === "rating") {
+    const from = typeof currentValue === "number" ? currentValue : proposal.ratingChange?.from;
+    const to = proposal.ratingChange?.to;
+    return `${proposal.ratingChange?.label ?? "Rating"} ${from ?? "—"} → ${to ?? "—"}${numericDelta(from, to)}`;
+  }
+  const from = typeof currentValue === "object" ? currentValue : proposal.traitChange?.from;
+  return `${slotsText(from)} → ${slotsText(proposal.traitChange?.to)}`;
+}
+
+type WorklistRow = { group: CheckpointGroupVM; player: CheckpointPlayerVM; proposal: CheckpointProposalVM };
+const WORKLIST_COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
 export function CheckpointTakeover({
   cp,
   onClose,
   onResolve,
+  helpOn = false,
 }: {
   cp: CheckpointVM;
   onClose: () => void;
   onResolve?: (request: DevelopmentResolutionRequest) => Promise<DevelopmentResolutionResult>;
+  helpOn?: boolean;
 }) {
   // Freeze the opened worklist. A service reload removes terminal rows, but a conflict receipt must
   // remain visible in this open takeover long enough to show the newly-read current value honestly.
@@ -2313,17 +2385,58 @@ export function CheckpointTakeover({
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [expanded, setExpanded] = useState<{ id: string; mode: "adjust" | "reject" } | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const proposals = groups.flatMap((group) =>
+  // Preserve the legacy service-call sequence for Mark all entered. UI sorting below is presentation only.
+  const serviceRows = groups.flatMap((group) =>
     group.players.flatMap((player) => (player.proposals ?? []).map((proposal) => ({ proposal, player }))),
   );
+  const worklistRows = useMemo<WorklistRow[]>(() => groups
+    .flatMap((group) => group.players.flatMap((player) =>
+      (player.proposals ?? []).map((proposal) => ({ group, player, proposal })),
+    ))
+    .sort((left, right) =>
+      WORKLIST_COLLATOR.compare(left.player.teamName ?? "Unassigned club", right.player.teamName ?? "Unassigned club") ||
+      WORKLIST_COLLATOR.compare(left.player.name, right.player.name) ||
+      WORKLIST_COLLATOR.compare(left.proposal.id, right.proposal.id),
+    ), [groups]);
   const isComplete = (id: string) => {
     const outcome = states[id]?.outcome;
     return outcome === "resolved" || outcome === "recovered" || outcome === "noop";
   };
-  const entered = proposals.filter(({ proposal }) => isComplete(proposal.id)).length;
-  const total = proposals.length;
+  const entered = worklistRows.filter(({ proposal }) => isComplete(proposal.id)).length;
+  const checkpointCounts = getCheckpointWorklistCounts(cp);
+  const total = checkpointCounts.changes;
   const allDone = total > 0 && entered === total;
+  const remaining = Math.max(0, total - entered);
+  const teamGroups = useMemo(() => {
+    const byTeam = new Map<string, Map<string, WorklistRow[]>>();
+    for (const row of worklistRows) {
+      const teamName = row.player.teamName ?? "Unassigned club";
+      const players = byTeam.get(teamName) ?? new Map<string, WorklistRow[]>();
+      const rows = players.get(row.player.id) ?? [];
+      rows.push(row);
+      players.set(row.player.id, rows);
+      byTeam.set(teamName, players);
+    }
+    return [...byTeam.entries()].map(([teamName, players]) => ({ teamName, players: [...players.values()] }));
+  }, [worklistRows]);
+
+  const focusRow = (id: string) => window.setTimeout(() => rowRefs.current[id]?.focus(), 0);
+  const focusNextRow = (currentId: string, direction = 1) => {
+    const index = worklistRows.findIndex(({ proposal }) => proposal.id === currentId);
+    if (index < 0 || worklistRows.length < 2) return;
+    const next = (index + direction + worklistRows.length) % worklistRows.length;
+    focusRow(worklistRows[next].proposal.id);
+  };
+  const advanceAfterResolution = (resolvedId: string) => {
+    const index = worklistRows.findIndex(({ proposal }) => proposal.id === resolvedId);
+    const next = [...worklistRows.slice(index + 1), ...worklistRows.slice(0, index)]
+      .find(({ proposal }) => proposal.id !== resolvedId && !isComplete(proposal.id) && states[proposal.id]?.outcome !== "conflict");
+    setExpanded(null);
+    if (next) focusRow(next.proposal.id);
+  };
 
   const runResolution = async (
     proposal: CheckpointProposalVM,
@@ -2364,15 +2477,18 @@ export function CheckpointTakeover({
         ...(result.outcome === "apply-failed" ? { retry: true as const } : {}),
       },
     }));
+    if (result.outcome === "resolved" || result.outcome === "recovered" || result.outcome === "noop") {
+      advanceAfterResolution(proposal.id);
+    }
     return result;
   };
 
   const markAllEntered = async () => {
-    const remaining = proposals.filter(({ proposal }) => !isComplete(proposal.id) && states[proposal.id]?.outcome !== "conflict");
-    setBatchProgress({ current: 0, total: remaining.length });
-    for (let index = 0; index < remaining.length; index += 1) {
-      const { proposal } = remaining[index];
-      setBatchProgress({ current: index + 1, total: remaining.length });
+    const unresolved = serviceRows.filter(({ proposal }) => !isComplete(proposal.id) && states[proposal.id]?.outcome !== "conflict");
+    setBatchProgress({ current: 0, total: unresolved.length });
+    for (let index = 0; index < unresolved.length; index += 1) {
+      const { proposal } = unresolved[index];
+      setBatchProgress({ current: index + 1, total: unresolved.length });
       const retry = proposal.retry || states[proposal.id]?.retry;
       const result = await runResolution(proposal, retry ? "retry" : "confirm");
       if (result.outcome !== "resolved" && result.outcome !== "recovered" && result.outcome !== "noop") break;
@@ -2382,96 +2498,111 @@ export function CheckpointTakeover({
 
   return (
     <div className="fen-cp" role="dialog" aria-label={cp.label}>
-      <div className="fen-cp-panel fen-aged">
+      <div className="fen-cp-panel fen-checkpoint-panel fen-aged">
         <div className="fen-content">
           <div className="fen-cp-head">
             <div>
-              <div className="fen-cp-kick">⚠ The league just shifted</div>
-              <h2 className="fen-chalk fen-y">Development worklist</h2>
-              <div className="fen-cp-sub">Record what SMB4 actually accepted. Every proposal gets its own durable receipt.</div>
+              <div className="fen-cp-kick">{cp.label.toUpperCase()}</div>
+              <div className="fen-cp-sub fen-help-b" hidden={!helpOn}>Record what SMB4 actually accepted. Every proposal gets its own durable receipt.</div>
             </div>
             <button type="button" className="fen-cp-x" onClick={onClose} aria-label="Close">×</button>
           </div>
           <div className="fen-cp-prog">
             <span className="bar"><span className="fill" style={{ width: `${total ? Math.round((entered / total) * 100) : 0}%` }} /></span>
-            <span className="lab fen-chalk">{batchProgress ? `Marking ${batchProgress.current} of ${batchProgress.total}` : `${entered} of ${total} entered`}</span>
+            <span className="lab fen-chalk" aria-live="polite">{batchProgress ? `Marking ${batchProgress.current} of ${batchProgress.total}` : `${entered} of ${total} entered`}</span>
           </div>
-          {groups.map((group) => (
-            <section key={`${group.boundaryGameNumber}-${group.ordinal}`} data-testid="checkpoint-group">
-              <div className="fen-sectlab">
-                {group.label}
-                {group.stalePlan ? <span className="lite fen-r"> · from an earlier schedule</span> : null}
-              </div>
-              <div className="fen-cp-grid">
-                {group.players.map((player) => (
-                  <div className="fen-cp-card" key={`${group.label}-${player.id}`}>
-                    <div className="ph"><span className="pos">{player.position}</span><span className="nm fen-chalk">{player.name}</span></div>
-                    <div className="changes">
-                      {(player.proposals ?? []).map((proposal) => {
+          <div className="fen-cp-teams">
+            {teamGroups.map(({ teamName, players }) => (
+              <section className="fen-cp-team" key={teamName} data-testid="checkpoint-group">
+                <div className="fen-cp-teamhead">{teamName}</div>
+                {players.map((playerRows) => {
+                  const player = playerRows[0].player;
+                  return (
+                    <div className="fen-cp-player" key={player.id}>
+                      <div className="fen-cp-playerhead"><span className="nm fen-chalk">{player.name}</span><span className="pos">{player.position}</span></div>
+                      {playerRows.map(({ group, proposal }) => {
                         const state = states[proposal.id];
                         const retry = proposal.retry || state?.retry;
-                        const terminal = isComplete(proposal.id) || state?.outcome === "conflict";
+                        const complete = isComplete(proposal.id);
+                        const conflict = state?.outcome === "conflict";
+                        const isExpanded = expanded?.id === proposal.id;
                         const traitDraft = traitAdjustments[proposal.id] ?? proposal.traitChange?.to ?? proposal.traitChange?.from ?? { trait1: null, trait2: null };
-                        const currentDisplay = state?.currentValue;
+                        const summary = proposalSummary(proposal, state?.currentValue);
                         return (
-                          <div className={proposal.kind === "rating" ? "rc" : `tc ${proposal.traitChange?.valence ?? ""}`} key={proposal.id} data-testid={`proposal-${proposal.id}`}>
-                            <div style={{ flex: 1 }}>
-                              {proposal.kind === "rating" ? (
-                                <>
-                                  <span className="rl">{proposal.ratingChange?.label}</span>{" "}
-                                  <span className="rf">{typeof currentDisplay === "number" ? currentDisplay : proposal.ratingChange?.from ?? "—"}</span>
-                                  <span className="ar"> → </span><span className="rt fen-y">{proposal.ratingChange?.to ?? "—"}</span>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="ar">{proposal.traitChange?.valence === "gain" ? "＋" : "－"}</span>{" "}
-                                  <span>{proposal.traitChange?.valence === "gain" ? "Gain" : "Lose"} <b className="fen-y">{proposal.traitChange?.trait}</b></span>
-                                  <div className="fen-muted">{slotsText(typeof currentDisplay === "object" ? currentDisplay : proposal.traitChange?.from)} → {slotsText(proposal.traitChange?.to)}</div>
-                                </>
-                              )}
-                              {state?.message ? <div className="fen-cp-sub fen-r" role="status">{state.message}</div> : null}
-                              {isComplete(proposal.id) ? <div className="fen-cp-sub fen-y">✓ receipt saved</div> : null}
-                            </div>
-                            {!terminal ? (
-                              <div style={{ display: "grid", gap: 6, minWidth: 220 }}>
-                                {retry ? (
-                                  <button type="button" className="chk" disabled={busyId !== null} onClick={() => void runResolution(proposal, "retry")}>Retry apply</button>
+                          <div
+                            className={`fen-cp-row${complete ? " receipt" : ""}${conflict ? " conflict" : ""}`}
+                            key={proposal.id}
+                            data-testid={`proposal-${proposal.id}`}
+                            ref={(element) => { rowRefs.current[proposal.id] = element; }}
+                            tabIndex={complete ? -1 : 0}
+                            aria-label={`${player.name}, ${player.position}, ${summary}`}
+                            onKeyDown={(event) => {
+                              if (event.currentTarget !== event.target || complete || busyId !== null) return;
+                              if (event.key === "Enter" && !retry && !conflict) {
+                                event.preventDefault();
+                                void runResolution(proposal, "confirm");
+                              }
+                              if (event.key === "Tab") {
+                                event.preventDefault();
+                                focusNextRow(proposal.id, event.shiftKey ? -1 : 1);
+                              }
+                            }}
+                          >
+                            <span className="fen-cp-kind" aria-hidden="true">{proposal.kind === "rating" ? "↕" : "✦"}</span>
+                            <span className="fen-cp-summary">{summary}{group.stalePlan ? <span className="fen-cp-stale">Earlier schedule</span> : null}</span>
+                            {complete ? <span className="fen-cp-receipt">✓ Entered</span> : conflict ? <span className="fen-cp-receipt conflict">Needs review</span> : retry ? (
+                              <button type="button" className="fen-cp-enter" disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "retry")}>↻ Retry apply</button>
+                            ) : (
+                              <div className="fen-cp-actions">
+                                <button type="button" className="fen-cp-enter" aria-label={`Mark ${player.name}'s ${summary} entered`} disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "confirm")}>✓ Entered</button>
+                                <button type="button" className="fen-cp-quiet" aria-expanded={isExpanded && expanded?.mode === "adjust"} onClick={() => setExpanded(isExpanded && expanded?.mode === "adjust" ? null : { id: proposal.id, mode: "adjust" })}>Adjust</button>
+                                <button type="button" className="fen-cp-quiet destructive" aria-expanded={isExpanded && expanded?.mode === "reject"} onClick={() => setExpanded(isExpanded && expanded?.mode === "reject" ? null : { id: proposal.id, mode: "reject" })}>Reject</button>
+                              </div>
+                            )}
+                            {isExpanded && !complete && !conflict ? (
+                              <div className="fen-cp-expand">
+                                {expanded.mode === "adjust" ? proposal.kind === "rating" ? (
+                                  <label>Actual value
+                                    <input aria-label={`${proposal.ratingChange?.label ?? "Rating"} actual value`} type="number" value={adjustments[proposal.id] ?? String(proposal.ratingChange?.to ?? "")} onChange={(event) => setAdjustments((current) => ({ ...current, [proposal.id]: event.target.value }))} />
+                                  </label>
                                 ) : (
-                                  <>
-                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "confirm")}>Entered in SMB4 as proposed</button>
-                                    {proposal.kind === "rating" ? (
-                                      <label className="fen-cp-sub">Actually accepted
-                                        <input aria-label={`${proposal.ratingChange?.label ?? "Rating"} actual value`} type="number" value={adjustments[proposal.id] ?? String(proposal.ratingChange?.to ?? "")} onChange={(event) => setAdjustments((current) => ({ ...current, [proposal.id]: event.target.value }))} />
+                                  <div className="fen-cp-trait-adjust">
+                                    {(["trait1", "trait2"] as const).map((slot, index) => (
+                                      <label key={slot}>Actual slot {index + 1}
+                                        <select aria-label={`Actual trait slot ${index + 1}`} value={traitDraft[slot] ?? ""} onChange={(event) => setTraitAdjustments((current) => ({ ...current, [proposal.id]: { ...traitDraft, [slot]: event.target.value || null } }))}>
+                                          <option value="">None</option>
+                                          {TRAIT_SLOT_OPTIONS.map((trait) => <option key={trait} value={trait}>{trait}</option>)}
+                                        </select>
                                       </label>
-                                    ) : (
-                                      <div className="fen-cp-sub">
-                                        {(["trait1", "trait2"] as const).map((slot, index) => (
-                                          <label key={slot}>Actual slot {index + 1}
-                                            <select aria-label={`Actual trait slot ${index + 1}`} value={traitDraft[slot] ?? ""} onChange={(event) => setTraitAdjustments((current) => ({ ...current, [proposal.id]: { ...traitDraft, [slot]: event.target.value || null } }))}>
-                                              <option value="">None</option>
-                                              {TRAIT_SLOT_OPTIONS.map((trait) => <option key={trait} value={trait}>{trait}</option>)}
-                                            </select>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    )}
-                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve} onClick={() => void runResolution(proposal, "confirm-adjusted")}>Adjust to actual</button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <label>Reason
                                     <input aria-label={`Reject reason for ${proposal.id}`} placeholder="Short rejection reason" value={rejectReasons[proposal.id] ?? ""} onChange={(event) => setRejectReasons((current) => ({ ...current, [proposal.id]: event.target.value }))} />
-                                    <button type="button" className="chk" disabled={busyId !== null || !onResolve || !(rejectReasons[proposal.id]?.trim())} onClick={() => void runResolution(proposal, "reject")}>Reject proposal</button>
-                                  </>
+                                  </label>
                                 )}
+                                <button
+                                  type="button"
+                                  className={expanded.mode === "reject" ? "fen-cp-reject-submit" : "fen-cp-adjust-submit"}
+                                  disabled={busyId !== null || !onResolve || (expanded.mode === "reject" && !(rejectReasons[proposal.id]?.trim()))}
+                                  onClick={() => void runResolution(proposal, expanded.mode === "reject" ? "reject" : "confirm-adjusted")}
+                                >
+                                  {expanded.mode === "reject" ? "Reject proposal" : "Save adjustment"}
+                                </button>
                               </div>
                             ) : null}
+                            {state?.message ? <span className="fen-cp-row-message" role="status">{state.message}</span> : null}
                           </div>
                         );
                       })}
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
+                  );
+                })}
+              </section>
+            ))}
+          </div>
           <div className="fen-cp-foot">
+            <span className="fen-cp-remaining" aria-live="polite">{remaining} remaining</span>
             <button type="button" className="fen-cp-allbtn" disabled={busyId !== null || !onResolve || allDone} onClick={() => void markAllEntered()}>Mark all entered</button>
             <button type="button" className="fen-cp-donebtn" onClick={onClose}>{allDone ? "All set — close" : "Close for now"}</button>
           </div>

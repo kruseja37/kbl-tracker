@@ -34,6 +34,7 @@ function checkpoint(): CheckpointVM {
           id: "p1",
           name: "Piper Truth",
           position: "CF",
+          teamName: "Boulder Baselines",
           proposals: [
             {
               id: "rating-1",
@@ -65,6 +66,7 @@ function checkpoint(): CheckpointVM {
           id: "p2",
           name: "Legacy Row",
           position: "SP",
+          teamName: "Denver Longnames",
           proposals: [{
             id: "retry-1",
             kind: "rating",
@@ -79,28 +81,58 @@ function checkpoint(): CheckpointVM {
 }
 
 describe("Franchise Lens console-mirror truth", () => {
-  test("renders the true ordinal header, keeps kinds together, and tags stale-plan rows last", () => {
+  test("renders the identity eyebrow and compact team → player rows in natural order", () => {
     render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={vi.fn()} />);
 
     const groups = screen.getAllByTestId("checkpoint-group");
-    expect(within(groups[0]).getByText("Checkpoint 2 of 5 — game 24")).toBeTruthy();
-    expect(within(groups[0]).getByText("Power")).toBeTruthy();
-    expect(within(groups[0]).getAllByText("Clutch").length).toBeGreaterThan(0);
-    expect(within(groups[1]).getByText(/from an earlier schedule/i)).toBeTruthy();
+    // D11 copy-test justification: the approved cockpit identity replaces the former dramatic modal banner.
+    expect(screen.getByText("CHECKPOINT 2 OF 5 — GAME 24")).toBeTruthy();
+    expect(screen.getByText(/Record what SMB4 actually accepted/i)).not.toBeVisible();
+    expect(screen.getByText("0 of 3 entered")).toBeTruthy();
+    expect(within(groups[0]).getByText("Boulder Baselines")).toBeTruthy();
+    expect(within(groups[0]).getByText(/Power 50 → 55 \(\+5\)/)).toBeTruthy();
+    expect(within(groups[0]).getByText(/no traits → Clutch/)).toBeTruthy();
+    expect(within(groups[1]).getByText(/Earlier schedule/)).toBeTruthy();
     expect(within(screen.getByTestId("proposal-retry-1")).getByRole("button", { name: /Retry apply/i })).toBeTruthy();
-    expect(within(screen.getByTestId("proposal-retry-1")).queryByRole("button", { name: /Entered in SMB4 as proposed/i })).toBeNull();
+    expect(within(screen.getByTestId("proposal-retry-1")).queryByRole("button", { name: /Mark .* entered/i })).toBeNull();
   });
 
-  test("sends the adjusted actual value and requires a rejection reason", async () => {
+  test("keeps takeover text to worklist identity, state, values, and actions", () => {
+    const { container } = render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={vi.fn()} />);
+    const dialog = screen.getByRole("dialog");
+    const visibleLeafText = Array.from(dialog.querySelectorAll<HTMLElement>("*"))
+      .filter((element) => element.children.length === 0 && window.getComputedStyle(element).display !== "none")
+      .map((element) => element.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter(Boolean);
+    const allowedVisibleText = [
+      /^CHECKPOINT 2 OF 5 — GAME 24$/,
+      /^0 of 3 entered$/,
+      /^(Boulder Baselines|Denver Longnames)$/,
+      /^(Piper Truth|Legacy Row|CF|SP)$/,
+      /^(↕|✦)$/,
+      /^(Power 50 → 55 \(\+5\)|no traits → Clutch|Velocity 40 → 43 \(\+3\))$/,
+      /^(Earlier schedule|3 remaining)$/,
+      /^(\u00d7|\u2713 Entered|Adjust|Reject|↻ Retry apply|Mark all entered|Close for now)$/,
+    ];
+    const outsideAllowlist = visibleLeafText.filter((text) => !allowedVisibleText.some((pattern) => pattern.test(text)));
+
+    // Amendment 1 allowlist: eyebrow/counts identify the checkpoint; team/player names,
+    // proposal-type glyphs, and summaries identify the work; state/action labels operate it.
+    // Any explanatory sentence added inline becomes an unexpected visible leaf and trips here.
+    expect(outsideAllowlist).toEqual([]);
+    expect(container.querySelector(".fen-help-b")?.textContent).toBe(
+      "Record what SMB4 actually accepted. Every proposal gets its own durable receipt.",
+    );
+  });
+
+  test("mounts adjustment controls only on expansion and sends both rating and trait resolution kinds", async () => {
     const onResolve = vi.fn(async () => ({ outcome: "resolved" as const, currentValue: 54 }));
-    render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={onResolve} />);
-    const row = screen.getByTestId("proposal-rating-1");
-    const reject = within(row).getByRole("button", { name: /Reject proposal/i });
-    expect(reject).toBeDisabled();
-    fireEvent.change(within(row).getByLabelText("Reject reason for rating-1"), { target: { value: "Console refused it" } });
-    expect(reject).toBeEnabled();
-    fireEvent.change(within(row).getByLabelText("Power actual value"), { target: { value: "54" } });
-    fireEvent.click(within(row).getByRole("button", { name: /Adjust to actual/i }));
+    const { container } = render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={onResolve} />);
+    expect(container.querySelectorAll("select")).toHaveLength(0);
+    const ratingRow = screen.getByTestId("proposal-rating-1");
+    fireEvent.click(within(ratingRow).getByRole("button", { name: "Adjust" }));
+    fireEvent.change(within(ratingRow).getByLabelText("Power actual value"), { target: { value: "54" } });
+    fireEvent.click(within(ratingRow).getByRole("button", { name: /Save adjustment/i }));
 
     await waitFor(() => expect(onResolve).toHaveBeenCalledWith(expect.objectContaining({
       proposalId: "rating-1",
@@ -108,16 +140,40 @@ describe("Franchise Lens console-mirror truth", () => {
       observedPriorValue: 50,
       actualValue: 54,
     })));
+
+    const traitRow = screen.getByTestId("proposal-trait-1");
+    fireEvent.click(within(traitRow).getByRole("button", { name: "Adjust" }));
+    expect(container.querySelectorAll("select")).toHaveLength(2);
+    fireEvent.change(within(traitRow).getAllByRole("combobox")[0], { target: { value: "Clutch" } });
+    fireEvent.click(within(traitRow).getByRole("button", { name: /Save adjustment/i }));
+
+    await waitFor(() => expect(onResolve).toHaveBeenLastCalledWith(expect.objectContaining({
+      proposalId: "trait-1",
+      kind: "trait",
+      action: "confirm-adjusted",
+      actualValue: { trait1: "Clutch", trait2: null },
+    })));
+  });
+
+  test("requires a rejection reason only after the reject row is opened", () => {
+    render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={vi.fn()} />);
+    const row = screen.getByTestId("proposal-rating-1");
+    fireEvent.click(within(row).getByRole("button", { name: "Reject" }));
+    const reject = within(row).getByRole("button", { name: /Reject proposal/i });
+    expect(reject).toBeDisabled();
+    fireEvent.change(within(row).getByLabelText("Reject reason for rating-1"), { target: { value: "Console refused it" } });
+    expect(reject).toBeEnabled();
   });
 
   test("shows a conflict with the refreshed current value and never offers retry", async () => {
     const onResolve = vi.fn(async () => ({ outcome: "conflict" as const, currentValue: 61 }));
     render(<CheckpointTakeover cp={checkpoint()} onClose={vi.fn()} onResolve={onResolve} />);
     const row = screen.getByTestId("proposal-rating-1");
-    fireEvent.click(within(row).getByRole("button", { name: /Entered in SMB4 as proposed/i }));
+    // D11 copy-test justification: the approved compact primary action is “✓ ENTERED”.
+    fireEvent.click(within(row).getByRole("button", { name: /Mark Piper Truth.*entered/i }));
 
     expect(await within(row).findByText(/changed underneath — showing current value/i)).toBeTruthy();
-    expect(within(row).getByText("61")).toBeTruthy();
+    expect(within(row).getByText(/Power 61 → 55/)).toBeTruthy();
     expect(within(row).queryByRole("button", { name: /Retry apply/i })).toBeNull();
   });
 
@@ -134,6 +190,49 @@ describe("Franchise Lens console-mirror truth", () => {
 
     await waitFor(() => expect(calls).toEqual(["rating-1", "trait-1"]));
     expect(calls).not.toContain("retry-1");
+  });
+
+  test("keeps a 37-proposal collapsed modal free of mounted trait selects", () => {
+    const players = Array.from({ length: 37 }, (_, index) => ({
+      id: `player-${index + 1}`,
+      name: `Batter${index + 1}`,
+      position: "CF",
+      teamName: "Boulder Baselines",
+      proposals: [{
+        id: `trait-${index + 1}`,
+        kind: "trait" as const,
+        observedPriorValue: { trait1: null, trait2: null },
+        traitChange: { valence: "gain" as const, trait: "Clutch", from: { trait1: null, trait2: null }, to: { trait1: "Clutch", trait2: null } },
+      }],
+    }));
+    const { container } = render(<CheckpointTakeover cp={{ number: 4, label: "Checkpoint 4 of 5 — game 24", players, groups: [{ boundaryGameNumber: 24, ordinal: 4, ordinalCount: 5, label: "Checkpoint 4 of 5 — game 24", players }] }} onClose={vi.fn()} onResolve={vi.fn()} />);
+    expect(container.querySelectorAll("select")).toHaveLength(0);
+  });
+
+  test("Enter confirms and advances through three focused rows while Tab cycles rows", async () => {
+    const onResolve = vi.fn(async () => ({ outcome: "resolved" as const }));
+    const players = ["Batter10", "Batter2", "Batter1"].map((name, index) => ({
+      id: `keyboard-player-${index}`,
+      name,
+      position: "CF",
+      teamName: "Boulder Baselines",
+      proposals: [{ id: `keyboard-${index}`, kind: "rating" as const, observedPriorValue: 50, ratingChange: { label: "Contact", from: 50, to: 51 } }],
+    }));
+    render(<CheckpointTakeover cp={{ number: 4, label: "Checkpoint 4 of 5 — game 24", players, groups: [{ boundaryGameNumber: 24, ordinal: 4, ordinalCount: 5, label: "Checkpoint 4 of 5 — game 24", players }] }} onClose={vi.fn()} onResolve={onResolve} />);
+    const first = screen.getByTestId("proposal-keyboard-2");
+    const second = screen.getByTestId("proposal-keyboard-1");
+    const third = screen.getByTestId("proposal-keyboard-0");
+    first.focus();
+    fireEvent.keyDown(first, { key: "Tab" });
+    await waitFor(() => expect(document.activeElement).toBe(second));
+    first.focus();
+    fireEvent.keyDown(first, { key: "Enter" });
+    await waitFor(() => expect(onResolve).toHaveBeenNthCalledWith(1, expect.objectContaining({ proposalId: "keyboard-2", action: "confirm" })));
+    await waitFor(() => expect(document.activeElement).toBe(second));
+    fireEvent.keyDown(second, { key: "Enter" });
+    await waitFor(() => expect(document.activeElement).toBe(third));
+    fireEvent.keyDown(third, { key: "Enter" });
+    await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(3));
   });
 });
 
@@ -209,7 +308,47 @@ describe("Franchise Lens drawer and card truth", () => {
     expect(screen.getByRole("button", { name: "Set fitness" })).toHaveTextContent("Fit");
   });
 
-  test("highlights the active club on the away side of Tonight", () => {
+  test("labels every Clubhouse and takeover interactive element", () => {
+    const hub: HubVM = {
+      pulse: {},
+      roster: [],
+      checkpoint: checkpoint(),
+      bigMoments: [{ id: "checkpoint", icon: "🔔", kicker: "Checkpoint", title: "3 changes across 2 players", detail: "Open the worklist.", action: "checkpoint", tone: "urgent" }],
+      home: {
+        impactCards: [{ kind: "dated", icon: "📋", title: "Checkpoint ready", detail: "3 changes across 2 players.", cta: "Open the worklist", action: "checkpoint" }],
+      },
+    };
+    render(<FranchiseLensHub teams={[{ id: "home", name: "Home Club", abbr: "HOM", primary: "#2A4A2F" }]} active={active} hub={hub} onSelectTeam={vi.fn()} />);
+    for (const control of screen.getAllByRole("button")) expect(control).toHaveAccessibleName();
+    fireEvent.click(screen.getByRole("button", { name: /Checkpoint ready/i }));
+    fireEvent.click(within(screen.getByTestId("proposal-trait-1")).getByRole("button", { name: "Adjust" }));
+    for (const control of [
+      ...screen.getAllByRole("button"),
+      ...screen.queryAllByRole("spinbutton"),
+      ...screen.getAllByRole("combobox"),
+    ]) expect(control).toHaveAccessibleName();
+  });
+
+  test("reveals the takeover instructions only through the Lens Help affordance", () => {
+    const hub: HubVM = {
+      pulse: {},
+      roster: [],
+      checkpoint: checkpoint(),
+      home: {
+        impactCards: [{ kind: "dated", icon: "📋", title: "Checkpoint ready", detail: "3 changes across 2 players.", cta: "Open the worklist", action: "checkpoint" }],
+      },
+    };
+    render(<FranchiseLensHub teams={[{ id: "home", name: "Home Club", abbr: "HOM", primary: "#2A4A2F" }]} active={active} hub={hub} onSelectTeam={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /Checkpoint ready/i }));
+    const instructions = screen.getByText(/Record what SMB4 actually accepted/i);
+    expect(instructions).not.toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /Help/i }));
+
+    expect(instructions).toBeVisible();
+  });
+
+  test("keeps the active club visible in the compact next-game strip", () => {
     const hub: HubVM = {
       pulse: {},
       roster: [],
@@ -229,6 +368,6 @@ describe("Franchise Lens drawer and card truth", () => {
       },
     };
     const { container } = render(<FranchiseLensHub teams={[{ id: "home", name: "Home Club", abbr: "HOM", primary: "#2A4A2F" }]} active={active} hub={hub} onSelectTeam={vi.fn()} />);
-    expect(container.querySelector(".fen-mt.you")?.textContent).toContain("Home Club");
+    expect(container.querySelector(".fen-next-opponent")?.textContent).toContain("Away Club");
   });
 });
