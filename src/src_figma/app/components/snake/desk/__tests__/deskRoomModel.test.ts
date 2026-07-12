@@ -10,8 +10,10 @@ import type {
 } from '../../../../../../utils/leagueBuilderStorage';
 import {
   buildDeskRoomPlayer,
+  __resetRationalRiskCacheForTests,
   fitWord,
   rationalRisksForRoom,
+  rationalRisksForRoomUncached,
   resolveLockedSeat,
   updateSessionSeatBoard,
 } from '../deskRoomModel';
@@ -149,5 +151,45 @@ describe('private desk room assembly', () => {
     });
     expect(locked.archetypeName).toBe("MURDERERS' ROW");
     expect(locked.priorities.Power).toBeGreaterThan(locked.priorities.Speed);
+  });
+
+  it('memoized risk reads are byte-identical to uncached reads across 30 deterministic fixtures', () => {
+    let state = 0xc0ffee;
+    const randomRating = () => {
+      state = (Math.imul(state, 1103515245) + 12345) >>> 0;
+      return 1 + (state % 99);
+    };
+    for (let fixtureIndex = 0; fixtureIndex < 30; fixtureIndex += 1) {
+      __resetRationalRiskCacheForTests();
+      const availablePlayers = Array.from({ length: 4 }, (_, index) => {
+        const stored = storedPlayer(`property-${fixtureIndex}-${index}`, {
+          power: randomRating(), contact: randomRating(), speed: randomRating(), fielding: randomRating(), arm: randomRating(),
+        });
+        return buildDeskRoomPlayer({ player: stored, price: 20 + randomRating(), seating: seating(stored) })!;
+      });
+      const baseSession = {
+        ...session(),
+        id: `property-session-${fixtureIndex}`,
+        revision: fixtureIndex,
+        pickOrder: [
+          { pick: 1, teamId: 'asker' },
+          { pick: 2, teamId: 'rival' },
+          { pick: 3, teamId: 'asker' },
+        ],
+      };
+      const asker = { teamId: 'asker', roster: legalTwentyOne(`pa-${fixtureIndex}`), committedSpent: 21, budget: 1_000, lockedArchetype: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 } };
+      const input = {
+        session: baseSession,
+        askingTeamId: 'asker',
+        askedPlayerIds: availablePlayers.map((player) => player.playerId),
+        availablePlayers,
+        seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne(`pr-${fixtureIndex}`) }],
+        baseCaps: [],
+        realTeamCount: 2,
+      };
+      const original = rationalRisksForRoomUncached(input);
+      expect(rationalRisksForRoom(input)).toEqual(original);
+      expect(rationalRisksForRoom(input)).toEqual(original);
+    }
   });
 });

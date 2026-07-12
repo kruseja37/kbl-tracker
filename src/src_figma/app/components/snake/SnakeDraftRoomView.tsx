@@ -66,6 +66,7 @@ export interface SnakeDraftRoomViewProps {
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
+  onPrivateSeatRevealedChange?: (revealed: boolean) => void;
   onDraftComplete?: () => void | Promise<void>;
 }
 
@@ -127,6 +128,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   useEffect(() => {
     if (reveal.revealed && props.dangerKey) soundPlayer.play('danger');
   }, [props.dangerKey, reveal.revealed, soundPlayer]);
+
+  useEffect(() => {
+    props.onPrivateSeatRevealedChange?.(reveal.revealed);
+  }, [props.onPrivateSeatRevealedChange, reveal.revealed]);
 
   useEffect(() => () => cancelHold(), []);
 

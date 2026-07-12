@@ -1,6 +1,6 @@
 import type { DeskCandidate } from './deskModel';
 
-export function DeskCandidateCard({ candidate, boardSlot }: { candidate: DeskCandidate; boardSlot?: string }) {
+export function DeskCandidateCard({ candidate, boardSlot, legalFinishLine }: { candidate: DeskCandidate; boardSlot?: string; legalFinishLine?: string }) {
   const risk = candidate.risk === 'SAFE_TO_WAIT' ? 'SAFE TO WAIT' : candidate.risk.replaceAll('_', ' ');
   return (
     <div className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
@@ -17,7 +17,7 @@ export function DeskCandidateCard({ candidate, boardSlot }: { candidate: DeskCan
       )}
       <p className="mt-1 text-xs font-bold">NEXT PICK — {risk}</p>
       {candidate.riskReason && <details className="mt-1 text-xs"><summary>WHY THIS READ?</summary><p>{candidate.riskReason}</p></details>}
-      <p className="mt-2 text-sm">{candidate.legalFinishLine}</p>
+      <p className="mt-2 text-sm">{legalFinishLine ?? candidate.legalFinishLine}</p>
       <p className="mt-2 text-sm font-bold">{boardSlot ? `FITS YOUR BOARD — ${boardSlot} SLOT` : candidate.boardFallout ?? 'NOT ON YOUR BOARD — CHOOSE A SLOT TO PRICE THE CHANGE.'}</p>
     </div>
   );

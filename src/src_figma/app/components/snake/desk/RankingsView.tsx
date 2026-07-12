@@ -7,6 +7,7 @@ export function RankingsView(props: {
   candidates: readonly DeskCandidate[];
   rankings: Partial<Record<TaxonomyPosition, string[]>>;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
+  resolveLegalFinishLine?: (candidateId: string) => string;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
@@ -22,7 +23,7 @@ export function RankingsView(props: {
               getId={(candidate) => candidate.id}
               itemLabel={(candidate) => candidate.name}
               onReorder={(orderedIds) => props.onReorder(position as TaxonomyPosition, orderedIds)}
-              renderContent={(candidate) => <DeskCandidateCard candidate={candidate} />}
+              renderContent={(candidate) => <DeskCandidateCard candidate={candidate} legalFinishLine={props.resolveLegalFinishLine?.(candidate.id)} />}
               rowClassName={(_candidate, _index, dragged) => `grid grid-cols-[1fr_auto] gap-2 border-4 p-2 ${dragged ? 'opacity-60' : ''}`}
               leftWrapClassName="flex min-w-0 items-start gap-2"
               rightWrapClassName="flex items-center gap-1"

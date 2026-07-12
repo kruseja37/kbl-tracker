@@ -10,6 +10,7 @@ export function BoardView(props: {
   planBill: SnakePlanBill | null;
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
+  resolveLegalFinishLine?: (candidateId: string) => string;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
@@ -19,7 +20,7 @@ export function BoardView(props: {
           <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
             <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
             {byId.get(playerId)
-              ? <DeskCandidateCard candidate={byId.get(playerId)!} boardSlot={slotId} />
+              ? <DeskCandidateCard candidate={byId.get(playerId)!} boardSlot={slotId} legalFinishLine={props.resolveLegalFinishLine?.(playerId)} />
               : <p className="font-bold">{playerId}</p>}
             {props.brokenSlots.includes(slotId as SnakeBoardSlotId) && <p className="text-sm font-black text-[var(--ballpark-warn-text)]">PLAN BROKEN</p>}
             {(props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2 && !props.brokenSlots.includes(slotId as SnakeBoardSlotId) && (

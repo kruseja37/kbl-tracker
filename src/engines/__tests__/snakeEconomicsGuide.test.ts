@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
-import { derivePickValueChart } from '../leagueConstruction';
+import { buildSnakeOrder, derivePickValueChart } from '../leagueConstruction';
 import {
   evaluateSnakeBills,
   evaluateSnakePlan,
@@ -10,6 +10,7 @@ import {
   executeSnakeGuidePackage,
   revalidateSnakeGuidePackage,
   searchSnakeGuidePackage,
+  searchSnakeGuidePackageBruteForce,
 } from '../snakeGuideTrade';
 import { restoreLatestSnakeCorrection } from '../snakeSession';
 import { proveSimultaneousSnakeSeating, type SnakeSeatingPlayer } from '../snakeSeatingProof';
@@ -172,5 +173,29 @@ describe('snake two-bills economics and guide packages', () => {
       pickValueChart: chart,
       seatingProofInput: { ...legalSeating, pool: [] },
     })).toEqual({ package: null, message: 'No legal guide trade reaches pick 9.' });
+  });
+
+  test('optimized guide answers are byte-identical to the original search across 40 deterministic fixtures', () => {
+    let state = 0x5eed1234;
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state / 0x1_0000_0000;
+    };
+    for (let fixtureIndex = 0; fixtureIndex < 40; fixtureIndex += 1) {
+      const teamIds = ['buyer', 'seller', 'third', 'fourth'];
+      const pickOrder = buildSnakeOrder(teamIds, 5);
+      const values = Array.from({ length: pickOrder.length }, () => 10 + Math.floor(random() * 990));
+      const chart = derivePickValueChart(values);
+      const session: LeagueBuilderMlbDraftSession = {
+        id: `property-${fixtureIndex}`, leagueId: 'league', seasonNumber: 1, seed: `seed-${fixtureIndex}`,
+        workflowVersion: 'v2', engineMethodVersion: 'snakeFoundations.v1', tier: 'standard', balanceMode: 'taxed', rounds: 5,
+        pickOrder, completedPicks: [], currentPickIndex: fixtureIndex % 3, revision: fixtureIndex,
+        createdDate: '2026-07-11', lastModified: '2026-07-11',
+      };
+      const targetPick = session.pickOrder.slice(session.currentPickIndex).find((slot) => slot.teamId === 'seller')!.pick;
+      const seatingProofInput = { clubs: [], pool: [], baseCaps: [], realTeamCount: teamIds.length };
+      const input = { session, buyerTeamId: 'buyer', targetPick, pickValueChart: chart, seatingProofInput };
+      expect(searchSnakeGuidePackage(input)).toEqual(searchSnakeGuidePackageBruteForce(input));
+    }
   });
 });

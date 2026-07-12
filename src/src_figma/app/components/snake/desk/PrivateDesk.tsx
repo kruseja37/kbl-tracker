@@ -21,6 +21,7 @@ export function PrivateDesk(props: {
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   whatIf?: DeskWhatIf | null;
   tradeGuide?: ReactNode;
+  resolveLegalFinishLine?: (candidateId: string) => string;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onStartWhatIf: (slotId: SnakeBoardSlotId, playerId: string) => void;
   onKeepWhatIf: () => void;
@@ -35,10 +36,10 @@ export function PrivateDesk(props: {
         ))}
       </div>
       {tab === 'BOARD' && <>
-        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} />
+        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} />
         <div className="mt-4"><WhatIfSandbox candidates={props.candidates} boardSlots={props.boardSlots} whatIf={props.whatIf ?? null} onStart={props.onStartWhatIf} onKeep={props.onKeepWhatIf} onRevert={props.onRevertWhatIf} /></div>
       </>}
-      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} onReorder={props.onReorder} />}
+      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} onReorder={props.onReorder} resolveLegalFinishLine={props.resolveLegalFinishLine} />}
       {tab === 'LOG' && <AdvisorLog entries={props.advisorLog} />}
       {tab === 'GUIDE' && props.tradeGuide}
     </section>
