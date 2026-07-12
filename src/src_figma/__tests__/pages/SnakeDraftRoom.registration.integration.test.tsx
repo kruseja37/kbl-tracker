@@ -305,19 +305,40 @@ describe('ROOMFIX setup to playable snake room', () => {
     await waitFor(() => expect(screen.getByLabelText('Shared trade guide').textContent).toMatch(/PICK|NO LEGAL GUIDE TRADE/i));
     fireEvent.click(screen.getByRole('button', { name: 'CLOSE' }));
 
-    const chosenName = screen.getByText('READ THE PICK').parentElement?.querySelector('h2')?.textContent;
-    expect(chosenName).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    const defaultName = screen.getByText('READ THE PICK').parentElement?.querySelector('h2')?.textContent;
+    expect(defaultName).toBeTruthy();
+    const alternate = screen.getAllByRole('button', { name: /^SELECT / })
+      .find((button) => !button.getAttribute('aria-label')?.endsWith(defaultName!.toUpperCase()));
+    expect(alternate).toBeTruthy();
+    const selectedId = alternate!.getAttribute('data-player-id');
+    const selectedPlayer = (await getAllPlayers()).find((row) => row.id === selectedId)!;
+    const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
+    const selectedFrozenIv = legs.pool!.players.find((row) => row.id === selectedId)!.iv;
+    fireEvent.click(alternate!);
+    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+    expect(screen.getByRole('region', { name: 'Private seat' })).toHaveTextContent(selectedName);
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     expect(await screen.findByText('PICK RECORDED')).toBeInTheDocument();
-    expect(screen.getByText(chosenName!.toUpperCase())).toBeInTheDocument();
+    expect(screen.getByText(selectedName.toUpperCase())).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ADVANCE TO NEXT PICK' }));
 
     await waitFor(async () => {
       const stored = await getMlbDraftSession(LEAGUE_ID, 1);
       expect(stored?.completedPicks).toHaveLength(1);
+      expect(stored?.completedPicks[0]?.playerId).toBe(selectedId);
+      expect(stored?.completedPicks[0]?.settledSalary).toBe(selectedFrozenIv);
+      expect(Number.isFinite(stored?.completedPicks[0]?.marginalTax)).toBe(true);
+      expect(stored?.correctionSnapshots?.[0]?.priorSession.currentPickIndex).toBe(0);
+      expect(stored?.correctionSnapshots?.[0]?.priorSession.completedPicks).toHaveLength(0);
       expect(stored?.currentPickIndex).toBe(1);
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL ROOMFIX CLUB 2 SEAT' }));
+    await waitFor(() => {
+      const nextName = screen.getByText('READ THE PICK').parentElement?.querySelector('h2')?.textContent;
+      expect(nextName).toBeTruthy();
+      expect(nextName).not.toBe(selectedName);
     });
   }, 180_000);
 });

@@ -30712,3 +30712,17 @@ site → STOP that site, report, finish the rest of T4 where linkable.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: HUNTFIX-TRACKER-1 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-1A ===== -->
+# SNAKE-MOCK-1A — CHOOSE, INSPECT, DRAFT
+
+**Date:** 2026-07-12 | **Base:** `origin/main` `ea66830e0305d999f4140a101d452417f7d9152e`
+
+The complete binding builder contract is
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_1A_2026-07-12.md`. It authorizes only
+the first mock-draft slice: choose any available MLB player from the live board,
+inspect the shared full profile, explicitly `DRAFT PLAYER`, then confirm the exact
+selection with the existing gavel ritual without candidate changes triggering the
+privacy cover. Separate builder and auditor are mandatory. No farm, completion,
+recap, franchise, schedule, chemistry, ledger, auction, or schema work is in scope.
+<!-- ===== END CONTRACT: SNAKE-MOCK-1A ===== -->

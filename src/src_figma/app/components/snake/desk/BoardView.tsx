@@ -11,6 +11,9 @@ export function BoardView(props: {
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   resolveLegalFinishLine?: (candidateId: string) => string;
+  selectedCandidateId?: string | null;
+  onSelectCandidate?: (candidateId: string) => void;
+  isCandidateSelectable?: (candidateId: string) => boolean;
   showHelp?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
@@ -21,7 +24,14 @@ export function BoardView(props: {
           <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
             <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
             {byId.get(playerId)
-              ? <DeskCandidateCard candidate={byId.get(playerId)!} boardSlot={slotId} legalFinishLine={props.resolveLegalFinishLine?.(playerId)} />
+              ? <DeskCandidateCard
+                  candidate={byId.get(playerId)!}
+                  boardSlot={slotId}
+                  legalFinishLine={props.resolveLegalFinishLine?.(playerId)}
+                  selected={props.selectedCandidateId === playerId}
+                  selectable={props.isCandidateSelectable?.(playerId) ?? true}
+                  onSelect={props.onSelectCandidate}
+                />
               : <p className="font-bold">{playerId}</p>}
             {props.brokenSlots.includes(slotId as SnakeBoardSlotId) && <p className="text-sm font-black text-[var(--ballpark-warn-text)]">PLAN BROKEN</p>}
             {(props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2 && !props.brokenSlots.includes(slotId as SnakeBoardSlotId) && (

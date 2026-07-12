@@ -65,6 +65,7 @@ describe('S6 farm room continuation', () => {
     expect(created.farmSlotSalaries[0]).toBe(3 * created.farmSlotSalaries.at(-1));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /REVEAL COMETS SEAT/i }));
+    expect(screen.getByRole('button', { name: 'COVER & ARM' })).toBeInTheDocument();
     expect(screen.getAllByText(/PICK 1 PAYS/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/SCOUT’S CALL/).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/TRUE COST|SAFE TO WAIT|LIKELY GONE|LEGAL-FINISH|\bIV\b/);

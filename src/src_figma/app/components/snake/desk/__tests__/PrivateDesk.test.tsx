@@ -24,6 +24,30 @@ const candidate: DeskCandidate = {
 };
 
 describe('PrivateDesk', () => {
+  it('selects an available non-default player from both the board and rankings but never selects a drafted card', () => {
+    const onSelectCandidate = vi.fn();
+    const available = { ...candidate, id: 'available', name: 'AVAILABLE PLAYER' };
+    const drafted = { ...candidate, id: 'drafted', name: 'DRAFTED PLAYER', drafted: true };
+    const blocked = { ...candidate, id: 'blocked', name: 'BLOCKED PLAYER' };
+    const common = {
+      candidates: [candidate, available, drafted, blocked],
+      rankings: { SS: ['muraski', 'available', 'drafted', 'blocked'] } as const,
+      boardSlots: { SS: 'available' } as const,
+      brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 3 },
+      selectedCandidateId: 'muraski', onSelectCandidate,
+      isCandidateSelectable: (candidateId: string) => candidateId !== 'blocked',
+      onReorder: () => undefined, onStartWhatIf: () => undefined, onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
+    };
+    render(<PrivateDesk {...common} />);
+    fireEvent.click(screen.getByRole('button', { name: 'SELECT AVAILABLE PLAYER' }));
+    expect(onSelectCandidate).toHaveBeenCalledWith('available');
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeDisabled();
+    fireEvent.click(screen.getAllByRole('button', { name: 'SELECT AVAILABLE PLAYER' })[0]);
+    expect(onSelectCandidate).toHaveBeenCalledTimes(2);
+  });
+
   it('renders distinct engine bills, verbatim risk, fallout, and keep/revert what-if controls', () => {
     const onKeepWhatIf = vi.fn();
     const onRevertWhatIf = vi.fn();
@@ -68,6 +92,7 @@ describe('downward tax consequence copy (TAXSWING seam)', () => {
   it('renders YOUR TAX BILL GOES DOWN when the marginal tax is negative', async () => {
     const { DeskCandidateCard } = await import('../DeskCandidateCard');
     render(<DeskCandidateCard candidate={{ ...candidate, marginalTax: -12345 }} />);
-    expect(screen.getByText(/YOUR TAX BILL GOES DOWN \$12,345 IF YOU TAKE HIM/)).toBeInTheDocument();
+    expect(screen.getByText(/YOUR TAX BILL GOES DOWN \$12,345 WITH THIS PLAYER/)).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 });

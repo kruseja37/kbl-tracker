@@ -36,6 +36,8 @@ describe('S6 farm fog', () => {
       farmTarget: 10,
       publicRosters: { a: [], b: [{ position: 'SP' }], c: [] },
     });
+    expect(card.scoutsCall).toContain('KEEP THIS PLAYER NEAR THE TOP OF YOUR LIST.');
+    expect(card.scoutsCall).not.toMatch(/\b(?:he|she|him|her)\b/i);
     const onChoose = vi.fn();
     const { container } = render(<FarmPrivateDesk
       cards={[card]}

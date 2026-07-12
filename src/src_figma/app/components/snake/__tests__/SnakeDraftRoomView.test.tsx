@@ -2,11 +2,23 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SnakeDraftRoomView, type SnakeDraftRoomViewProps } from '../SnakeDraftRoomView';
+import type { Player } from '../../../../../utils/leagueBuilderStorage';
+import { buildDraftProfileModel } from '../../../../../utils/draftProfileModel';
 
 const teams = [
   { id: 'a', name: 'Kodiaks', abbreviation: 'KOD', colors: { primary: 'rgb(120, 20, 20)', secondary: 'rgb(240, 220, 180)', accent: 'rgb(20, 80, 120)' }, logoUrl: 'data:image/png;base64,AA==' },
   { id: 'b', name: 'Comets', abbreviation: 'COM', colors: { primary: 'rgb(20, 70, 120)', secondary: 'rgb(230, 230, 220)' } },
 ];
+
+const candidateProfile = {
+  id: 'p1', firstName: 'Sam', lastName: 'Slugger', gender: 'F', age: 24, bats: 'R', throws: 'R',
+  primaryPosition: '1B', secondaryPosition: '3B', power: 88, contact: 77, speed: 42, fielding: 61, arm: 70,
+  velocity: 0, junk: 0, accuracy: 0, arsenal: [], overallGrade: 'A-', personality: 'Competitive',
+  chemistry: 'Spirited', trait1: 'Power vs RHP', trait2: 'Tough Out', playerArchetype: 'Slugger', morale: 50,
+  mojo: 'Normal', fame: 0, salary: 1000, leagueAssignments: [],
+  hiddenPersonalityModifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
+  createdDate: '2026-01-01', lastModified: '2026-01-01', isCustom: true,
+} as Player;
 
 function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoomViewProps {
   return {
@@ -18,6 +30,8 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
     ownedPicksByTeamId: { a: [1], b: [2, 3] },
     activeSeatId: 'a',
     candidate: { id: 'p1', name: 'Sam Slugger', position: '1B', consequence: 'You can still finish a legal 22.', privateNote: 'Your top first baseman.' },
+    candidateProfile,
+    draftActionLabel: 'DRAFT PLAYER',
     paused: false,
     soundsEnabled: true,
     correctionAvailable: false,
@@ -56,7 +70,7 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toHaveClass('text-xl');
 
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     expect(screen.getByTestId('ritual-card')).toHaveClass('min-h-44', 'p-4');
     expect(screen.getByAltText('Kodiaks logo')).toHaveClass('h-14', 'w-14');
     expect(screen.getByText('THE KODIAKS SELECT…')).toHaveClass('text-lg');
@@ -96,6 +110,30 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByText('Your top first baseman.')).not.toBeInTheDocument();
   });
 
+  it('keeps the revealed desk open when the selected candidate changes', () => {
+    const { rerender } = render(<SnakeDraftRoomView {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    rerender(<SnakeDraftRoomView {...props({
+      candidate: { id: 'p2', name: 'Pat Pitcher', position: 'SP', consequence: 'A different legal finish.', privateNote: 'Selected from rankings.' },
+      candidateProfile: { ...candidateProfile, id: 'p2', firstName: 'Pat', lastName: 'Pitcher', primaryPosition: 'SP' },
+    })} />);
+    expect(screen.getByText('Selected from rankings.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'REVEAL KODIAKS SEAT' })).not.toBeInTheDocument();
+  });
+
+  it('opens the selected player shared full profile without a pronoun label', () => {
+    render(<SnakeDraftRoomView {...props()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'VIEW FULL PROFILE' }));
+    expect(screen.getByText('POW')).toBeInTheDocument();
+    expect(screen.getByText('Power vs RHP')).toBeInTheDocument();
+    expect(screen.getByText(buildDraftProfileModel(candidateProfile, { revealFull: true }).archetype!)).toBeInTheDocument();
+    expect(screen.getByText('Competitive')).toBeInTheDocument();
+    expect(screen.getByText('Spirited')).toBeInTheDocument();
+    const privateSeatText = screen.getByRole('region', { name: 'Private seat' }).textContent ?? '';
+    expect(privateSeatText).not.toMatch(/\b(?:he|she|him|her)\b|pronouns?/i);
+  });
+
   it('renders engine facts and never offers ARM for an illegal candidate', () => {
     render(<SnakeDraftRoomView {...props({ candidate: { id: 'p1', name: 'Sam Slugger', position: '1B', consequence: 'You are short 2 catchers.', blockReason: 'You are short 2 catchers.' } })} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
@@ -108,7 +146,7 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByAltText('Kodiaks logo in draft order')).toBeInTheDocument();
     expect(screen.getByAltText('Kodiaks logo in club lens')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     const card = screen.getByTestId('ritual-card');
     expect(card).toHaveStyle({ backgroundColor: 'rgb(120, 20, 20)', color: 'rgb(240, 220, 180)' });
     expect(screen.getByAltText('Kodiaks logo')).toBeInTheDocument();
@@ -130,7 +168,7 @@ describe('SnakeDraftRoomView', () => {
     const onRecordPick = vi.fn();
     render(<SnakeDraftRoomView {...props({ onRecordPick })} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     expect(screen.getByRole('button', { name: 'KEEP HOLDING' })).toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
@@ -139,12 +177,25 @@ describe('SnakeDraftRoomView', () => {
     expect(oscillator.start).toHaveBeenCalled();
   });
 
+  it('does not show PICK RECORDED when the page rejects an invalid save', async () => {
+    vi.useFakeTimers();
+    const onRecordPick = vi.fn().mockRejectedValue(new Error('selected player is no longer available'));
+    render(<SnakeDraftRoomView {...props({ onRecordPick })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(onRecordPick).toHaveBeenCalledWith('p1');
+    expect(screen.queryByText('PICK RECORDED')).not.toBeInTheDocument();
+    expect(screen.getByText('PICK NOT SAVED — HOLD THE GAVEL AGAIN')).toBeInTheDocument();
+  });
+
   it('cancels a mid-hold pause without touching the session save', async () => {
     vi.useFakeTimers();
     const saveSession = vi.fn();
     render(<SnakeDraftRoomView {...props({ onRecordPick: saveSession })} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
     fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
@@ -157,7 +208,7 @@ describe('SnakeDraftRoomView', () => {
     vi.useFakeTimers();
     const { rerender } = render(<SnakeDraftRoomView {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
 
@@ -181,7 +232,7 @@ describe('SnakeDraftRoomView', () => {
     const finalProps = props({ order: [{ pick: 1, teamId: 'a' }], onDraftComplete });
     const { rerender } = render(<SnakeDraftRoomView {...finalProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     rerender(<SnakeDraftRoomView {...finalProps} currentPickIndex={1} candidate={null} />);
@@ -196,7 +247,7 @@ describe('SnakeDraftRoomView', () => {
     const saveSession = vi.fn();
     const { rerender } = render(<SnakeDraftRoomView {...props({ onRecordPick: saveSession, tradeRevision: 0 })} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'COVER & ARM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await vi.advanceTimersByTimeAsync(500); });
     rerender(<SnakeDraftRoomView {...props({ onRecordPick: saveSession, tradeRevision: 1 })} />);

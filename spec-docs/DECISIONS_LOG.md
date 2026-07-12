@@ -7,6 +7,10 @@
 
 ## July 2026
 
+### 2026-07-12 (draft-to-franchise schedule law): no schedule is required to finish the draft or launch a franchise
+
+**JK's ruling:** for mock-draft testing and the real product path, the MLB and farm drafts must be allowed to finish with no schedule present. The app shows the completed-draft recap, continues through Franchise Setup, and launches the franchise with zero schedule rows. Once inside Living Season, `SCHEDULE NEEDED` is a normal actionable state: the user may upload the schedule CSV or enter games manually there. **Consequences:** schedule presence is never a draft-completion, recap, Franchise Setup, or franchise-initialization gate; regular-season play and schedule-dependent systems remain unavailable until valid schedule rows exist. The existing empty-schedule initialization and Living Season CSV/manual entry surfaces are the canonical destination, not a setup-time schedule workaround.
+
 ### 2026-07-11 (snake resume law): resuming a saved snake draft goes to the ROOM, never back to setup's GO
 
 **The finding:** JK's live browser walkthrough hit a live-data-loss bug — resuming a snake draft already in progress (closing the browser mid-draft and coming back) routed the user back into the SETUP screen instead of the room. Pressing GO on that setup screen a second time would silently create a brand-new draft session, overwriting the real saved one, with no warning to the user. **The ruling:** resuming an existing snake draft must always land the user in the room, never in a screen whose own GO button can create a fresh session. This is now built into the unified setup/room routing (PR #96 hotfix, later carried into PR #97's unified GO path) and treated as a standing law for any future setup/resume work on either draft format — a resume path and a fresh-start path must never share a control that can silently clobber saved progress. Full record: `spec-docs/contracts/CONTRACT_ROOMFIX_2026-07-11.md`, `CONTRACT_UNIFYSETUP_2026-07-11.md`.

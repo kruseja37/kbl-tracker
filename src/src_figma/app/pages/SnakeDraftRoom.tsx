@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import {
@@ -344,6 +344,8 @@ function MlbSnakeDraftRoom() {
   const [livePickMoveRevision, setLivePickMoveRevision] = useState(0);
   const [privateDeskRevealed, setPrivateDeskRevealed] = useState(false);
   const [privateDeskReady, setPrivateDeskReady] = useState(false);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
+  const selectionTurnKey = useRef<string | null>(null);
 
   useEffect(() => {
     if (!privateDeskRevealed) {
@@ -398,7 +400,7 @@ function MlbSnakeDraftRoom() {
     ? resolveLockedSeat({ team: currentTeam, session })
     : null, [currentTeam, session]);
   const currentBoard = currentTeam ? session?.seatBoards?.[currentTeam.id] : null;
-  const candidateId = useMemo(() => {
+  const defaultCandidateId = useMemo(() => {
     const ranked = [
       ...(currentBoard?.rankings.global ?? []),
       ...Object.values(currentBoard?.slots ?? {}),
@@ -406,7 +408,26 @@ function MlbSnakeDraftRoom() {
     ];
     return ranked.find((id) => !unavailable.has(id) && playerById.has(id) && poolById.has(id)) ?? null;
   }, [activePoolRows, currentBoard, playerById, poolById, unavailable]);
-
+  const turnKey = `${session?.currentPickIndex ?? -1}:${currentTeam?.id ?? 'none'}`;
+  useEffect(() => {
+    if (selectionTurnKey.current === turnKey) return;
+    selectionTurnKey.current = turnKey;
+    setSelectedPlayerId(defaultCandidateId);
+  }, [defaultCandidateId, turnKey]);
+  useEffect(() => {
+    if (!selectedPlayerId
+      || unavailable.has(selectedPlayerId)
+      || !playerById.has(selectedPlayerId)
+      || !poolById.has(selectedPlayerId)) {
+      setSelectedPlayerId(defaultCandidateId);
+    }
+  }, [defaultCandidateId, playerById, poolById, selectedPlayerId, unavailable]);
+  const candidateId = selectedPlayerId
+    && !unavailable.has(selectedPlayerId)
+    && playerById.has(selectedPlayerId)
+    && poolById.has(selectedPlayerId)
+      ? selectedPlayerId
+      : defaultCandidateId;
   const seatingPlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     if (!player) return [];
@@ -598,8 +619,8 @@ function MlbSnakeDraftRoom() {
         fitWord: fitWord({ player, priorities: locked.priorities, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
         riskReason: risk
-          ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.`
-          : 'NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.',
+          ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} SELECT THIS PLAYER BEFORE YOUR TURN.`
+          : 'NO CLUB IS LIKELY TO SELECT THIS PLAYER BEFORE YOUR TURN.',
         legalFinishLine: '',
         construction: player.construction,
         drafted: unavailable.has(player.playerId),
@@ -634,17 +655,17 @@ function MlbSnakeDraftRoom() {
         boardFallout: boardSlot
           ? `FITS YOUR BOARD — ${boardSlot} SLOT`
           : targetSlot
-            ? `NOT ON YOUR BOARD: TAKING HIM PUSHES YOUR ${targetSlot} PLAN DOWN TO A BACKUP.`
+            ? `NOT ON YOUR BOARD: ADDING THIS PLAYER PUSHES YOUR ${targetSlot} PLAN DOWN TO A BACKUP.`
             : `NOT ON YOUR BOARD: CHOOSE A SLOT TO PRICE THE CHANGE.`,
       };
     });
     const candidateById = new Map(displayCandidates.map((candidate) => [candidate.id, candidate]));
-    const legalFinishLineCache = new Map<string, string>();
-    const legalFinishLineForCandidate = (candidateId: string): string => {
-      const cached = legalFinishLineCache.get(candidateId);
+    const legalFinishCache = new Map<string, { line: string; selectable: boolean }>();
+    const legalFinishForCandidate = (candidateId: string): { line: string; selectable: boolean } => {
+      const cached = legalFinishCache.get(candidateId);
       if (cached) return cached;
       const player = deskRoomById.get(candidateId);
-      if (!player) return 'THIS PLAYER IS NO LONGER IN THE DRAFT POOL.';
+      if (!player) return { line: 'THIS PLAYER IS NO LONGER IN THE DRAFT POOL.', selectable: false };
       const finish = evaluateSnakeLegalFinish({
         currentRoster: [...ownSeat.roster, player],
         committedSpent: ownSeat.committedSpent + player.price,
@@ -659,9 +680,12 @@ function MlbSnakeDraftRoom() {
         : finish.legalFinishCushion < 0
           ? `YOU ARE $${Math.abs(Math.round(finish.legalFinishCushion)).toLocaleString()} SHORT AFTER SAVING ENOUGH TO FINISH YOUR TEAM.`
           : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`;
-      legalFinishLineCache.set(candidateId, line);
-      return line;
+      const result = { line, selectable: finish.feasible && finish.legalFinishCushion >= 0 };
+      legalFinishCache.set(candidateId, result);
+      return result;
     };
+    const legalFinishLineForCandidate = (candidateId: string): string => legalFinishForCandidate(candidateId).line;
+    const canSelectCandidate = (candidateId: string): boolean => !unavailable.has(candidateId) && legalFinishForCandidate(candidateId).selectable;
     const slotDepth = Object.fromEntries(Object.keys(board?.slots ?? {}).map((slotId) => {
       const position = boardSlotPosition(slotId as SnakeBoardSlotId)
         ?? candidateById.get(board?.slots[slotId as SnakeBoardSlotId] ?? '')?.position;
@@ -693,7 +717,7 @@ function MlbSnakeDraftRoom() {
           ? [{
               key: `risk:${playerId}`,
               playerId,
-              text: `${player.name} → LIKELY GONE — ${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.`,
+              text: `${player.name} → LIKELY GONE — ${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} SELECT THIS PLAYER BEFORE YOUR TURN.`,
               actionable: true,
             }]
           : [];
@@ -710,6 +734,7 @@ function MlbSnakeDraftRoom() {
       slotDepth,
       taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps }) : [],
       legalFinishLineForCandidate,
+      canSelectCandidate,
     };
   }, [currentBoard, currentLocked, currentTeam, deskRoomById, deskRoomPlayers, leagueTeams, playerById, pool, privateDeskReady, session, unavailable]);
 
@@ -731,6 +756,24 @@ function MlbSnakeDraftRoom() {
       return JSON.stringify(previous) === JSON.stringify(next) ? current : { ...current, [currentTeam.id]: next };
     });
   }, [currentTeam, deskState]);
+
+  useEffect(() => {
+    if (!deskState || !candidateId || deskState.canSelectCandidate(candidateId)) return;
+    const repaired = [
+      ...(currentBoard?.rankings.global ?? []),
+      ...Object.values(currentBoard?.slots ?? {}),
+      ...deskState.candidates.map((row) => row.id),
+    ].find((id) => deskState.canSelectCandidate(id));
+    setSelectedPlayerId(repaired ?? null);
+  }, [candidateId, currentBoard, deskState]);
+
+  const selectCandidate = useCallback((playerId: string) => {
+    if (!deskState?.canSelectCandidate(playerId)
+      || unavailable.has(playerId)
+      || !playerById.has(playerId)
+      || !poolById.has(playerId)) return;
+    setSelectedPlayerId(playerId);
+  }, [deskState, playerById, poolById, unavailable]);
 
   useEffect(() => { setWhatIf(null); }, [currentTeam?.id, session?.currentPickIndex]);
 
@@ -793,10 +836,14 @@ function MlbSnakeDraftRoom() {
   }, [currentTeam, persist, session, whatIf]);
 
   const recordPick = useCallback(async (playerId: string) => {
-    if (!session || !pool || !currentTeam) return;
+    if (!session) throw new Error('The MLB snake draft session is no longer available.');
+    if (!pool) throw new Error('The registered MLB draft pool is no longer available.');
+    if (!currentTeam) throw new Error('The active MLB draft team is no longer available.');
+    if (unavailable.has(playerId)) throw new Error('The selected player is no longer available.');
     const player = seatingById.get(playerId);
     const priced = poolById.get(playerId);
-    if (!player || !priced) return;
+    if (!player) throw new Error('The selected player is not in the active MLB draft model.');
+    if (!priced) throw new Error('The selected player has no frozen MLB draft price.');
     const existing = session.completedPicks.filter((pick) => pick.teamId === currentTeam.id).flatMap((pick) => {
       const row = seatingById.get(pick.playerId);
       return row ? [row.construction] : [];
@@ -812,7 +859,7 @@ function MlbSnakeDraftRoom() {
     });
     setPrivateDeskRevealed(false);
     await persist(next);
-  }, [currentTeam, leagueTeams.length, persist, pool, poolById, seatingById, seatingPlayers, session]);
+  }, [currentTeam, leagueTeams.length, persist, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
@@ -888,6 +935,8 @@ function MlbSnakeDraftRoom() {
       ownedPicksByTeamId={ownedPicksByTeamId}
       activeSeatId={currentTeam?.id ?? null}
       candidate={candidate}
+      candidateProfile={candidateId ? playerById.get(candidateId) ?? null : null}
+      draftActionLabel="DRAFT PLAYER"
       paused={Boolean(session.paused)}
       soundsEnabled={soundsEnabled}
       correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
@@ -911,6 +960,9 @@ function MlbSnakeDraftRoom() {
           slotDepth={deskState.slotDepth}
           whatIf={whatIf?.view ?? null}
           showHelp={showHelp}
+          selectedCandidateId={candidateId}
+          onSelectCandidate={selectCandidate}
+          isCandidateSelectable={deskState.canSelectCandidate}
           resolveLegalFinishLine={deskState.legalFinishLineForCandidate}
           onReorder={(position, orderedIds) => { void reorderRanking(position, orderedIds); }}
           onStartWhatIf={startWhatIf}
@@ -941,7 +993,7 @@ function MlbSnakeDraftRoom() {
         onAsk={askTradeGuide}
         onExecute={executeTrade}
       />}
-      roomHelpNotes={candidate ? ['THIS PLAYER CAME FROM YOUR SAVED BOARD ORDER.'] : []}
+      roomHelpNotes={candidate ? ['THIS PLAYER IS SELECTED FROM YOUR PRIVATE DRAFT DESK.'] : []}
       companionApproval={<CompanionApprovalCard
         session={session}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}

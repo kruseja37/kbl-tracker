@@ -8,6 +8,9 @@ export function RankingsView(props: {
   rankings: Partial<Record<TaxonomyPosition, string[]>>;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   resolveLegalFinishLine?: (candidateId: string) => string;
+  selectedCandidateId?: string | null;
+  onSelectCandidate?: (candidateId: string) => void;
+  isCandidateSelectable?: (candidateId: string) => boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
@@ -23,7 +26,13 @@ export function RankingsView(props: {
               getId={(candidate) => candidate.id}
               itemLabel={(candidate) => candidate.name}
               onReorder={(orderedIds) => props.onReorder(position as TaxonomyPosition, orderedIds)}
-              renderContent={(candidate) => <DeskCandidateCard candidate={candidate} legalFinishLine={props.resolveLegalFinishLine?.(candidate.id)} />}
+              renderContent={(candidate) => <DeskCandidateCard
+                candidate={candidate}
+                legalFinishLine={props.resolveLegalFinishLine?.(candidate.id)}
+                selected={props.selectedCandidateId === candidate.id}
+                selectable={props.isCandidateSelectable?.(candidate.id) ?? true}
+                onSelect={props.onSelectCandidate}
+              />}
               rowClassName={(_candidate, _index, dragged) => `grid grid-cols-[1fr_auto] gap-2 border-4 p-2 ${dragged ? 'opacity-60' : ''}`}
               leftWrapClassName="flex min-w-0 items-start gap-2"
               rightWrapClassName="flex items-center gap-1"

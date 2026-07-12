@@ -23,6 +23,9 @@ export function PrivateDesk(props: {
   tradeGuide?: ReactNode;
   showHelp?: boolean;
   resolveLegalFinishLine?: (candidateId: string) => string;
+  selectedCandidateId?: string | null;
+  onSelectCandidate?: (candidateId: string) => void;
+  isCandidateSelectable?: (candidateId: string) => boolean;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onStartWhatIf: (slotId: SnakeBoardSlotId, playerId: string) => void;
   onKeepWhatIf: () => void;
@@ -37,10 +40,10 @@ export function PrivateDesk(props: {
         ))}
       </div>
       {tab === 'BOARD' && <>
-        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} showHelp={props.showHelp ?? false} />
+        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} showHelp={props.showHelp ?? false} />
         <div className="mt-4"><WhatIfSandbox candidates={props.candidates} boardSlots={props.boardSlots} whatIf={props.whatIf ?? null} onStart={props.onStartWhatIf} onKeep={props.onKeepWhatIf} onRevert={props.onRevertWhatIf} showHelp={props.showHelp ?? false} /></div>
       </>}
-      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} onReorder={props.onReorder} resolveLegalFinishLine={props.resolveLegalFinishLine} />}
+      {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} onReorder={props.onReorder} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} />}
       {tab === 'LOG' && <AdvisorLog entries={props.advisorLog} />}
       {tab === 'GUIDE' && props.tradeGuide}
     </section>

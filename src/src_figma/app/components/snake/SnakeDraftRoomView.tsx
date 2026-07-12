@@ -3,7 +3,9 @@ import { Eye, EyeOff, HelpCircle, Pause, Play, RotateCcw, Volume2, VolumeX } fro
 
 import { useSeatReveal } from '../../hooks/useSeatReveal';
 import { createSnakeSoundPlayer } from '../../../utils/snakeSounds';
+import type { Player } from '../../../../utils/leagueBuilderStorage';
 import { PressButton } from '../ballpark/BallparkKit';
+import { PlayerProfilePopover } from '../shared/PlayerProfilePopover';
 import { createSnakeRoomState, snakeRoomReducer } from './snakeRoomReducer';
 
 type HelpAwareRoomContent = ReactNode | ((showHelp: boolean) => ReactNode);
@@ -52,6 +54,8 @@ export interface SnakeDraftRoomViewProps {
   ownedPicksByTeamId: Readonly<Record<string, readonly number[]>>;
   activeSeatId: string | null;
   candidate: SnakeReviewCandidate | null;
+  candidateProfile?: Player | null;
+  draftActionLabel?: string;
   paused: boolean;
   soundsEnabled: boolean;
   correctionAvailable: boolean;
@@ -86,6 +90,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [showHelp, setShowHelp] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const completedHold = useRef(false);
+  const armedCandidate = useRef<SnakeReviewCandidate | null>(null);
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
   const soundPlayer = useMemo(() => createSnakeSoundPlayer(props.soundsEnabled), [props.soundsEnabled]);
@@ -94,7 +99,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const lensTeam = props.teams.find((team) => team.id === lensId);
   const reveal = useSeatReveal({
     seatId: props.activeSeatId,
-    pickKey: `${props.currentPickIndex}:${props.candidate?.id ?? 'none'}`,
+    pickKey: props.currentPickIndex,
     tradeKey: props.tradeRevision ?? 0,
     lensId,
   });
@@ -112,10 +117,11 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   }, [props.paused]);
 
   useEffect(() => {
+    armedCandidate.current = null;
     dispatch({ type: 'NEXT_TURN', candidateId: props.candidate?.id ?? null });
     setPassCoverOpen(Boolean(props.hotseatNextName));
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
-  }, [props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName]);
+  }, [props.activeSeatId, props.currentPickIndex, props.hotseatNextName]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
@@ -156,7 +162,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   };
 
   const startHold = () => {
-    if (state.phase !== 'ARM' || state.paused || !props.candidate) return;
+    const frozenCandidate = armedCandidate.current;
+    if (state.phase !== 'ARM' || state.paused || !frozenCandidate) return;
     completedHold.current = false;
     dispatch({ type: 'GAVEL_DOWN' });
     holdTimer.current = setTimeout(async () => {
@@ -165,13 +172,13 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       if (liveState.paused || liveState.phase !== 'ANNOUNCE' || props.paused) return;
       completedHold.current = true;
       const recordedPick = {
-        playerId: props.candidate!.id,
-        playerName: props.candidate!.name,
+        playerId: frozenCandidate.id,
+        playerName: frozenCandidate.name,
         teamId: currentTeam?.id ?? currentOrder?.teamId ?? '',
         teamName: teamName(currentTeam),
       };
       try {
-        await props.onRecordPick(props.candidate!.id);
+        await props.onRecordPick(frozenCandidate.id);
         const postSaveState = stateRef.current;
         if (!postSaveState.paused && postSaveState.phase === 'ANNOUNCE' && !props.paused) {
           dispatch({ type: 'GAVEL_HOME', recordedPick });
@@ -297,13 +304,22 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                   <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
                   <h2 className="mt-1 text-2xl font-bold">{props.candidate.name}</h2>
                   <p className="mb-3 text-sm">{props.candidate.position}</p>
+                  {props.candidateProfile ? (
+                    <PlayerProfilePopover player={props.candidateProfile} revealFull={true}>
+                      <span className="ballpark-press-button ballpark-press-sm ballpark-press-default mb-3">VIEW FULL PROFILE</span>
+                    </PlayerProfilePopover>
+                  ) : null}
                   <p className={`mb-3 border-4 p-3 font-bold ${props.candidate.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>
                     {props.candidate.consequence}
                   </p>
                   {props.candidate.privateNote ? <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p> : null}
                   {!props.candidate.blockReason && !props.paused && (
-                    <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mb-3" onClick={() => { reveal.cover(); dispatch({ type: 'ARM', candidateId: props.candidate!.id }); }}>
-                      COVER &amp; ARM
+                    <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mb-3" onClick={() => {
+                      armedCandidate.current = props.candidate;
+                      reveal.cover();
+                      dispatch({ type: 'ARM', candidateId: props.candidate!.id });
+                    }}>
+                      {props.draftActionLabel ?? 'COVER & ARM'}
                     </button>
                   )}
                 </>

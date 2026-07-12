@@ -46,7 +46,7 @@ export function buildFarmFogCard(input: {
     confidence: report.scoutConfidence,
     scoutName: report.scout.scoutName ?? 'YOUR SCOUT',
     scoutsCall: report.scoutedGrade.startsWith('A') || report.scoutedGrade.startsWith('B')
-      ? 'SCOUT’S CALL — KEEP HIM NEAR THE TOP OF YOUR LIST.'
+      ? 'SCOUT’S CALL — KEEP THIS PLAYER NEAR THE TOP OF YOUR LIST.'
       : 'SCOUT’S CALL — KNOW THE RISK BEFORE YOU USE THIS PICK.',
   };
 }
