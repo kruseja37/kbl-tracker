@@ -11,6 +11,7 @@ import { syncEngine } from '../../../utils/syncEngine';
 import {
   patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
+  SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
   type SnakeBoardSlotId,
   type SnakeSeatBoardRecord,
@@ -32,6 +33,7 @@ import {
   boardSlotPosition,
   buildTaxCoreRows,
   isCandidateEligibleForBoardSlot,
+  refitBoardSlots,
   type DeskCandidate,
 } from '../components/snake/desk/deskModel';
 import {
@@ -43,6 +45,7 @@ import {
   resolveLockedSeat,
 } from '../components/snake/desk/deskRoomModel';
 import type { DeskWhatIf } from '../components/snake/desk/WhatIfSandbox';
+import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import { guideForAskedPick as buildAskedPickGuide } from '../components/snake/trade/tradeGuideModel';
 
@@ -270,6 +273,7 @@ export default function SnakeCompanion() {
         id: entry.playerId,
         name: fullName(entry.stored.firstName, entry.stored.lastName).toUpperCase(),
         position: entry.position,
+        eligiblePositions: entry.eligiblePositions,
         advisorWorth: entry.price,
         iv: entry.price,
         marginalTax,
@@ -277,7 +281,7 @@ export default function SnakeCompanion() {
         archetypeChip: locked.archetypeName,
         fitWord: fitWord({ player: entry, priorities: locked.priorities, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
-        riskReason: risk ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE HIM BEFORE YOUR TURN.` : 'NO CLUB IS LIKELY TO TAKE HIM BEFORE YOUR TURN.',
+        riskReason: risk ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE THIS PLAYER BEFORE YOUR TURN.` : 'NO CLUB IS LIKELY TO TAKE THIS PLAYER BEFORE YOUR TURN.',
         legalFinishLine: !finish.feasible ? 'THIS PICK LEAVES NO LEGAL 22.' : `MONEY LEFT AFTER SAVING ENOUGH TO FINISH YOUR TEAM: $${Math.round(finish.legalFinishCushion).toLocaleString()}.`,
         boardFallout: Object.entries(board.slots).find(([, id]) => id === entry.playerId)?.[0]
           ? `FITS YOUR BOARD — ${Object.entries(board.slots).find(([, id]) => id === entry.playerId)?.[0]} SLOT`
@@ -286,7 +290,7 @@ export default function SnakeCompanion() {
         drafted: unavailable.has(entry.playerId),
       };
     });
-    const brokenSlots = Object.entries(board.slots).filter(([, id]) => unavailable.has(id)).map(([slot]) => slot as SnakeBoardSlotId);
+    const brokenSlots = SNAKE_BOARD_SLOT_IDS.filter((slotId) => !board.slots[slotId] || unavailable.has(board.slots[slotId]));
     const planBill = brokenSlots.length ? null : evaluateSnakePlan({
       boardPlayerIds: Object.values(board.slots), players: deskPlayers, budget: pool.tierCap,
       baseCaps: pool.luxuryCaps, realTeamCount: leagueTeams.length, capIdentity: locked.capIdentity,
@@ -326,16 +330,25 @@ export default function SnakeCompanion() {
     }
   }, [board, getMlbDraftSession, ownDeviceId, refreshSession, session]);
 
-  const reorder = useCallback((position: DeskCandidate['position'], orderedIds: readonly string[]) => {
-    if (!board) return;
+  const reorder = useCallback((view: SnakeRankingView, orderedIds: readonly string[]) => {
+    if (!board || !deskState) return;
     const frozen = new Set(board.rankings.frozenPlayerIds ?? []);
     orderedIds.forEach((id) => frozen.add(id));
+    const rankings: SnakeSeatBoardRecord['rankings'] = view === 'OVERALL'
+      ? { ...board.rankings, global: [...orderedIds], frozenPlayerIds: [...frozen] }
+      : {
+          ...board.rankings,
+          byPosition: { ...board.rankings.byPosition, [view]: [...orderedIds] },
+          frozenPlayerIds: [...frozen],
+        };
+    const refit = refitBoardSlots({ rankings, candidates: deskState.candidates, unavailablePlayerIds: unavailable });
     void saveBoard({
       ...board,
-      rankings: { ...board.rankings, byPosition: { ...board.rankings.byPosition, [position]: [...orderedIds] }, frozenPlayerIds: [...frozen] },
+      slots: refit.slots as SnakeSeatBoardRecord['slots'],
+      rankings,
       revision: board.revision + 1,
     });
-  }, [board, saveBoard]);
+  }, [board, deskState, saveBoard, unavailable]);
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!board || !deskState || !pool || !team || !session) return;
@@ -415,10 +428,12 @@ export default function SnakeCompanion() {
     currentPick={session.pickOrder[session.currentPickIndex]?.pick ?? session.currentPickIndex + 1}
     order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({ pick: slot.pick, teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? 'CLUB' }))}
     ticker={ticker}
+    message={message}
     onSignOut={() => { setSession(null); setMessage('THIS DEVICE IS COVERED. CLAIM IT AGAIN TO RETURN.'); }}
     privateDesk={<PrivateDesk
       candidates={deskState.candidates}
       rankings={board.rankings.byPosition ?? {}}
+      overallRankings={board.rankings.global ?? []}
       boardSlots={board.slots}
       brokenSlots={deskState.brokenSlots}
       planBill={deskState.planBill}
@@ -426,7 +441,8 @@ export default function SnakeCompanion() {
       taxCoreRows={deskState.taxCoreRows}
       slotDepth={deskState.slotDepth}
       whatIf={whatIf?.view ?? null}
-      onReorder={reorder}
+      onReorder={(position, orderedIds) => reorder(position, orderedIds)}
+      onReorderOverall={(orderedIds) => reorder('OVERALL', orderedIds)}
       onStartWhatIf={startWhatIf}
       onKeepWhatIf={() => { if (whatIf) void saveBoard(whatIf.board); setWhatIf(null); }}
       onRevertWhatIf={() => setWhatIf(null)}

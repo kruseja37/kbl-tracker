@@ -3776,3 +3776,11 @@ position. Reordering either view immediately refits the 22-slot plan and recalcu
 money and legality consequences. Drafted or retired players backfill every saved team board without
 revealing another team's private information. The implementation must preserve scarce-role
 feasibility, especially catcher depth and the required `SP/RP` swing slot.
+
+## 2026-07-12 — Snake private work is team-first and may happen off-clock
+
+The live pick owner and selected private desk are separate concepts. On the shared device, any club
+may select its covered private desk and work on its board off-clock, but only the live pick owner may
+arm or record a player. A new live pick returns the shared device to that club under cover. Approved
+companions remain pinned to their claimed team and may perform the same overall/position refits
+under existing freshness and own-board-only write guards.

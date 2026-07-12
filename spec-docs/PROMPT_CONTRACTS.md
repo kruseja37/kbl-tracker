@@ -30752,3 +30752,15 @@ saved team board backfills after picks without requiring private reveal. No
 team-first selector, chemistry/ledger, farm redesign, manifest, franchise,
 schedule, staffing, auction, or schema work.
 <!-- ===== END CONTRACT: SNAKE-MOCK-2A ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2B ===== -->
+# SNAKE-MOCK-2B — TEAM-FIRST PRIVATE SEATS AND OFF-CLOCK BOARDS
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2B_2026-07-12.md`. The public room
+stays tied to the live pick while the covered private desk can select any club;
+off-clock clubs may edit only their own persisted board but cannot draft. The
+approved companion gains Slice 2A overall/position/refit parity under its
+existing own-board and freshness guards. No chemistry, new money ledger, farm
+redesign, manifest, franchise, schedule, transport, auth, auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2B ===== -->

@@ -43,6 +43,37 @@ Final verification:
 
 Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate and will occur after the complete mock-draft program is assembled.
 
+## Slice 2B — team-first private seats and off-clock boards
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2B_2026-07-12.md`
+
+Built:
+
+- Separate live-pick ownership from the selected private desk on the shared main device.
+- Select any club from the branded room controls; every switch removes the prior private DOM and opens the next club covered.
+- Allow off-clock player inspection, overall/position reorder, 22-slot refit, what-if work, and a fixed-buyer private trade guide while withholding the draft action.
+- Keep exact-player selection scoped per club and repair it when that club, player availability, or stored player data changes.
+- Return the main device to the new on-clock club, covered, whenever the live pick advances.
+- Give approved companions Slice 2A overall/position/secondary/refit parity under the existing claimed-team and stale-write guards.
+- Surface stale/revoked companion write failures instead of silently storing the message off-screen.
+- Remove the remaining visible hardcoded player pronouns from the companion risk read.
+
+Independent audit findings fixed:
+
+1. A stale or revoked companion board save updated internal message state but the pinned companion frame never rendered it, producing a silent failure.
+2. The controlled MLB team-switch cancellation also fired for the farm room's public-only Club Lens, so merely viewing another public roster could cancel an armed farm pick.
+3. A controlled team switch during `ANNOUNCE` cleared the hold timer but left the reducer stuck on `KEEP HOLDING`; the switch now releases the gavel before returning to review.
+
+Final verification:
+
+- Focused privacy/main-page/companion gate: 5 files / 35 tests passed.
+- Completed snake, recap, desk, companion, farm, performance, trade, and auction regression gate: passed.
+- Final main/farm/companion ritual gate after audit repairs: 4 files / 33 tests passed.
+- Production build: passed before the final narrow ritual repair; final post-repair build is part of the checkpoint gate.
+- `git diff --check`: clean.
+
+Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate.
+
 ## Slice 1B — final recap and durable handoff
 
 Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`

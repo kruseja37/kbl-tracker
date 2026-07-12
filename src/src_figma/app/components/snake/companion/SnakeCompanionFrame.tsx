@@ -6,6 +6,7 @@ export function SnakeCompanionFrame(props: {
   order: readonly { pick: number; teamName: string }[];
   ticker: readonly string[];
   privateDesk: ReactNode;
+  message?: string | null;
   onSignOut: () => void;
 }) {
   return (
@@ -17,6 +18,7 @@ export function SnakeCompanionFrame(props: {
         </div>
         <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={props.onSignOut}>COVER THIS DEVICE</button>
       </header>
+      {props.message ? <p className="mb-4 border-4 border-[var(--ballpark-panel-border)] p-3 font-bold" role="status">{props.message}</p> : null}
       <section className="ballpark-panel mb-4" aria-label="Draft order">
         <p className="font-bold">CURRENT PICK {props.currentPick}</p>
         <div className="mt-2 flex gap-2 overflow-x-auto">{props.order.map((slot) => <span key={slot.pick} className="whitespace-nowrap border-2 border-[var(--ballpark-panel-border)] px-2 py-1 text-sm">#{slot.pick} {slot.teamName.toUpperCase()}</span>)}</div>

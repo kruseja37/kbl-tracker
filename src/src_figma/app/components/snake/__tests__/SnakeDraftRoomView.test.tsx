@@ -110,6 +110,109 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByText('Your top first baseman.')).not.toBeInTheDocument();
   });
 
+  it('keeps an armed public-only farm ritual alive across club-lens changes', async () => {
+    vi.useFakeTimers();
+    const onRecordPick = vi.fn();
+    render(<SnakeDraftRoomView {...props({ onRecordPick, onActiveSeatChange: undefined })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+    expect(screen.getByRole('button', { name: 'HOLD THE GAVEL' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'KODIAKS' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+    expect(screen.getByRole('button', { name: 'KEEP HOLDING' })).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(onRecordPick).toHaveBeenCalledWith('p1');
+  });
+
+  it('cancels the armed ritual when a controlled private seat switches clubs', () => {
+    const onActiveSeatChange = vi.fn();
+    render(<SnakeDraftRoomView {...props({ onActiveSeatChange })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+
+    expect(onActiveSeatChange).toHaveBeenCalledWith('b');
+    expect(screen.queryByRole('button', { name: 'HOLD THE GAVEL' })).not.toBeInTheDocument();
+    expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toBeInTheDocument();
+  });
+
+  it('cancels an announced ritual when a controlled private seat switches clubs', async () => {
+    vi.useFakeTimers();
+    const onActiveSeatChange = vi.fn();
+    const onRecordPick = vi.fn();
+    render(<SnakeDraftRoomView {...props({ onActiveSeatChange, onRecordPick })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+
+    expect(onActiveSeatChange).toHaveBeenCalledWith('b');
+    expect(screen.queryByRole('button', { name: 'KEEP HOLDING' })).not.toBeInTheDocument();
+    expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(onRecordPick).not.toHaveBeenCalled();
+  });
+
+  it('controls the private club, removes the old private DOM, and never arms an off-clock desk', () => {
+    const onActiveSeatChange = vi.fn();
+    const { rerender } = render(<SnakeDraftRoomView {...props({
+      privateDesk: <div>KODIAKS SECRET BOARD</div>,
+      onActiveSeatChange,
+      canDraftFromActiveSeat: true,
+    })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    expect(screen.getByText('KODIAKS SECRET BOARD')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+    expect(onActiveSeatChange).toHaveBeenCalledWith('b');
+
+    rerender(<SnakeDraftRoomView {...props({
+      activeSeatId: 'b',
+      candidate: { id: 'p2', name: 'Pat Pitcher', position: 'SP', consequence: 'Comets private consequence.', privateNote: 'COMETS SECRET NOTE' },
+      privateDesk: <div>COMETS SECRET BOARD</div>,
+      onActiveSeatChange,
+      canDraftFromActiveSeat: false,
+    })} />);
+    expect(screen.queryByText('KODIAKS SECRET BOARD')).not.toBeInTheDocument();
+    expect(screen.queryByText('COMETS SECRET BOARD')).not.toBeInTheDocument();
+    expect(screen.queryByText('COMETS SECRET NOTE')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL COMETS SEAT' }));
+    expect(screen.getByText('COMETS SECRET BOARD')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'DRAFT PLAYER' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'KODIAKS' }));
+    rerender(<SnakeDraftRoomView {...props({
+      activeSeatId: 'a',
+      privateDesk: <div>KODIAKS SECRET BOARD</div>,
+      onActiveSeatChange,
+      canDraftFromActiveSeat: true,
+    })} />);
+    expect(screen.queryByText('COMETS SECRET BOARD')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    expect(screen.getByRole('button', { name: 'DRAFT PLAYER' })).toBeInTheDocument();
+  });
+
+  it('selects the new on-clock private club and keeps it covered when the live pick advances', () => {
+    const { rerender } = render(<SnakeDraftRoomView {...props({ privateDesk: <div>KODIAKS SECRET BOARD</div> })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    rerender(<SnakeDraftRoomView {...props({
+      activeSeatId: 'b',
+      currentPickIndex: 1,
+      candidate: { id: 'p2', name: 'Pat Pitcher', position: 'SP', consequence: 'Comets consequence.' },
+      privateDesk: <div>COMETS SECRET BOARD</div>,
+    })} />);
+    expect(screen.queryByText('KODIAKS SECRET BOARD')).not.toBeInTheDocument();
+    expect(screen.queryByText('COMETS SECRET BOARD')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'REVEAL COMETS SEAT' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Comets' })).toBeInTheDocument();
+  });
+
   it('keeps the revealed desk open when the selected candidate changes', () => {
     const { rerender } = render(<SnakeDraftRoomView {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));

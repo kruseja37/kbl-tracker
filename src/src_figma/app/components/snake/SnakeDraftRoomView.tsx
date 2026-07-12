@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { Eye, EyeOff, HelpCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 import { useSeatReveal } from '../../hooks/useSeatReveal';
@@ -53,6 +53,7 @@ export interface SnakeDraftRoomViewProps {
   rostersByTeamId: Readonly<Record<string, readonly SnakePublicRosterPlayer[]>>;
   ownedPicksByTeamId: Readonly<Record<string, readonly number[]>>;
   activeSeatId: string | null;
+  canDraftFromActiveSeat?: boolean;
   candidate: SnakeReviewCandidate | null;
   candidateProfile?: Player | null;
   draftActionLabel?: string;
@@ -75,6 +76,7 @@ export interface SnakeDraftRoomViewProps {
   onCorrectLatest: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
   onPrivateSeatRevealedChange?: (revealed: boolean) => void;
+  onActiveSeatChange?: (teamId: string) => void;
   onDraftComplete?: () => void | Promise<void>;
 }
 
@@ -106,6 +108,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     lensId,
   });
   stateRef.current = state;
+
+  useLayoutEffect(() => {
+    setLensId(props.activeSeatId ?? props.teams[0]?.id ?? null);
+  }, [props.activeSeatId, props.teams]);
 
   const cancelHold = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
@@ -179,7 +185,16 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   }, [props.currentPickIndex, props.order.length]);
 
   const selectLens = (teamId: string) => {
+    if (props.onActiveSeatChange && teamId !== props.activeSeatId) {
+      cancelHold();
+      armedCandidate.current = null;
+      if (stateRef.current.phase === 'ARM' || stateRef.current.phase === 'ANNOUNCE') {
+        if (stateRef.current.phase === 'ANNOUNCE') dispatch({ type: 'GAVEL_RELEASE' });
+        dispatch({ type: 'NEXT_TURN', candidateId: props.candidate?.id ?? null });
+      }
+    }
     setLensId(teamId);
+    props.onActiveSeatChange?.(teamId);
     soundPlayer.play('nav');
   };
 
@@ -196,7 +211,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
 
   const startHold = () => {
     const frozenCandidate = armedCandidate.current;
-    if (state.phase !== 'ARM' || state.paused || !frozenCandidate) return;
+    if (props.canDraftFromActiveSeat === false || state.phase !== 'ARM' || state.paused || !frozenCandidate) return;
     completedHold.current = false;
     dispatch({ type: 'GAVEL_DOWN' });
     holdTimer.current = setTimeout(async () => {
@@ -346,7 +361,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                     {props.candidate.consequence}
                   </p>
                   {props.candidate.privateNote ? <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p> : null}
-                  {!props.candidate.blockReason && !props.paused && (
+                  {!props.candidate.blockReason && !props.paused && props.canDraftFromActiveSeat !== false && (
                     <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mb-3" onClick={() => {
                       armedCandidate.current = props.candidate;
                       reveal.cover();

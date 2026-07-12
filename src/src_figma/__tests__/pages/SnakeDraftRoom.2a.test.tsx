@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
   saveRoom: vi.fn(),
+  guideAsk: vi.fn(),
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -20,6 +21,16 @@ vi.mock('../../utils/snakeSounds', () => ({
 vi.mock('../../../engines/snakeGuideTrade', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../engines/snakeGuideTrade')>();
   return { ...actual, primeSnakeGuideSeatingProof: vi.fn() };
+});
+vi.mock('../../app/components/snake/trade/tradeGuideModel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/trade/tradeGuideModel')>();
+  return {
+    ...actual,
+    guideForAskedPick: (input: Parameters<typeof actual.guideForAskedPick>[0]) => {
+      mocks.guideAsk(input);
+      return actual.guideForAskedPick(input);
+    },
+  };
 });
 vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
@@ -129,7 +140,10 @@ function renderRoom(source: LeagueBuilderMlbDraftSession) {
 }
 
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
-  beforeEach(() => mocks.saveRoom.mockReset().mockImplementation(async (next) => next));
+  beforeEach(() => {
+    mocks.saveRoom.mockReset().mockImplementation(async (next) => next);
+    mocks.guideAsk.mockReset();
+  });
   afterEach(() => cleanup());
 
   test('reconciles three saved boards in one write without revealing any private seat', async () => {
@@ -160,5 +174,59 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const afterPosition = mocks.saveRoom.mock.calls[1][0] as LeagueBuilderMlbDraftSession;
     expect(afterPosition.seatBoards?.a.rankings.byPosition?.C?.slice(0, 2)).toEqual(['a-replacement', 'gone-c']);
     expect(afterPosition.seatBoards?.a.slots.C).toBe('a-replacement');
+  });
+
+  test('edits only an explicitly revealed off-clock board, fixes its trade-guide buyer, and restores the live draft path', async () => {
+    const source = session(false);
+    const originalA = structuredClone(source.seatBoards!.a);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' }));
+    const alternate = (await screen.findAllByRole('button', { name: /^SELECT / }))[1];
+    const selectedId = alternate.getAttribute('data-player-id')!;
+    const selectedPlayer = players.find((row) => row.id === selectedId)!;
+    const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
+    fireEvent.click(alternate);
+    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    expect(screen.queryByRole('button', { name: 'DRAFT PLAYER' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    const saved = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
+    expect(saved.seatBoards?.a).toEqual(originalA);
+    expect(saved.seatBoards?.b.rankings.global).not.toEqual(source.seatBoards?.b.rankings.global);
+    expect(new Set(Object.values(saved.seatBoards!.b.slots))).toHaveLength(22);
+
+    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 2' }));
+    await waitFor(() => expect(mocks.guideAsk).toHaveBeenCalledWith(expect.objectContaining({ buyerTeamId: 'b', targetPick: 2 })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    expect(await screen.findByRole('button', { name: 'DRAFT PLAYER' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' }));
+    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+  });
+
+  test('a recorded live pick selects the new on-clock club and opens its private seat covered', async () => {
+    renderRoom(session(false));
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).completedPicks).toHaveLength(1);
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
   });
 });
