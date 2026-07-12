@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
   pull: vi.fn(),
   init: vi.fn(),
   flush: vi.fn(),
+  auth: {
+    user: { email: "scorekeeper@example.com" } as { email: string } | null,
+    isAuthenticated: true,
+    error: null as string | null,
+  },
   syncStatus: {
     state: "idle",
     lastPullAt: 0,
@@ -25,10 +30,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../hooks/useAuth", () => ({
   useAuth: () => ({
-    user: { email: "scorekeeper@example.com" },
-    isAuthenticated: true,
+    user: mocks.auth.user,
+    isAuthenticated: mocks.auth.isAuthenticated,
     isLoading: false,
-    error: null,
+    error: mocks.auth.error,
     signIn: mocks.signIn,
     signOut: mocks.signOut,
   }),
@@ -81,6 +86,9 @@ describe("SyncModal diagnostics status", () => {
     mocks.init.mockResolvedValue(undefined);
     mocks.flush.mockResolvedValue(undefined);
     mocks.pull.mockResolvedValue(undefined);
+    mocks.auth.user = { email: "scorekeeper@example.com" };
+    mocks.auth.isAuthenticated = true;
+    mocks.auth.error = null;
     mocks.syncStatus.state = "idle";
     mocks.syncStatus.pendingCount = 0;
     mocks.syncStatus.error = null;
@@ -205,5 +213,20 @@ describe("SyncModal diagnostics status", () => {
     const icon = container.querySelector("svg");
 
     expect(icon).toHaveStyle({ color: "#FFFF44" });
+  });
+
+  test("keeps the extracted login form behavior on the cloud sync modal", async () => {
+    mocks.auth.user = null;
+    mocks.auth.isAuthenticated = false;
+    mocks.signIn.mockResolvedValue(undefined);
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.getByText("Sign in to sync data across devices.")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "scorekeeper@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
+
+    await waitFor(() => expect(mocks.signIn).toHaveBeenCalledWith("scorekeeper@example.com", "secret"));
   });
 });

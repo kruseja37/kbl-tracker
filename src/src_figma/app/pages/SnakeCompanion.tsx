@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
@@ -8,9 +8,17 @@ import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../engines/rosterNeed';
 import * as phaseFlags from '../../../utils/franchisePhase2Flags';
 import { syncEngine } from '../../../utils/syncEngine';
-import type { LeagueBuilderMlbDraftSession, SnakeBoardSlotId, SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
+import {
+  patchMlbDraftSessionSeatBoard,
+  patchMlbDraftSessionSnakeCompanions,
+  type LeagueBuilderMlbDraftSession,
+  type SnakeBoardSlotId,
+  type SnakeSeatBoardRecord,
+} from '../../../utils/leagueBuilderStorage';
+import { useAuth } from '../../../hooks/useAuth';
 import { useLeagueBuilderData, toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { CompanionClaimScreen } from '../components/snake/companion/CompanionClaimScreen';
+import { CompanionSignInScreen } from '../components/snake/companion/CompanionSignInScreen';
 import { SnakeCompanionFrame } from '../components/snake/companion/SnakeCompanionFrame';
 import { startCompanionFreshness } from '../components/snake/companion/companionFreshness';
 import {
@@ -18,7 +26,6 @@ import {
   claimForDevice,
   COMPANION_STALE_COPY,
   submitCompanionClaim,
-  updateApprovedCompanionBoard,
 } from '../components/snake/companion/companionModel';
 import { PrivateDesk } from '../components/snake/desk/PrivateDesk';
 import {
@@ -42,6 +49,7 @@ import { guideForAskedPick as buildAskedPickGuide } from '../components/snake/tr
 const SEASON_NUMBER = 1;
 const DEVICE_KEY = 'kbl-snake-companion-device-id';
 const FRESHNESS_MS = 5_000;
+const NO_OPEN_ROOM_COPY = 'NO OPEN SNAKE ROOM FOUND ON THIS ACCOUNT.';
 
 function snakeEnabled(): boolean {
   const enabled = (phaseFlags as typeof phaseFlags & { isSnakeDraftV1Enabled?: () => boolean }).isSnakeDraftV1Enabled;
@@ -61,15 +69,47 @@ function fullName(firstName: string, lastName: string): string {
 }
 
 export default function SnakeCompanion() {
+  const auth = useAuth();
   const {
     leagues, teams, players, isLoading, error,
-    getRegisteredPool, getMlbDraftSession, saveMlbDraftSession,
+    getRegisteredPool, getMlbDraftSession, refresh,
   } = useLeagueBuilderData();
   const [ownDeviceId] = useState(deviceId);
   const [session, setSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
   const [pool, setPool] = useState<Awaited<ReturnType<typeof getRegisteredPool>>>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
+  const [initialPull, setInitialPull] = useState<'idle' | 'pulling' | 'complete' | 'error'>('idle');
+  const [pullAttempt, setPullAttempt] = useState(0);
+  const [roomAvailability, setRoomAvailability] = useState<'checking' | 'open' | 'empty'>('checking');
+  const pulledUserId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const userId = auth.user?.id ?? null;
+    if (!auth.isAuthenticated || !userId) {
+      pulledUserId.current = null;
+      setInitialPull('idle');
+      setRoomAvailability('checking');
+      return;
+    }
+    if (pulledUserId.current === userId) return;
+    pulledUserId.current = userId;
+    let cancelled = false;
+    setInitialPull('pulling');
+    setMessage(null);
+    void syncEngine.pull({ throwOnError: true })
+      .then(refresh)
+      .then(() => {
+        if (!cancelled) setInitialPull('complete');
+      })
+      .catch((cause) => {
+        if (cancelled) return;
+        pulledUserId.current = null;
+        setMessage(cause instanceof Error ? cause.message : String(cause));
+        setInitialPull('error');
+      });
+    return () => { cancelled = true; };
+  }, [auth.isAuthenticated, auth.user?.id, pullAttempt, refresh]);
 
   const findDeviceSession = useCallback(async () => {
     for (const league of leagues) {
@@ -79,10 +119,28 @@ export default function SnakeCompanion() {
     return null;
   }, [getMlbDraftSession, leagues, ownDeviceId]);
 
+  const hasOpenRoom = useCallback(async () => {
+    for (const league of leagues) {
+      const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
+      if (/^\d{4}$/.test(candidate?.snakeCompanions?.roomCode ?? '')) return true;
+    }
+    return false;
+  }, [getMlbDraftSession, leagues]);
+
   useEffect(() => {
-    if (isLoading) return;
+    if (!auth.isAuthenticated || initialPull !== 'complete' || isLoading) return;
+    let cancelled = false;
+    setRoomAvailability('checking');
+    void hasOpenRoom()
+      .then((open) => { if (!cancelled) setRoomAvailability(open ? 'open' : 'empty'); })
+      .catch((cause) => { if (!cancelled) setMessage(cause instanceof Error ? cause.message : String(cause)); });
+    return () => { cancelled = true; };
+  }, [auth.isAuthenticated, hasOpenRoom, initialPull, isLoading]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || initialPull !== 'complete' || isLoading) return;
     void findDeviceSession().then(setSession).catch((cause) => setMessage(cause instanceof Error ? cause.message : String(cause)));
-  }, [findDeviceSession, isLoading]);
+  }, [auth.isAuthenticated, findDeviceSession, initialPull, isLoading]);
 
   const refreshSession = useCallback(async () => {
     await syncEngine.pull();
@@ -91,12 +149,15 @@ export default function SnakeCompanion() {
       setSession(fresh);
     } else {
       setSession(await findDeviceSession());
+      const open = await hasOpenRoom();
+      setRoomAvailability(open ? 'open' : 'empty');
     }
-  }, [findDeviceSession, getMlbDraftSession, session]);
+  }, [findDeviceSession, getMlbDraftSession, hasOpenRoom, session]);
 
   useEffect(() => {
+    if (!auth.isAuthenticated || initialPull !== 'complete') return;
     return startCompanionFreshness({ pullAndRefresh: refreshSession, intervalMs: FRESHNESS_MS });
-  }, [refreshSession]);
+  }, [auth.isAuthenticated, initialPull, refreshSession]);
 
   useEffect(() => {
     if (!session) { setPool(null); return; }
@@ -105,18 +166,36 @@ export default function SnakeCompanion() {
 
   const claimDesk = useCallback(async (gmName: string, roomCode: string) => {
     setMessage(null);
-    for (const league of leagues) {
-      const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
-      if (candidate?.snakeCompanions?.roomCode !== roomCode) continue;
-      const result = submitCompanionClaim(candidate, { deviceId: ownDeviceId, gmName, roomCode });
-      if (!result.ok || !result.session) { setMessage(result.message); return; }
-      const saved = await saveMlbDraftSession(result.session);
-      setSession(saved);
-      setMessage(result.message);
-      return;
+    try {
+      await syncEngine.pull({ throwOnError: true });
+      let foundOpenRoom = false;
+      for (const league of leagues) {
+        const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
+        if (/^\d{4}$/.test(candidate?.snakeCompanions?.roomCode ?? '')) foundOpenRoom = true;
+        if (candidate?.snakeCompanions?.roomCode !== roomCode) continue;
+        const result = submitCompanionClaim(candidate, { deviceId: ownDeviceId, gmName, roomCode });
+        if (!result.ok || !result.session?.snakeCompanions) { setMessage(result.message); return; }
+        const nextCompanions = result.session.snakeCompanions;
+        const saved = await patchMlbDraftSessionSnakeCompanions({
+          leagueId: candidate.leagueId,
+          seasonNumber: candidate.seasonNumber,
+          patch: () => nextCompanions,
+        });
+        setSession(saved);
+        setMessage(result.message);
+        return;
+      }
+      setMessage(foundOpenRoom ? 'THAT ROOM CODE DOES NOT MATCH.' : NO_OPEN_ROOM_COPY);
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
     }
-    setMessage('THAT ROOM CODE DOES NOT MATCH.');
-  }, [getMlbDraftSession, leagues, ownDeviceId, saveMlbDraftSession]);
+  }, [getMlbDraftSession, leagues, ownDeviceId]);
+
+  const signOut = useCallback(async () => {
+    await auth.signOut();
+    setSession(null);
+    setMessage(null);
+  }, [auth.signOut]);
 
   const approved = session ? approvedClaimForDevice(session, ownDeviceId) : null;
   const activeClaim = session ? claimForDevice(session, ownDeviceId) : null;
@@ -226,17 +305,26 @@ export default function SnakeCompanion() {
 
   const saveBoard = useCallback(async (nextBoard: SnakeSeatBoardRecord) => {
     if (!session || !board) return;
-    const current = await getMlbDraftSession(session.leagueId, session.seasonNumber);
-    if (!current) { setMessage(COMPANION_STALE_COPY); return; }
-    const result = updateApprovedCompanionBoard({
-      session: current, deviceId: ownDeviceId, expectedSessionRevision: session.revision ?? 0,
-      expectedBoardRevision: board.revision, board: nextBoard,
-    });
-    if (!result.ok || !result.session) { setMessage(result.message); await refreshSession(); return; }
-    const saved = await saveMlbDraftSession(result.session);
-    setSession(saved);
-    setMessage('SAVED.');
-  }, [board, getMlbDraftSession, ownDeviceId, refreshSession, saveMlbDraftSession, session]);
+    try {
+      await syncEngine.pull({ throwOnError: true });
+      const current = await getMlbDraftSession(session.leagueId, session.seasonNumber);
+      if (!current) { setMessage(COMPANION_STALE_COPY); return; }
+      const currentApproval = approvedClaimForDevice(current, ownDeviceId);
+      if (!currentApproval) { setMessage('MAIN-DEVICE APPROVAL IS REQUIRED.'); await refreshSession(); return; }
+      const saved = await patchMlbDraftSessionSeatBoard({
+        leagueId: current.leagueId,
+        seasonNumber: current.seasonNumber,
+        teamId: currentApproval.teamId,
+        board: nextBoard,
+        expectedBoardRevision: board.revision,
+      });
+      setSession(saved);
+      setMessage('SAVED.');
+    } catch {
+      setMessage(COMPANION_STALE_COPY);
+      await refreshSession();
+    }
+  }, [board, getMlbDraftSession, ownDeviceId, refreshSession, session]);
 
   const reorder = useCallback((position: DeskCandidate['position'], orderedIds: readonly string[]) => {
     if (!board) return;
@@ -300,10 +388,20 @@ export default function SnakeCompanion() {
   }, [pickValueChart, seatingProofInput, session]);
 
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
+  if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
+  if (!auth.isAuthenticated) return <CompanionSignInScreen error={auth.error} onSignIn={auth.signIn} />;
+  if (initialPull === 'pulling' || initialPull === 'idle') return <main className="ballpark-page"><p>PULLING YOUR LEAGUES…</p></main>;
+  if (initialPull === 'error') return <main className="ballpark-page"><section className="ballpark-panel"><p role="alert">{message ?? 'COULD NOT PULL YOUR LEAGUES.'}</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-3" onClick={() => { pulledUserId.current = null; setInitialPull('idle'); setPullAttempt((attempt) => attempt + 1); }}>TRY AGAIN</button></section></main>;
   if (isLoading) return <main className="ballpark-page"><p>OPENING THE COMPANION…</p></main>;
   if (error) return <main className="ballpark-page"><p className="uppercase">{error}</p></main>;
   if (!approved || !team || !session) {
-    return <CompanionClaimScreen pending={activeClaim?.status === 'pending'} message={message} onClaim={claimDesk} />;
+    return <CompanionClaimScreen
+      pending={activeClaim?.status === 'pending'}
+      message={message ?? (roomAvailability === 'empty' ? NO_OPEN_ROOM_COPY : null)}
+      accountEmail={auth.user?.email ?? ''}
+      onSignOut={signOut}
+      onClaim={claimDesk}
+    />;
   }
   if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">OPEN THIS CLUB'S DESK ON THE MAIN DEVICE FIRST.</p></section></main>;
 
@@ -339,13 +437,6 @@ export default function SnakeCompanion() {
         sessionRevision={session.revision ?? 0}
         onAsk={askGuide}
       />}
-    />}
-    tradeGuide={<SnakeTradeGuide
-      teams={leagueTeams.map((entry) => ({ id: entry.id, name: entry.name }))}
-      fixedBuyerTeamId={team.id}
-      pickValueChart={pickValueChart}
-      sessionRevision={session.revision ?? 0}
-      onAsk={askGuide}
     />}
   />;
 }

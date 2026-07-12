@@ -6,7 +6,6 @@ export function SnakeCompanionFrame(props: {
   order: readonly { pick: number; teamName: string }[];
   ticker: readonly string[];
   privateDesk: ReactNode;
-  tradeGuide: ReactNode;
   onSignOut: () => void;
 }) {
   return (
@@ -27,7 +26,6 @@ export function SnakeCompanionFrame(props: {
         {props.ticker.length ? props.ticker.map((line) => <p key={line} className="mt-1 text-sm">{line}</p>) : <p className="mt-1 text-sm">NO PICKS RECORDED YET.</p>}
       </section>
       <section className="ballpark-panel mb-4">{props.privateDesk}</section>
-      <section className="ballpark-panel">{props.tradeGuide}</section>
     </main>
   );
 }

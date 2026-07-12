@@ -2058,6 +2058,41 @@ export async function patchMlbDraftSessionSnakeCompanions(input: {
   });
 }
 
+/**
+ * Companion board writer: replace only one seat's board after checking that
+ * seat's revision. Session-level draft progress is deliberately not part of
+ * the optimistic-lock check because picks may advance while a GM edits a board.
+ */
+export async function patchMlbDraftSessionSeatBoard(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  teamId: string;
+  board: SnakeSeatBoardRecord;
+  expectedBoardRevision: number;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  let revisionConflict = false;
+  const saved = await updateMlbDraftSessionAtomically(
+    input.leagueId,
+    input.seasonNumber ?? 1,
+    (current) => {
+      const currentBoard = current.seatBoards?.[input.teamId];
+      if (!currentBoard || currentBoard.revision !== input.expectedBoardRevision) {
+        revisionConflict = true;
+        return current;
+      }
+      return {
+        ...current,
+        seatBoards: { ...current.seatBoards, [input.teamId]: input.board },
+        revision: (current.revision ?? 0) + 1,
+      };
+    },
+  );
+  if (revisionConflict) {
+    throw new Error(`Seat board ${input.teamId} changed before it could be saved.`);
+  }
+  return saved;
+}
+
 function mergeFreshSeatBoards(
   fresh: LeagueBuilderMlbDraftSession['seatBoards'],
   incoming: LeagueBuilderMlbDraftSession['seatBoards'],
