@@ -6,9 +6,9 @@ Generated: 2026-06-19
 
 | Leg | Seed | Games Simulated | Total Scheduled Games | Stopped Early | Final Digest |
 | --- | --- | ---: | ---: | --- | --- |
-| Baseline | lsim-h2-baseline | 60 | 60 | false | 12637840:61e18afb |
-| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12724789:6760ceaa |
-| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12724789:6760ceaa |
+| Baseline | lsim-h2-baseline | 60 | 60 | false | 12721898:511c041c |
+| Determinism A | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12811603:ea55b394 |
+| Determinism B | lsim-h2-baseline-determinism | 60 | 60 | n/a | 12811603:ea55b394 |
 
 Determinism same-seed byte-identical end-state: **PASS**
 
