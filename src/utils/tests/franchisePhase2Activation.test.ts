@@ -94,17 +94,17 @@ describe('franchise Phase-2 activation', () => {
     expect(getters.map((getter) => getter())).toEqual(Array(getters.length).fill(false));
   });
 
-  test('snake draft POC follows the house activation pattern but compiles on for viability testing', async () => {
-    expect(isSnakeDraftPocEnabled()).toBe(true);
+  test('snake draft POC follows the house activation pattern and compiles OFF (retired from view; the real snake draft shipped)', async () => {
+    expect(isSnakeDraftPocEnabled()).toBe(false);
 
     await saveFranchisePhase2ActivationRecord({
       globalEnabled: null,
-      flagOverrides: { snakeDraftPoc: false },
+      flagOverrides: { snakeDraftPoc: true },
     });
-    expect(isSnakeDraftPocEnabled()).toBe(false);
-
-    setSnakeDraftPocEnabledForTests(true);
     expect(isSnakeDraftPocEnabled()).toBe(true);
+
+    setSnakeDraftPocEnabledForTests(false);
+    expect(isSnakeDraftPocEnabled()).toBe(false);
   });
 
   test('a persisted global activation record flips getters after hydrate', async () => {

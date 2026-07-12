@@ -245,14 +245,11 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
   });
 
-  test("offers the isolated snake POC beside the existing start button when the same readiness gate passes", async () => {
+  test("the retired snake POC button no longer renders (the real snake draft shipped; POC flag compiles OFF)", async () => {
     render(<LeagueBuilderDraftSetup />);
 
-    const snakeStart = await screen.findByRole("button", { name: /START SNAKE DRAFT \(POC\)/i });
-    await waitFor(() => expect(snakeStart).toBeEnabled(), { timeout: 5000 });
-    fireEvent.click(snakeStart);
-
-    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/snake-draft?leagueId=league-page");
+    await screen.findByRole("button", { name: /START THE DRAFT/i });
+    expect(screen.queryByRole("button", { name: /START SNAKE DRAFT \(POC\)/i })).not.toBeInTheDocument();
   });
 
   test("CUT2-1 flips THE FLOOR status in-session after locking the pool", async () => {
@@ -812,9 +809,9 @@ describe("LeagueBuilderDraftSetup", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /RESUME DRAFT/i }));
     await waitFor(() => {
-      // D1 repairs shared completion/resume detection; the current route contract remains the
-      // established auction fallback until the live traditional-draft lane replaces it.
-      expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=0&reserveK=0.65");
+      // An in-progress snake draft resumes in THE ROOM — re-entering setup's GO would
+      // overwrite the saved session (walkthrough finding, 2026-07-11).
+      expect(mockNavigate).toHaveBeenCalledWith("/snake-room?leagueId=league-page");
     });
   });
 
