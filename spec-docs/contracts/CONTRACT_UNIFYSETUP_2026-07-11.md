@@ -86,3 +86,114 @@ No git write commands. Spec-first. STOPs: any characterized auction fixture that
 the slim profile panel; any need to change snakeSetup/seatBoards shapes; any engine
 gap. Builder report appended here: file:line map, gate outputs, copy inventory,
 auditor attack list.
+
+---
+
+## BUILDER REPORT — BLOCKED AT PRE-CHANGE FIREWALL (2026-07-11)
+
+**Verdict:** BLOCKED. No production code or test files were changed. The required
+pre-change `LeagueBuilderDraftSetup` firewall is red in a solo-file rerun on a
+failure that is not named in the current characterized-flake list. Per
+`UNKNOWN = STOP`, implementation did not begin and no fixture/assertion was
+changed to make the firewall convenient.
+
+### File:line map
+
+- No implementation changes.
+- Failure seam: `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.testUtils.ts:327-330`
+  (`waitForExtractableOption` times out because the requested option never
+  becomes available within 12 seconds).
+- This report is the only tracked-file change.
+
+### Pre-change firewall output
+
+Command:
+
+```text
+NODE_ENV= npx vitest run --silent=passed-only \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.setup.test.tsx \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.money.test.tsx \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.board.test.tsx \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.universe.test.tsx \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.RankYourBoardZone.test.tsx
+```
+
+Real summary:
+
+```text
+Test Files  1 failed | 5 passed (6)
+Tests       1 failed | 108 passed (109)
+FAIL LeagueBuilderDraftSetup.poolLock.test.tsx
+  reroll advances the deterministic generation nonce without converting roster priority into hard keeps
+AssertionError: expected undefined to be defined
+at LeagueBuilderDraftSetup.testUtils.ts:329
+```
+
+Required solo rerun:
+
+```text
+NODE_ENV= npx vitest run --silent=passed-only \
+  src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx
+```
+
+Real summary:
+
+```text
+Test Files  1 failed (1)
+Tests       1 failed | 20 passed (21)
+FAIL LeagueBuilderDraftSetup.poolLock.test.tsx
+  quality-center changes preserve user-added hard keeps and manual exclusions
+AssertionError: expected undefined to be defined
+at LeagueBuilderDraftSetup.testUtils.ts:329
+```
+
+The failure moved between two tests across the combined and solo-file runs,
+but the solo-file result is still red and this exact file/test condition is not
+listed among the current characterized solo-green flakes. That makes the
+auction behavior baseline unknown rather than a green firewall.
+
+### Gates 1-5
+
+Not run. The contract requires the characterized firewall early and mandates a
+STOP on UNKNOWN. Running implementation gates after a red pre-change firewall
+would erase the ability to attribute later failures.
+
+### Copy inventory
+
+None. No UI copy was added, removed, or changed.
+
+### Auditor attack list
+
+1. Reproduce the pre-change `LeagueBuilderDraftSetup.poolLock.test.tsx` timeout
+   from base `8f6c215a` / contract-only HEAD `dfe8faca` with no product diff.
+2. Determine whether the moving timeout is an accepted new characterized flake
+   or a real baseline regression in pool regeneration/option availability.
+3. If ruled a flake, ratify the exact solo verification protocol before
+   re-dispatching UNIFYSETUP; do not weaken assertions or pin a convenient
+   fixture as part of this lane.
+4. Re-run the full six-file firewall green before allowing any UNIFYSETUP code
+   change.
+
+---
+
+## AMENDMENT 1 (captain ruling on the firewall STOP, 2026-07-11)
+The STOP is upheld and the cause is identified: the machine is concurrently running
+three other xhigh Codex lanes (other threads). Under that load the
+LeagueBuilderDraftSetup family times out non-deterministically EVEN SOLO — the captain
+re-ran poolLock twice on the untouched base: run 1 fully GREEN 21/21 (proving no
+baseline regression), run 2 red on two DIFFERENT tests. Moving failures + intermittent
+full greens under load = contention flake, not a regression.
+
+RATIFIED FIREWALL PROTOCOL (this lane, this environment):
+1. A PRE-EXISTING characterized file (the LeagueBuilderDraftSetup family,
+   franchiseManualSmokeFixture, franchiseOffseasonGuards async family) counts GREEN if
+   ANY of up to 3 solo attempts passes the file fully. Record every attempt's real
+   output.
+2. This grace applies ONLY to those pre-existing files — NEVER to tests you write or
+   migrate in this lane; yours must be deterministically green (design them with
+   generous waits, not tight timers).
+3. An identical failure on 3 consecutive solo attempts = real red = STOP.
+4. Note the machine-load context in your report so the auditor re-runs accordingly.
+Resume from the firewall (it now passes under this protocol — the captain's run 1 is
+the evidence) and build the contract as written.
