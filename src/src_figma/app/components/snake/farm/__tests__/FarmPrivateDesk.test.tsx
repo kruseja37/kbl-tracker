@@ -49,7 +49,7 @@ describe('S6 farm fog', () => {
       onChoose={onChoose}
     />);
 
-    expect(screen.getByText(/YOUR SCOUT:/)).toBeInTheDocument();
+    expect(screen.getByText(/YOUR SCOUT · JO SCOUT:/i)).toBeInTheDocument();
     expect(screen.getByText(/YOUR SCOUT LIKES MARA DIAZ/)).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/POWER 97|CONTACT 96|SPEED 95|FIELDING 94|ARM 93|999,999|\bIV\b|TRUE COST|SAFE TO WAIT|LIKELY GONE/);
     fireEvent.click(screen.getByRole('button', { name: /Mara Diaz/i }));
@@ -62,5 +62,37 @@ describe('S6 farm fog', () => {
     const weak = buildFarmFogCard({ prospect: player, scout: { scoutId: 'weak', scoutName: 'Weak', accuracyModifier: -35 }, seed: 'variance' });
     expect({ grade: strong.scoutedGrade, range: strong.gradeRange, confidence: strong.confidence })
       .not.toEqual({ grade: weak.scoutedGrade, range: weak.gradeRange, confidence: weak.confidence });
+  });
+
+  test('shows one compact ranking view, planned class, and separate drafted/planned money', () => {
+    const shortstop = buildFarmFogCard({ prospect: { ...prospect(), secondaryPosition: '2B' }, scout: undefined, seed: 'one' });
+    const catcher = buildFarmFogCard({ prospect: { ...prospect(), id: 'lee', firstName: 'Ana', lastName: 'Lee', primaryPosition: 'C' }, scout: undefined, seed: 'two' });
+    const onReorder = vi.fn();
+    render(<FarmPrivateDesk
+      cards={[shortstop, catcher]}
+      selectedId={shortstop.id}
+      slotPick={7}
+      slotSalary={25_000}
+      farmMoneyLeft={200_000}
+      advisorLog={[]}
+      board={{
+        overall: ['diaz', 'lee'], byPosition: { SS: ['diaz'], '2B': ['diaz'], C: ['lee'] },
+        frozenProspectIds: [], plannedProspectIds: ['diaz', 'lee'], revision: 0,
+      }}
+      remainingTurns={2}
+      moneyLedger={{ draftedCount: 1, draftedSpend: 25_000, moneyLeft: 200_000, plannedCount: 2, futureSlotCost: 40_000, moneyAfterOwedSlots: 160_000 }}
+      onChoose={vi.fn()}
+      onReorder={onReorder}
+    />);
+
+    expect(screen.getByRole('button', { name: 'OVERALL' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '2B' })).toBeInTheDocument();
+    expect(screen.getByText(/DRAFTED 1 · SPENT \$25,000 · LEFT \$200,000/)).toBeInTheDocument();
+    expect(screen.getByText(/PLAN 2\/2 · OWED \$40,000 · AFTER \$160,000/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Planned farm class')).toHaveTextContent('Mara Diaz');
+
+    fireEvent.click(screen.getByRole('button', { name: '2B' }));
+    expect(screen.getByLabelText('Scouted prospect board')).toHaveTextContent('Mara Diaz');
+    expect(screen.getByLabelText('Scouted prospect board')).not.toHaveTextContent('Ana Lee');
   });
 });

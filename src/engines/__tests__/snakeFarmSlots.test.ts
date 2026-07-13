@@ -4,6 +4,7 @@ import {
   buildFarmSlotTable,
   createFarmSnakeSession,
   executeFarmGuidePackage,
+  buildFarmMoneyLedger,
   farmPickSalary,
   validateFarmPickTrade,
 } from '../snakeFarmSlots';
@@ -56,6 +57,23 @@ describe('S6 farm slot salaries', () => {
       pickOrder: session.pickOrder.map((slot) => slot.pick === 1 ? { ...slot, teamId: 'b' } : slot),
     };
     expect(farmPickSalary(traded, 1)).toBe(30_000);
+  });
+
+  test('keeps drafted and planned money distinct after a pick ownership trade', () => {
+    const source = {
+      ...farmSession(),
+      currentPickIndex: 1,
+      completedPicks: [{ round: 1, pick: 1, teamId: 'a', playerId: 'p1', settledSalary: 30_000 }],
+    };
+    const before = buildFarmMoneyLedger(source, 'a', 100_000);
+    const traded = {
+      ...source,
+      pickOrder: source.pickOrder.map((slot) => slot.pick === 4 ? { ...slot, teamId: 'b' } : slot),
+    };
+    const after = buildFarmMoneyLedger(traded, 'a', 100_000);
+
+    expect(before).toEqual({ draftedCount: 1, draftedSpend: 30_000, moneyLeft: 70_000, plannedCount: 1, futureSlotCost: 10_000, moneyAfterOwedSlots: 60_000 });
+    expect(after).toEqual({ draftedCount: 1, draftedSpend: 30_000, moneyLeft: 70_000, plannedCount: 0, futureSlotCost: 0, moneyAfterOwedSlots: 70_000 });
   });
 
   test('creates the farm session once from the completed MLB session and freezes its table', () => {

@@ -132,6 +132,36 @@ export function farmPickSalary(session: LeagueBuilderMlbDraftSession, absolutePi
   return salary!;
 }
 
+export interface FarmMoneyLedger {
+  draftedCount: number;
+  draftedSpend: number;
+  moneyLeft: number;
+  plannedCount: number;
+  futureSlotCost: number;
+  moneyAfterOwedSlots: number;
+}
+
+/** Public frozen-slot money only. Candidate ordering never changes these amounts. */
+export function buildFarmMoneyLedger(
+  session: LeagueBuilderMlbDraftSession,
+  teamId: string,
+  farmBudget: number,
+): FarmMoneyLedger {
+  const drafted = session.completedPicks.filter((pick) => pick.teamId === teamId);
+  const draftedSpend = drafted.reduce((sum, pick) => sum + farmPickSalary(session, pick.pick), 0);
+  const futureSlots = session.pickOrder.slice(session.currentPickIndex).filter((slot) => slot.teamId === teamId);
+  const futureSlotCost = futureSlots.reduce((sum, slot) => sum + farmPickSalary(session, slot.pick), 0);
+  const moneyLeft = farmBudget - draftedSpend;
+  return {
+    draftedCount: drafted.length,
+    draftedSpend,
+    moneyLeft,
+    plannedCount: futureSlots.length,
+    futureSlotCost,
+    moneyAfterOwedSlots: moneyLeft - futureSlotCost,
+  };
+}
+
 function ownershipAfterTrade(input: {
   session: LeagueBuilderMlbDraftSession;
   buyerTeamId: string;

@@ -109,6 +109,34 @@ Final verification:
 
 Status: **INDEPENDENTLY APPROVED WITH ONE TEST-HARNESS HANG RECORDED**. JK browser acceptance remains the sole product gate.
 
+## Slice 2D — farm board parity under scouting fog
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2D_2026-07-12.md`
+
+Built:
+
+- Optional backward-compatible farm seat boards containing prospect ids/order only.
+- Per-team scout-conditioned overall and position rankings, including stored secondary/two-way eligibility.
+- Deterministic planned farm class, overall/position reorder, and all-seat backfill with rankings byte-stable.
+- Team-first covered farm desks with off-clock editing and live-owner-only drafting.
+- Separate drafted farm spend and planned frozen-slot obligation ledgers; no invented farm tax.
+- Pick-trade refit using frozen absolute slot salaries.
+- Legacy in-progress farm sessions seed once; completed sessions do not mutate to create unused boards.
+
+Independent audit findings fixed:
+
+1. Completed farm reload initially seeded private boards before recap/commit, creating an unnecessary post-completion session mutation.
+2. The live draft action needed a fail-closed guard until legacy board seeding finished.
+
+Final verification:
+
+- Independent farm board/money/desk/page/completion gate: 5 files / 20 tests passed.
+- Independent MLB room/recap/companion/performance/auction regression gate: 7 files / 64 tests passed.
+- Production build and `git diff --check`: passed.
+- Fog boundary inspection: persisted farm board holds ids/order only; no true grade, rating, IV, or rival scout read is stored or rendered.
+
+Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate.
+
 ## Slice 1B — final recap and durable handoff
 
 Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`

@@ -30776,3 +30776,14 @@ team-fit status, full compact profile, and existing Assistant-GM shape/chemistry
 status. No new calculations, farm redesign, manifest, franchise, schedule,
 auction, or schema work.
 <!-- ===== END CONTRACT: SNAKE-MOCK-2C ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2D ===== -->
+# SNAKE-MOCK-2D — FARM BOARD PARITY UNDER SCOUTING FOG
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2D_2026-07-12.md`. Add a persisted,
+team-specific fog-safe farm overall board, position views, planned class,
+team-first off-clock editing, frozen-slot money truth, and all-seat backfill.
+No true prospect ratings/IV, farm tax, chemistry claim, companion expansion,
+manifest, franchise, schedule, or auction change.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2D ===== -->

@@ -359,6 +359,15 @@ export interface SnakeSeatBoardRecord {
   revision: number;
 }
 
+/** FARM-only private ordering. Ids only: scout/true evaluation never persists here. */
+export interface FarmSeatBoardRecord {
+  overall: string[];
+  byPosition: Record<string, string[]>;
+  frozenProspectIds: string[];
+  plannedProspectIds: string[];
+  revision: number;
+}
+
 export interface SnakeVersionState {
   draftedPlayerIdByGroupId: Record<string, string>;
   retiredPlayerIdsByGroupId: Record<string, string[]>;
@@ -399,6 +408,8 @@ export interface LeagueBuilderMlbDraftSession {
   trades?: SnakeDraftTradeRecord[];
   /** S1A session-v2 additions. All are optional so old sessions remain readable in-place. */
   seatBoards?: Record<string, SnakeSeatBoardRecord>;
+  /** Optional so old FARM sessions seed deterministically on first use. */
+  farmSeatBoards?: Record<string, FarmSeatBoardRecord>;
   versionState?: SnakeVersionState;
   snakeSetup?: {
     /** Final trimmed pool: the chosen version card per human, plus all non-versioned picks. */

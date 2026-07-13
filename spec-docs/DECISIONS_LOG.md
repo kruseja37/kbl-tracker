@@ -3792,3 +3792,10 @@ the drafted roster reads only persisted picks. Each owns its own salary, full-ro
 money-left, and five-family chemistry display. Selected-player fit is a color signal beside exact
 current marginal tax, never a fabricated future tax charge. Persisted pick tax, plan tax, and
 candidate tax all use the session-locked archetype identity.
+
+## 2026-07-12 — Farm snake uses private fog-safe boards and frozen slot money
+
+Each farm club owns a covered scout-conditioned overall ranking, position views, and planned class.
+Only prospect ids and order persist; true ratings, true grade, IV, and rival scout reads stay outside
+the farm board record. Candidate ordering never changes money: salary remains attached to the
+absolute pick, including after valid pick trades.
