@@ -279,6 +279,17 @@ Allowed product files are exactly:
 Owned tests are the matching desk/trade/hook/worker tests plus existing main, companion, privacy, and
 performance integrations. Batch 2 engines and Batch 3 assistant/consequence engines are read-only.
 
+**Ratified stop-condition amendment (2026-07-13):** Batch 3's assistant-board hook currently collapses a
+proven engine-level infeasible optimize pin and a transport/worker failure into the same unavailable state.
+Batch 4B cannot truthfully render the required positive infeasible-pin `PASS` while also returning `null` on
+worker failure without preserving that distinction. Therefore the allowed product surface additionally
+includes `src/src_figma/app/components/snake/desk/useSnakeAssistantBoard.ts`, and the owned test surface
+includes its existing matching test. The change is additive state provenance only: expose the engine's
+infeasible reason when a current result proves it, keep the reason absent on construction/post/worker/stale
+failure, and do not change Batch 3 ranking, optimization, economics, privacy, request keys, or result content.
+Mutation-honest tests must prove an infeasible optimize pin can drive `PASS`, while worker error, malformed
+result, stale key, cover, revoke, and null request remain neutral and cannot drive `PASS`.
+
 Frozen implementation rulings:
 
 - The pure resolver may return exactly `TAKE_NOW`, `SAFE_TO_WAIT`, `TRADE_TO_PICK`, `PASS`, or `null`.
