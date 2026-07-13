@@ -2,10 +2,13 @@ import { useState, type ReactNode } from 'react';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
 import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
+import type { RosterNeedBreakdown } from '../../../../../engines/rosterNeed';
 import { AdvisorLog } from './AdvisorLog';
 import { BoardView } from './BoardView';
+import { AssistantGmStatusRow } from './DraftTruthStrip';
 import { RankingsView } from './RankingsView';
 import { WhatIfSandbox, type DeskWhatIf } from './WhatIfSandbox';
+import type { ChemistryStripRow } from './draftTruthModel';
 import type { AdvisorLogEntry, DeskCandidate, TaxCoreRow } from './deskModel';
 
 type DeskTab = 'BOARD' | 'RANKINGS' | 'LOG' | 'GUIDE';
@@ -17,6 +20,9 @@ export function PrivateDesk(props: {
   boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
   brokenSlots: readonly SnakeBoardSlotId[];
   planBill: SnakePlanBill | null;
+  planChemistry?: readonly ChemistryStripRow[];
+  draftedChemistry?: readonly ChemistryStripRow[];
+  assistantNeed?: RosterNeedBreakdown;
   advisorLog: readonly AdvisorLogEntry[];
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
@@ -36,13 +42,14 @@ export function PrivateDesk(props: {
   const [tab, setTab] = useState<DeskTab>('BOARD');
   return (
     <section data-testid="private-draft-desk">
+      {props.assistantNeed && props.draftedChemistry ? <AssistantGmStatusRow need={props.assistantNeed} chemistry={props.draftedChemistry} showHelp={props.showHelp ?? false} /> : null}
       <div className="mb-3 flex flex-wrap gap-2">
         {(['BOARD', 'RANKINGS', 'LOG', ...(props.tradeGuide ? ['GUIDE' as const] : [])] as const).map((next) => (
           <button key={next} className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => setTab(next)}>{next}</button>
         ))}
       </div>
       {tab === 'BOARD' && <>
-        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} showHelp={props.showHelp ?? false} />
+        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} planChemistry={props.planChemistry} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} showHelp={props.showHelp ?? false} />
         <div className="mt-4"><WhatIfSandbox candidates={props.candidates} boardSlots={props.boardSlots} whatIf={props.whatIf ?? null} onStart={props.onStartWhatIf} onKeep={props.onKeepWhatIf} onRevert={props.onRevertWhatIf} showHelp={props.showHelp ?? false} /></div>
       </>}
       {tab === 'RANKINGS' && <RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} resolveLegalFinishLine={props.resolveLegalFinishLine} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} isCandidateSelectable={props.isCandidateSelectable} />}

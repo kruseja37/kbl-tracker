@@ -293,11 +293,10 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(stored?.seatBoards?.[TEAM_IDS[0]]).toBeDefined();
     }, { timeout: 10_000 });
     expect(screen.getAllByText(/TRUE COST \$/).length).toBeGreaterThan(0);
-    for (const label of ['PLAN COST', 'PLAN TAX', 'PLAN CUSHION']) {
-      const text = screen.getByText(label).parentElement?.textContent ?? '';
-      expect(text).toMatch(/\$-?[\d,]+/);
-      expect(text).not.toMatch(/NaN|Infinity/);
-    }
+    const planTruth = screen.getByTestId('plan-truth-strip').textContent ?? '';
+    for (const label of ['SALARY', 'TAX', 'ALL-IN', 'MONEY LEFT']) expect(planTruth).toContain(label);
+    expect(planTruth).toMatch(/\$-?[\d,]+/);
+    expect(planTruth).not.toMatch(/NaN|Infinity/);
 
     fireEvent.click(screen.getByRole('button', { name: 'THE GUIDE' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
@@ -305,7 +304,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     await waitFor(() => expect(screen.getByLabelText('Shared trade guide').textContent).toMatch(/PICK|NO LEGAL GUIDE TRADE/i));
     fireEvent.click(screen.getByRole('button', { name: 'CLOSE' }));
 
-    const defaultName = screen.getByText('READ THE PICK').parentElement?.querySelector('h2')?.textContent;
+    const defaultName = screen.getByTestId('selected-player-card').querySelector('h2')?.textContent;
     expect(defaultName).toBeTruthy();
     const alternate = screen.getAllByRole('button', { name: /^SELECT / })
       .find((button) => !button.getAttribute('aria-label')?.endsWith(defaultName!.toUpperCase()));
@@ -315,7 +314,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
     const selectedFrozenIv = legs.pool!.players.find((row) => row.id === selectedId)!.iv;
     fireEvent.click(alternate!);
-    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+    expect(screen.getByTestId('selected-player-card').querySelector('h2')).toHaveTextContent(selectedName);
     expect(screen.getByRole('region', { name: 'Private seat' })).toHaveTextContent(selectedName);
     fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
@@ -337,7 +336,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL ROOMFIX CLUB 2 SEAT' }));
     await waitFor(() => {
-      const nextName = screen.getByText('READ THE PICK').parentElement?.querySelector('h2')?.textContent;
+      const nextName = screen.getByTestId('selected-player-card').querySelector('h2')?.textContent;
       expect(nextName).toBeTruthy();
       expect(nextName).not.toBe(selectedName);
     });

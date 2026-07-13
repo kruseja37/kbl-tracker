@@ -25,6 +25,43 @@ const candidate: DeskCandidate = {
 };
 
 describe('PrivateDesk', () => {
+  it('shows the distinct 22-player plan ledger, five chemistry families, and canonical Assistant GM status', () => {
+    const chemistry = [
+      { family: 'CMP' as const, word: 'Competitive' as const, count: 3, tier: 'L2' as const },
+      { family: 'SPI' as const, word: 'Spirited' as const, count: 5, tier: 'L2' as const },
+      { family: 'CRA' as const, word: 'Crafty' as const, count: 4, tier: 'L2' as const },
+      { family: 'SCH' as const, word: 'Scholarly' as const, count: 6, tier: 'L2' as const },
+      { family: 'DIS' as const, word: 'Disciplined' as const, count: 4, tier: 'L2' as const },
+    ];
+    render(<PrivateDesk
+      candidates={[candidate]}
+      rankings={{ SS: ['muraski'] }}
+      overallRankings={['muraski']}
+      boardSlots={{ SS: 'muraski' }}
+      brokenSlots={[]}
+      planBill={{ planCost: 500_000, planTax: 20_000, planCushion: 480_000, playerIds: Array.from({ length: 22 }, (_, index) => `p${index}`) }}
+      planChemistry={chemistry}
+      draftedChemistry={chemistry}
+      assistantNeed={{ missingPrimaries: ['C'], catcherCoverNeed: 1, pitcherNeed: 2, rotationDeficit: 1, bullpenDeficit: 1, closerDeficit: 1, hitterFloorNeed: 0, pitcherFloorNeed: 0, minimumAdditions: 3, infeasible: false }}
+      advisorLog={[]}
+      taxCoreRows={[]}
+      slotDepth={{ SS: 1 }}
+      onReorder={() => undefined}
+      onStartWhatIf={() => undefined}
+      onKeepWhatIf={() => undefined}
+      onRevertWhatIf={() => undefined}
+    />);
+
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('22-PLAYER PLAN');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('$500,000');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('$20,000');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('$520,000');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('$480,000');
+    for (const word of ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined']) expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent(word);
+    expect(screen.getByRole('region', { name: 'Assistant GM status' })).toHaveTextContent('SHAPE 3 OPEN');
+    expect(screen.queryByText(/SHAPE READS THE CANONICAL/)).not.toBeInTheDocument();
+  });
+
   it('shows one chosen overall or position ranking and routes each reorder to the matching persisted list', () => {
     const onReorder = vi.fn();
     const onReorderOverall = vi.fn();
@@ -131,5 +168,13 @@ describe('downward tax consequence copy (TAXSWING seam)', () => {
     render(<DeskCandidateCard candidate={{ ...candidate, marginalTax: -12345 }} />);
     expect(screen.getByText(/YOUR TAX BILL GOES DOWN \$12,345 WITH THIS PLAYER/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
+  });
+
+  it('renders unknown fit and money instead of partial-roster calculations', async () => {
+    const { DeskCandidateCard } = await import('../DeskCandidateCard');
+    render(<DeskCandidateCard candidate={{ ...candidate, consequencesKnown: false }} />);
+    expect(screen.getByText('TEAM FIT · FIT UNKNOWN')).toBeInTheDocument();
+    expect(screen.getByText('CURRENT TAX — · TRUE COST —')).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('$90');
   });
 });

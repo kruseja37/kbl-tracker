@@ -7,6 +7,8 @@ import type { Player } from '../../../../utils/leagueBuilderStorage';
 import { PressButton } from '../ballpark/BallparkKit';
 import { PlayerProfilePopover } from '../shared/PlayerProfilePopover';
 import { createSnakeRoomState, snakeRoomReducer } from './snakeRoomReducer';
+import { DraftTruthStrip } from './desk/DraftTruthStrip';
+import type { ChemistryStripRow, DraftMoneyLedger } from './desk/draftTruthModel';
 
 type HelpAwareRoomContent = ReactNode | ((showHelp: boolean) => ReactNode);
 
@@ -52,10 +54,12 @@ export interface SnakeDraftRoomViewProps {
   ticker: readonly SnakeTickerItem[];
   rostersByTeamId: Readonly<Record<string, readonly SnakePublicRosterPlayer[]>>;
   ownedPicksByTeamId: Readonly<Record<string, readonly number[]>>;
+  publicTruthByTeamId?: Readonly<Record<string, { ledger: DraftMoneyLedger; chemistry: readonly ChemistryStripRow[] }>>;
   activeSeatId: string | null;
   canDraftFromActiveSeat?: boolean;
   candidate: SnakeReviewCandidate | null;
   candidateProfile?: Player | null;
+  selectedPlayerCard?: ReactNode;
   draftActionLabel?: string;
   paused: boolean;
   soundsEnabled: boolean;
@@ -349,14 +353,15 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               {renderHelpAware(props.privateDesk)}
               {props.candidate ? (
                 <>
-                  <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
-                  <h2 className="mt-1 text-2xl font-bold">{props.candidate.name}</h2>
-                  <p className="mb-3 text-sm">{props.candidate.position}</p>
+                  {props.selectedPlayerCard ?? <>
+                    <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
+                    <h2 className="mt-1 text-2xl font-bold">{props.candidate.name}</h2>
+                    <p className="mb-3 text-sm">{props.candidate.position}</p>
                   {props.candidateProfile ? (
                     <PlayerProfilePopover player={props.candidateProfile} revealFull={true}>
                       <span className="ballpark-press-button ballpark-press-sm ballpark-press-default mb-3">VIEW FULL PROFILE</span>
                     </PlayerProfilePopover>
-                  ) : null}
+                  ) : null}</>}
                   <p className={`mb-3 border-4 p-3 font-bold ${props.candidate.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>
                     {props.candidate.consequence}
                   </p>
@@ -460,6 +465,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               {(lensId ? props.rostersByTeamId[lensId] : [])?.map((player) => <li key={player.id}>{player.position} · {player.name}</li>)}
               {(lensId ? props.rostersByTeamId[lensId] : [])?.length === 0 && <li>NO PICKS RECORDED YET.</li>}
             </ul>
+            {lensId && props.publicTruthByTeamId?.[lensId] ? (
+              <div className="mb-4"><DraftTruthStrip
+                title="DRAFTED ROSTER"
+                ledger={props.publicTruthByTeamId[lensId].ledger}
+                chemistry={props.publicTruthByTeamId[lensId].chemistry}
+                testId={`drafted-truth-${lensId}`}
+              /></div>
+            ) : null}
             <p className="text-xs font-bold text-[var(--ballpark-brass)]">OWNED, TRADEABLE PICKS</p>
             <p>{(lensId ? props.ownedPicksByTeamId[lensId] : [])?.join(', ') || 'NONE'}</p>
           </section>

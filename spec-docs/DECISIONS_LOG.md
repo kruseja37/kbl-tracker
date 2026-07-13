@@ -3784,3 +3784,11 @@ may select its covered private desk and work on its board off-clock, but only th
 arm or record a player. A new live pick returns the shared device to that club under cover. Approved
 companions remain pinned to their claimed team and may perform the same overall/position refits
 under existing freshness and own-board-only write guards.
+
+## 2026-07-12 — Snake plan truth and drafted-roster truth stay separate
+
+The draft room shows two canonical states. The 22-player plan reads only saved board membership;
+the drafted roster reads only persisted picks. Each owns its own salary, full-roster tax, all-in,
+money-left, and five-family chemistry display. Selected-player fit is a color signal beside exact
+current marginal tax, never a fabricated future tax charge. Persisted pick tax, plan tax, and
+candidate tax all use the session-locked archetype identity.

@@ -74,6 +74,41 @@ Final verification:
 
 Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate.
 
+## Slice 2C — money, tax, chemistry, and selected-player truth
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2C_2026-07-12.md`
+
+Built:
+
+- Separate real-time drafted-roster and 22-player-plan ledgers with salary, canonical full-roster tax, all-in cost, and money left.
+- Public Club Lens drafted ledger and five-family chemistry strip for every club.
+- Private plan ledger and five-family chemistry strip sourced from exact 22-slot membership.
+- Stable Competitive, Spirited, Crafty, Scholarly, Disciplined counts and potency tiers; unresolved legacy rosters show explicit unknowns.
+- Compact inline selected-player card with team logo, positions, age, bats/throws, arm slot, classified player archetype, personality, chemistry, traits, every non-zero rating, arsenal, current tax, true cost, and exact chemistry-family delta.
+- Green/yellow/red/unknown team-fit signals using the existing fit thresholds; exact current tax remains a separate number.
+- Compact Assistant-GM shape/chemistry row sourced from the canonical roster-need and chemistry models, with explanation behind Help.
+- Recorded-pick marginal tax now uses the session-locked archetype identity, matching candidate, plan, and recap truth.
+- Canonical legal-finish bill cache shared by public selected-player and private desk consumers.
+
+Independent audit findings fixed:
+
+1. The recorded pick receipt used mutable `Team.capIdentity` while candidate and plan calculations used the frozen session archetype.
+2. Missing persisted roster construction could make fit, tax, true cost, chemistry, and legal-finish reads appear exact from a partial roster.
+3. The first final-hardening edit declared the legal-finish cache in the farm component, crashing every real MLB room render with `ReferenceError`.
+4. The fallback selection path priced the same newly selected player twice, exceeding the production-scale legal-finish call budget.
+5. The performance test mixed its direct guide benchmark counter with the page-idle benchmark and could pass or fail by callback timing; the phases now reset explicitly.
+
+Final verification:
+
+- Independent model/card/private-desk/view/real-page/performance gate: 6 files / 49 tests passed.
+- Independent recap/completion/farm/companion/desk/auction regression gate: 10 files / 61 tests passed.
+- Production-scale reveal: 380 ms, one rational-room calculation, exactly 22 legal-finish calculations.
+- Production build: passed on final code.
+- `git diff --check`, temporary-trace grep, visible-pronoun grep, and theme review: clean.
+- The heavy registration integration still completed its small first test and then produced no output for 60 seconds in a quiet isolated run; it was terminated once. This is recorded as **NOT PASSED**, not treated as a product acceptance gate. The deterministic real page tests above cover the changed seams; JK's browser walk remains the product gate.
+
+Status: **INDEPENDENTLY APPROVED WITH ONE TEST-HARNESS HANG RECORDED**. JK browser acceptance remains the sole product gate.
+
 ## Slice 1B — final recap and durable handoff
 
 Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`

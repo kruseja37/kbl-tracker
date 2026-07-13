@@ -235,6 +235,7 @@ describe('PERFROOM production-scale call profile', () => {
     const revealStart = performance.now();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL PERFORMANCE CLUB 1 SEAT' }));
     await screen.findByTestId('private-draft-desk', {}, { timeout: 30_000 });
+    await waitFor(() => expect(engineProfile.rationalRoom).toBe(1), { timeout: 30_000 });
     console.info('PERFROOM_PROFILE reveal', JSON.stringify({
       revealMs: Math.round(performance.now() - revealStart),
       rationalRoomCalls: engineProfile.rationalRoom,
@@ -255,6 +256,7 @@ describe('PERFROOM production-scale call profile', () => {
       seatingProofInput: { clubs: [], pool: [], baseCaps: [], realTeamCount: 8 },
     });
     const directSearchMs = performance.now() - directStart;
+    resetCallCounts();
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${LEAGUE_ID}`]}><SnakeDraftRoom /></MemoryRouter>);
     await screen.findByTestId('snake-draft-room', {}, { timeout: 30_000 });
     await waitFor(() => expect(engineProfile.seatingProof).toBe(1), { timeout: 30_000 });

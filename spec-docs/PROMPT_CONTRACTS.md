@@ -30764,3 +30764,15 @@ approved companion gains Slice 2A overall/position/refit parity under its
 existing own-board and freshness guards. No chemistry, new money ledger, farm
 redesign, manifest, franchise, schedule, transport, auth, auction, or schema work.
 <!-- ===== END CONTRACT: SNAKE-MOCK-2B ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2C ===== -->
+# SNAKE-MOCK-2C — MONEY, TAX, CHEMISTRY, AND SELECTED-PLAYER TRUTH
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2C_2026-07-12.md`. Keep the
+22-player plan and drafted roster as separate canonical ledgers; show salary,
+tax, all-in, cap left, five chemistry families, selected-player chemistry delta,
+team-fit status, full compact profile, and existing Assistant-GM shape/chemistry
+status. No new calculations, farm redesign, manifest, franchise, schedule,
+auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2C ===== -->

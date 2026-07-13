@@ -58,6 +58,33 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('SECRET BOARD CONTENT')).toBeInTheDocument();
   });
 
+  it('keeps public drafted money and chemistry visible while private plan and selected truth stay absent until reveal', () => {
+    render(<SnakeDraftRoomView {...props({
+      publicTruthByTeamId: {
+        a: {
+          ledger: { rosterCount: 1, salary: 88_000, tax: 4_000, allIn: 92_000, moneyLeft: 908_000 },
+          chemistry: [
+            { family: 'CMP', word: 'Competitive', count: 1, tier: 'L1' },
+            { family: 'SPI', word: 'Spirited', count: 0, tier: 'L1' },
+            { family: 'CRA', word: 'Crafty', count: 0, tier: 'L1' },
+            { family: 'SCH', word: 'Scholarly', count: 0, tier: 'L1' },
+            { family: 'DIS', word: 'Disciplined', count: 0, tier: 'L1' },
+          ],
+        },
+      },
+      privateDesk: <div>PRIVATE PLAN $777,777</div>,
+      selectedPlayerCard: <div>PRIVATE FIT STRONG · CHEM 2→3</div>,
+    })} />);
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('$88,000');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive');
+    expect(screen.queryByText('PRIVATE PLAN $777,777')).not.toBeInTheDocument();
+    expect(screen.queryByText('PRIVATE FIT STRONG · CHEM 2→3')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    expect(screen.getByText('PRIVATE PLAN $777,777')).toBeInTheDocument();
+    expect(screen.getByText('PRIVATE FIT STRONG · CHEM 2→3')).toBeInTheDocument();
+  });
+
   it('puts the private desk first in the wide room layout and compacts the sticky ritual rail', () => {
     render(<SnakeDraftRoomView {...props()} />);
     const privateSeat = screen.getByRole('region', { name: 'Private seat' });

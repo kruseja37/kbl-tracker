@@ -31,6 +31,7 @@ export interface DeskCandidate extends DeskEligibilityCandidate {
   boardFallout?: string;
   construction: ConstructionPlayer;
   drafted?: boolean;
+  consequencesKnown?: boolean;
 }
 
 export interface BoardBackfillEvent {

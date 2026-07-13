@@ -50,6 +50,9 @@ import type {
   SnakeSeatBoardRecord,
   Team,
 } from '../../../utils/leagueBuilderStorage';
+import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
+import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
+import { resolveLockedSeat } from '../../app/components/snake/desk/deskRoomModel';
 import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
 
 const TEAM_IDS = ['a', 'b', 'c'] as const;
@@ -130,10 +133,10 @@ function session(withCompletedPick: boolean): LeagueBuilderMlbDraftSession {
   };
 }
 
-function renderRoom(source: LeagueBuilderMlbDraftSession) {
+function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: Team[]; pool?: RegisteredPool; players?: Player[] } = {}) {
   mocks.data = {
-    leagues: [league], teams, players, isLoading: false, error: null,
-    getRegisteredPool: vi.fn(async () => pool), getMlbDraftSession: vi.fn(async () => source),
+    leagues: [league], teams: overrides.teams ?? teams, players: overrides.players ?? players, isLoading: false, error: null,
+    getRegisteredPool: vi.fn(async () => overrides.pool ?? pool), getMlbDraftSession: vi.fn(async () => source),
     saveMlbDraftSession: vi.fn(async (next) => next),
   };
   return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
@@ -191,7 +194,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const selectedPlayer = players.find((row) => row.id === selectedId)!;
     const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
     fireEvent.click(alternate);
-    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
     fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
     expect(screen.queryByRole('button', { name: 'DRAFT PLAYER' })).not.toBeInTheDocument();
 
@@ -214,7 +217,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' }));
-    expect(screen.getByText('READ THE PICK').parentElement?.querySelector('h2')).toHaveTextContent(selectedName);
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
   });
 
   test('a recorded live pick selects the new on-clock club and opens its private seat covered', async () => {
@@ -228,5 +231,59 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).completedPicks).toHaveLength(1);
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
+  });
+
+  test('public drafted money and chemistry update after a persisted pick and its correction while the private plan stays distinct', async () => {
+    renderRoom(session(false));
+    await screen.findByTestId('snake-draft-room');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('0/22');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive0 · L1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    expect(await screen.findByTestId('plan-truth-strip')).toHaveTextContent('22/22');
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('1/22');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('$10,100');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive1 · L1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
+    fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('0/22');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive0 · L1');
+  });
+
+  test('records marginal tax with the session-locked archetype identity instead of mutable team identity', async () => {
+    const source = session(false);
+    source.snakeSetup!.clubs = source.snakeSetup!.clubs.map((club) => club.teamId === 'a' ? { ...club, archetypeId: 'murderers-row' } : club);
+    const identityTeams = teams.map((team) => team.id === 'a'
+      ? { ...team, capIdentity: { increase: [], decrease: ['POW'] } }
+      : team);
+    const identityPool: RegisteredPool = {
+      ...pool,
+      luxuryCaps: [{ group: 'hitters', stat: 'POW', topN: 1, cap: 1, penaltyCurve: 1, penaltyPer100: 100_000, minAdder: 1_000 }],
+    };
+    renderRoom(source, { teams: identityTeams, pool: identityPool });
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+
+    const saved = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
+    const pick = saved.completedPicks[0];
+    const pickedPlayer = players.find((entry) => entry.id === pick.playerId)!;
+    const normalized = normalizeAuctionLuxuryCapsForLeagueSize(identityPool.luxuryCaps, identityTeams.length);
+    const lockedIdentity = resolveLockedSeat({ team: identityTeams[0], session: source }).capIdentity;
+    const expected = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), lockedIdentity, normalized);
+    const mutable = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), identityTeams[0].capIdentity, normalized);
+    expect(expected).not.toBe(mutable);
+    expect(pick.marginalTax).toBe(expected);
   });
 });

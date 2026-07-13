@@ -1,6 +1,8 @@
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
 import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
 import { DeskCandidateCard } from './DeskCandidateCard';
+import { DraftTruthStrip } from './DraftTruthStrip';
+import { buildPlanLedger, type ChemistryStripRow } from './draftTruthModel';
 import type { DeskCandidate, TaxCoreRow } from './deskModel';
 
 export function BoardView(props: {
@@ -8,6 +10,7 @@ export function BoardView(props: {
   boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
   brokenSlots: readonly SnakeBoardSlotId[];
   planBill: SnakePlanBill | null;
+  planChemistry?: readonly ChemistryStripRow[];
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   resolveLegalFinishLine?: (candidateId: string) => string;
@@ -40,7 +43,9 @@ export function BoardView(props: {
           </div>
         ))}
       </div>
-      {props.planBill && (
+      {props.planBill && props.planChemistry ? (
+        <div className="mt-4"><DraftTruthStrip title="22-PLAYER PLAN" ledger={buildPlanLedger(props.planBill)} chemistry={props.planChemistry} testId="plan-truth-strip" /></div>
+      ) : props.planBill ? (
         <div className="mt-4 border-4 border-[var(--ballpark-brass)] p-3 text-center">
           <div className="grid grid-cols-3 gap-2">
             <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
@@ -49,7 +54,7 @@ export function BoardView(props: {
           </div>
           {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p> : null}
         </div>
-      )}
+      ) : null}
       <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
         <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
         <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p>
