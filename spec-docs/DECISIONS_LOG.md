@@ -3879,3 +3879,31 @@ rankings and contextual value, and shows the exact displaced player plus before/
 all-in, money-left, five chemistry families, fit, and legal-finish truth. Main and companion must return
 the same result. Cover, revoke, team switch, stale revisions, incomplete money, or worker failure remove
 the prior result and fail closed. No explanatory prose or pronouns appear outside Help.
+
+## 2026-07-13 — Snake public availability ensemble, viable scarcity, and action calls
+
+Availability remains public-model advice, not a probability claim. Run one deterministic `BASE` rival
+playout plus one `RIVAL_SECOND:<teamId>` local-sensitivity scenario for every distinct rival scheduled
+before the asking club's next pick. In that rival's scenario, its first intervening selection takes its
+second-highest legal, affordable, completion-safe choice; every other choice remains canonical. Stable
+team/pick order is mandatory. Stop at the asking club's next pick; do not simulate the asking club.
+
+A player is `SAFE TO WAIT` only when every valid scenario leaves that version group available,
+`LIKELY GONE` only when every valid scenario selects it before the asking turn, and `AT RISK` when the
+scenarios split. Missing next-pick truth, missing inputs, no scenarios, or engine failure is unavailable,
+never safe. Show the earliest threat through the latest threat or `YOUR #N`; do not display a numeric
+percentage until an empirical calibration program exists. Interested-club count is the number of unique
+rival team ids that select the version group in at least one scenario.
+
+Position scarcity counts version-unique players who are canonically applicable to the role and can be
+added while preserving that club's solvency and constructive legal finish. It reports viable people left,
+public clubs still needing the role, the next-turn viable cost range, and the contextual-worth drop to the
+best replacement (or `NO REPLACEMENT`). Raw card counts are not scarcity truth.
+
+The private action resolver is fail-closed and sparse. `PASS` requires an infeasible/insolvent pin or
+strict Pareto domination. `SAFE TO WAIT` requires assistant priority, a real next pick, known legal finish,
+and survival in every scenario. `TAKE NOW` additionally requires the asking club to own the live pick and
+the target to be gone/at-risk without an equivalent replacement. Off-clock, the same urgency may produce
+`TRADE TO #N` only with the latest viable destination before the earliest threat and a current Batch 2
+posted-value package. A trade action opens and prefills the guide; it never posts or executes. Any state
+outside these proofs emits no persistent advice.

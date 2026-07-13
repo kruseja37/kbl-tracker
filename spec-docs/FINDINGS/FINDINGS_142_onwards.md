@@ -380,3 +380,40 @@ own drafted players, use settled/frozen price truth, require an exact legal solv
 on main and companion. Replace the detached What-If with deterministic selected-player displacement and exact
 before/after consequences. Full Batch 3A/3B allowlists and adversarial gates are frozen in the Snake Intelligence
 contract.
+
+---
+
+### FINDING-155
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 4 pre-build trace
+**Status:** CONFIRMED-OPEN — availability/scarcity/action architecture contracted
+**File:** `src/engines/snakeRationalRoom.ts`; `src/src_figma/app/components/snake/desk/deskRoomModel.ts`; `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`; snake private-desk and trade-guide surfaces
+
+**Evidence:**
+1. `playSnakeRationalRoom` owns one greedy deterministic playout. A requested player is therefore either
+   selected by one predicted club or not selected at all, and `rationalBuyersBeforeTurn` is hard-coded to
+   `0` or `1`. The UI can consequently report `AT RISK · 0 CLUBS` even though risk and buyer pressure are
+   meant to describe the same public market.
+2. `riskFromPlayout` returns `SAFE_TO_WAIT` when the asking club has no later pick. Missing turn truth,
+   missing inputs, and zero valid scenarios are not safety evidence and must fail closed.
+3. `canonicalSnakeRoleDepth` counts cards, not version-unique people, and does not prove affordability or
+   constructive legal completion. `computeSnakeScarcity` deduplicates people but is not connected to the
+   private desk. The displayed role depth can therefore overstate usable supply while the better scarcity
+   input remains orphaned.
+4. The rational-room result contains no opportunity-cost cliff, scenario range, or actionable bridge. The
+   private desk can label risk but cannot convert an urgent player into a current, fair, executable guide
+   package. The trade guide still requires the GM to guess a destination pick.
+5. The repo already owns the required public inputs: current pick ownership/order, locked club archetypes,
+   public completed rosters, frozen pool identity and prices, canonical roster need/completion proof, and the
+   Batch 2 posted-value package search. No rival private board or fabricated probability is needed.
+
+**Impact:** Current risk copy presents a single guess as a market read, can call an unknowable state safe,
+and does not help a GM decide whether to take, wait, pass, or move to a specific pick. Position depth can
+also count unusable alternate cards as real replacements.
+
+**Required repair:** Use a deterministic public-information sensitivity ensemble, count distinct interested
+clubs, and expose categorical survival truth plus a pick range rather than an uncalibrated percentage.
+Compute version-unique, role-applicable, affordable, legal-finish supply and the replacement cliff. A pure
+decision resolver may emit `TAKE NOW`, `SAFE TO WAIT`, `TRADE TO #N`, or `PASS` only when its prerequisites
+are proved; a trade call must carry the current Batch 2 guide package and may only prefill the guide. Full
+Batch 4A/4B allowlists and adversarial gates are frozen in the Snake Intelligence contract.

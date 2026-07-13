@@ -214,9 +214,104 @@ write on view/select/optimize/revert; and private DOM/action removal on cover, r
 
 ### Batch 4 — Availability, pressure, cliffs, and action calls
 
-Allowed product files: `snakeRationalRoom.ts`, its worker/hook/adapter, snake desk/trade surfaces,
-and owned tests. Scenario outputs must be deterministic for identical inputs and must degrade to
-honest pending/unavailable copy rather than SAFE.
+#### Batch 4A — public scenario ensemble and viable scarcity
+
+Allowed product files are exactly:
+
+- `src/engines/snakeRationalRoom.ts`,
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`,
+- `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`, and
+- `src/src_figma/app/workers/snakeRationalRoom.worker.ts`.
+
+Owned tests are the existing matching engine, model, hook, and worker-contract tests. Canonical tax,
+roster-construction, seating proof, archetype, chemistry, storage, and trade engines are read-only.
+
+Frozen implementation rulings:
+
+- Replace the single-result market claim with a deterministic ensemble: one `BASE` scenario plus one
+  `RIVAL_SECOND:<teamId>` scenario for each distinct rival with a pick before the asking club's next
+  pick. Stable order is next-pick order, then team id. In a rival's sensitivity scenario, only that
+  club's first intervening selection skips its highest-ranked legal/affordable/completion-safe candidate
+  and takes its second; all later selections use the canonical chooser. Stop immediately before the
+  asking club's next selection. Never consume rival private rankings, boards, seat logs, companion state,
+  or correction history.
+- For each requested version group: `SAFE_TO_WAIT` means it survives every valid scenario;
+  `LIKELY_GONE` means it is selected before the asking turn in every valid scenario; `AT_RISK` means the
+  valid scenarios split. Return the earliest selecting pick and latest selecting pick, using the asking
+  club's `YOUR #N` as the upper bound when any scenario leaves it available. Return the number of unique
+  rival team ids selecting it in any scenario. Do not display or calculate a percentage.
+- A missing next pick, incomplete public input, nonfinite economics, zero valid scenarios, worker error,
+  stale request key, cover, revoke, or team switch returns explicit pending/unavailable output. It can
+  never become `SAFE_TO_WAIT`, `0 CLUBS`, or an old club's result.
+- Scarcity is per canonical role applicable to the selected player. Deduplicate alternate versions with
+  `deriveVersionGroupId`. A remaining person is viable only when the canonical role eligibility holds,
+  the relevant public club can afford the player, and the constructive seating proof still finds a legal
+  finish. Report viable people left, unique public clubs still needing that role, the cheapest/highest
+  viable cost reachable by the asking club before its next turn, and the contextual-worth drop to the
+  best viable replacement or `NO_REPLACEMENT`. Raw player-card count is forbidden.
+- The worker request/result key binds session id/revision, current pick/order/ownership, asking club,
+  locked public archetypes, settled public rosters/prices, frozen available version/price/worth signature,
+  caps/budgets, and requested players/roles. Identical inputs produce byte-equivalent ordered results.
+
+Mutation-honest gates must prove: the old one-playout/0-or-1 buyer implementation fails; all/mixed/none
+survival categories; no-next-pick and zero-scenario fail closed; earliest/latest/`YOUR #N` range; unique
+interested clubs across scenarios; stable scenario order; rival-private fields absent from the worker
+request; alternate-version deduplication; secondary catcher and SP/RP/CP applicability; unaffordable or
+legal-finish-breaking players excluded from supply; real replacement cliff/no-replacement; stale/private
+worker result removal; and main/companion-identical model input.
+
+#### Batch 4B — sparse decision resolver and current trade-guide bridge
+
+Allowed product files are exactly:
+
+- `src/src_figma/app/components/snake/desk/snakeDraftDecisionModel.ts` (new pure resolver),
+- `src/src_figma/app/components/snake/desk/useSnakeGuideRecommendation.ts` (new fail-closed hook),
+- `src/src_figma/app/workers/snakeGuideRecommendation.worker.ts` (new worker),
+- `src/src_figma/app/components/snake/desk/deskModel.ts`,
+- `src/src_figma/app/components/snake/desk/DeskCandidateRow.tsx`,
+- `src/src_figma/app/components/snake/desk/RankingsView.tsx`,
+- `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`,
+- `src/src_figma/app/components/snake/trade/tradeGuideModel.ts`,
+- `src/src_figma/app/components/snake/trade/SnakeTradeGuide.tsx`,
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`, and
+- `src/src_figma/app/pages/SnakeCompanion.tsx`.
+
+Owned tests are the matching desk/trade/hook/worker tests plus existing main, companion, privacy, and
+performance integrations. Batch 2 engines and Batch 3 assistant/consequence engines are read-only.
+
+Frozen implementation rulings:
+
+- The pure resolver may return exactly `TAKE_NOW`, `SAFE_TO_WAIT`, `TRADE_TO_PICK`, `PASS`, or `null`.
+  `PASS` requires either a selected-player optimize pin that cannot produce a legal solvent 22 or a
+  candidate strictly Pareto-dominated by an available replacement on contextual worth, true cost, fit,
+  chemistry consequence, and legal finish. Missing facts return `null`, not PASS.
+- `SAFE_TO_WAIT` requires the player to be in the current assistant priority set, a known next asking
+  pick, known legal/solvent consequence, and survival in every scenario. `TAKE_NOW` requires the same
+  priority/legality truth, current live-pick ownership, and `LIKELY_GONE` or `AT_RISK` with no equivalent
+  viable replacement before the next tier cliff. Otherwise the resolver returns `null`.
+- Off-clock urgency may return `TRADE_TO_PICK` only when the target is assistant-priority, legal/solvent,
+  gone/at-risk without an equivalent replacement, and the Batch 2 search returns a current package. The
+  target destination is the latest pick the asking club can acquire before the ensemble's earliest threat;
+  enumerate viable destinations from latest to earliest and keep the first current fair package. Carry the
+  exact buyer/seller, pick arrays, posted values, target pick, and session revision returned by the guide.
+- The guide worker receives a sanitized public session containing only the current id/revision, pick order,
+  current index, completed public picks, locked public setup/archetypes, and fields required by the verified
+  package search. It may not receive `seatBoards`, farm boards, private logs, companion claims/tokens,
+  correction history, or another club's private state. A key mismatch or ownership/revision change clears
+  the recommendation.
+- Clicking `TRADE TO #N` switches to and prefills the selected club's existing private guide with the exact
+  target/package. It does not post, nod, execute, persist, select another team, or arm/draft a player.
+  `TAKE NOW` may focus the existing selected-player draft action but cannot bypass live-owner arming and
+  commissioner persistence. Neutral `null` advice renders nothing and creates no log/activity entry.
+- Main and approved companion use the same resolver and sanitized guide path. Cover, revoke, team switch,
+  claim change, session revision change, or worker failure removes all prior advice and actions before paint.
+  Labels/values/states only; explanations remain behind Help.
+
+Mutation-honest gates must prove every action and every required negative: infeasible and Pareto PASS;
+unknown is not PASS; all-survive wait; live urgent take; off-clock urgent fair trade; no package/null; an
+equivalent replacement suppresses urgency; current owner/revision/package truth; latest viable destination;
+no auto-post/execute/persist/draft/log; sanitized worker payload; stale/private removal; main/companion parity;
+and the old manual-pick-only guide cannot satisfy the prefill test.
 
 ### Batch 5 — UI consolidation and final wiring
 
