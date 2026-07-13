@@ -3858,3 +3858,8 @@ smallest nonnegative posted-value gap before fewer pieces. Balancing return pick
 Execution rejects duplicate or overlapping picks, self-trades, target mismatches, stale ownership,
 and caller-tampered totals, then recomputes the current canonical values before writing. The shared
 farm `validateTrade` behavior is unchanged.
+
+Finite input must produce finite chart output even at JavaScript numeric extremes; cohort means use a
+scale-safe calculation rather than a naive sum. Both live registered-pool construction paths pass the
+league's explicit club count. `PoolConfig` may retain an inference fallback only for legacy/direct test
+callers, but live app registration must not infer club count from roster slots.

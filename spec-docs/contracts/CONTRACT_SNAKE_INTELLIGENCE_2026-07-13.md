@@ -85,8 +85,12 @@ Frozen Batch 2 implementation ruling:
   `lateFloor = max(1, round(expectedIV(draftPickCount) - replacementIV))`.
   `value(p) = round(max(lateFloor, expectedIV(p) - replacementIV))` for exactly every drafted pick.
   Flat and exact-floor pools must remain finite, positive, monotone, and deterministic.
-- Register-pool construction passes its explicit MLB slot count and club count; room and companion
-  pass `session.pickOrder.length` and the current league-team count. Map every direct test caller.
+- The cohort mean must be scale-safe: finite IV inputs, including repeated `Number.MAX_VALUE`, may not
+  overflow to `Infinity`/`NaN`. Clamp only at the numeric representation boundary; normal canonical IV
+  values must preserve the exact formula.
+- Both live register-pool callers pass their explicit MLB slot count and actual league club count;
+  room and companion pass `session.pickOrder.length` and the current league-team count. `PoolConfig`
+  may keep an inference fallback for legacy/direct test callers only. Map every direct chart caller.
 - Do not change shared `validateTrade`; farm uses it. MLB adds a directional check requiring
   `offerValue >= receiveValue` and retains the canonical 15% imbalance ceiling.
 - Search all equal-count one-, two-, and three-pick packages. Remove the first-count early exit.
@@ -98,7 +102,9 @@ Frozen Batch 2 implementation ruling:
   constructive legal finishes. Reject tampered totals rather than persisting caller values.
 - Exact product files for this batch are `src/engines/leagueConstruction.ts`,
   `src/engines/snakeGuideTrade.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, and
-  `src/src_figma/app/pages/SnakeCompanion.tsx`. Owned tests may change only in
+  `src/src_figma/app/pages/SnakeCompanion.tsx`; the audit-approved explicit-club-count repair also
+  allows `src/utils/leagueBuilderPoolRegistration.ts` and
+  `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`. Owned tests may change only in
   `src/engines/__tests__/leagueConstruction.test.ts`,
   `src/engines/__tests__/snakeEconomicsGuide.test.ts`,
   `src/src_figma/app/components/snake/trade/__tests__/tradeGuideModel.test.ts`,
@@ -108,6 +114,7 @@ Frozen Batch 2 implementation ruling:
   hand-pinned production values; underpay-within-15% rejection; all-size search beating the old
   early exit; gap-before-complexity; insufficient capital; brute-force parity; duplicate/overlap/
   self/target-mismatch rejection; stale ownership; and caller-tampered total rejection.
+- Add a finite-extreme chart gate and prove both live register-pool callers pass their actual club count.
 - Verification-only gates include `snakeFarmSlots.test.ts`, `SnakeTradeGuide.test.tsx`, room and
   companion integrations, auction register-pool tests, full build, and the full suite.
 

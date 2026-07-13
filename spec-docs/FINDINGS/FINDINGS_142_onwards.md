@@ -332,6 +332,10 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 4. The current chart is raw nth-player IV. Current-pool opportunity value can instead be derived
    deterministically as the one-round forward-cohort expected IV above the first undrafted cohort, with a
    positive late-pick floor derived from the final drafted-to-replacement gap.
+5. Hostile Batch 2 audit found two contract-level gaps in the first repair: naive summation can overflow
+   to `NaN` even when every IV is finite (for example two `Number.MAX_VALUE` rows), and `registerPool`
+   reconstructed club count with `ceil(totalSlots / 22)` rather than receiving the actual league club
+   count from both production registration callers.
 
 **Impact:** A forged equal-length package can change actual turn counts, and the live guide can recommend
 strategically weak packages or record caller-controlled values. This is a transaction-integrity defect,
