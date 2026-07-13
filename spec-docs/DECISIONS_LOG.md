@@ -3863,3 +3863,19 @@ Finite input must produce finite chart output even at JavaScript numeric extreme
 scale-safe calculation rather than a naive sum. Both live registered-pool construction paths pass the
 league's explicit club count. `PoolConfig` may retain an inference fallback only for legacy/direct test
 callers, but live app registration must not infer club count from roster slots.
+
+## 2026-07-13 — Snake assistant-board truth and direct player consequences
+
+The Asst GM Board is one shared, worker-backed, read-only derived 22 for both main and companion. It
+pins every player already drafted by the selected club, may additionally pin the selected available
+player for `OPTIMIZE AROUND`, and fills only from the current version-valid frozen pool. Completed picks
+carry settled salary; available players carry frozen IV. A result is shown only when all pins are honored
+and the canonical roster is exactly 22, unique, legal, and solvent. It has no persistence revision and
+cannot silently become My Board.
+
+The selected-player decision replaces the detached slot/player What-If. The engine tests every legal
+one-player displacement and complete canonical reassignment, chooses deterministically from the GM's
+rankings and contextual value, and shows the exact displaced player plus before/after salary, tax,
+all-in, money-left, five chemistry families, fit, and legal-finish truth. Main and companion must return
+the same result. Cover, revoke, team switch, stale revisions, incomplete money, or worker failure remove
+the prior result and fail closed. No explanatory prose or pronouns appear outside Help.

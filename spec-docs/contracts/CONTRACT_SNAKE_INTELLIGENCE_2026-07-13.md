@@ -120,10 +120,97 @@ Frozen Batch 2 implementation ruling:
 
 ### Batch 3 — Separate Asst GM Board and direct consequences
 
-Allowed product files: snake desk models/components, `pages/SnakeDraftRoom.tsx`,
-`pages/SnakeCompanion.tsx`, and the smallest reusable engine adapters/tests required. Derived board
-must be legal, solvent, available-only, and distinct from persisted My Board. Preserve current
-loading/fail-closed behavior.
+#### Batch 3A — shared derived intelligence core
+
+Allowed product files are exactly:
+
+- `src/engines/snakeAssistantBoard.ts` (new pure engine),
+- `src/src_figma/app/components/snake/desk/snakeDeskIntelligenceModel.ts` (new serializable adapter),
+- `src/src_figma/app/components/snake/desk/useSnakeAssistantBoard.ts` (new fail-closed hook), and
+- `src/src_figma/app/workers/snakeAssistantBoard.worker.ts` (new worker).
+
+Owned tests may be added only at the matching engine and desk test paths. Existing canonical tax,
+chemistry, legality, identity, Best-22, and roster-design engines are read-only in this slice.
+
+Frozen implementation rulings:
+
+- The candidate universe is the selected club's own completed MLB picks plus currently available,
+  version-valid players from the frozen active pool. Rival-drafted players and alternate versions of
+  selected/drafted identities are excluded. A drafted player's cost is the session's settled salary;
+  an available player's price/IV is the frozen pool value. Stored mutable player salary is never
+  allowed to replace either source.
+- Pin every completed pick owned by the selected club, plus the optional selected player for
+  `OPTIMIZE AROUND`, into the canonical 22 design slots through deterministic maximum matching using
+  `isDesignPlayerEligibleForSlot`. Then call `buildBest22Target`. A result is available only when it
+  contains exactly 22 unique, version-unique players, every required pin was honored, all non-owned
+  players remain available, the canonical roster is legal, and the plan is solvent. Any missing
+  input, dropped pin, partial build, stale result, or infeasible plan returns explicit pending or
+  unavailable state; it never returns a partial board.
+- Existing fit/current-need math from `computeOwnValue`, existing chemistry premium and GM preference
+  blend from `assembleBoard`, and the canonical Best-22 objective order the available candidates.
+  The GM's rankings are a soft preference only. Do not invent, store, or display a new assistant
+  score. Recompute the returned plan with `evaluateSnakePlan` and all five chemistry families with
+  `buildChemistryStrip` before exposing it.
+- The output is a new derived record with no board `revision`, storage writer, draft action, or trade
+  action. It can never be passed to the My Board optimistic-lock writer by structural typing.
+- Best-22 work runs off the UI thread. The request/result key binds session id and revision, private
+  team/seat/device identity, current My Board revision, frozen available/version signature, settled
+  and frozen prices, locked team archetype, and optional selected pin. A key mismatch, cover, revoke,
+  team switch, or worker failure clears prior output and renders pending/unavailable rather than stale
+  private truth.
+
+Mutation-honest gates must prove: own picks are pins; settled salary beats stored salary; frozen IV
+beats stored salary for available players; rival picks and alternate versions cannot enter; all 22
+are unique/legal/solvent; multi-position pin matching is deterministic; dropped pins and stale worker
+results fail closed; My Board is byte-unchanged; and identical main/companion inputs return identical
+derived results.
+
+#### Batch 3B — main/companion board view and selected-player consequences
+
+Allowed product files are exactly:
+
+- `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`,
+- `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`,
+- `src/src_figma/app/components/snake/desk/BoardView.tsx` only if the existing read-only board renderer
+  cannot label the derived view,
+- `src/src_figma/app/components/snake/desk/snakeDeskIntelligenceModel.ts`,
+- `src/src_figma/app/components/snake/desk/useSnakeAssistantBoard.ts`,
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`, and
+- `src/src_figma/app/pages/SnakeCompanion.tsx`.
+
+Owned tests are the matching desk component/model/hook tests plus existing room `2a`, companion `2b`,
+privacy, and performance integrations. `WhatIfSandbox.tsx` is not rendered after this slice but is not
+deleted until Batch 5 proves the replacement.
+
+Frozen implementation rulings:
+
+- `MY BOARD` remains the only persisted/editable board. `ASST GM BOARD` is visibly separate,
+  read-only, live, and may be viewed or optimized around the selected available player. Merely
+  viewing, selecting, switching views, or optimizing never persists, drafts, trades, or changes My
+  Board. Main and companion use the same shared request/result path; the companion may not fall back
+  to raw-price `advisorWorth`.
+- Replace the detached slot/player dropdown flow with consequences for the player already selected in
+  the pool/profile. If the player is already on My Board, report that state and offer no Keep action.
+  Otherwise evaluate every possible one-player displacement and canonical reassignment. Each candidate
+  result must contain 22 unique, version-unique players, a complete deterministic canonical-slot
+  matching, and pass `isLegalRoster`. Prefer the feasible displacement whose incumbent is lowest in
+  the GM's applicable position ranking, then overall ranking, then contextual worth, then canonical
+  slot/player id. Return the minimal reassignment and the exact displaced player. Never use the desk's
+  permissive FLEX/SWING shortcut as legality proof.
+- The selected-player card shows exact before/after salary, tax, all-in, money-left, all five chemistry
+  counts/tiers, displaced fit versus selected fit, and current-roster legal-finish consequences. Unknown
+  inputs render dashes/unavailable, never zero or SAFE. `KEEP ON MY BOARD` writes the fully validated
+  replacement through the existing selected seat/device optimistic revision; `REVERT` discards only the
+  preview. Keep must reject stale private identity or board/session revision and reload canonical truth.
+- Cover, revoke, team switch, and companion claim change remove the prior club's assistant board,
+  selected-player consequences, and action controls before paint. Off-clock private work remains
+  allowed; only the current pick owner may draft. No pronouns or inline explanations are displayed;
+  Help remains the only explanation surface.
+
+Mutation-honest gates must prove: main/companion parity; read-only assistant separation; optimize-around
+pinning; a multi-position case the old local-slot check falsely called legal; deterministic displacement;
+all exact financial/chemistry/legal-finish deltas; already-on-board behavior; stale Keep rejection; no
+write on view/select/optimize/revert; and private DOM/action removal on cover, revoke, or team switch.
 
 ### Batch 4 — Availability, pressure, cliffs, and action calls
 

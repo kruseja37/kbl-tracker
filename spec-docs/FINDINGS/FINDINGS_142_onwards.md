@@ -345,3 +345,38 @@ not merely a presentation problem.
 totals at execution; retain equal counts and the 15% imbalance ceiling; enforce seller protection; search
 all authorized 1–3 pick counts and minimize posted value gap before complexity. Keep shared farm validation
 unchanged. Exact math and test gates are frozen in Batch 2 of the Snake Intelligence contract.
+
+---
+
+### FINDING-154
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 3 pre-build trace
+**Status:** CONFIRMED-OPEN — shared assistant-board architecture contracted
+**File:** `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`; `src/src_figma/app/components/snake/desk/deskModel.ts`; canonical Best-22/legality/economics engines
+
+**Evidence:**
+1. Main builds contextual advisor worth through `computeOwnValue` and `assembleBoard`; companion sets
+   `advisorWorth` to raw frozen price. The two private devices therefore rank the same club/player pool
+   with different intelligence even though parity is canon.
+2. The only live persisted board is My Board. The repo owns a pin-capable `buildBest22Target`, canonical
+   identity construction, team archetype, current roster need, tax, chemistry, and legal-finish math, but
+   neither live page builds a separate derived assistant plan from those inputs.
+3. The current What-If lets the GM choose a slot and player, swaps at most two occupants, and declares
+   legality from local `isCandidateEligibleForBoardSlot` checks. That helper accepts every player in FLEX
+   and can accept pitchers in SWING, while canonical roster law requires FLEX hitters and a complete legal
+   22. The preview can therefore say the chosen slots work without proving the roster works.
+4. Both pages already possess the authoritative current inputs, but they mix price sources: completed picks
+   own settled salary, available players own frozen IV, and stored player salary is neither. A shared adapter
+   must preserve those sources before Best-22 construction.
+5. Best-22 construction is too expensive for synchronous render on the target iPad. The existing rational-risk
+   worker/hook establishes the fail-closed keyed-worker pattern, including stale-result rejection.
+
+**Impact:** The assistant intelligence is inconsistent by device, the requested Asst GM Board does not exist,
+and the current direct decision aid can affirm an illegal roster. A synchronous page-local implementation would
+also risk freezing the iPad and leaking stale private results across cover/team changes.
+
+**Required repair:** Build one pure derived assistant-board engine plus serializable adapter/worker/hook, pin all
+own drafted players, use settled/frozen price truth, require an exact legal solvent 22, and consume it identically
+on main and companion. Replace the detached What-If with deterministic selected-player displacement and exact
+before/after consequences. Full Batch 3A/3B allowlists and adversarial gates are frozen in the Snake Intelligence
+contract.
