@@ -30817,3 +30817,18 @@ Binding repair contracts:
 `spec-docs/contracts/CONTRACT_SNAKE_REPAIR_JOURNEY_2026-07-12.md`.
 Each builder owns only its named files/findings and may not audit its own diff.
 <!-- ===== END CONTRACTS: SNAKE-FINAL-REPAIR ===== -->
+
+<!-- ===== CONTRACT: SNAKE-INTELLIGENCE ===== -->
+# SNAKE-INTELLIGENCE — MY BOARD, ASST GM BOARD, AND FAIR TRADES
+
+**Date:** 2026-07-13 | **Base checkpoint:** `99d13080` | **Finding:** FINDING-152
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`. The approved build repairs
+main/companion ranking-to-plan refits, replaces the strategically empty trade search with fair
+balancing-return packages, and composes the repo's existing fit/money/chemistry/scarcity/rival
+intelligence into a separate live Asst GM Board with selected-player opportunity cost and
+actionable TAKE / WAIT / TRADE / PASS reads. My Board remains the GM's persisted board; the
+assistant never overwrites it, drafts, or executes a trade. Work proceeds in verified batches with
+separate builder/auditor roles; Help-Button Law and JK browser acceptance remain binding.
+<!-- ===== END CONTRACT: SNAKE-INTELLIGENCE ===== -->

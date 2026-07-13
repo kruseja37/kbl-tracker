@@ -287,3 +287,25 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 - **Root cause / lesson:** L9b-3a used the SUPERSEDED §D triage instead of the resolved §VI model, and the superseded "needs new input" justification went uncaught. Future L-stack tickets that implement a spec with both an "open triage" and a "resolved model" section MUST build to the resolved section and the contract must name it.
 
 **Next:** TRAIT_DETECTION_SCOPE_AUDIT — mechanically diff §VI's buildable set (A + B + personality-primary, with the live-persistence status of each discriminating signal) against `BUILDABLE_TRAITS`, producing the exact wrongly-dormant / correctly-dormant / cut classification with a signal source per trait, BEFORE any L9b-3a rebuild. Then re-scope L9a-2 (precision-only) + expand L9b-3a + build the L9b-2 personality-primary exception (Q12).
+
+---
+
+### FINDING-152
+**Date:** 2026-07-13
+**Phase:** Snake mock-draft browser audit follow-up
+**Status:** CONFIRMED-OPEN — JK approved the complete repair/intelligence plan
+**File:** `src/src_figma/app/components/snake/desk/deskModel.ts`; `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; snake desk/room/companion/guide tests
+
+**Evidence:**
+1. `refitBoardSlots` already deterministically rebuilds a unique legal 22 from overall/position rankings, but `reorderSeatBoardRankings` explicitly returns `slots: input.board.slots`. Main and companion both call that non-refitting writer. SNAKE-MOCK-2B required both surfaces to refit and recalculate; current main/companion tests instead assert the stale plan. JK reproduced the visible result: moving a new player to #1 changes the ranking but not the board.
+2. `searchSnakeGuidePackage` searches equal-count packages but stops as soon as any package exists at the smallest count, and candidate ordering prefers fewer pieces before value equality. `validateTrade` accepts a symmetric 15% value gap, while `derivePickValueChart` assigns raw nth-player IV to nth pick. This makes a nearby one-for-one trade-up qualify before a realistic balancing-return package. The documented `14+41` for `9+62` test hand-pins that value relationship and therefore does not validate real-pool package quality.
+3. The repo already owns most required inputs: locked archetypes, live rosters, roster need, player fit, exact salary/tax/legal finish, five chemistry families, scarcity/replacement reads, a pin-capable Best-22 optimizer, and a public-information rival playout. The live snake product has only one persisted board, no separate derived Asst GM Board, no calibrated availability probability, no real multi-buyer pressure count, and no bridge from target risk to a fair executable trade-up.
+4. Focused baseline characterization on frozen branch `codex/snake-mock-draft-ready` at `99d13080`: 7 test files / 60 tests passed. The green state does not clear item 1 because three tests positively encode the stale-board behavior; it characterizes the defect.
+
+**Impact:**
+- User ranking work does not control the primary 22-player plan or its money/chemistry consequences.
+- The trade guide is legal but strategically worthless for common trade-ups.
+- High-value backend intelligence is fragmented into cards/logs instead of producing a coherent decision aid.
+- Main and companion surfaces share the same stale-board defect.
+
+**Approved repair:** Binding contract `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`. Build in verified batches: live My Board refit; fair balancing trade packages; separate live Asst GM Board; selected-player opportunity cost; availability/rival/scarcity intelligence; actionable TAKE/WAIT/TRADE recommendations; UI consolidation under the ratified Help-Button Law. Separate builder and auditor; JK's browser walk is the only acceptance gate.

@@ -3817,3 +3817,29 @@ The MLB record freezes public IV for every active-pool player. The farm record s
 and retains scout fog; salaries remain the frozen absolute-slot amounts. Franchise setup stores
 both manifests as launch provenance and still begins with zero schedule rows. Schedule CSV upload
 and manual entry remain inside Living Season.
+
+## 2026-07-13 — Snake My Board, Asst GM Board, and actionable trade advice (JK ruling)
+
+This ruling supersedes the 2026-07-12 post-iPad clarification that ranking changes must leave the
+22-player plan untouched, and it narrows/supersedes the old Snake First Law and S4 no-target-nudge
+rule where they conflict.
+
+1. **My Board follows the GM's rankings.** Reordering overall or position rankings immediately
+   refits the team's unique legal 22-player plan on both main and approved companion devices and
+   recalculates its existing salary, tax, chemistry, fit, and legality consequences. The action is
+   undoable. Availability backfill remains own-board-only and privacy-safe.
+2. **Asst GM Board is separate and derived.** It may optimize its own live 22 from current roster,
+   availability, player/team fit, salary/tax, chemistry, scarcity, replacement quality, and legal
+   finish. It never silently overwrites My Board and never records a pick. The GM may inspect it,
+   optimize around a selected player, or deliberately copy useful choices.
+3. **Actionable advice is allowed.** The Asst GM may issue TAKE / WAIT / TRADE / PASS calls and may
+   recommend a target pick plus an executable posted-price package when a valued player is unlikely
+   to survive. It never executes the trade; the GMs decide and the commissioner remains the writer.
+4. **Availability must be honest.** A single deterministic playout may remain an input, but a
+   displayed probability/range requires a documented public-information scenario ensemble and
+   calibration. No fabricated precision.
+5. **Screen value law.** Every persistent element must support a repeat strategic or practical GM
+   decision. Neutral/no-action assistant noise is hidden; explanations live only behind Help. Team
+   privacy, team branding, pronoun non-display, and the ratified Help-Button UI Law remain canon.
+
+Binding implementation contract: `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`.
