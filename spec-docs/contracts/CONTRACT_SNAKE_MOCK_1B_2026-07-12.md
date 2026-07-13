@@ -1,9 +1,9 @@
 # CONTRACT — SNAKE MOCK 1B: FINAL RECAP AND DURABLE HANDOFF
 
-**Date:** 2026-07-12  
-**Builder:** separate implementation agent  
-**Auditor:** captain/audit agent that does not write the product diff  
-**Branch/worktree:** `codex/snake-mock-draft-ready` at `/private/tmp/kbl-snake-mock`  
+**Date:** 2026-07-12
+**Builder:** separate implementation agent
+**Auditor:** captain/audit agent that does not write the product diff
+**Branch/worktree:** `codex/snake-mock-draft-ready` at `/private/tmp/kbl-snake-mock`
 **Base checkpoint:** `809a8212` (`feat(snake): select and confirm exact draft player`)
 
 ## Binding product rulings

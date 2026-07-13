@@ -122,7 +122,7 @@ export function reconcileFarmSeatBoards(input: {
     );
     if (plannedProspectIds.join('\0') === board.plannedProspectIds.join('\0')) return [teamId, board];
     changed = true;
-    return [teamId, { ...board, plannedProspectIds }];
+    return [teamId, { ...board, plannedProspectIds, revision: board.revision + 1 }];
   }));
   return changed ? {
     changed: true,

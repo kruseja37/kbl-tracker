@@ -36,7 +36,6 @@ import {
   getRegisteredPool as getRegisteredPoolFromStorage,
   getMlbDraftSession as getMlbDraftSessionFromStorage,
   saveMlbDraftSession as saveMlbDraftSessionToStorage,
-  deleteMlbDraftSession as deleteMlbDraftSessionFromStorage,
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
   seedFromMLBDatabase,
@@ -108,7 +107,6 @@ export interface UseLeagueBuilderDataReturn {
       lastModified?: string;
     },
   ) => Promise<LeagueBuilderMlbDraftSession>;
-  deleteMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<void>;
 
   // Team operations
   getTeamById: (id: string) => Promise<Team | null>;
@@ -561,10 +559,6 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     return saveMlbDraftSessionToStorage(session);
   }, []);
 
-  const deleteMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
-    return deleteMlbDraftSessionFromStorage(leagueId, seasonNumber);
-  }, []);
-
   // ============================================
   // TEAM OPERATIONS
   // ============================================
@@ -804,7 +798,6 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     getRegisteredPool,
     getMlbDraftSession,
     saveMlbDraftSession,
-    deleteMlbDraftSession,
 
     // Team operations
     getTeamById,

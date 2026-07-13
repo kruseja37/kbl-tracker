@@ -37,6 +37,8 @@ describe('SelectedPlayerCard', () => {
     expect(screen.getByText('SP · SP/RP')).toBeInTheDocument();
     expect(screen.getByText('AGE 26 · B/T R/R')).toBeInTheDocument();
     expect(screen.getByAltText('Beewolves logo')).toBeInTheDocument();
+    expect(screen.getByText('OVR')).toBeInTheDocument();
+    expect(screen.getByText('A-')).toBeInTheDocument();
     for (const label of ['CON', 'SPD', 'FLD', 'ARM', 'VEL', 'JNK', 'ACC']) expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByText('POW')).not.toBeInTheDocument();
     expect(screen.getByText('ARSENAL · 4F · SL · CH')).toBeInTheDocument();
@@ -63,7 +65,7 @@ describe('SelectedPlayerCard', () => {
       teamName="Beewolves"
     />);
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('Jovita Pulo');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('CURRENT TAX—');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TAX CHANGE—');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST—');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('CHEM VALUE—');
     expect(screen.getByText('SCHOLARLY —→—')).toBeInTheDocument();

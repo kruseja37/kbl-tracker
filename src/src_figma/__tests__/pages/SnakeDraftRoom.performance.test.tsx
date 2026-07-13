@@ -6,6 +6,7 @@ const engineProfile = vi.hoisted(() => ({
   rationalRoom: 0,
   legalFinish: 0,
   seatingProof: 0,
+  pickProof: 0,
   seatingProofResult: null as unknown,
 }));
 const useLeagueBuilderDataMock = vi.hoisted(() => vi.fn());
@@ -44,6 +45,10 @@ vi.mock('../../../engines/snakeSeatingProof', async (importOriginal) => {
         engineProfile.seatingProofResult = actual.proveSimultaneousSnakeSeating(...args);
       }
       return engineProfile.seatingProofResult as ReturnType<typeof actual.proveSimultaneousSnakeSeating>;
+    },
+    proveSnakePickKeepsAllClubsSeated: (...args: Parameters<typeof actual.proveSnakePickKeepsAllClubsSeated>) => {
+      engineProfile.pickProof += 1;
+      return actual.proveSnakePickKeepsAllClubsSeated(...args);
     },
   };
 });
@@ -180,6 +185,7 @@ function resetProfile(): void {
   engineProfile.rationalRoom = 0;
   engineProfile.legalFinish = 0;
   engineProfile.seatingProof = 0;
+  engineProfile.pickProof = 0;
   engineProfile.seatingProofResult = null;
 }
 
@@ -187,6 +193,7 @@ function resetCallCounts(): void {
   engineProfile.rationalRoom = 0;
   engineProfile.legalFinish = 0;
   engineProfile.seatingProof = 0;
+  engineProfile.pickProof = 0;
 }
 
 describe('PERFROOM production-scale call profile', () => {
@@ -219,9 +226,11 @@ describe('PERFROOM production-scale call profile', () => {
       initialRationalRoomCalls: afterInitial.rationalRoom,
       initialLegalFinishCalls: afterInitial.legalFinish,
       initialSeatingProofCalls: afterInitial.seatingProof,
+      initialPickProofCalls: afterInitial.pickProof,
       pureRerenderRationalRoomCalls: engineProfile.rationalRoom - afterInitial.rationalRoom,
       pureRerenderLegalFinishCalls: engineProfile.legalFinish - afterInitial.legalFinish,
       pureRerenderSeatingProofCalls: engineProfile.seatingProof - afterInitial.seatingProof,
+      pureRerenderPickProofCalls: engineProfile.pickProof - afterInitial.pickProof,
     };
     console.info('PERFROOM_PROFILE render', JSON.stringify(profile));
     expect(profile.initialRationalRoomCalls).toBe(0);
@@ -230,19 +239,22 @@ describe('PERFROOM production-scale call profile', () => {
     expect(profile.pureRerenderRationalRoomCalls).toBe(0);
     expect(profile.pureRerenderLegalFinishCalls).toBe(0);
     expect(profile.pureRerenderSeatingProofCalls).toBe(0);
+    expect(profile.initialPickProofCalls).toBeLessThanOrEqual(1);
+    expect(profile.pureRerenderPickProofCalls).toBe(0);
 
     resetCallCounts();
     const revealStart = performance.now();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL PERFORMANCE CLUB 1 SEAT' }));
     await screen.findByTestId('private-draft-desk', {}, { timeout: 30_000 });
-    await waitFor(() => expect(engineProfile.rationalRoom).toBe(1), { timeout: 30_000 });
     console.info('PERFROOM_PROFILE reveal', JSON.stringify({
       revealMs: Math.round(performance.now() - revealStart),
       rationalRoomCalls: engineProfile.rationalRoom,
       legalFinishCalls: engineProfile.legalFinish,
       seatingProofCalls: engineProfile.seatingProof,
     }));
-    expect(engineProfile.rationalRoom).toBe(1);
+    // JSDOM has no Worker. The desk must stay interactive without ever running
+    // the future-pick playout synchronously on React's UI thread.
+    expect(engineProfile.rationalRoom).toBe(0);
     expect(engineProfile.legalFinish).toBeLessThanOrEqual(22);
   }, 60_000);
 

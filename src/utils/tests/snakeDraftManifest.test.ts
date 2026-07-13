@@ -5,6 +5,7 @@ import {
   buildSnakeDraftManifest,
   freezeSnakeDraftSession,
   readSnakeDraftTruth,
+  snakeManifestOwnershipIdentity,
   validateSnakeDraftManifest,
 } from '../snakeDraftManifest';
 
@@ -60,6 +61,19 @@ function build(session = completedSession()) {
 }
 
 describe('immutable snake draft manifest', () => {
+  test('uses the full canonical manifest as the collision-free franchise ownership identity', () => {
+    const first = build();
+    const second = structuredClone(first);
+    second.frozenAt = '2026-07-12T12:00:01.000Z';
+
+    const firstIdentity = snakeManifestOwnershipIdentity(first);
+    const secondIdentity = snakeManifestOwnershipIdentity(second);
+
+    expect(firstIdentity).toContain('snake-manifest-ownership-v1:');
+    expect(firstIdentity).toContain('"completedPicks"');
+    expect(firstIdentity).not.toBe(secondIdentity);
+  });
+
   test('freezes complete provenance and preserves explicit legacy unknown display money', () => {
     const session = completedSession();
     delete session.completedPicks[0].settledSalary;

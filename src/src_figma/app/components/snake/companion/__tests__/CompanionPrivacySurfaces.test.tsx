@@ -2,11 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
-  buildCompanionBranding,
   CompanionCompletedScreen,
   CompanionCoveredScreen,
   SnakeCompanionFrame,
 } from '../SnakeCompanionFrame';
+import { buildCompanionBranding } from '../companionFrameModel';
 
 describe('companion privacy and team-first surfaces', () => {
   it('keeps a covered device free of private desk content until explicit return', () => {

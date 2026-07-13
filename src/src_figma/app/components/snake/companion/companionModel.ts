@@ -6,6 +6,7 @@ import type {
 export const COMPANION_ROOM_FULL_COPY = 'THIS ROOM ALREADY HAS 3 COMPANIONS. USE THE MAIN DEVICE OR HOTSEAT.';
 export const COMPANION_STALE_COPY = 'THE DRAFT MOVED ON — REFRESH';
 export const COMPANION_DRAFT_COMPLETE_COPY = 'THIS DRAFT IS COMPLETE.';
+export const COMPANION_PICKS_COMPLETE_COPY = 'PICKS COMPLETE — WAITING FOR COMMISSIONER.';
 
 export type CompanionClaim = NonNullable<LeagueBuilderMlbDraftSession['snakeCompanions']>['claims'][number];
 export type CompanionClaimIdentity = Pick<CompanionClaim, 'deviceId' | 'teamId' | 'status'> & {
@@ -29,8 +30,11 @@ export function isRoomCode(value: string | undefined): value is string {
 }
 
 export function isCompanionDraftComplete(session: LeagueBuilderMlbDraftSession): boolean {
-  return Boolean(session.draftManifest)
-    || (session.pickOrder.length > 0 && session.currentPickIndex >= session.pickOrder.length);
+  return Boolean(session.rosterHandoff);
+}
+
+export function isCompanionPicksComplete(session: LeagueBuilderMlbDraftSession): boolean {
+  return session.pickOrder.length > 0 && session.currentPickIndex >= session.pickOrder.length;
 }
 
 export function isCompanionRoomOpen(session: LeagueBuilderMlbDraftSession | null | undefined): session is LeagueBuilderMlbDraftSession {

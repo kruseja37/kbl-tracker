@@ -1,3 +1,5 @@
+import { companionTeamBranding } from './companion/companionBranding';
+
 export interface SnakeDraftRecapTeam {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface SnakeDraftRecapPick {
   position?: string;
   salary?: number;
   tax?: number;
+  identityChips?: readonly string[];
 }
 
 function money(value: number): string {
@@ -37,25 +40,27 @@ export function SnakeDraftRecap(props: {
   picks: readonly SnakeDraftRecapPick[];
   committing: boolean;
   error?: string | null;
+  confirmLabel?: string;
   onConfirm: () => void | Promise<void>;
   onBack?: () => void;
 }) {
   const showTax = props.phase === 'MLB';
   return (
-    <main className="ballpark-page min-h-screen" data-testid="snake-draft-recap">
+    <main className="ballpark-page min-h-screen min-w-0 overflow-x-clip" data-testid="snake-draft-recap">
       <header className="mb-5">
         <p className="text-[11px] font-bold tracking-[0.2em] text-[var(--ballpark-brass)]">DRAFT COMPLETE</p>
         <h1 className="ballpark-title text-3xl">{props.phase} DRAFT RECAP</h1>
       </header>
       <div className="grid gap-4 lg:grid-cols-2">
         {props.teams.map((team) => {
+          const brand = companionTeamBranding(team.colors);
           const picks = props.picks.filter((pick) => pick.teamId === team.id).sort((a, b) => a.pick - b.pick);
           const salary = knownTotal(picks, 'salary');
           const tax = showTax ? knownTotal(picks, 'tax') : 0;
           const allIn = salary === null || tax === null ? null : salary + tax;
           return (
-            <section key={team.id} className="ballpark-panel" aria-label={`${team.name} draft recap`}>
-              <div className="ballpark-panel-strip flex items-center gap-3" style={{ backgroundColor: team.colors.primary, color: team.colors.secondary, borderColor: team.colors.accent ?? team.colors.secondary }}>
+            <section key={team.id} className="ballpark-panel min-w-0" aria-label={`${team.name} draft recap`}>
+              <div className="ballpark-panel-strip flex items-center gap-3" style={{ backgroundColor: brand.primary, color: brand.foreground, borderColor: brand.border }}>
                 {team.logoUrl ? <img src={team.logoUrl} alt={`${team.name} logo`} className="h-10 w-10 object-contain" /> : null}
                 <strong>{team.name.toUpperCase()}</strong>
               </div>
@@ -69,7 +74,7 @@ export function SnakeDraftRecap(props: {
                 {picks.map((pick) => (
                   <li key={`${pick.pick}-${pick.playerId}`} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
                     <strong>#{pick.pick}</strong>
-                    <span><strong>{pick.playerName.toUpperCase()}</strong>{pick.position ? <small className="ml-2 text-[var(--ballpark-brass)]">{pick.position}</small> : null}</span>
+                    <span><strong>{pick.playerName.toUpperCase()}</strong>{pick.position ? <small className="ml-2 text-[var(--ballpark-brass)]">{pick.position}</small> : null}{pick.identityChips?.length ? <small className="block text-[var(--ballpark-brass)]">{pick.identityChips.join(' · ')}</small> : null}</span>
                     <span className="text-right text-xs font-bold">
                       <span className="block">{typeof pick.salary === 'number' && Number.isFinite(pick.salary) ? money(pick.salary) : '—'}</span>
                       {showTax ? <span className="block">TAX {typeof pick.tax === 'number' && Number.isFinite(pick.tax) ? money(pick.tax) : '—'}</span> : null}
@@ -85,7 +90,7 @@ export function SnakeDraftRecap(props: {
       <div className="mt-5 flex flex-wrap gap-3">
         {props.onBack ? <button className="ballpark-press-button ballpark-press-lg ballpark-press-default" disabled={props.committing} onClick={props.onBack}>BACK TO ROOM</button> : null}
         <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold" disabled={props.committing} onClick={() => void props.onConfirm()}>
-          {props.committing ? 'COMMITTING…' : `CONFIRM ${props.phase} DRAFT`}
+          {props.committing ? 'SAVING…' : props.confirmLabel ?? `CONFIRM ${props.phase} DRAFT`}
         </button>
       </div>
     </main>

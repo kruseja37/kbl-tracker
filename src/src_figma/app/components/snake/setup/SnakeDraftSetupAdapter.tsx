@@ -1,23 +1,30 @@
+/* eslint-disable react-refresh/only-export-components -- setup helpers and their tested hook form one adapter contract */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
-import { buildSnakeOrder } from '../../../../../engines/leagueConstruction';
-import { archetypeToCapIdentity } from '../../../../../engines/archetypeIdentity';
-import { toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
-import { seededSnakeShuffle } from '../../../../../engines/snakeDraftPoc';
+import { isLegalRoster } from '../../../../../data/rosterConstruction';
+import { BANDS, buildSnakeOrder, luxuryTax, shiftLuxuryCaps, type BandPriorities } from '../../../../../engines/leagueConstruction';
+import { archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
+import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
+import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
+import {
+  auctionSinglePlayerTaxWithShiftedCaps,
+  normalizeAuctionLuxuryCapsForLeagueSize,
+} from '../../../../../engines/auctionLuxuryTax';
+import { seededSnakeShuffle } from '../../../../../engines/snakeShuffle';
 import {
   proveSimultaneousSnakeSeating,
   type SimultaneousSnakeSeatingInput,
   type SnakeSeatingPlayer,
   type SnakeSeatingProof,
 } from '../../../../../engines/snakeSeatingProof';
-import { deriveVersionGroupId } from '../../../../../engines/snakeVersioning';
 import type { RegisteredPool } from '../../../../../engines/leagueConstruction';
 import {
   createMlbDraftSessionId,
   getRegisteredPool,
   saveMlbDraftSession,
+  SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
   type LeagueTemplate,
   type Player,
@@ -32,6 +39,12 @@ import {
   unlockLeaguePool,
 } from '../../../../../utils/leagueBuilderPoolBuilder';
 import { buildSeededSeatBoard, type DeskCandidate } from '../desk/deskModel';
+import { buildDeskRoomPlayer, fitWord as deskFitWord, type DeskRoomPlayer } from '../desk/deskRoomModel';
+import {
+  snakePlayerSourceId,
+  snakePlayerVersionGroupId,
+  snakePlayerVersionLabel,
+} from '../../../../../utils/snakePlayerIdentity';
 
 type ProofRunner = (input: SimultaneousSnakeSeatingInput) => SnakeSeatingProof | Promise<SnakeSeatingProof>;
 
@@ -53,26 +66,12 @@ export interface SnakeSetupAdapterInput {
   savedDraftLookupError: string | null;
   flushBoardRankings: () => Promise<Team[]>;
   navigateToRoom: (leagueId: string) => void;
+  navigateToPracticeRoom?: (leagueId: string) => void;
   runProof?: ProofRunner;
 }
 
 function fullName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
-}
-
-function historicalSourceId(player: Player): string | undefined {
-  const carried = player as Player & { sourceId?: unknown; historicalSourceId?: unknown };
-  if (typeof carried.historicalSourceId === 'string' && carried.historicalSourceId.trim()) {
-    return carried.historicalSourceId.trim();
-  }
-  if (typeof carried.sourceId === 'string' && carried.sourceId.trim()) return carried.sourceId.trim();
-  return undefined;
-}
-
-function versionLabel(player: Player): string {
-  const source = historicalSourceId(player);
-  if (source) return source.split(':').at(-1)?.toUpperCase() ?? source.toUpperCase();
-  return player.nickname?.trim() || player.overallGrade || player.id;
 }
 
 function isTaxonomyPosition(position: Player['primaryPosition']): position is TaxonomyPosition {
@@ -93,7 +92,7 @@ function toConstructionPlayer(player: Player): SnakeSeatingPlayer['construction'
 export function deriveSnakeVersionGroups(poolPlayers: readonly Player[]): SnakeVersionGroup[] {
   const grouped = new Map<string, Player[]>();
   for (const player of poolPlayers) {
-    const groupId = deriveVersionGroupId({ playerId: player.id, sourceId: historicalSourceId(player) });
+    const groupId = snakePlayerVersionGroupId(player);
     grouped.set(groupId, [...(grouped.get(groupId) ?? []), player]);
   }
   return [...grouped.entries()].map(([groupId, cards]) => ({ groupId, cards }));
@@ -106,6 +105,19 @@ export function selectedSnakePoolIds(
   return groups.map(({ groupId, cards }) => (
     cards.find((card) => card.id === selections[groupId])?.id ?? cards[0].id
   ));
+}
+
+export function lockedSnakeVersionSelections(
+  groups: readonly SnakeVersionGroup[],
+  lockedPlayerIds: readonly string[],
+): Record<string, string> {
+  const locked = new Set(lockedPlayerIds);
+  return Object.fromEntries(groups
+    .filter(({ cards }) => cards.length > 1)
+    .map(({ groupId, cards }) => [
+      groupId,
+      cards.find((card) => locked.has(card.id))?.id ?? cards[0].id,
+    ]));
 }
 
 function capIdentityForTeam(team: Team) {
@@ -126,7 +138,8 @@ export function buildLockedSnakeSeatingPlayers(input: {
     if (!Number.isFinite(priced.iv)) throw new Error(`Locked snake pool player ${priced.id} has no frozen IV.`);
     return {
       playerId: player.id,
-      sourceId: historicalSourceId(player),
+      sourceId: snakePlayerSourceId(player),
+      versionGroupId: snakePlayerVersionGroupId(player),
       price: priced.iv,
       shape: toRosterSlotPlayer({
         primaryPosition: player.primaryPosition,
@@ -164,21 +177,39 @@ function materializeOrder(natural: readonly string[], explicit: readonly string[
   return [...pinned, ...natural.filter((id) => !pinnedSet.has(id))];
 }
 
-function boardCandidate(player: Player, iv: number): DeskCandidate | null {
-  if (!isTaxonomyPosition(player.primaryPosition)) return null;
+const BALANCED_PRIORITIES = Object.fromEntries(BANDS.map((band) => [band, 1])) as BandPriorities;
+
+function boardCandidate(input: {
+  player: Player;
+  roomPlayer: DeskRoomPlayer;
+  iv: number;
+  priorities: BandPriorities;
+  archetypeName: string;
+  shiftedCaps: ReturnType<typeof normalizeAuctionLuxuryCapsForLeagueSize>;
+}): DeskCandidate | null {
+  if (!isTaxonomyPosition(input.player.primaryPosition)) return null;
+  const need = rosterNeedBreakdown([]);
+  const marginalTax = auctionSinglePlayerTaxWithShiftedCaps(input.roomPlayer.construction, input.shiftedCaps);
   return {
-    id: player.id,
-    name: fullName(player).toUpperCase(),
-    position: player.primaryPosition,
-    advisorWorth: iv,
-    iv,
-    marginalTax: 0,
-    trueCost: iv,
-    archetypeChip: 'SETUP',
-    fitWord: 'SETUP RANK',
+    id: input.player.id,
+    name: fullName(input.player).toUpperCase(),
+    position: input.player.primaryPosition,
+    advisorWorth: computeOwnValue({
+      iv: input.iv,
+      archetypeWeights: input.roomPlayer.archetypeWeights,
+      ownBandPriorities: input.priorities,
+      needBreakdown: need,
+      shape: input.roomPlayer.shape,
+      openSlots: 22,
+    }),
+    iv: input.iv,
+    marginalTax,
+    trueCost: input.iv + marginalTax,
+    archetypeChip: input.archetypeName,
+    fitWord: deskFitWord({ player: input.roomPlayer, priorities: input.priorities, need, openSlots: 22 }),
     risk: 'SAFE_TO_WAIT',
     legalFinishLine: 'SETUP BOARD SNAPSHOT',
-    construction: toConstructionPlayer(player),
+    construction: input.roomPlayer.construction,
   };
 }
 
@@ -186,25 +217,95 @@ export function buildInitialSnakeSeatBoards(input: {
   teams: readonly Team[];
   players: readonly Player[];
   pool: RegisteredPool;
+  certificate?: SnakeSeatingProof | null;
 }): Record<string, SnakeSeatBoardRecord> {
   const playerById = new Map(input.players.map((player) => [player.id, player]));
-  const candidates = input.pool.players.flatMap((priced) => {
+  const seatingById = new Map(buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }).map((player) => [player.playerId, player]));
+  const roomPlayerById = new Map(input.pool.players.flatMap((priced) => {
     const player = playerById.get(priced.id);
-    if (!player) return [];
-    const candidate = boardCandidate(player, priced.iv);
-    return candidate ? [candidate] : [];
-  });
+    const seating = seatingById.get(priced.id);
+    if (!player || !seating) return [];
+    const roomPlayer = buildDeskRoomPlayer({ player, price: priced.iv, seating });
+    return roomPlayer ? [[priced.id, roomPlayer] as const] : [];
+  }));
+  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length);
 
   return Object.fromEntries(input.teams.map((team) => {
-    const seeded = buildSeededSeatBoard(candidates);
-    if (!seeded.board) {
-      throw new Error(`Could not seed ${team.name}'s 22-slot snake board: ${seeded.brokenSlots.join(', ')}.`);
+    const priorities = resolveClubBandPriorities(team) ?? BALANCED_PRIORITIES;
+    const archetype = team.mlbArchetypeKey
+      ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === team.mlbArchetypeKey)
+      : undefined;
+    const archetypeName = (archetype?.name ?? 'BALANCED').toUpperCase();
+    const capIdentity = capIdentityForTeam(team);
+    const shiftedCaps = capIdentity ? shiftLuxuryCaps(normalizedCaps, capIdentity) : normalizedCaps;
+    const candidates = input.pool.players.flatMap((priced) => {
+      const player = playerById.get(priced.id);
+      const roomPlayer = roomPlayerById.get(priced.id);
+      if (!player || !roomPlayer) return [];
+      const candidate = boardCandidate({ player, roomPlayer, iv: priced.iv, priorities, archetypeName, shiftedCaps });
+      return candidate ? [candidate] : [];
+    });
+    const certifiedAssignment = input.certificate?.feasible
+      ? input.certificate.assignments.find((assignment) => assignment.teamId === team.id)
+      : null;
+    const completion: SnakeSeatingProof = certifiedAssignment ? {
+      feasible: true,
+      assignments: [certifiedAssignment],
+      shortfall: null,
+      message: input.certificate!.message,
+    } : proveSimultaneousSnakeSeating({
+      clubs: [{ teamId: team.id, roster: [], budgetRemaining: input.pool.tierCap, capIdentity: capIdentityForTeam(team) }],
+      pool: [...seatingById.values()],
+      baseCaps: input.pool.luxuryCaps,
+      realTeamCount: input.teams.length,
+    });
+    const completionIds = new Set(completion.assignments[0]?.playerIds ?? []);
+    const completionCandidates = candidates.filter((candidate) => completionIds.has(candidate.id));
+    const affordable = (board: SnakeSeatBoardRecord | null): boolean => {
+      if (!board) return false;
+      const selected = Object.values(board.slots).flatMap((id) => seatingById.get(id) ?? []);
+      if (selected.length !== 22 || !isLegalRoster(selected.map((row) => row.shape))) return false;
+      if (certifiedAssignment) {
+        const certifiedIds = new Set(certifiedAssignment.playerIds);
+        if (selected.every((player) => certifiedIds.has(player.playerId))) {
+          return certifiedAssignment.allInCost <= input.pool.tierCap + 1e-9;
+        }
+      }
+      const salary = selected.reduce((sum, row) => sum + row.price, 0);
+      const tax = luxuryTax(selected.map((row) => row.construction), shiftedCaps, 'taxed').charged;
+      return salary + tax <= input.pool.tierCap + 1e-9;
+    };
+    let seeded = buildSeededSeatBoard(completionCandidates);
+    if (!affordable(seeded.board)) {
+      const extras = candidates
+        .filter((candidate) => !completionIds.has(candidate.id))
+        .sort((left, right) => left.trueCost - right.trueCost || left.id.localeCompare(right.id));
+      for (const extra of extras) {
+        const trial = buildSeededSeatBoard([...completionCandidates, extra]);
+        if (!affordable(trial.board)) continue;
+        seeded = trial;
+        break;
+      }
+    }
+    const fullRankings = buildSeededSeatBoard(candidates).board?.rankings;
+    if (!completion.feasible || !seeded.board || !affordable(seeded.board) || !fullRankings) {
+      throw new Error(`Could not seed ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
     }
     const overrides = team.boardRankOverrides;
-    const byPosition = Object.fromEntries(Object.entries(seeded.board.rankings.byPosition ?? {}).map(([position, ids]) => [
-      position,
-      materializeOrder(ids ?? [], overrides?.byPosition?.[position as TaxonomyPosition]),
-    ]));
+    const plannedIds = SNAKE_BOARD_SLOT_IDS.flatMap((slotId) => seeded.board?.slots[slotId] ?? []);
+    const plannedSet = new Set(plannedIds);
+    const coherentGlobal = [
+      ...plannedIds,
+      ...(fullRankings.global ?? []).filter((id) => !plannedSet.has(id)),
+    ];
+    const byPosition = Object.fromEntries(Object.entries(fullRankings.byPosition ?? {}).map(([position, ids]) => {
+      const natural = ids ?? [];
+      const naturalSet = new Set(natural);
+      const plannedAtPosition = plannedIds.filter((id) => naturalSet.has(id));
+      const plannedAtPositionSet = new Set(plannedAtPosition);
+      const coherent = [...plannedAtPosition, ...natural.filter((id) => !plannedAtPositionSet.has(id))];
+      return [position, materializeOrder(coherent, overrides?.byPosition?.[position as TaxonomyPosition])];
+    }));
     const frozenPlayerIds = [...new Set([
       ...(overrides?.global ?? []),
       ...Object.values(overrides?.byPosition ?? {}).flatMap((ids) => ids ?? []),
@@ -212,7 +313,7 @@ export function buildInitialSnakeSeatBoards(input: {
     return [team.id, {
       ...seeded.board,
       rankings: {
-        global: materializeOrder(seeded.board.rankings.global ?? [], overrides?.global),
+        global: materializeOrder(coherentGlobal, overrides?.global),
         byPosition,
         frozenPlayerIds,
       },
@@ -272,31 +373,46 @@ export async function registerPickedSnakePool(leagueId: string, pickedPlayerIds:
 export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
   const { league, teams, players, poolPlayers, pool, runProof = proveSimultaneousSnakeSeating } = input;
   const groups = useMemo(() => deriveSnakeVersionGroups(poolPlayers), [poolPlayers]);
+  const versionLedgerGroups = useMemo(() => {
+    const sourceIds = new Set(league?.snakeVersionSourcePlayerIds ?? []);
+    if (sourceIds.size === 0) return groups;
+    return deriveSnakeVersionGroups(players.filter((player) => sourceIds.has(player.id)));
+  }, [groups, league?.snakeVersionSourcePlayerIds, players]);
   const [versionSelections, setVersionSelections] = useState<Record<string, string>>({});
-  const [gmNames, setGmNames] = useState<Record<string, string>>({});
-  const [seatModes, setSeatModes] = useState<Record<string, 'hotseat' | 'companion'>>({});
+  const [gmNameEdits, setGmNames] = useState<Record<string, string>>({});
+  const [seatModeEdits, setSeatModes] = useState<Record<string, 'hotseat' | 'companion'>>({});
   const [seed, setSeed] = useState('OPENING-DAY');
-  const [order, setOrder] = useState<string[]>([]);
+  const [orderEdits, setOrder] = useState<string[]>([]);
   const [swapFirst, setSwapFirst] = useState<string | null>(null);
-  const [proof, setProof] = useState<SnakeSeatingProof | null>(null);
-  const [checking, setChecking] = useState(false);
   const proofRevision = useRef(0);
 
-  const teamIdsKey = teams.map((team) => team.id).join('|');
-  useEffect(() => {
-    setOrder((current) => (
-      current.length === teams.length && current.every((id) => teams.some((team) => team.id === id))
-        ? current
-        : teams.map((team) => team.id)
-    ));
-    setGmNames((current) => Object.fromEntries(teams.map((team) => [team.id, current[team.id] ?? team.gmSeatName ?? team.managerName ?? ''])));
-    setSeatModes((current) => Object.fromEntries(teams.map((team) => [team.id, current[team.id] ?? 'hotseat'])));
-  }, [teamIdsKey, teams]);
+  const teamIds = useMemo(() => teams.map((team) => team.id), [teams]);
+  const order = useMemo(() => (
+    orderEdits.length === teamIds.length && orderEdits.every((id) => teamIds.includes(id))
+      ? orderEdits
+      : teamIds
+  ), [orderEdits, teamIds]);
+  const gmNames = useMemo(
+    () => Object.fromEntries(teams.map((team) => [team.id, gmNameEdits[team.id] ?? team.gmSeatName ?? team.managerName ?? ''])),
+    [gmNameEdits, teams],
+  );
+  const seatModes = useMemo<Record<string, 'hotseat' | 'companion'>>(
+    () => Object.fromEntries(teams.map((team) => [team.id, seatModeEdits[team.id] ?? 'hotseat'])),
+    [seatModeEdits, teams],
+  );
 
   const selectedPoolIds = useMemo(
     () => selectedSnakePoolIds(groups, versionSelections),
     [groups, versionSelections],
   );
+  const proofPool = useMemo(() => {
+    if (!pool) return null;
+    const selected = new Set(selectedPoolIds);
+    const selectedPlayers = pool.players.filter((player) => selected.has(player.id));
+    return selectedPlayers.length === selected.size
+      ? { ...pool, players: selectedPlayers }
+      : null;
+  }, [pool, selectedPoolIds]);
 
   const companionSeatReasons = useMemo(() => validateSnakeCompanionSeats({
     teams,
@@ -305,26 +421,26 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
   }), [gmNames, seatModes, teams]);
 
   const proofInput = useMemo(() => (
-    pool?.locked ? buildSnakeSetupProofInput({ teams, players, pool }) : null
-  ), [players, pool, teams]);
+    proofPool ? buildSnakeSetupProofInput({ teams, players, pool: proofPool }) : null
+  ), [players, proofPool, teams]);
+  const [proofResult, setProofResult] = useState<{
+    input: SimultaneousSnakeSeatingInput;
+    runner: ProofRunner;
+    proof: SnakeSeatingProof | null;
+  } | null>(null);
+  const proofMatches = proofResult?.input === proofInput && proofResult.runner === runProof;
+  const proof = proofMatches ? proofResult.proof : null;
+  const checking = Boolean(proofInput) && !proofMatches;
 
   useEffect(() => {
     const revision = ++proofRevision.current;
-    if (!proofInput || teams.length === 0) {
-      setProof(null);
-      setChecking(false);
-      return;
-    }
-    setProof(null);
-    setChecking(true);
+    if (!proofInput || teams.length === 0) return;
     void Promise.resolve(runProof(proofInput)).then((next) => {
       if (proofRevision.current !== revision) return;
-      setProof(next);
-      setChecking(false);
+      setProofResult({ input: proofInput, runner: runProof, proof: next });
     }).catch(() => {
       if (proofRevision.current !== revision) return;
-      setProof(null);
-      setChecking(false);
+      setProofResult({ input: proofInput, runner: runProof, proof: null });
     });
   }, [proofInput, runProof, teams.length]);
 
@@ -333,17 +449,25 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     if (input.savedDraftLookupError) return [input.savedDraftLookupError];
     if (input.hasSavedDraft) return [];
     if (companionSeatReasons.length > 0) return companionSeatReasons;
-    if (!pool?.locked) return [];
-    if (checking) return [];
+    if (!pool) return [];
+    if (pool && !proofPool) return ['The selected player versions do not match the priced pool.'];
+    if (checking) return ['Checking every club\'s legal, affordable 22.'];
     if (!proof) return ['The snake room check did not finish.'];
     if (!proof.feasible) return [proof.message];
+    if (!pool?.locked) return [];
+    if (!seed.trim()) return ['Enter a draft seed.'];
     if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];
     return [];
-  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool?.locked, proof, teams.length]);
+  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool, proof, proofPool, seed, teams.length]);
+
+  const lockProofBlocked = Boolean(pool && !pool.locked && (
+    !proofPool || checking || !proof?.feasible
+  ));
 
   const ready = Boolean(pool?.locked
     && proof?.feasible
     && !checking
+    && Boolean(seed.trim())
     && order.length === teams.length
     && companionSeatReasons.length === 0);
 
@@ -361,14 +485,65 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
       setSwapFirst(null);
       return;
     }
-    setOrder((current) => {
-      const next = [...current];
-      const firstIndex = next.indexOf(swapFirst);
-      const secondIndex = next.indexOf(teamId);
-      [next[firstIndex], next[secondIndex]] = [next[secondIndex], next[firstIndex]];
-      return next;
-    });
+    const next = [...order];
+    const firstIndex = next.indexOf(swapFirst);
+    const secondIndex = next.indexOf(teamId);
+    [next[firstIndex], next[secondIndex]] = [next[secondIndex], next[firstIndex]];
+    setOrder(next);
     setSwapFirst(null);
+  };
+
+  const createRoomSession = async (options: {
+    seasonNumber: number;
+    workflowVersion: string;
+    navigate: (leagueId: string) => void;
+  }) => {
+    if (!league) return;
+    if (!pool?.locked || !proof?.feasible || checking || companionSeatReasons.length > 0 || !seed.trim()) return;
+    const draftSeed = seed.trim();
+    const lockedIds = pool.players.map((row) => row.id);
+    await registerPickedSnakePool(league.id, lockedIds);
+    const rankedTeams = await input.flushBoardRankings();
+    const now = new Date().toISOString();
+    const session: LeagueBuilderMlbDraftSession = {
+      id: createMlbDraftSessionId(league.id, options.seasonNumber),
+      leagueId: league.id,
+      seasonNumber: options.seasonNumber,
+      seed: draftSeed,
+      workflowVersion: options.workflowVersion,
+      engineMethodVersion: 'snake-s1a',
+      tier: league.tier ?? 'juiced',
+      balanceMode: league.balanceMode ?? 'taxed',
+      rounds: 22,
+      pickOrder: buildSnakeOrder(order, 22),
+      completedPicks: [],
+      seatBoards: buildInitialSnakeSeatBoards({ teams: rankedTeams, players, pool, certificate: proof }),
+      snakeSetup: {
+        poolPlayerIds: lockedIds,
+        versionSelections: lockedSnakeVersionSelections(versionLedgerGroups, lockedIds),
+        clubs: rankedTeams.map((team) => ({
+          teamId: team.id,
+          ...(gmNames[team.id]?.trim() ? { gmName: gmNames[team.id].trim() } : {}),
+          hotseat: options.workflowVersion.includes('practice')
+            ? team.id === order[0]
+            : (seatModes[team.id] ?? 'hotseat') === 'hotseat',
+          ...(team.mlbArchetypeKey ? { archetypeId: team.mlbArchetypeKey } : {}),
+        })),
+        orderSeed: draftSeed,
+        seatingCertificate: {
+          feasible: true,
+          assignments: proof.assignments,
+          shortfall: null,
+          message: proof.message,
+        },
+      },
+      currentPickIndex: 0,
+      revision: 0,
+      createdDate: now,
+      lastModified: now,
+    };
+    await saveMlbDraftSession(session);
+    options.navigate(league.id);
   };
 
   const enterDraft = async () => {
@@ -377,44 +552,15 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
       input.navigateToRoom(league.id);
       return;
     }
-    if (!pool?.locked || !proof?.feasible || checking || companionSeatReasons.length > 0) return;
-    const lockedIds = pool.players.map((row) => row.id);
-    await registerPickedSnakePool(league.id, lockedIds);
-    const rankedTeams = await input.flushBoardRankings();
-    const now = new Date().toISOString();
-    const session: LeagueBuilderMlbDraftSession = {
-      id: createMlbDraftSessionId(league.id, 1),
-      leagueId: league.id,
-      seasonNumber: 1,
-      seed,
-      workflowVersion: 'snake-v1',
-      engineMethodVersion: 'snake-s1a',
-      tier: league.tier ?? 'juiced',
-      balanceMode: league.balanceMode ?? 'taxed',
-      rounds: 22,
-      pickOrder: buildSnakeOrder(order, 22),
-      completedPicks: [],
-      seatBoards: buildInitialSnakeSeatBoards({ teams: rankedTeams, players, pool }),
-      snakeSetup: {
-        poolPlayerIds: lockedIds,
-        versionSelections: Object.fromEntries(groups
-          .filter(({ cards }) => cards.length > 1)
-          .map(({ groupId, cards }) => [groupId, cards.find((card) => lockedIds.includes(card.id))?.id ?? cards[0].id])),
-        clubs: rankedTeams.map((team) => ({
-          teamId: team.id,
-          ...(gmNames[team.id]?.trim() ? { gmName: gmNames[team.id].trim() } : {}),
-          hotseat: (seatModes[team.id] ?? 'hotseat') === 'hotseat',
-          ...(team.mlbArchetypeKey ? { archetypeId: team.mlbArchetypeKey } : {}),
-        })),
-        orderSeed: seed,
-      },
-      currentPickIndex: 0,
-      revision: 0,
-      createdDate: now,
-      lastModified: now,
-    };
-    await saveMlbDraftSession(session);
-    input.navigateToRoom(league.id);
+    await createRoomSession({ seasonNumber: 1, workflowVersion: 'snake-v1', navigate: input.navigateToRoom });
+  };
+
+  const enterPractice = async () => {
+    await createRoomSession({
+      seasonNumber: 99,
+      workflowVersion: 'snake-practice-v1',
+      navigate: input.navigateToPracticeRoom ?? input.navigateToRoom,
+    });
   };
 
   return {
@@ -434,10 +580,12 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     checking,
     readinessReasons,
     companionSeatReasons,
+    lockProofBlocked,
     ready,
     shuffleOrder,
     tapOrder,
     enterDraft,
+    enterPractice,
   };
 }
 
@@ -449,12 +597,16 @@ function HelpNote({ children }: { children: ReactNode }) {
   );
 }
 
-export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHelp = false }: {
+export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDisabled = false, showHelp = false, poolControls, onLock, onUnlock }: {
   adapter: ReturnType<typeof useSnakeDraftSetupAdapter>;
   teams: readonly Team[];
   locked: boolean;
   disabled: boolean;
+  lockDisabled?: boolean;
   showHelp?: boolean;
+  poolControls?: ReactNode;
+  onLock?: () => void;
+  onUnlock?: () => void;
 }) {
   const teamById = new Map(teams.map((team) => [team.id, team]));
   const turn = adapter.order.length > 1
@@ -463,8 +615,8 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
   const companionSeatCount = teams.filter((team) => adapter.seatModes[team.id] === 'companion').length;
   return (
     <div className="space-y-6" data-testid="snake-setup-adapter">
-      <section className="ballpark-panel" aria-label="Snake versions">
-        <div className="ballpark-panel-strip"><strong>5 · VERSIONS</strong></div>
+      <section className="ballpark-panel" aria-label="Snake pool">
+        <div className="ballpark-panel-strip"><strong>1 · POOL</strong></div>
         <div className="space-y-3 p-4">
           {showHelp ? <HelpNote>Pick one card for each real person before you lock the pool. Choose each player version, then LOCK POOL. The room check runs on those locked players and prices.</HelpNote> : null}
           {adapter.groups.filter(({ cards }) => cards.length > 1).map(({ groupId, cards }) => (
@@ -477,17 +629,21 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
                 onChange={(event) => adapter.setVersionSelections((current) => ({ ...current, [groupId]: event.target.value }))}
                 className="border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2 font-bold"
               >
-                {cards.map((card) => <option key={card.id} value={card.id}>{versionLabel(card).toUpperCase()}</option>)}
+                {cards.map((card) => <option key={card.id} value={card.id}>{(snakePlayerVersionLabel(card, cards) ?? card.overallGrade).toUpperCase()}</option>)}
               </select>
             </label>
           ))}
           {adapter.groups.every(({ cards }) => cards.length === 1) ? <p className="text-sm">No duplicate player versions in this pool.</p> : null}
+          {!locked ? poolControls : null}
           {locked ? <p className="font-bold text-[var(--ballpark-brass)]">UNLOCK THE POOL TO CHANGE VERSIONS.</p> : null}
+          <button type="button" disabled={disabled || (!locked && lockDisabled)} onClick={locked ? onUnlock : onLock} className="ballpark-press-button ballpark-press-md ballpark-press-gold">
+            {locked ? 'UNLOCK POOL' : 'LOCK POOL'}
+          </button>
         </div>
       </section>
 
       <section className="ballpark-panel" aria-label="Snake club extras">
-        <div className="ballpark-panel-strip"><strong>6 · CLUB SEATS</strong></div>
+        <div className="ballpark-panel-strip"><strong>2 · CLUBS</strong></div>
         <div className="grid gap-3 p-4 md:grid-cols-2">
           {teams.map((team) => (
             <div key={team.id} className="grid gap-2 border-4 border-[var(--ballpark-panel-border)] p-3">
@@ -510,7 +666,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
       </section>
 
       <section className="ballpark-panel" aria-label="Snake order">
-        <div className="ballpark-panel-strip"><strong>7 · ORDER</strong></div>
+        <div className="ballpark-panel-strip"><strong>3 · ORDER</strong></div>
         <div className="space-y-3 p-4">
           <div className="flex flex-wrap items-end gap-3">
             <label className="text-xs font-bold">DRAFT SEED
@@ -523,15 +679,6 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
           </div>
           <p className="font-bold text-[var(--ballpark-brass)]">R1: 1→{adapter.order.length} · R2: {adapter.order.length}→1</p>
           {showHelp && turn ? <HelpNote>{turn}</HelpNote> : null}
-        </div>
-      </section>
-
-      <section className="ballpark-panel" aria-label="Snake readiness">
-        <div className="ballpark-panel-strip"><strong>8 · READINESS</strong></div>
-        <div className="space-y-2 p-4" aria-live="polite">
-          <p className="font-bold">{adapter.checking ? 'CHECKING THE ROOM…' : adapter.proof?.message ?? 'LOCK THE POOL TO CHECK THE ROOM.'}</p>
-          {showHelp ? <HelpNote>Checking whether every club can finish a legal 22 with its chosen team identity.</HelpNote> : null}
-          {adapter.readinessReasons.map((reason) => <p key={reason} className="text-sm text-[var(--ballpark-warn-text)]">• {reason}</p>)}
         </div>
       </section>
     </div>

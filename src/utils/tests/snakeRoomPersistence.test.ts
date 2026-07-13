@@ -20,6 +20,8 @@ import {
   patchMlbDraftSessionFarmSeatBoard,
   patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
+  resetCompletedDraftArcAtomically,
+  saveLeagueTemplate,
   saveRegisteredPool,
   saveMlbDraftRoomSession,
   saveMlbDraftSession,
@@ -202,6 +204,88 @@ describe('PERFROOM room-session persistence', () => {
       leagueId: 'perfroom-league', teamId: 'team-a',
       board: board(2, 'same-revision-overwrite'), expectedBoardRevision: 2,
     })).rejects.toThrow('invalid next revision');
+  });
+
+  test('different seat edits and a main-room pick survive regardless of transaction order', async () => {
+    const base = await saveMlbDraftSession({
+      ...session(),
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-a' },
+        { round: 1, pick: 2, teamId: 'team-b' },
+      ],
+      seatBoards: { 'team-a': board(1, 'a-1'), 'team-b': board(1, 'b-1') },
+    });
+
+    await Promise.all([
+      patchMlbDraftSessionSeatBoard({
+        leagueId: base.leagueId,
+        teamId: 'team-a',
+        board: board(2, 'a-2'),
+        expectedBoardRevision: 1,
+      }),
+      patchMlbDraftSessionSeatBoard({
+        leagueId: base.leagueId,
+        teamId: 'team-b',
+        board: board(2, 'b-2'),
+        expectedBoardRevision: 1,
+      }),
+      saveMlbDraftRoomSession({
+        ...base,
+        completedPicks: [{ round: 1, pick: 1, teamId: 'team-a', playerId: 'picked' }],
+        currentPickIndex: 1,
+        revision: 1,
+      }, 0),
+    ]);
+
+    const stored = await getMlbDraftSession(base.leagueId, 1);
+    expect(stored?.completedPicks).toEqual([expect.objectContaining({ playerId: 'picked' })]);
+    expect(stored?.seatBoards?.['team-a']).toEqual(board(2, 'a-2'));
+    expect(stored?.seatBoards?.['team-b']).toEqual(board(2, 'b-2'));
+  });
+
+  test('a stale phone board cannot resurrect a player after the main room reconciles that seat', async () => {
+    const base = await saveMlbDraftSession({
+      ...session(),
+      seatBoards: { 'team-a': board(1, 'draft-target') },
+    });
+    await saveMlbDraftRoomSession({
+      ...base,
+      completedPicks: [{ round: 1, pick: 1, teamId: 'team-a', playerId: 'draft-target' }],
+      currentPickIndex: 1,
+      seatBoards: { 'team-a': board(2, 'next-legal-player') },
+      revision: 1,
+    }, 0);
+
+    await expect(patchMlbDraftSessionSeatBoard({
+      leagueId: base.leagueId,
+      teamId: 'team-a',
+      board: board(2, 'draft-target'),
+      expectedBoardRevision: 1,
+    })).rejects.toThrow('changed before it could be saved');
+    expect((await getMlbDraftSession(base.leagueId, 1))?.seatBoards?.['team-a'])
+      .toEqual(board(2, 'next-legal-player'));
+  });
+
+  test('Run It Back clears independent private boards before a deterministic session id is reused', async () => {
+    await saveLeagueTemplate({
+      id: 'perfroom-league',
+      name: 'Perfroom',
+      teamIds: [],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+    });
+    await saveMlbDraftSession({
+      ...session(),
+      seatBoards: { 'team-a': board(1, 'old-private-plan') },
+    });
+
+    await resetCompletedDraftArcAtomically('perfroom-league');
+    const rerun = await saveMlbDraftSession(session());
+
+    expect(rerun.seatBoards).toBeUndefined();
+    expect((await getMlbDraftSession('perfroom-league', 1))?.seatBoards).toBeUndefined();
   });
 
   test('persisted manifest truth cannot be removed or replaced by generic or stale-room writes', async () => {

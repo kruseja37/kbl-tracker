@@ -1,7 +1,7 @@
 # CONTRACT — SNAKE MOCK 2A: ONE BOARD, SECONDARY ELIGIBILITY, ALL-SEAT BACKFILL
 
-**Date:** 2026-07-12  
-**Base checkpoint:** `93adf76a`  
+**Date:** 2026-07-12
+**Base checkpoint:** `93adf76a`
 **Builder/auditor law:** separate agents; JK browser walk is the sole acceptance gate.
 
 ## Binding rulings

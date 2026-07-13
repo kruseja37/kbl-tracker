@@ -7,8 +7,8 @@ import {
 
 export function mlbDraftRouteForFormat(
   format: LeagueTemplate["draftFormat"],
-): "/league-builder/auction-draft" | "/snake-setup" {
-  return format === "snake" ? "/snake-setup" : "/league-builder/auction-draft";
+): "/league-builder/auction-draft" | "/snake-room" {
+  return format === "snake" ? "/snake-room" : "/league-builder/auction-draft";
 }
 
 export const draftRouteForFormat = mlbDraftRouteForFormat;
@@ -107,8 +107,8 @@ export function resolveInitialLeagueId(
   leagues: readonly Pick<LeagueTemplate, "id">[],
   requestedLeagueId: string | null,
 ): string {
-  if (requestedLeagueId && leagues.some((league) => league.id === requestedLeagueId)) {
-    return requestedLeagueId;
+  if (requestedLeagueId !== null) {
+    return leagues.some((league) => league.id === requestedLeagueId) ? requestedLeagueId : "";
   }
   return leagues[0]?.id ?? "";
 }

@@ -7110,3 +7110,39 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next session must start with the captain ruling on the two non-amended Gate 5 failures;
   do not silently characterize them. If unblocked, rerun Gate 5 once, then dispatch the
   required independent builder≠auditor review before any landing.
+
+## 2026-07-12/13 (Codex, resumed after app crash) — snake mock-draft assembly and hostile close
+
+- Re-fetched `origin/main` before every current-state ruling. The isolated branch
+  `codex/snake-mock-draft-ready` remains based directly on `origin/main` `ea66830e`; this work is
+  not on `main` until the branch is merged.
+- Completed the approved functional path: shared Draft Setup → canonical snake room → explicit
+  MLB recap confirmation → Scout Hire → farm snake room/recap → staffing → compact Franchise
+  Setup → Franchise launch with zero schedule rows. Living Season remains the owner of later CSV
+  upload or manual schedule entry.
+- Closed the team-room contract: covered team-first desks, off-clock board work, full-pool search
+  and inspection, overall and position rankings over one saved ordering, explicit 22-player plan,
+  separate live roster, all non-zero player ratings, positions, traits, personality, archetype,
+  team fit, exact salary/tax/true-cost effects, and five chemistry aggregates. Pronouns remain in
+  engine data and do not render.
+- Hardened persistence and privacy: atomic pick/trade/correction/companion writes; immutable MLB
+  and farm manifests; exact roster-handoff proof; cloud-safe Run It Back receipts; version-aware
+  player identity; farm scouting fog and frozen absolute-slot salaries; hidden farm true-value
+  rows excluded while salary and morale reach Franchise launch.
+- Ruthless repo/UI crawling removed the retired POC page and engine, noncanonical route ownership,
+  stale whole-session races, terminal retry paths, privacy auto-reveal, recap/correction dead ends,
+  touch/focus/selected-state defects, explanatory-text violations, and iPad layout failures.
+- The final audit itself found and fixed 71 stale fixtures or regression expectations exposed by
+  the production corrections, then caught stale stock MLB/FARM assignments, first-confirm recap
+  revision races, same-name ambiguity, missing farm search/TOP, stranded Scout Hire recovery,
+  narrow-layout overflow, and checksum-only snake launch ownership. A stable full-repository run
+  then passed 674 test files with 8 skipped (682 total): 9,955 tests passed, 15 skipped (9,970
+  total), 0 failed.
+  TypeScript, production build, focused ESLint, and `git diff --check` are clean.
+- During the last recheck, macOS purged several `/private/tmp` directories under disk pressure,
+  including the uncommitted worktree. The ten committed checkpoints stayed safe. The exact final
+  tree was reconstructed from this task's retained ordered patch ledger, compared across all 107
+  touched files, and re-cleared through TypeScript plus the 11-file/89-test high-risk gate before
+  the independent closing audit resumed. No source was guessed from memory.
+- Automated evidence can make the build ready, not accept it. JK's browser walk remains the sole
+  product gate.

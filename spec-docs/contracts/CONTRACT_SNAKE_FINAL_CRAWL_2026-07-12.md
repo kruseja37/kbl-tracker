@@ -34,4 +34,3 @@ finding. Do not edit files.
 - JK's browser walk is the sole acceptance gate.
 - Report `VERIFIED` or `NOT VERIFIED`, major/minor counts, evidence, and residual risk.
 - Use very high reasoning effort.
-

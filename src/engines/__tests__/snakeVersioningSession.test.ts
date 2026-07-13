@@ -117,12 +117,27 @@ describe('snake version identity and session v2', () => {
   test('D1 compatibility: a completed v2 session commits 22 unique IDs per team', async () => {
     const teamIds = ['a', 'b'];
     const pickOrder = buildSnakeOrder(teamIds, 22);
-    const poolPlayers = pickOrder.map((slot) => ({
-      id: `d1-${slot.pick}`,
-      iv: 100 + slot.pick,
-      salary: 100 + slot.pick,
-    }));
-    const makePlayer = (id: string): Player => ({
+    const legalPositions = [
+      'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', '1B', '2B', 'SS', 'LF', 'RF',
+      'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'CP', 'RP',
+    ] as const satisfies readonly Player['primaryPosition'][];
+    const teamPlayerIndex = new Map(teamIds.map((teamId) => [teamId, 0]));
+    const poolPlayers = pickOrder.map((slot) => {
+      const index = teamPlayerIndex.get(slot.teamId) ?? 0;
+      teamPlayerIndex.set(slot.teamId, index + 1);
+      return {
+        id: `d1-${slot.pick}`,
+        iv: 100 + slot.pick,
+        salary: 100 + slot.pick,
+        primaryPosition: legalPositions[index],
+        secondaryPosition: index === 8 ? 'C' as const : undefined,
+      };
+    });
+    const makePlayer = (
+      id: string,
+      primaryPosition: Player['primaryPosition'],
+      secondaryPosition?: Player['secondaryPosition'],
+    ): Player => ({
       id,
       firstName: id,
       lastName: 'Player',
@@ -130,7 +145,8 @@ describe('snake version identity and session v2', () => {
       age: 25,
       bats: 'R',
       throws: 'R',
-      primaryPosition: 'CF',
+      primaryPosition,
+      secondaryPosition,
       power: 50,
       contact: 50,
       speed: 50,
@@ -152,7 +168,7 @@ describe('snake version identity and session v2', () => {
       isCustom: false,
     });
     for (const teamId of teamIds) await saveTeamRoster(createEmptyTeamRoster(teamId));
-    for (const row of poolPlayers) await savePlayer(makePlayer(row.id));
+    for (const row of poolPlayers) await savePlayer(makePlayer(row.id, row.primaryPosition, row.secondaryPosition));
 
     const completed: LeagueBuilderMlbDraftSession = {
       ...session(),

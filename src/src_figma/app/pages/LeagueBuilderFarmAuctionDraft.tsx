@@ -409,7 +409,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   }, [activeLeague, leagueData.teams]);
 
   useEffect(() => {
-    if (!activeLeagueId || leagueTeams.length === 0) return;
+    if (!activeLeagueId || activeLeague?.draftFormat === "snake" || leagueTeams.length === 0) return;
     const key = `${activeLeagueId}:farm:1`;
     if (loadedKeyRef.current === key) return;
     loadedKeyRef.current = key;
@@ -423,7 +423,7 @@ export function LeagueBuilderFarmAuctionDraft() {
         excludeFromLeague: true,
       });
     });
-  }, [activeLeagueId, auction, leagueTeams.length, loadFarmAuction, requestedDevSeed]);
+  }, [activeLeague?.draftFormat, activeLeagueId, auction, leagueTeams.length, loadFarmAuction, requestedDevSeed]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -745,10 +745,11 @@ export function LeagueBuilderFarmAuctionDraft() {
   const blockers = useMemo(() => {
     const messages: string[] = [];
     if (!activeLeagueId) messages.push("Select a league to load the farm auction.");
+    if (activeLeague?.draftFormat === "snake") messages.push("This league is configured for a snake draft.");
     if (activeLeagueId && leagueTeams.length === 0) messages.push("Selected league has no teams.");
     if (session?.state === "NOMINATION" && availablePoolCandidates.length === 0) messages.push("No nominatable prospects remain.");
     return messages;
-  }, [activeLeagueId, availablePoolCandidates.length, leagueTeams.length, session?.state]);
+  }, [activeLeague, activeLeagueId, availablePoolCandidates.length, leagueTeams.length, session?.state]);
 
   const stageFocusTeamState = currentBidderTeamState ?? (
     session?.pendingClaim ? teamStateById.get(session.pendingClaim.teamId) ?? null : null
@@ -1030,6 +1031,10 @@ export function LeagueBuilderFarmAuctionDraft() {
         </div>
       </div>
     );
+  }
+
+  if (activeLeague?.draftFormat === "snake") {
+    return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">FARM AUCTION BLOCKED</h1><p>THIS LEAGUE IS CONFIGURED FOR A SNAKE DRAFT.</p></div></main>;
   }
 
   return (

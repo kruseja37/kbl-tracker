@@ -260,7 +260,7 @@ export function ScheduleContent({
         
         {teamStats ? (
           <div className="text-xs text-[var(--franchise-text)]/80">
-            ⭐ {selectedTeam} │ {teamStats.wins}-{teamStats.losses} ({teamStats.winPct}) │ {teamStats.gamesRemaining} games remaining
+            ⭐ {teamName(selectedTeam)} │ {teamStats.wins}-{teamStats.losses} ({teamStats.winPct}) │ {teamStats.gamesRemaining} games remaining
           </div>
         ) : (
           <div className="text-xs text-[var(--franchise-text)]/80">
@@ -366,7 +366,7 @@ export function ScheduleContent({
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="w-full bg-[var(--franchise-border)] py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform flex items-center justify-between"
           >
-            <span>Filter: {selectedTeam}</span>
+            <span>Filter: {selectedTeam === "FULL LEAGUE" ? selectedTeam : teamName(selectedTeam)}</span>
             {dropdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           
@@ -391,7 +391,7 @@ export function ScheduleContent({
                   }}
                   className="w-full py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] flex items-center justify-between border-b border-[var(--franchise-panel-dark)]"
                 >
-                  <span>{team}</span>
+                  <span>{teamName(team)}</span>
                   {selectedTeam === team && <CheckCircle className="w-3 h-3 text-[var(--franchise-text)]" />}
                 </button>
               ))}

@@ -1,6 +1,6 @@
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
 import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
-import { DeskCandidateCard } from './DeskCandidateCard';
+import { DeskCandidateRow } from './DeskCandidateRow';
 import { DraftTruthStrip } from './DraftTruthStrip';
 import { buildPlanLedger, type ChemistryStripRow } from './draftTruthModel';
 import type { DeskCandidate, TaxCoreRow } from './deskModel';
@@ -13,36 +13,32 @@ export function BoardView(props: {
   planChemistry?: readonly ChemistryStripRow[];
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
-  resolveLegalFinishLine?: (candidateId: string) => string;
   selectedCandidateId?: string | null;
   onSelectCandidate?: (candidateId: string) => void;
-  isCandidateSelectable?: (candidateId: string) => boolean;
   showHelp?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
     <div>
       <div
-        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-2"
+        className="grid grid-cols-1 gap-1"
         data-testid="board-slot-grid"
       >
         {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
-          <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
-            <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
+          <div key={slotId}>
             {byId.get(playerId)
-              ? <DeskCandidateCard
+              ? <DeskCandidateRow
                   candidate={byId.get(playerId)!}
-                  boardSlot={slotId}
-                  legalFinishLine={props.resolveLegalFinishLine?.(playerId)}
+                  prefix={slotId}
                   selected={props.selectedCandidateId === playerId}
-                  selectable={props.isCandidateSelectable?.(playerId) ?? true}
                   onSelect={props.onSelectCandidate}
+                  warning={props.brokenSlots.includes(slotId as SnakeBoardSlotId)
+                    ? 'PLAN BROKEN'
+                    : (props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2
+                      ? `${props.slotDepth[slotId as SnakeBoardSlotId]} LEFT`
+                      : null}
                 />
               : <p className="font-bold">{playerId}</p>}
-            {props.brokenSlots.includes(slotId as SnakeBoardSlotId) && <p className="text-sm font-black text-[var(--ballpark-warn-text)]">PLAN BROKEN</p>}
-            {(props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2 && !props.brokenSlots.includes(slotId as SnakeBoardSlotId) && (
-              <p className="mt-2 text-xs font-black text-[var(--ballpark-warn-text)]">YOUR {slotId} SLOT IS DOWN TO DEPTH — {props.slotDepth[slotId as SnakeBoardSlotId]} LEFT YOU'VE RANKED</p>
-            )}
           </div>
         ))}
       </div>

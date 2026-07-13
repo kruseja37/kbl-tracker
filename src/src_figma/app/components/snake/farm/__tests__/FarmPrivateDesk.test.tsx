@@ -107,6 +107,13 @@ describe('S6 farm fog', () => {
     expect(screen.getByText(/PLAN 2\/2 · OWED \$40,000 · AFTER \$160,000/)).toBeInTheDocument();
     expect(screen.getByLabelText('Planned farm class')).toHaveTextContent('Mara Diaz');
 
+    fireEvent.change(screen.getByLabelText('FIND PROSPECT'), { target: { value: 'Ana' } });
+    expect(screen.getByLabelText('Scouted prospect board')).toHaveTextContent('Ana Lee');
+    expect(screen.getByLabelText('Scouted prospect board')).not.toHaveTextContent('Mara Diaz');
+    fireEvent.click(screen.getByRole('button', { name: 'Send Ana Lee to top' }));
+    expect(onReorder).toHaveBeenCalledWith('OVERALL', ['lee', 'diaz']);
+    fireEvent.change(screen.getByLabelText('FIND PROSPECT'), { target: { value: '' } });
+
     fireEvent.click(screen.getByRole('button', { name: '2B' }));
     expect(screen.getByLabelText('Scouted prospect board')).toHaveTextContent('Mara Diaz');
     expect(screen.getByLabelText('Scouted prospect board')).not.toHaveTextContent('Ana Lee');

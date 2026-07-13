@@ -169,7 +169,20 @@ describe('S5 companion lifecycle', () => {
       message: 'THAT GM NAME DOES NOT IDENTIFY ONE COMPANION SEAT.',
     });
 
-    const complete = { ...opened, currentPickIndex: opened.pickOrder.length };
+    const picksComplete = { ...opened, currentPickIndex: opened.pickOrder.length };
+    expect(isCompanionDraftComplete(picksComplete)).toBe(false);
+    expect(isCompanionRoomOpen(picksComplete)).toBe(true);
+    const complete = {
+      ...picksComplete,
+      rosterHandoff: {
+        formatVersion: 'snake-roster-handoff-v1' as const,
+        phase: 'MLB' as const,
+        sourceSessionId: picksComplete.id,
+        manifestPoolIdentity: 'pool',
+        manifestIdentity: 'manifest',
+        committedAt: '2026-07-12T15:00:00.000Z',
+      },
+    };
     expect(isCompanionDraftComplete(complete)).toBe(true);
     expect(isCompanionRoomOpen(complete)).toBe(false);
     expect(submitCompanionClaim(complete, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' })).toMatchObject({
@@ -189,6 +202,14 @@ describe('S5 companion lifecycle', () => {
       id,
       leagueId: id,
       currentPickIndex: complete ? 1 : 0,
+      rosterHandoff: complete ? {
+        formatVersion: 'snake-roster-handoff-v1',
+        phase: 'MLB',
+        sourceSessionId: id,
+        manifestPoolIdentity: 'pool',
+        manifestIdentity: 'manifest',
+        committedAt: lastModified,
+      } : undefined,
       lastModified,
       snakeCompanions: {
         roomCode: '4821',

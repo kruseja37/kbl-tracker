@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 
 import {
+  fallBackCompanionSeatToHotseat,
   patchMlbDraftSessionSnakeCompanions,
   type LeagueBuilderMlbDraftSession,
   type SnakeCompanionState,
 } from '../../../../../utils/leagueBuilderStorage';
 import { CompanionHelp } from './CompanionHelp';
+import { isLoopbackCompanionHost, resolveCompanionJoinUrl } from './companionJoinUrl';
 import {
   approveCompanionClaim,
   companionClaimIdentity,
@@ -20,8 +22,16 @@ export interface CompanionApprovalCardProps {
   createRoomCode?: () => string;
 }
 
+const COMPANION_ORIGIN_KEY = 'kbl-snake-companion-origin';
+
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   const [error, setError] = useState<string | null>(null);
+  const configuredOrigin = import.meta.env.VITE_COMPANION_ORIGIN as string | undefined;
+  const [shareableOrigin, setShareableOrigin] = useState(() => configuredOrigin ?? localStorage.getItem(COMPANION_ORIGIN_KEY) ?? '');
+  const currentIsLoopback = (() => {
+    try { return isLoopbackCompanionHost(new URL(window.location.origin).hostname); } catch { return true; }
+  })();
+  const joinUrl = resolveCompanionJoinUrl(window.location.origin, shareableOrigin);
   useEffect(() => {
     if (props.session.snakeCompanions?.roomCode) return;
     void patchMlbDraftSessionSnakeCompanions({
@@ -55,13 +65,44 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+  const fallBackToHotseat = async (claim: CompanionClaim) => {
+    setError(null);
+    try {
+      const saved = await fallBackCompanionSeatToHotseat({
+        leagueId: props.session.leagueId,
+        seasonNumber: props.session.seasonNumber,
+        claimId: claim.claimId,
+        claimVersion: claim.claimVersion,
+        deviceId: claim.deviceId,
+        teamId: claim.teamId,
+      });
+      await props.onChange(saved);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   return (
     <section className="ballpark-panel" aria-label="Companion approvals">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
       <CompanionHelp>
-        <p>ON YOUR PHONE, GO TO: {`${window.location.origin}/snake-companion`} — SAME WI-FI.</p>
+        {joinUrl ? <p>ON YOUR PHONE, GO TO: <strong>{joinUrl}</strong> — SAME WI-FI.</p> : <p className="font-bold text-[var(--ballpark-warn-text)]" role="alert">THIS BROWSER ADDRESS ONLY WORKS ON THIS DEVICE.</p>}
+        {currentIsLoopback ? <label className="mt-3 block font-bold">SHAREABLE ADDRESS
+          <input
+            type="url"
+            aria-label="SHAREABLE ADDRESS"
+            placeholder="http://192.168.1.10:5173"
+            value={shareableOrigin}
+            onChange={(event) => {
+              const value = event.target.value;
+              setShareableOrigin(value);
+              if (value.trim()) localStorage.setItem(COMPANION_ORIGIN_KEY, value.trim());
+              else localStorage.removeItem(COMPANION_ORIGIN_KEY);
+            }}
+            className="mt-1 block min-h-11 w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2"
+          />
+        </label> : null}
         <p>USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
       </CompanionHelp>
       {error ? <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{error}</p> : null}
@@ -78,7 +119,10 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
         {companions.claims.filter((claim) => claim.status === 'approved').map((claim) => (
           <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-panel-border)] p-3">
             <p><strong>{claim.gmName.toUpperCase()}</strong> — {teamName(claim.teamId).toUpperCase()}</p>
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REVOKE {claim.gmName.toUpperCase()}</button>
+            <div className="flex flex-wrap gap-2">
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={() => void fallBackToHotseat(claim)}>FALL BACK TO HOTSEAT</button>
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REVOKE {claim.gmName.toUpperCase()}</button>
+            </div>
           </div>
         ))}
       </div>

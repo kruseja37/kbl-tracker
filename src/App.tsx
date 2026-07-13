@@ -411,6 +411,9 @@ function App() {
           <Route path="/snake-room" element={<SnakeDraftRoom />} />
         ) : null}
         {isSnakeDraftV1Enabled() ? (
+          <Route path="/league-builder/snake-practice" element={<SnakeDraftRoom />} />
+        ) : null}
+        {isSnakeDraftV1Enabled() ? (
           <Route path="/snake-companion" element={<SnakeCompanion />} />
         ) : null}
         <Route path="/league-builder/scout-hire" element={<ScoutHire />} />

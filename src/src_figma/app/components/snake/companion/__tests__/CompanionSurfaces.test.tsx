@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const patchCompanions = vi.hoisted(() => vi.fn());
 
@@ -10,6 +10,7 @@ vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) =
 
 import type { LeagueBuilderMlbDraftSession } from '../../../../../../utils/leagueBuilderStorage';
 import { CompanionApprovalCard } from '../CompanionApprovalCard';
+import { resolveCompanionJoinUrl } from '../companionJoinUrl';
 import { CompanionClaimScreen } from '../CompanionClaimScreen';
 import { SnakeCompanionFrame } from '../SnakeCompanionFrame';
 
@@ -27,6 +28,8 @@ const session = {
 } satisfies LeagueBuilderMlbDraftSession;
 
 describe('S5 companion surfaces', () => {
+  beforeEach(() => localStorage.clear());
+
   it('lets the main device approve, refuse, and revoke from a standalone card', async () => {
     const onChange = vi.fn();
     patchCompanions.mockImplementation(async (input) => ({
@@ -39,10 +42,12 @@ describe('S5 companion surfaces', () => {
       onChange={onChange}
     />);
     expect(screen.getByText('ROOM CODE 4821')).toBeInTheDocument();
-    expect(screen.queryByText(new RegExp(`${window.location.origin}/snake-companion`))).not.toBeInTheDocument();
     expect(screen.queryByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
-    expect(screen.getByText(new RegExp(`${window.location.origin}/snake-companion`))).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('THIS BROWSER ADDRESS ONLY WORKS ON THIS DEVICE.');
+    expect(document.body).not.toHaveTextContent(`${window.location.origin}/snake-companion`);
+    fireEvent.change(screen.getByRole('textbox', { name: 'SHAREABLE ADDRESS' }), { target: { value: 'http://192.168.68.54:5173' } });
+    expect(screen.getByText(/http:\/\/192\.168\.68\.54:5173\/snake-companion/)).toBeInTheDocument();
     expect(screen.getByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).toBeInTheDocument();
     expect(screen.getByText('LET ALEX SEE THE KODIAKS DESK?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
@@ -52,6 +57,14 @@ describe('S5 companion surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'REFUSE' }));
     fireEvent.click(screen.getByRole('button', { name: 'REVOKE BLAIR' }));
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
+  });
+
+  it('accepts only LAN-safe http companion origins', () => {
+    expect(resolveCompanionJoinUrl('http://127.0.0.1:5173')).toBeNull();
+    expect(resolveCompanionJoinUrl('http://0.0.0.0:5173')).toBeNull();
+    expect(resolveCompanionJoinUrl('http://[::]:5173')).toBeNull();
+    expect(resolveCompanionJoinUrl('http://localhost:5173', 'javascript:alert(1)')).toBeNull();
+    expect(resolveCompanionJoinUrl('http://localhost:5173', 'https://draft.example.test/path')).toBe('https://draft.example.test/snake-companion');
   });
 
   it('cannot approve a stale pending row after that seat was replaced', async () => {

@@ -2,6 +2,7 @@ import { createMlbDraftSessionId, type LeagueBuilderMlbDraftSession } from '../u
 import { buildSnakeOrder, validateTrade, type PickValue } from './leagueConstruction';
 import type { SnakeGuidePackage } from './snakeGuideTrade';
 import { withLatestSnakeCorrection } from './snakeSession';
+import type { FarmAuctionPool } from '../utils/farmAuctionPool';
 
 export const FARM_SLOT_SALARY_UNIT = 1_000;
 /** Separate key in the existing store; preserves the completed MLB record at season 1. */
@@ -73,6 +74,7 @@ export function createFarmSnakeSession(input: {
   farmBudgetsByTeamId: Readonly<Record<string, number>>;
   farmArchetypeIdByTeamId: Readonly<Record<string, string | undefined>>;
   prospectIds: readonly string[];
+  prospects: FarmAuctionPool['prospects'];
   now: string;
 }): LeagueBuilderMlbDraftSession {
   if (!input.mlbSession.draftManifest && input.mlbSession.currentPickIndex < input.mlbSession.pickOrder.length) {
@@ -86,6 +88,10 @@ export function createFarmSnakeSession(input: {
   if (input.prospectIds.length < pickOrder.length) {
     throw new Error('The farm pool cannot fill every open roster spot.');
   }
+  if (
+    input.prospects.length !== input.prospectIds.length
+    || input.prospects.some((prospect, index) => prospect.id !== input.prospectIds[index])
+  ) throw new Error('The farm prospect snapshot does not match the frozen prospect ids.');
   const farmSlotSalaries = buildFarmSlotTable(pickOrder.length, input.teamOrder.map((teamId) => {
     const budget = input.farmBudgetsByTeamId[teamId];
     if (!Number.isFinite(budget)) throw new Error(`Farm budget is missing for ${teamId}.`);
@@ -108,12 +114,14 @@ export function createFarmSnakeSession(input: {
     rounds: 10,
     draftPhase: 'FARM',
     farmSlotSalaries,
+    farmProspectSnapshot: input.prospects.map((prospect) => structuredClone(prospect)),
     pickOrder,
     completedPicks: [],
     trades: [],
     versionState: undefined,
     // FARM confirmation owns a separate manifest; never inherit the frozen MLB record.
     draftManifest: undefined,
+    rosterHandoff: undefined,
     correctionSnapshots: [],
     currentPickIndex: 0,
     revision: 0,
@@ -335,6 +343,7 @@ export function executeFarmGuidePackage(input: {
     message: 'Guide-matched and affordable now.',
     session: {
       ...swapped,
+      openTradeOffers: [],
       trades: [...(input.session.trades ?? []), {
         id: `snake-farm-guide-${input.session.revision ?? 0}-${(input.session.trades?.length ?? 0) + 1}`,
         atPickIndex: input.session.currentPickIndex,

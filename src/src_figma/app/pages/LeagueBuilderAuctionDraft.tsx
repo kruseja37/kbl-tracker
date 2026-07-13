@@ -2001,6 +2001,7 @@ export function LeagueBuilderAuctionDraft() {
   const blockers = useMemo(() => {
     const messages: string[] = [];
     if (!activeLeagueId) messages.push("Select a league to load the auction draft.");
+    if (activeLeague?.draftFormat === "snake") messages.push("This league is configured for a snake draft.");
     if (activeLeagueId && leagueTeams.length === 0) messages.push("Selected league has no teams.");
     if (!session && activeLeagueId && leagueTeams.length > 0) {
       if (poolLoading) {
@@ -2021,6 +2022,7 @@ export function LeagueBuilderAuctionDraft() {
     if (session?.state === "NOMINATION" && availablePoolCandidates.length === 0) messages.push("No nominatable players remain.");
     return messages;
   }, [
+    activeLeague,
     activeLeagueId,
     availablePoolCandidates.length,
     leagueTeams.length,
@@ -2484,6 +2486,10 @@ export function LeagueBuilderAuctionDraft() {
         onAdvanceCpu={handleAdvanceCpuDecision}
       />
     );
+  }
+
+  if (activeLeague?.draftFormat === "snake") {
+    return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">AUCTION ROOM BLOCKED</h1><p>THIS LEAGUE IS CONFIGURED FOR A SNAKE DRAFT.</p></div></main>;
   }
 
   return (

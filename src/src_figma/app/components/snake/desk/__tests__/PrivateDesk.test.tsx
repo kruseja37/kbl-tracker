@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { PrivateDesk } from '../PrivateDesk';
+import { DeskCandidateRow } from '../DeskCandidateRow';
 import type { DeskCandidate } from '../deskModel';
 
 const candidate: DeskCandidate = {
@@ -61,8 +62,8 @@ describe('PrivateDesk', () => {
     expect(screen.getByRole('region', { name: 'Assistant GM status' })).toHaveTextContent('SHAPE 3 OPEN');
     expect(screen.queryByText(/SHAPE READS THE CANONICAL/)).not.toBeInTheDocument();
     expect(screen.queryByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).not.toBeInTheDocument();
-    expect(screen.getByTestId('board-slot-grid')).toHaveClass('grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))]');
-    expect(screen.getByTestId('board-slot-grid').className).not.toMatch(/(?:sm|md|lg|xl):grid-cols/);
+    expect(screen.getByTestId('board-slot-grid')).toHaveClass('grid-cols-1');
+    expect(screen.getByTestId('board-slot-grid')).not.toHaveClass('md:grid-cols-2');
   });
 
   it('keeps tax-core explanation behind Help while leaving the tax rows available', () => {
@@ -132,7 +133,6 @@ describe('PrivateDesk', () => {
       boardSlots: { SS: 'available' } as const,
       brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 3 },
       selectedCandidateId: 'muraski', onSelectCandidate,
-      isCandidateSelectable: (candidateId: string) => candidateId !== 'blocked',
       onReorder: () => undefined, onStartWhatIf: () => undefined, onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
     };
     render(<PrivateDesk {...common} />);
@@ -147,6 +147,33 @@ describe('PrivateDesk', () => {
     expect(onSelectCandidate).toHaveBeenCalledWith('blocked');
     fireEvent.click(screen.getAllByRole('button', { name: 'SELECT AVAILABLE PLAYER' })[0]);
     expect(onSelectCandidate).toHaveBeenCalledTimes(3);
+  });
+
+  it('finds a specific player without scrolling and sends the full ranking to the persisted handler', () => {
+    const onReorderOverall = vi.fn();
+    const target = { ...candidate, id: 'target', name: 'JOVITA PULO', position: 'CF' as const };
+    render(<PrivateDesk
+      candidates={[candidate, target]}
+      rankings={{ SS: ['muraski'], CF: ['target'] }}
+      overallRankings={['muraski', 'target']}
+      boardSlots={{ SS: 'muraski' }}
+      brokenSlots={[]}
+      planBill={null}
+      advisorLog={[]}
+      taxCoreRows={[]}
+      slotDepth={{ SS: 1 }}
+      onReorder={() => undefined}
+      onReorderOverall={onReorderOverall}
+      onStartWhatIf={() => undefined}
+      onKeepWhatIf={() => undefined}
+      onRevertWhatIf={() => undefined}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'jovita' } });
+    expect(screen.getByRole('button', { name: 'SELECT JOVITA PULO' })).toHaveTextContent('#2');
+    fireEvent.click(screen.getByRole('button', { name: 'Send JOVITA PULO to top' }));
+    expect(onReorderOverall).toHaveBeenCalledWith(['target', 'muraski']);
   });
 
   it('renders distinct engine bills, verbatim risk, fallout, and keep/revert what-if controls', () => {
@@ -176,9 +203,8 @@ describe('PrivateDesk', () => {
     expect(screen.getByText('PLAN COST')).toBeInTheDocument();
     expect(screen.getByText('PLAN TAX')).toBeInTheDocument();
     expect(screen.getByText('PLAN CUSHION')).toBeInTheDocument();
-    expect(screen.getByText('NEXT PICK — AT RISK')).toBeInTheDocument();
-    expect(screen.getByText('FITS YOUR BOARD — SS SLOT')).toBeInTheDocument();
-    expect(screen.getAllByText(candidate.legalFinishLine)).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
+    expect(screen.getAllByText(candidate.legalFinishLine)).toHaveLength(1);
     expect(screen.getByText('THE CHOSEN BOARD SLOTS STILL WORK.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'KEEP' }));
@@ -191,19 +217,16 @@ describe('PrivateDesk', () => {
 });
 
 describe('downward tax consequence copy (TAXSWING seam)', () => {
-  it('renders YOUR TAX BILL GOES DOWN when the marginal tax is negative', async () => {
-    const { DeskCandidateCard } = await import('../DeskCandidateCard');
-    render(<DeskCandidateCard candidate={{ ...candidate, marginalTax: -12345 }} />);
-    expect(screen.getByText(/YOUR TAX BILL GOES DOWN \$12,345 WITH THIS PLAYER/)).toBeInTheDocument();
+  it('renders a tax reduction as favorable money on the compact board row', () => {
+    render(<DeskCandidateRow candidate={{ ...candidate, marginalTax: -12345 }} />);
+    const reduction = screen.getByText('TAX −$12,345');
+    expect(reduction).toHaveClass('text-[var(--ballpark-status-green)]');
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
-  it('renders unknown fit and money instead of partial-roster calculations', async () => {
-    const { DeskCandidateCard } = await import('../DeskCandidateCard');
-    render(<DeskCandidateCard candidate={{ ...candidate, consequencesKnown: false }} />);
-    expect(screen.getByText('TEAM ARCHETYPE · WHITEYBALL')).toBeInTheDocument();
-    expect(screen.getByText('FIT · FIT UNKNOWN')).toBeInTheDocument();
-    expect(screen.getByText('CURRENT TAX — · TRUE COST —')).toBeInTheDocument();
-    expect(document.body.textContent).not.toContain('$90');
+  it('shows and announces identity chips for same-name player versions', () => {
+    render(<DeskCandidateRow candidate={{ ...candidate, name: 'YOINK SAX', identityChips: ['2024', 'BEW'] }} />);
+    expect(screen.getByText('2024 · BEW')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SELECT YOINK SAX · 2024 · BEW' })).toBeInTheDocument();
   });
 });

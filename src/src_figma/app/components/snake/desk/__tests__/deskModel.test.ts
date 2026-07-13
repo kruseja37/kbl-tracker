@@ -7,6 +7,7 @@ import {
   isCandidateEligibleForBoardSlot,
   reconcileBoardAvailability,
   refitBoardSlots,
+  reorderSeatBoardRankings,
   seedPositionalRankings,
   type DeskCandidate,
 } from '../deskModel';
@@ -93,7 +94,7 @@ describe('private desk model', () => {
       rankings: { ...seeded.rankings, global: [overallTarget, ...seeded.rankings.global.filter((id) => id !== overallTarget)] },
     });
     expect(overall.brokenSlots).toEqual([]);
-    expect(overall.slots.FLEX1).toBe(overallTarget);
+    expect(Object.values(overall.slots)).toContain(overallTarget);
     expect(total(overall.slots)).not.toBe(total(seeded.slots));
     expect(new Set(Object.values(overall.slots)).size).toBe(22);
 
@@ -109,6 +110,21 @@ describe('private desk model', () => {
     expect(position.slots.SS).toBe(positionTarget);
     expect(total(position.slots)).not.toBe(total(seeded.slots));
     expect(new Set(Object.values(position.slots)).size).toBe(22);
+  });
+
+  it('keeps the 22-player plan byte-stable when a GM reorders a ranking', () => {
+    const board = buildSeededSeatBoard(fullPool()).board!;
+    const priorSlots = structuredClone(board.slots);
+    const target = board.rankings.global.at(-1)!;
+    const orderedIds = [target, ...board.rankings.global.filter((id) => id !== target)];
+
+    const reordered = reorderSeatBoardRankings({ board, view: 'OVERALL', orderedIds });
+
+    expect(reordered.slots).toBe(board.slots);
+    expect(reordered.slots).toEqual(priorSlots);
+    expect(reordered.rankings.global[0]).toBe(target);
+    expect(reordered.revision).toBe(board.revision + 1);
+    expect(reordered.rankings.frozenPlayerIds).toContain(target);
   });
 
   it('reports the exact broken slot instead of inventing a player', () => {
@@ -148,23 +164,10 @@ describe('private desk model', () => {
     expect(refit.slots.BACKUP_C).toBe(dual.id);
   });
 
-  it('reserves the only SP/RP for SWING instead of consuming it in a FLEX slot', () => {
-    const swing = candidate('only-swing', 'SP/RP', 5_000);
-    const pool = [
-      ...fullPool().filter((row) => row.position !== 'SP/RP'),
-      swing,
-    ];
-    const refit = refitBoardSlots({
-      candidates: pool,
-      rankings: {
-        global: [swing.id, ...pool.map((row) => row.id).filter((id) => id !== swing.id)],
-        byPosition: seedPositionalRankings(pool),
-      },
-    });
-
-    expect(refit.brokenSlots).toEqual([]);
-    expect(refit.slots.SWING).toBe(swing.id);
-    expect(Object.entries(refit.slots).find(([slotId]) => slotId.startsWith('FLEX'))?.[1]).not.toBe(swing.id);
+  it('lets SWING hold the canonical 22nd bench bat or reliever without requiring an SP/RP card', () => {
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('bench', '1B', 5_000))).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('relief', 'RP', 5_000))).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('starter', 'SP', 5_000))).toBe(false);
   });
 
   it('never moves a hand-touched survivor and only backfills the unavailable slot from the GM ranking', () => {

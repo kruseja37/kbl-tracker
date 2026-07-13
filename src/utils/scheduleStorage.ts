@@ -298,40 +298,28 @@ export async function getNextGameNumber(seasonNumber: number): Promise<number> {
   return maxGameNumber + 1;
 }
 
-/**
- * Add a single game to the schedule
- */
-export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
-  const db = await initScheduleDatabase();
+function sameScheduleScope(left: ScheduledGame, right: ScheduledGame): boolean {
+  if (left.seasonNumber !== right.seasonNumber) return false;
+  return left.franchiseId
+    ? left.franchiseId === right.franchiseId
+    : !right.franchiseId;
+}
 
-  // Validate: away team !== home team
-  if (input.awayTeamId === input.homeTeamId) {
-    throw new Error('Away team cannot equal home team');
-  }
-  if (input.gameNumber != null && input.gameNumber < 1) {
-    throw new Error('Game number must be positive');
-  }
-  if (input.dayNumber != null && input.dayNumber < 1) {
-    throw new Error('Day number must be positive');
-  }
+function assertAddGameInput(input: AddGameInput): void {
+  if (input.awayTeamId === input.homeTeamId) throw new Error('Away team cannot equal home team');
+  if (input.gameNumber != null && input.gameNumber < 1) throw new Error('Game number must be positive');
+  if (input.dayNumber != null && input.dayNumber < 1) throw new Error('Day number must be positive');
+}
 
-  // Auto-increment game number if not provided. Franchise schedules are
-  // independently numbered so multiple franchises can share a seasonNumber.
-  const gameNumber = input.gameNumber ?? (
-    input.franchiseId
-      ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
-      : await getNextGameNumber(input.seasonNumber)
-  );
-  const dayNumber = input.dayNumber ?? gameNumber;
-
-  const game: ScheduledGame = {
+function scheduledGameFromInput(input: AddGameInput, gameNumber: number): ScheduledGame {
+  return {
     id: generateGameId(),
     franchiseId: input.franchiseId,
     seasonId: input.seasonId,
     statsScopeId: input.statsScopeId ?? input.seasonId,
     seasonNumber: input.seasonNumber,
     gameNumber,
-    dayNumber,
+    dayNumber: input.dayNumber ?? gameNumber,
     date: input.date,
     time: input.time,
     notes: input.notes,
@@ -342,20 +330,71 @@ export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
     importedAt: input.importedAt,
     source: input.source ?? 'manual',
   };
+}
+
+/** Validate the full set and commit every row in one transaction or none. */
+async function addGamesAtomically(games: readonly ScheduledGame[]): Promise<ScheduledGame[]> {
+  if (games.length === 0) return [];
+  const db = await initScheduleDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.SCHEDULED_GAMES, 'readwrite');
     const store = tx.objectStore(STORES.SCHEDULED_GAMES);
-    const request = store.add(game);
+    const readRequest = store.getAll();
+    let validationError: Error | null = null;
 
-    request.onsuccess = () => {
-      if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-schedule', 'scheduledGames', game.id, game);
-      updateMetadata(input.seasonNumber);
-      resolve(game);
+    readRequest.onerror = () => reject(readRequest.error);
+    readRequest.onsuccess = () => {
+      const existing = (readRequest.result ?? []) as ScheduledGame[];
+      const accepted: ScheduledGame[] = [];
+      for (const game of games) {
+        const duplicate = [...existing, ...accepted].some((candidate) => (
+          sameScheduleScope(candidate, game) && candidate.gameNumber === game.gameNumber
+        ));
+        if (duplicate) {
+          validationError = new Error(`Duplicate game number ${game.gameNumber} in schedule`);
+          tx.abort();
+          return;
+        }
+        accepted.push(game);
+      }
+      try {
+        for (const game of accepted) store.add(game);
+      } catch (caught) {
+        validationError = caught instanceof Error ? caught : new Error(String(caught));
+        tx.abort();
+      }
     };
 
-    request.onerror = () => reject(request.error);
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const game of games) syncEngine.upsert('kbl-schedule', 'scheduledGames', game.id, game);
+      }
+      for (const seasonNumber of new Set(games.map((game) => game.seasonNumber))) {
+        void updateMetadata(seasonNumber);
+      }
+      resolve([...games]);
+    };
+    tx.onerror = () => reject(validationError ?? tx.error ?? new Error('Schedule transaction failed'));
+    tx.onabort = () => reject(validationError ?? tx.error ?? new Error('Schedule transaction aborted'));
   });
+}
+
+/**
+ * Add a single game to the schedule
+ */
+export async function addGame(input: AddGameInput): Promise<ScheduledGame> {
+  assertAddGameInput(input);
+
+  // Auto-increment game number if not provided. Franchise schedules are
+  // independently numbered so multiple franchises can share a seasonNumber.
+  const gameNumber = input.gameNumber ?? (
+    input.franchiseId
+      ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
+      : await getNextGameNumber(input.seasonNumber)
+  );
+  const [game] = await addGamesAtomically([scheduledGameFromInput(input, gameNumber)]);
+  return game;
 }
 
 /**
@@ -501,9 +540,8 @@ export async function importFranchiseScheduleRows(
   }
 
   const importedAt = Date.now();
-  const importedGames: ScheduledGame[] = [];
-  for (const row of input.rows) {
-    const game = await addGame({
+  const importedGames = input.rows.map((row) => {
+    const gameInput: AddGameInput = {
       franchiseId: input.franchiseId,
       seasonNumber: input.seasonNumber,
       seasonId: input.seasonId,
@@ -517,35 +555,40 @@ export async function importFranchiseScheduleRows(
       homeTeamId: row.homeTeamId,
       source: 'csv-import',
       importedAt,
-    });
-    importedGames.push(game);
-  }
+    };
+    assertAddGameInput(gameInput);
+    return scheduledGameFromInput(gameInput, row.gameNumber);
+  });
 
-  return importedGames;
+  return addGamesAtomically(importedGames);
 }
 
 /**
  * Add a series of games (same matchup, sequential)
  */
 export async function addSeries(
-  input: Omit<AddGameInput, 'gameNumber' | 'dayNumber'>,
+  input: AddGameInput,
   seriesLength: number = 3
 ): Promise<ScheduledGame[]> {
-  const games: ScheduledGame[] = [];
-  const nextGameNumber = input.franchiseId
-    ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
-    : await getNextGameNumber(input.seasonNumber);
-
-  for (let i = 0; i < seriesLength; i++) {
-    const game = await addGame({
-      ...input,
-      gameNumber: nextGameNumber + i,
-      dayNumber: nextGameNumber + i,
-    });
-    games.push(game);
+  if (!Number.isInteger(seriesLength) || seriesLength < 1) {
+    throw new Error('Series length must be a positive whole number');
   }
+  assertAddGameInput(input);
+  const nextGameNumber = input.gameNumber ?? (input.franchiseId
+    ? await getNextGameNumberForFranchise(input.franchiseId, input.seasonNumber)
+    : await getNextGameNumber(input.seasonNumber));
+  const firstDayNumber = input.dayNumber ?? nextGameNumber;
 
-  return games;
+  const games = Array.from({ length: seriesLength }, (_, index) => {
+    const gameNumber = nextGameNumber + index;
+    return scheduledGameFromInput({
+      ...input,
+      gameNumber,
+      dayNumber: firstDayNumber + index,
+    }, gameNumber);
+  });
+
+  return addGamesAtomically(games);
 }
 
 /**

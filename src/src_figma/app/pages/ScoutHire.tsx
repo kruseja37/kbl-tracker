@@ -17,6 +17,9 @@ import {
   persistScoutHiresForLeague,
   type LiveScoutCandidate,
 } from "../utils/draftStaffingPersistence";
+import { getMlbDraftSession } from "../../../utils/leagueBuilderStorage";
+import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
+import { companionTeamBranding } from "../components/snake/companion/companionBranding";
 
 function teamDisplayName(team: Team): string {
   return `${team.location} ${team.nickname}`.trim() || team.name;
@@ -32,6 +35,9 @@ export function ScoutHire() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [handoffState, setHandoffState] = useState<"checking" | "ready" | "blocked">("checking");
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffRevision, setHandoffRevision] = useState(0);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -63,8 +69,32 @@ export function ScoutHire() {
   );
   const allHumanTeamsReady = humanTeams.length > 0 && humanTeams.every((team) => scoutByTeamId.has(team.id));
 
+  useEffect(() => {
+    if (!activeLeague) return;
+    if (activeLeague.draftFormat !== "snake") {
+      setHandoffState("ready");
+      setHandoffError(null);
+      return;
+    }
+    let cancelled = false;
+    setHandoffState("checking");
+    setHandoffError(null);
+    void getMlbDraftSession(activeLeague.id, 1)
+      .then(async (session) => {
+        if (!session) throw new Error("THE MLB SNAKE DRAFT HANDOFF IS MISSING.");
+        await assertSnakeRosterHandoffReady(session, "MLB");
+        if (!cancelled) setHandoffState("ready");
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setHandoffError(caught instanceof Error ? caught.message : "THE MLB DRAFT HANDOFF IS NOT READY.");
+        setHandoffState("blocked");
+      });
+    return () => { cancelled = true; };
+  }, [activeLeague, handoffRevision]);
+
   const continueToDraft = async (): Promise<void> => {
-    if (!activeLeague || !allHumanTeamsReady) return;
+    if (!activeLeague || !allHumanTeamsReady || handoffState !== "ready") return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -114,7 +144,25 @@ export function ScoutHire() {
   if (!activeLeague) {
     return (
       <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-xl font-bold">No league found for scout hire.</div>
+        <div className="max-w-lg border-4 border-[#E0857A] bg-[#2d3d2f] p-5 text-center">
+          <div className="text-xl font-bold text-[#E0857A]">NO LEAGUE FOUND FOR SCOUT HIRE</div>
+          <div className="mt-4 flex flex-wrap justify-center gap-3">
+            <button
+              type="button"
+              className="inline-flex min-h-11 items-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-2 font-bold text-[#1A1A1A]"
+              onClick={() => void refresh()}
+            >
+              <RefreshCw className="h-4 w-4" /> RETRY
+            </button>
+            <button
+              type="button"
+              className="min-h-11 border-4 border-[#E8E8D8] px-4 py-2 font-bold"
+              onClick={() => navigate('/league-builder/draft-setup')}
+            >
+              BACK TO DRAFT SETUP
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -160,6 +208,13 @@ export function ScoutHire() {
           </aside>
         ) : null}
 
+        {handoffState === "blocked" ? (
+          <div className="mb-5 flex flex-wrap items-center gap-3 border-4 border-[#FFD27A] bg-[#6B3A3A] p-4 font-bold text-[#FFE8B0]">
+            <span>MLB DRAFT HANDOFF NOT READY · {handoffError}</span>
+            <button type="button" className="ml-auto border-2 border-[#FFE8B0] px-3 py-2" onClick={() => setHandoffRevision((value) => value + 1)}>RETRY</button>
+          </div>
+        ) : null}
+
         {humanTeams.length === 0 ? (
           <div className="mb-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
             No human-controlled teams are assigned in this league. Return to draft setup and assign at least one team.
@@ -192,22 +247,23 @@ export function ScoutHire() {
               {humanTeams.map((team) => {
                 const scout = scoutByTeamId.get(team.id);
                 if (!scout) return null;
+                const brand = companionTeamBranding(team.colors);
                 return (
                   <div
                     key={scout.id}
                     data-testid={`scout-card-${team.id}`}
                     className="relative text-left border-4 bg-[#34472f] p-4"
                     style={{
-                      borderColor: team.colors.primary,
-                      boxShadow: `5px 5px 0 ${team.colors.secondary}`,
+                      borderColor: brand.primary,
+                      boxShadow: `5px 5px 0 ${brand.border}`,
                     }}
                   >
                     <span
                       className="absolute top-2 right-2 flex items-center gap-1 border-2 text-[9px] font-bold tracking-wider px-1.5 py-0.5"
                       style={{
-                        backgroundColor: team.colors.primary,
-                        borderColor: team.colors.secondary,
-                        color: team.colors.secondary,
+                        backgroundColor: brand.primary,
+                        borderColor: brand.border,
+                        color: brand.foreground,
                       }}
                     >
                       {team.logoUrl ? <img alt="" src={team.logoUrl} className="h-5 w-5 object-contain" /> : <Check className="w-2.5 h-2.5" />}
@@ -246,7 +302,7 @@ export function ScoutHire() {
             <div className="mt-5 flex items-center gap-3">
               <button
                 type="button"
-                disabled={!allHumanTeamsReady || saving || humanTeams.length === 0}
+                disabled={!allHumanTeamsReady || saving || humanTeams.length === 0 || handoffState !== "ready"}
                 onClick={() => void continueToDraft()}
                 className="flex items-center gap-2 bg-[#C4A853] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[#E8E8D8] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
               >

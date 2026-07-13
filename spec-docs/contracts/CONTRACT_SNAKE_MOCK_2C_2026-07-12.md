@@ -1,7 +1,7 @@
 # CONTRACT — SNAKE MOCK 2C: MONEY, TAX, CHEMISTRY, AND SELECTED-PLAYER TRUTH
 
-**Date:** 2026-07-12  
-**Base checkpoint:** `95e9a536`  
+**Date:** 2026-07-12
+**Base checkpoint:** `95e9a536`
 **Builder/auditor law:** separate agents; JK browser walk is the sole acceptance gate.
 
 ## Binding rulings

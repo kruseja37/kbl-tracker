@@ -1,7 +1,7 @@
 # Snake Draft Spec / UI Alignment Report
 
-**Date:** 2026-07-12  
-**Verdict:** NOT VERIFIED before repair  
+**Date:** 2026-07-12
+**Verdict:** NOT VERIFIED before repair
 **Scope:** production snake setup, MLB room, companion, farm room, recap, staffing, Franchise Setup, and zero-schedule Living Season handoff.
 
 ## Major confirmed gaps
@@ -36,3 +36,39 @@
 - Confirmed manifests freeze MLB and farm rosters and allow zero-schedule franchise launch.
 
 This report is the pre-repair baseline. Final acceptance remains JK's browser walk.
+
+## Post-repair reconciliation — 2026-07-12
+
+All 12 UI gaps and all 5 persistence defects above now have production repairs and focused
+regression coverage:
+
+1. The iPad room is board-first with a compact decision rail, bounded active-pick window, compact
+   selected-player profile, and separate plan/roster truth.
+2. Any available player may be inspected; draft legality gates recording, not inspection.
+3. One persisted overall ranking feeds primary/secondary position views. Ranking changes do not
+   silently rewrite exact plan membership; explicit plan changes drive all recalculation.
+4. Full-pool search, selected profile, fit, exact tax/true cost, five chemistry families,
+   personality, traits, player archetype, positions, and every non-zero rating are present.
+   Pronouns stay engine-side and never render.
+5. Companion and shared-device desks fail closed, auto-cover at disclosure boundaries, and expose
+   only the selected team's authorized private state.
+6. Farm has fog-safe overall/position boards, selected-prospect inspection, frozen slot money,
+   durable trade/correction, recap confirmation, and no hidden-IV leakage.
+7. Setup, room, companion, recap, staffing, Franchise Setup, and schedule entry conform to the
+   ratified Help-Button law.
+8. Run It Back clears both snake phases and associated generated state while linked franchises
+   block destructive reset. Completed manifests freeze the pool and launch record.
+9. Pick, pause, board, trade, correction, cover, and room-code writes use narrow or atomic merge
+   paths rather than stale whole-row replacement.
+10. Franchise launch requires exact MLB and farm handoffs, stores both manifest provenances,
+    preserves farm privacy, and creates zero schedule rows.
+11. Roster recommit clears stale MLB/FARM league assignments before applying frozen winners, so
+    old stock-roster ownership cannot block the completed 22+10 handoff.
+12. MLB and farm recap confirmation reload the current session revision before freezing; the
+    first confirmation click can no longer lose a race to background advisor/board persistence.
+13. Franchise ownership embeds both full canonical snake manifests. Even a short deterministic-ID
+    collision fails closed for completed resume and partial-launch cleanup.
+
+**Status:** independently code-aligned; the complete repository gate passed 674 test files with
+8 skipped (682 total): 9,955 tests passed, 15 skipped (9,970 total), 0 failed. Only JK can accept the UI through
+his browser walk.

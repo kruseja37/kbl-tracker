@@ -19,6 +19,7 @@ export interface DeskEligibilityCandidate {
 
 export interface DeskCandidate extends DeskEligibilityCandidate {
   name: string;
+  identityChips?: readonly string[];
   advisorWorth: number;
   iv: number;
   marginalTax: number;
@@ -26,6 +27,11 @@ export interface DeskCandidate extends DeskEligibilityCandidate {
   archetypeChip: string;
   fitWord: string;
   risk: SnakeRiskRead;
+  /** True while the public future-pick playout is running off the UI thread. */
+  riskPending?: boolean;
+  /** True when the background playout is unavailable; never treat this as safe-to-wait. */
+  riskUnavailable?: boolean;
+  hasNextPick?: boolean;
   riskReason?: string;
   legalFinishLine: string;
   boardFallout?: string;
@@ -72,7 +78,9 @@ export function boardSlotPosition(slotId: SnakeBoardSlotId): TaxonomyPosition | 
   if (slotId === 'BACKUP_C') return 'C';
   if (slotId.startsWith('SP')) return 'SP';
   if (slotId.startsWith('RP')) return 'RP';
-  if (slotId === 'SWING') return 'SP/RP';
+  // Canonical roster law swings the 22nd body between a fifth bench bat and a
+  // fifth reliever. It does not require an SP/RP player.
+  if (slotId === 'SWING') return null;
   return null;
 }
 
@@ -87,7 +95,10 @@ function eligibleForSlot(slotId: SnakeBoardSlotId, candidate: DeskEligibilityCan
   if (slotId === 'BACKUP_C') return eligible.includes('C');
   if (slotId.startsWith('SP')) return eligible.includes('SP') || eligible.includes('SP/RP');
   if (slotId.startsWith('RP')) return eligible.includes('RP') || eligible.includes('SP/RP');
-  if (slotId === 'SWING') return eligible.includes('SP/RP');
+  if (slotId === 'SWING') {
+    return !['SP', 'SP/RP', 'RP', 'CP'].includes(candidate.position)
+      || eligible.some((position) => ['SP/RP', 'RP', 'CP'].includes(position));
+  }
   if (slotId.startsWith('FLEX')) return true;
   return eligible.includes(slotId as TaxonomyPosition);
 }
@@ -177,6 +188,54 @@ export function refitBoardSlots(input: {
   }
   const brokenSlots = SNAKE_BOARD_SLOT_IDS.filter((slotId) => !assigned.has(slotId));
   return { slots, brokenSlots };
+}
+
+/**
+ * A ranking gesture is private scouting work, not a roster-plan transaction.
+ * Keep the 22-player board byte-stable; the explicit what-if/KEEP flow is the
+ * only place where a GM changes board membership.
+ */
+export function reorderSeatBoardRankings(input: {
+  board: SnakeSeatBoardRecord;
+  view: 'OVERALL' | TaxonomyPosition;
+  orderedIds: readonly string[];
+}): SnakeSeatBoardRecord {
+  const priorOrder = input.view === 'OVERALL'
+    ? input.board.rankings.global ?? []
+    : input.board.rankings.byPosition?.[input.view] ?? [];
+  const changedIds = new Set<string>();
+  const maxLength = Math.max(priorOrder.length, input.orderedIds.length);
+  for (let index = 0; index < maxLength; index += 1) {
+    const prior = priorOrder[index];
+    const next = input.orderedIds[index];
+    if (prior === next) continue;
+    if (prior) changedIds.add(prior);
+    if (next) changedIds.add(next);
+  }
+  const frozenPlayerIds = [...new Set([
+    ...(input.board.rankings.frozenPlayerIds ?? []),
+    ...changedIds,
+  ])];
+  const rankings: SnakeSeatBoardRecord['rankings'] = input.view === 'OVERALL'
+    ? {
+        ...input.board.rankings,
+        global: [...input.orderedIds],
+        frozenPlayerIds,
+      }
+    : {
+        ...input.board.rankings,
+        byPosition: {
+          ...input.board.rankings.byPosition,
+          [input.view]: [...input.orderedIds],
+        },
+        frozenPlayerIds,
+      };
+  return {
+    ...input.board,
+    slots: input.board.slots,
+    rankings,
+    revision: input.board.revision + 1,
+  };
 }
 
 /** Advisor seed only. This creates no recommendation/search API; the GM confirms it in the UI. */

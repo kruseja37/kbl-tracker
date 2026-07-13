@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import { RankReorderList } from '../../shared/RankReorderList';
-import { DeskCandidateCard } from './DeskCandidateCard';
+import { DeskCandidateRow } from './DeskCandidateRow';
 import type { DeskCandidate } from './deskModel';
 
 export type SnakeRankingView = 'OVERALL' | TaxonomyPosition;
@@ -16,20 +16,30 @@ export function RankingsView(props: {
   overallRankings?: readonly string[];
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onReorderOverall?: (orderedIds: readonly string[]) => void;
-  resolveLegalFinishLine?: (candidateId: string) => string;
   selectedCandidateId?: string | null;
   onSelectCandidate?: (candidateId: string) => void;
-  isCandidateSelectable?: (candidateId: string) => boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   const positionButtons = POSITION_ORDER.filter((position) => (props.rankings[position]?.length ?? 0) > 0);
   const [view, setView] = useState<SnakeRankingView>(() => (
     props.overallRankings ? 'OVERALL' : positionButtons[0] ?? 'OVERALL'
   ));
+  const [query, setQuery] = useState('');
   const ids = view === 'OVERALL'
     ? props.overallRankings ?? []
     : props.rankings[view] ?? [];
   const rows = ids.flatMap((id) => byId.get(id) ?? []);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matchingRows = normalizedQuery
+    ? rows.filter((candidate) => [
+        candidate.name,
+        candidate.position,
+        ...(candidate.identityChips ?? []),
+      ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
+    : rows;
+  const persistOrder = (orderedIds: readonly string[]) => view === 'OVERALL'
+    ? props.onReorderOverall?.(orderedIds)
+    : props.onReorder(view, orderedIds);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2" aria-label="Ranking view">
@@ -46,19 +56,45 @@ export function RankingsView(props: {
         ))}
       </div>
       <section>
-        <h3 className="mb-2 text-lg font-black">{view} RANKINGS</h3>
-        <RankReorderList
-          items={rows}
+        <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
+          <h3 className="text-lg font-black">{view} RANKINGS</h3>
+          <label className="text-[10px] font-black">FIND PLAYER
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="mt-1 block min-h-11 w-52 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-sm"
+            />
+          </label>
+        </div>
+        {normalizedQuery ? <div className="space-y-1.5" aria-label={`${view} ranking search results`}>
+          {matchingRows.map((candidate) => {
+            const rank = ids.indexOf(candidate.id) + 1;
+            return <div key={candidate.id} className="grid grid-cols-[1fr_auto] gap-2 border-4 p-2">
+              <DeskCandidateRow
+                candidate={candidate}
+                prefix={`#${rank}`}
+                selected={props.selectedCandidateId === candidate.id}
+                onSelect={props.onSelectCandidate}
+              />
+              <button
+                type="button"
+                className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+                disabled={rank === 1}
+                aria-label={`Send ${candidate.name} to top`}
+                onClick={() => persistOrder([candidate.id, ...ids.filter((id) => id !== candidate.id)])}
+              >TOP</button>
+            </div>;
+          })}
+          {matchingRows.length === 0 ? <p className="border-2 border-[var(--ballpark-panel-border)] p-3 font-black">NO MATCHES</p> : null}
+        </div> : <RankReorderList
+          items={matchingRows}
           getId={(candidate) => candidate.id}
           itemLabel={(candidate) => candidate.name}
-          onReorder={(orderedIds) => view === 'OVERALL'
-            ? props.onReorderOverall?.(orderedIds)
-            : props.onReorder(view, orderedIds)}
-          renderContent={(candidate) => <DeskCandidateCard
+          onReorder={persistOrder}
+          renderContent={(candidate) => <DeskCandidateRow
             candidate={candidate}
-            legalFinishLine={props.resolveLegalFinishLine?.(candidate.id)}
             selected={props.selectedCandidateId === candidate.id}
-            selectable={props.isCandidateSelectable?.(candidate.id) ?? true}
             onSelect={props.onSelectCandidate}
           />}
           rowClassName={(_candidate, _index, dragged) => `grid grid-cols-[1fr_auto] gap-2 border-4 p-2 ${dragged ? 'opacity-60' : ''}`}
@@ -69,7 +105,7 @@ export function RankingsView(props: {
           rankBadgeClassName="border-2 border-[var(--ballpark-brass)] px-2 py-1 font-bold"
           rankInputClassName="min-h-11 w-16 border-2 bg-[var(--ballpark-action-green)] px-2"
           sendToTopClassName="min-h-11 border-2 px-2 text-xs font-bold"
-        />
+        />}
       </section>
     </div>
   );

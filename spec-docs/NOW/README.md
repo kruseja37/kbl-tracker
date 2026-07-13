@@ -6,7 +6,7 @@ you which thread you're in and what its next move is. Each brief separates VERIF
 ground truth at writing time) from CARRIED (Fable's session memory — re-verify before relying).
 
 1. `LIVING_SEASON.md` — build COMPLETE; next = tuning ratification + JK's first real walk.
-2. `SNAKE_DRAFT.md` — mainly built, messy edges; companion cross-device is the known first fix.
+2. `SNAKE_DRAFT.md` — active thread; full mock-draft hardening and hostile closing crawls are assembled, then JK's browser walk is the only acceptance gate.
 3. `LEGENDS_LIBRARY.md` — separate repo; engine likely finished awaiting exam+freeze; research open.
 
 House rules that do not change on crossing: builder≠auditor; JK's browser walk is the sole

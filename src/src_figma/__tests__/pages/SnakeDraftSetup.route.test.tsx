@@ -7,7 +7,6 @@ vi.mock('../../../utils/franchisePhase2Activation', () => ({
 }));
 
 vi.mock('../../../utils/franchisePhase2Flags', () => ({
-  isSnakeDraftPocEnabled: () => false,
   isSnakeDraftV1Enabled: () => false,
 }));
 

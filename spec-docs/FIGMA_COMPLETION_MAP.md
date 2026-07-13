@@ -1,16 +1,17 @@
 # Snake Draft Completion Map
 
 **Date:** 2026-07-12
+**Code status:** assembled and independently crawling; JK browser acceptance pending.
 
 | Surface | Keep | Repair | Cut / retire |
 |---|---|---|---|
-| Setup | Pool, identities, ownership, order, device choice | Companion limits/names, active order selection, completed-draft lock | Old snake POC entry |
-| Main room | Covered team lens, overall/position boards, profile, fit, money, chemistry, Assistant GM | iPad two-column shell, top decision dock, active-pick window, touch/keyboard, retry states | Explanatory text outside Help |
-| Companion | Claim/approval model, own-board authorization | Durable cover/leave, profile, money/chemistry, branding, completion state | Reopening covered/completed rooms |
-| Farm | Fog-safe stored boards, fixed slots | Prospect inspection, compact action dock, durable correction | True ratings/IV/tax claims |
-| Recap | Frozen manifest recap | Return for final correction, named next step, farm column cleanup | Duplicate farm tax/all-in column |
-| Staffing | Manager/reporter/scout persistence | Snake-aware back labels, team branding, retry/help | Generic auction wording |
-| Franchise Setup | Draft handoff, confirmation, zero-schedule launch | Draft-aware compact setup using settled truth | Re-draft prompts, deferred playoffs, redundant roster-mode step |
-| Living Season | CSV/manual schedule entry after launch | Help-gated instructions | Pre-launch schedule requirement |
+| Setup | Pool, identities, ownership, order, device choice | **DONE** — companion limits/names, active order selection, completed-draft lock | **DONE** — old snake POC entry retired |
+| Main room | Covered team lens, overall/position boards, profile, fit, money, chemistry, Assistant GM | **DONE** — iPad two-column shell, decision dock, active-pick window, touch/keyboard, retry states | **DONE** — explanatory text moved behind Help |
+| Companion | Claim/approval model, own-board authorization | **DONE** — durable cover/leave, profile, money/chemistry, branding, completion state | **DONE** — covered/completed rooms fail closed |
+| Farm | Fog-safe stored boards, fixed slots | **DONE** — prospect inspection, compact action dock, durable correction | **DONE** — true ratings/IV/tax claims excluded |
+| Recap | Frozen manifest recap | **DONE** — final correction return, named next step, farm columns | **DONE** — duplicate farm tax/all-in removed |
+| Staffing | Manager/reporter/scout persistence | **DONE** — snake-aware back labels, branding, retry/help | **DONE** — generic auction wording removed |
+| Franchise Setup | Draft handoff, confirmation, zero-schedule launch | **DONE** — compact draft-aware setup uses settled truth | **DONE** — re-draft prompts/deferred playoffs/redundant roster step removed |
+| Living Season | CSV/manual schedule entry after launch | **DONE** — Help-gated instructions | **DONE** — no pre-launch schedule requirement |
 
 Design source is the production component tree. No detached Figma-only surface counts as complete.

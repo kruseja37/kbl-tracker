@@ -778,7 +778,7 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
     },
   },
   'kbl-league-builder': {
-    version: 8,
+    version: 9,
     stores: {
       leagueTemplates: {
         keyPath: 'id',
@@ -834,13 +834,21 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
         indexes: [{ name: 'leagueId', keyPath: 'leagueId' }],
         optional: true,
       },
+      snakeSeatBoards: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'sessionId', keyPath: 'sessionId' },
+          { name: 'leagueId', keyPath: 'leagueId' },
+        ],
+        optional: true,
+      },
       auctionSessions: {
         keyPath: 'id',
         indexes: [{ name: 'leagueId', keyPath: 'leagueId' }],
         optional: true,
       },
     },
-    includedStores: ['leaguePlayerOverrides', 'scoutProfiles', 'startupDraftSessions', 'registeredPools', 'mlbDraftSessions', 'auctionSessions'],
+    includedStores: ['leaguePlayerOverrides', 'scoutProfiles', 'startupDraftSessions', 'registeredPools', 'mlbDraftSessions', 'snakeSeatBoards', 'auctionSessions'],
   },
 };
 

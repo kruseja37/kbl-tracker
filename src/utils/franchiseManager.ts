@@ -45,6 +45,8 @@ export interface FranchiseMetadata {
   controlledTeamName?: string;
   gmName?: string;
   currentSeason?: number;
+  sourceDraftIdentity?: string;
+  initializationComplete?: boolean;
   livingSeason?: {
     enabled: boolean;
     activatedAt: string;
@@ -161,10 +163,10 @@ export async function initMetaDatabase(): Promise<IDBDatabase> {
  */
 export async function createFranchise(
   name: string,
-  options?: { livingSeason?: boolean },
+  options?: { livingSeason?: boolean; franchiseId?: string; sourceDraftIdentity?: string },
 ): Promise<FranchiseId> {
   const db = await initMetaDatabase();
-  const franchiseId = generateFranchiseId();
+  const franchiseId = options?.franchiseId ?? generateFranchiseId();
 
   const metadata: FranchiseMetadata = {
     franchiseId,
@@ -173,6 +175,8 @@ export async function createFranchise(
     lastPlayedAt: Date.now(),
     schemaVersion: CURRENT_SCHEMA_VERSION,
     appVersionCreated: APP_VERSION,
+    sourceDraftIdentity: options?.sourceDraftIdentity,
+    initializationComplete: false,
     ...(options?.livingSeason === true
       ? {
           livingSeason: {
@@ -239,10 +243,12 @@ export async function renameFranchise(
     const request = store.put(metadata);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
+    tx.oncomplete = () => {
       if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
       resolve();
     };
+    tx.onerror = () => reject(tx.error ?? new Error('Franchise metadata transaction failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('Franchise metadata transaction aborted'));
   });
 }
 
@@ -389,7 +395,7 @@ export async function getFranchiseConfig(franchiseId: FranchiseId): Promise<Stor
  */
 export async function updateFranchiseMetadata(
   franchiseId: FranchiseId,
-  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'gmName' | 'currentSeason'>>
+  updates: Partial<Pick<FranchiseMetadata, 'leagueName' | 'leagueId' | 'controlledTeamId' | 'controlledTeamName' | 'gmName' | 'currentSeason' | 'sourceDraftIdentity' | 'initializationComplete'>>
 ): Promise<void> {
   const metadata = await loadFranchise(franchiseId);
   if (!metadata) throw new Error(`Franchise ${franchiseId} not found`);
@@ -403,10 +409,12 @@ export async function updateFranchiseMetadata(
     const request = store.put(metadata);
 
     request.onerror = () => reject(request.error);
-    request.onsuccess = () => {
+    tx.oncomplete = () => {
       if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-app-meta', 'franchiseList', franchiseId, metadata);
       resolve();
     };
+    tx.onerror = () => reject(tx.error ?? new Error('Franchise metadata transaction failed'));
+    tx.onabort = () => reject(tx.error ?? new Error('Franchise metadata transaction aborted'));
   });
 }
 
@@ -460,6 +468,7 @@ export async function importFranchise(data: Blob): Promise<FranchiseId> {
 export async function estimateStorageUsage(
   _franchiseId: FranchiseId
 ): Promise<number> {
+  void _franchiseId;
   // StorageManager.estimate() gives total origin usage, not per-DB.
   // For per-franchise estimates, we'd need to read all records and sum sizes.
   // This is expensive, so we return 0 and update when franchise is loaded.

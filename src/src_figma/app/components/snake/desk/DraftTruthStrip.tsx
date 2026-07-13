@@ -46,11 +46,11 @@ export function DraftTruthStrip(props: {
         <h3 className="text-xs font-black tracking-[0.14em] text-[var(--ballpark-brass)]">{props.title}</h3>
         <span className="text-xs font-black">{props.ledger.rosterCount}/22</span>
       </div>
-      <div className={`mb-2 grid grid-cols-2 gap-2 text-center ${props.compact ? '' : 'sm:grid-cols-4'}`} data-testid={props.compact ? 'compact-money-grid' : undefined}>
-        <div className="min-w-0"><p className="text-[10px] font-bold">SALARY</p><strong className="break-words text-sm">{money(props.ledger.salary)}</strong></div>
-        <div className="min-w-0"><p className="text-[10px] font-bold">TAX</p><strong className="break-words text-sm">{money(props.ledger.tax)}</strong></div>
-        <div className="min-w-0"><p className="text-[10px] font-bold">ALL-IN</p><strong className="break-words text-sm">{money(props.ledger.allIn)}</strong></div>
-        <div className="min-w-0"><p className="text-[10px] font-bold">MONEY LEFT</p><strong className="break-words text-sm">{money(props.ledger.moneyLeft)}</strong></div>
+      <div className="mb-2 grid grid-cols-2 gap-2 text-center" data-testid={props.compact ? 'compact-money-grid' : undefined}>
+        <div className="min-w-0"><p className="text-[10px] font-bold">SALARY</p><strong className="whitespace-nowrap text-sm">{money(props.ledger.salary)}</strong></div>
+        <div className="min-w-0"><p className="text-[10px] font-bold">TAX</p><strong className="whitespace-nowrap text-sm">{money(props.ledger.tax)}</strong></div>
+        <div className="min-w-0"><p className="text-[10px] font-bold">ALL-IN</p><strong className="whitespace-nowrap text-sm">{money(props.ledger.allIn)}</strong></div>
+        <div className="min-w-0"><p className="text-[10px] font-bold">MONEY LEFT</p><strong className="whitespace-nowrap text-sm">{money(props.ledger.moneyLeft)}</strong></div>
       </div>
       <ChemistryStrip rows={props.chemistry} label={`${props.title} chemistry`} compact={props.compact} />
     </section>

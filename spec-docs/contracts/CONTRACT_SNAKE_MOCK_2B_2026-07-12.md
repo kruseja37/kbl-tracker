@@ -1,7 +1,7 @@
 # CONTRACT — SNAKE MOCK 2B: TEAM-FIRST PRIVATE SEATS AND OFF-CLOCK BOARDS
 
-**Date:** 2026-07-12  
-**Base checkpoint:** `ed2828d7`  
+**Date:** 2026-07-12
+**Base checkpoint:** `ed2828d7`
 **Builder/auditor law:** separate agents; JK browser walk is the sole acceptance gate.
 
 ## Binding rulings

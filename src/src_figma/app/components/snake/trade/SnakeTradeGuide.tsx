@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import type { PickValue } from '../../../../../engines/leagueConstruction';
 import { TradePackageCard, type SnakeTradeGuideTeam } from './TradePackageCard';
 import type { AskedPickGuideResult } from './tradeGuideModel';
+import type { SnakeGuidePackage } from '../../../../../engines/snakeGuideTrade';
+import type { SnakeOpenTradeOffer } from '../../../../../utils/leagueBuilderStorage';
 
 export function SnakeTradeGuide(props: {
   teams: readonly SnakeTradeGuideTeam[];
@@ -10,11 +12,17 @@ export function SnakeTradeGuide(props: {
   sessionRevision: number;
   showHelp?: boolean;
   onAsk: (buyerTeamId: string, targetPick: number) => AskedPickGuideResult | Promise<AskedPickGuideResult>;
+  onPost?: (proposal: SnakeGuidePackage) => void | Promise<void>;
+  openOffers?: readonly SnakeOpenTradeOffer[];
+  onNod?: (offerId: string, teamId: string) => void | Promise<void>;
+  onClose?: (offerId: string, action: 'WITHDRAWN' | 'DECLINED') => void | Promise<void>;
+  onFailure?: () => void | Promise<void>;
 }) {
   const [buyerTeamId, setBuyerTeamId] = useState(props.fixedBuyerTeamId ?? props.teams[0]?.id ?? '');
   const [targetPick, setTargetPick] = useState('');
   const [answer, setAnswer] = useState<AskedPickGuideResult | null>(null);
   const [checking, setChecking] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setAnswer(null);
@@ -23,11 +31,47 @@ export function SnakeTradeGuide(props: {
 
   const askedPick = Number(targetPick);
   const validPick = Number.isInteger(askedPick) && props.pickValueChart.some((row) => row.pick === askedPick);
+  const reportFailure = async (cause: unknown) => {
+    setStatus((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
+    try {
+      await props.onFailure?.();
+    } catch {
+      // The original trade failure remains the actionable status.
+    }
+  };
   const ask = async () => {
     if (!buyerTeamId || !validPick) return;
     setChecking(true);
+    setStatus(null);
     try {
       setAnswer(await props.onAsk(buyerTeamId, askedPick));
+    } catch (cause) {
+      await reportFailure(cause);
+    } finally {
+      setChecking(false);
+    }
+  };
+  const post = async () => {
+    if (!answer?.proposal || !props.onPost) return;
+    setChecking(true);
+    try {
+      await props.onPost(answer.proposal);
+      setStatus('THE OFFER IS POSTED.');
+      setAnswer(null);
+    } catch (cause) {
+      await reportFailure(cause);
+    } finally {
+      setChecking(false);
+    }
+  };
+  const actOnOffer = async (action: () => void | Promise<void>, success: string) => {
+    setChecking(true);
+    setStatus(null);
+    try {
+      await action();
+      setStatus(success);
+    } catch (cause) {
+      await reportFailure(cause);
     } finally {
       setChecking(false);
     }
@@ -64,7 +108,24 @@ export function SnakeTradeGuide(props: {
         {validPick ? `CHECK PICK ${askedPick}` : 'ENTER A PICK'}
       </button>
 
-      {answer && <TradePackageCard answer={answer} teams={props.teams} />}
+      {answer && <>
+        <TradePackageCard answer={answer} teams={props.teams} />
+        {answer.proposal && props.onPost ? <button className="ballpark-press-button ballpark-press-md ballpark-press-gold mt-3" disabled={checking} onClick={() => void post()}>POST OFFER</button> : null}
+      </>}
+      {(props.openOffers?.length ?? 0) > 0 ? <div className="mt-4 grid gap-2">
+        {props.openOffers?.map((offer) => {
+          const ownTeamId = props.fixedBuyerTeamId;
+          const ownNod = ownTeamId === offer.buyerTeamId ? offer.buyerNod : offer.sellerNod;
+          return <div key={offer.id} className="border-4 border-[var(--ballpark-panel-border)] p-3">
+            <p className="font-bold">{offer.buyerTeamId === ownTeamId ? 'YOU RECEIVE' : 'THEY RECEIVE'} {offer.receivePickNumbers.map((pick) => `#${pick}`).join(' + ')}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {ownTeamId && props.onNod ? <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={checking || Boolean(ownNod)} onClick={() => void actOnOffer(() => props.onNod!(offer.id, ownTeamId), 'YOUR NOD IS RECORDED.')}>{ownNod ? 'YOU NODDED' : 'NOD'}</button> : null}
+              {ownTeamId && props.onClose ? <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" disabled={checking} onClick={() => void actOnOffer(() => props.onClose!(offer.id, ownTeamId === offer.buyerTeamId ? 'WITHDRAWN' : 'DECLINED'), 'THE OFFER IS CLOSED.')}>{ownTeamId === offer.buyerTeamId ? 'WITHDRAW' : 'DECLINE'}</button> : null}
+            </div>
+          </div>;
+        })}
+      </div> : null}
+      {status ? <p className="mt-3 font-bold" role="status">{status}</p> : null}
 
       <details className="mt-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
         <summary className="cursor-pointer font-bold">FULL POSTED PRICE CHART</summary>

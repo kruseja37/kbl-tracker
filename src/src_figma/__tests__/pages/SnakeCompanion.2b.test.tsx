@@ -150,7 +150,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
   });
   afterEach(() => cleanup());
 
-  test('an approved off-clock companion refits overall and secondary-position reorders and writes only its claimed board', async () => {
+  test('an approved off-clock companion reorders both rankings without changing either club plan', async () => {
+    const originalA = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
     const originalB = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.b);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
@@ -168,7 +169,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
     saved = mocks.patchBoard.mock.calls[1][0].board as SnakeSeatBoardRecord;
     expect(saved.rankings.byPosition?.C?.slice(0, 2)).toEqual(['dual', 'catcher']);
-    expect(saved.slots.C).toBe('dual');
+    expect(saved.slots).toEqual(originalA.slots);
     expect((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards?.b).toEqual(originalB);
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });

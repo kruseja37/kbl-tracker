@@ -3777,6 +3777,12 @@ money and legality consequences. Drafted or retired players backfill every saved
 revealing another team's private information. The implementation must preserve scarce-role
 feasibility, especially catcher depth and the required `SP/RP` swing slot.
 
+**Clarification after the iPad crawl:** moving a player in an overall or position ranking changes
+preference order only; it must never silently rewrite the team's exact 22-player plan. The initial
+top 22 seeds that plan once. Thereafter only an explicit board/what-if add, remove, or replacement
+changes plan membership and recalculates money, tax, fit, chemistry, and legality. Automatic
+availability backfill may replace a drafted/retired member without revealing another team's board.
+
 ## 2026-07-12 — Snake private work is team-first and may happen off-clock
 
 The live pick owner and selected private desk are separate concepts. On the shared device, any club

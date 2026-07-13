@@ -1083,7 +1083,9 @@ function snakeRestoreRows(input: {
           formatVersion: "snake-draft-manifest-v1",
           phase: "MLB",
           leagueId: input.leagueId,
+          source: { sessionId },
           pool: {
+            identity: `pool:${input.leagueId}`,
             playerIds: [playerId],
             mlbIvByPlayerId: { [playerId]: 100 },
           },
@@ -1188,6 +1190,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
           phase: "FARM",
           leagueId,
           source: { sessionId },
+          pool: { identity: `farm-pool:${leagueId}` },
         },
       },
       changed_at: Date.parse("2026-07-12T01:30:00.000Z"),

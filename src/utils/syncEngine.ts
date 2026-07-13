@@ -177,8 +177,27 @@ type SnakeSyncSession = { leagueId?: string; draftManifest?: {
   formatVersion?: string;
   phase?: string;
   leagueId?: string;
-  pool?: { playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
+  source?: { sessionId?: string };
+  pool?: { identity?: string; playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
+}; farmProspectSnapshot?: unknown[]; rosterHandoff?: {
+  formatVersion?: string;
+  phase?: string;
+  sourceSessionId?: string;
+  manifestPoolIdentity?: string;
+  manifestIdentity?: string;
+  committedAt?: string;
 } } | null;
+
+type SnakeResetReceipt = {
+  formatVersion?: string;
+  leagueId?: string;
+  phase?: string;
+  sourceSessionId?: string;
+  manifestPoolIdentity?: string;
+  manifestIdentity?: string;
+  rosterHandoffCommittedAt?: string | null;
+  resetAt?: string;
+} | null;
 
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -187,6 +206,16 @@ function canonicalJson(value: unknown): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
     .join(',')}}`;
+}
+
+function snakeSyncManifestIdentity(manifest: NonNullable<SnakeSyncSession>['draftManifest']): string {
+  const source = canonicalJson(manifest);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `snake-manifest-v1:${hash.toString(16).padStart(8, '0')}:${source.length}`;
 }
 
 function isProtectedSnakeMlbRecord(record: CloudStoreRow): boolean {
@@ -203,7 +232,14 @@ export function assertSnakeManifestPoolInboundInvariant(input: {
   proposedPool: SnakeSyncPool;
   proposedSession: SnakeSyncSession;
   sessionDeleted?: boolean;
+  sessionTombstoneData?: unknown;
 }): void {
+  assertSnakeDraftSessionInboundInvariant({
+    currentSession: input.currentSession,
+    proposedSession: input.proposedSession,
+    sessionDeleted: input.sessionDeleted,
+    tombstoneData: input.sessionTombstoneData,
+  });
   const currentManifest = input.currentSession?.draftManifest;
   const proposedManifest = input.proposedSession?.draftManifest;
   if (currentManifest && canonicalJson(input.proposedPool) !== canonicalJson(input.currentPool)) {
@@ -228,6 +264,110 @@ export function assertSnakeManifestPoolInboundInvariant(input: {
       || !Number.isFinite(row.iv)
       || proposedManifest.pool?.mlbIvByPlayerId?.[String(row.id)] !== row.iv)) {
     throw new Error('Inbound sync snake manifest and RegisteredPool do not match exactly.');
+  }
+}
+
+/** Preserve every frozen MLB/FARM session; only an exact reset receipt may delete it. */
+export function assertSnakeDraftSessionInboundInvariant(input: {
+  currentSession: SnakeSyncSession;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+  tombstoneData?: unknown;
+}): void {
+  const current = input.currentSession;
+  const proposed = input.proposedSession;
+  const currentManifest = current?.draftManifest;
+  const proposedManifest = proposed?.draftManifest;
+  if (input.sessionDeleted && currentManifest) {
+    const receipt = (input.tombstoneData && typeof input.tombstoneData === 'object'
+      ? input.tombstoneData
+      : null) as SnakeResetReceipt;
+    const currentMarker = current?.rosterHandoff;
+    const resetAt = Date.parse(receipt?.resetAt ?? '');
+    if (
+      receipt?.formatVersion !== 'snake-draft-reset-v1'
+      || receipt.leagueId !== current?.leagueId
+      || receipt.phase !== currentManifest.phase
+      || receipt.sourceSessionId !== currentManifest.source?.sessionId
+      || receipt.manifestPoolIdentity !== currentManifest.pool?.identity
+      || receipt.manifestIdentity !== snakeSyncManifestIdentity(currentManifest)
+      || !Number.isFinite(resetAt)
+      || receipt.rosterHandoffCommittedAt !== (currentMarker?.committedAt ?? null)
+      || (currentMarker && (
+        receipt.manifestIdentity !== currentMarker.manifestIdentity
+        || receipt.sourceSessionId !== currentMarker.sourceSessionId
+        || receipt.manifestPoolIdentity !== currentMarker.manifestPoolIdentity
+      ))
+    ) {
+      throw new Error('Inbound sync cannot delete a frozen snake draft without its exact Run It Back receipt.');
+    }
+    return;
+  }
+  if (currentManifest && (!proposedManifest || canonicalJson(proposedManifest) !== canonicalJson(currentManifest))) {
+    throw new Error('Inbound sync cannot remove or replace a frozen snake draft manifest.');
+  }
+  if (current?.farmProspectSnapshot && canonicalJson(proposed?.farmProspectSnapshot) !== canonicalJson(current.farmProspectSnapshot)) {
+    throw new Error('Inbound sync cannot remove or replace a frozen farm prospect snapshot.');
+  }
+  if (proposedManifest && (
+    proposedManifest.formatVersion !== 'snake-draft-manifest-v1'
+    || (proposedManifest.phase !== 'MLB' && proposedManifest.phase !== 'FARM')
+    || !proposedManifest.source?.sessionId
+    || !proposedManifest.pool?.identity
+  )) {
+    throw new Error('Inbound sync carried an invalid snake draft manifest.');
+  }
+  assertSnakeRosterHandoffInboundInvariant(input);
+}
+
+/** Exported for adversarial tests and used for both MLB and FARM session rows. */
+export function assertSnakeRosterHandoffInboundInvariant(input: {
+  currentSession: SnakeSyncSession;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+  tombstoneData?: unknown;
+}): void {
+  const current = input.currentSession;
+  const proposed = input.proposedSession;
+  const currentMarker = current?.rosterHandoff;
+  const proposedMarker = proposed?.rosterHandoff;
+
+  if (input.sessionDeleted && currentMarker) {
+    const receipt = (input.tombstoneData && typeof input.tombstoneData === 'object'
+      ? input.tombstoneData
+      : null) as SnakeResetReceipt;
+    if (
+      receipt?.formatVersion !== 'snake-draft-reset-v1'
+      || receipt.leagueId !== current?.leagueId
+      || receipt.phase !== currentMarker.phase
+      || receipt.sourceSessionId !== currentMarker.sourceSessionId
+      || receipt.manifestPoolIdentity !== currentMarker.manifestPoolIdentity
+      || receipt.manifestIdentity !== currentMarker.manifestIdentity
+      || receipt.rosterHandoffCommittedAt !== currentMarker.committedAt
+      || !Number.isFinite(Date.parse(receipt.resetAt ?? ''))
+    ) {
+      throw new Error('Inbound sync cannot delete a completed snake roster handoff without its exact Run It Back receipt.');
+    }
+    return;
+  }
+
+  if (currentMarker) {
+    if (!proposedMarker || canonicalJson(proposedMarker) !== canonicalJson(currentMarker)) {
+      throw new Error('Inbound sync cannot remove or replace a completed snake roster handoff.');
+    }
+  }
+  if (!proposedMarker) return;
+  const manifest = proposed?.draftManifest;
+  if (
+    proposedMarker.formatVersion !== 'snake-roster-handoff-v1'
+    || (proposedMarker.phase !== 'MLB' && proposedMarker.phase !== 'FARM')
+    || !Number.isFinite(Date.parse(proposedMarker.committedAt ?? ''))
+    || manifest?.phase !== proposedMarker.phase
+    || manifest.source?.sessionId !== proposedMarker.sourceSessionId
+    || manifest.pool?.identity !== proposedMarker.manifestPoolIdentity
+    || proposedMarker.manifestIdentity !== snakeSyncManifestIdentity(manifest)
+  ) {
+    throw new Error('Inbound sync carried a snake roster handoff that does not match its manifest.');
   }
 }
 
@@ -364,6 +504,8 @@ class SyncEngine {
   private restoredPushQueueKeys = new Set<string>();
   private restoredLocalQueueKeys = new Set<string>();
   private lastGeneratedChangedAt = 0;
+  private mutationBatchDepth = 0;
+  private mutationBatchDirty = false;
 
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
@@ -421,6 +563,29 @@ class SyncEngine {
   // Public API — IndexedDB Records
   // ============================================================
 
+  async batchMutations<T>(work: () => Promise<T>): Promise<T> {
+    this.mutationBatchDepth += 1;
+    try {
+      return await work();
+    } finally {
+      this.mutationBatchDepth -= 1;
+      if (this.mutationBatchDepth === 0 && this.mutationBatchDirty) {
+        this.mutationBatchDirty = false;
+        this.persistQueues();
+        this.emitStatusChange();
+      }
+    }
+  }
+
+  private commitQueuedMutation(): void {
+    if (this.mutationBatchDepth > 0) {
+      this.mutationBatchDirty = true;
+      return;
+    }
+    this.persistQueues();
+    this.emitStatusChange();
+  }
+
   upsert(dbName: string, storeName: string, recordKey: unknown, data: unknown): void {
     if (!this._enabled || this._suppressSync || !supabase) return;
 
@@ -439,11 +604,10 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: false,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
-  remove(dbName: string, storeName: string, recordKey: unknown): void {
+  remove(dbName: string, storeName: string, recordKey: unknown, tombstoneData: unknown = {}): void {
     if (!this._enabled || this._suppressSync || !supabase) return;
 
     const keyStr = serializeKey(recordKey);
@@ -457,12 +621,11 @@ class SyncEngine {
       dbName,
       storeName,
       recordKey: keyStr,
-      data: {},
+      data: tombstoneData,
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: true,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   // ============================================================
@@ -482,8 +645,7 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: false,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   removeLocal(key: string): void {
@@ -499,8 +661,7 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: true,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   // ============================================================
@@ -1528,6 +1689,9 @@ class SyncEngine {
           }
 
           try {
+            if (dbName === 'kbl-league-builder' && storeName === 'mlbDraftSessions') {
+              await this.assertOrdinarySnakeSessionInbound(db, storeRecords);
+            }
             const tx = db.transaction(storeName, 'readwrite');
             const store = tx.objectStore(storeName);
             const appliedBases = new Map<string, { receivedAt: string; id: string }>();
@@ -1596,6 +1760,34 @@ class SyncEngine {
         : null,
       skippedConflicts,
     };
+  }
+
+  private async assertOrdinarySnakeSessionInbound(
+    db: IDBDatabase,
+    records: CloudStoreRow[],
+  ): Promise<void> {
+    if (records.length === 0) return;
+    const currentByKey = new Map<string, SnakeSyncSession>();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('mlbDraftSessions', 'readonly');
+      const store = tx.objectStore('mlbDraftSessions');
+      for (const record of records) {
+        const request = store.get(JSON.parse(record.record_key));
+        request.onsuccess = () => currentByKey.set(record.record_key, request.result ?? null);
+        request.onerror = () => reject(request.error);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    for (const record of records) {
+      assertSnakeDraftSessionInboundInvariant({
+        currentSession: currentByKey.get(record.record_key) ?? null,
+        proposedSession: record.deleted ? null : record.data as SnakeSyncSession,
+        sessionDeleted: record.deleted,
+        tombstoneData: record.data,
+      });
+    }
   }
 
   private async applySnakeManifestPoolInboundAtomically(
@@ -1685,6 +1877,7 @@ class SyncEngine {
               proposedPool,
               proposedSession,
               sessionDeleted: Boolean(sessionRecord?.deleted),
+              sessionTombstoneData: sessionRecord?.deleted ? sessionRecord.data : undefined,
             });
           }
           for (const record of relevant) {

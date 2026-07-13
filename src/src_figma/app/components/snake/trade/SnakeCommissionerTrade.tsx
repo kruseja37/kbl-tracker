@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SnakeGuidePackage } from '../../../../../engines/snakeGuideTrade';
+import type { SnakeOpenTradeOffer } from '../../../../../utils/leagueBuilderStorage';
 import { TradePackageCard, type SnakeTradeGuideTeam } from './TradePackageCard';
 import type { AskedPickGuideResult, ExecutedAskedPickTrade } from './tradeGuideModel';
 
@@ -7,10 +8,16 @@ export function SnakeCommissionerTrade(props: {
   teams: readonly SnakeTradeGuideTeam[];
   ownedPicksByTeamId: Readonly<Record<string, readonly number[]>>;
   sessionRevision: number;
+  openOffers?: readonly SnakeOpenTradeOffer[];
   showHelp?: boolean;
   onAsk: (buyerTeamId: string, targetPick: number) => AskedPickGuideResult | Promise<AskedPickGuideResult>;
-  onExecute: (proposal: SnakeGuidePackage) => ExecutedAskedPickTrade | Promise<ExecutedAskedPickTrade>;
+  onPost: (proposal: SnakeGuidePackage) => void | Promise<void>;
+  onNod: (offerId: string, teamId: string) => void | Promise<void>;
+  onClose: (offerId: string, action: 'WITHDRAWN' | 'DECLINED') => void | Promise<void>;
+  onExecute: (offer: SnakeOpenTradeOffer) => ExecutedAskedPickTrade | Promise<ExecutedAskedPickTrade>;
+  onFailure?: () => void | Promise<void>;
 }) {
+  const openOffers = props.openOffers ?? [];
   const [buyerTeamId, setBuyerTeamId] = useState('');
   const [sellerTeamId, setSellerTeamId] = useState('');
   const [targetPick, setTargetPick] = useState('');
@@ -29,6 +36,14 @@ export function SnakeCommissionerTrade(props: {
   );
   const askedPick = Number(targetPick);
   const canCheck = Boolean(buyerTeamId && sellerTeamId && buyerTeamId !== sellerTeamId && sellerPicks.includes(askedPick));
+  const reportFailure = async (cause: unknown) => {
+    setStatus((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
+    try {
+      await props.onFailure?.();
+    } catch {
+      // The original trade failure remains the actionable status.
+    }
+  };
 
   const check = async () => {
     if (!canCheck) return;
@@ -39,18 +54,47 @@ export function SnakeCommissionerTrade(props: {
       setAnswer(next.proposal?.sellerTeamId === sellerTeamId ? next : {
         message: `No legal guide trade reaches pick ${askedPick}.`, proposal: null, nextPickMoves: [],
       });
+    } catch (cause) {
+      await reportFailure(cause);
     } finally {
       setWorking(false);
     }
   };
 
-  const execute = async () => {
+  const post = async () => {
     if (!answer?.proposal) return;
     setWorking(true);
     try {
-      const result = await props.onExecute(answer.proposal);
-      setStatus(result.message);
+      await props.onPost(answer.proposal);
+      setStatus('THE OFFER IS POSTED.');
       setAnswer(null);
+    } catch (cause) {
+      await reportFailure(cause);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const execute = async (offer: SnakeOpenTradeOffer) => {
+    setWorking(true);
+    try {
+      const result = await props.onExecute(offer);
+      setStatus(result.message);
+    } catch (cause) {
+      await reportFailure(cause);
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const actOnOffer = async (action: () => void | Promise<void>, success: string) => {
+    setWorking(true);
+    setStatus(null);
+    try {
+      await action();
+      setStatus(success);
+    } catch (cause) {
+      await reportFailure(cause);
     } finally {
       setWorking(false);
     }
@@ -91,11 +135,28 @@ export function SnakeCommissionerTrade(props: {
       {answer && <>
         <TradePackageCard answer={answer} teams={props.teams} />
         {answer.proposal && <div className="mt-3 flex flex-wrap gap-2">
-          <button className="ballpark-press-button ballpark-press-md ballpark-press-gold" disabled={working} onClick={() => void execute()}>EXECUTE TRADE</button>
-          <button className="ballpark-press-button ballpark-press-md ballpark-press-default" disabled={working} onClick={resetPackage}>DECLINE</button>
+          <button className="ballpark-press-button ballpark-press-md ballpark-press-gold" disabled={working} onClick={() => void post()}>POST OFFER</button>
+          <button className="ballpark-press-button ballpark-press-md ballpark-press-default" disabled={working} onClick={resetPackage}>CANCEL</button>
         </div>}
       </>}
+      {openOffers.length > 0 && <div className="mt-5 grid gap-3" aria-label="Open trade offers">
+        {openOffers.map((offer) => <article key={offer.id} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
+          <p className="font-black">{teamName(props.teams, offer.buyerTeamId)} GETS {offer.receivePickNumbers.map((pick) => `#${pick}`).join(' + ')}</p>
+          <p className="text-sm font-bold">{teamName(props.teams, offer.sellerTeamId)} GETS {offer.offerPickNumbers.map((pick) => `#${pick}`).join(' + ')}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || offer.buyerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.buyerTeamId), 'THE BUYER NOD IS RECORDED.')}>{offer.buyerNod ? 'BUYER NODDED' : 'BUYER NOD'}</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || offer.sellerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.sellerTeamId), 'THE SELLER NOD IS RECORDED.')}>{offer.sellerNod ? 'SELLER NODDED' : 'SELLER NOD'}</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || !offer.buyerNod || !offer.sellerNod} onClick={() => void execute(offer)}>EXECUTE TRADE</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'WITHDRAWN'), 'THE OFFER IS WITHDRAWN.')}>WITHDRAW</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'DECLINED'), 'THE OFFER IS DECLINED.')}>DECLINE</button>
+          </div>
+        </article>)}
+      </div>}
       {status && <p className="mt-4 font-bold uppercase" role="status">{status}</p>}
     </section>
   );
+}
+
+function teamName(teams: readonly SnakeTradeGuideTeam[], teamId: string): string {
+  return (teams.find((team) => team.id === teamId)?.name ?? 'CLUB').toUpperCase();
 }

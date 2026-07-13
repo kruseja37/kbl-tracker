@@ -16,14 +16,17 @@ import {
 import {
   createFarmAuctionSessionId,
   getAuctionSessionById,
+  getLeagueTemplate,
   getMlbDraftSession,
 } from "../../../utils/leagueBuilderStorage";
 import { readSnakeDraftTruth } from "../../../utils/snakeDraftManifest";
+import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
 import { FARM_SNAKE_SESSION_NUMBER } from "../../../engines/snakeFarmSlots";
 import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
 } from "../../../utils/leagueBuilderFarmScoutingHandoff";
+import { draftSetupRouteForLeague } from "../utils/draftRouting";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -172,15 +175,20 @@ interface DraftHandoffCompletion {
 }
 
 async function readDraftHandoffCompletion(leagueId: string): Promise<DraftHandoffCompletion> {
+  const league = await getLeagueTemplate(leagueId);
+  if (!league) {
+    return { hasMlbDraft: false, mlbComplete: false, farmComplete: false, complete: false, blocker: "THE LEAGUE COULD NOT BE FOUND." };
+  }
   const mlb = await readMlbDraftCompletion(leagueId, 1);
-  const hasMlbDraft = Boolean(mlb.auctionSession?.session || mlb.snakeSession);
-  if (!mlb.complete) {
+  const hasMlbDraft = league.draftFormat === "snake" ? Boolean(mlb.snakeSession) : Boolean(mlb.auctionSession?.session);
+  const configuredMlbComplete = league.draftFormat === "snake" ? mlb.snakeComplete : mlb.auctionComplete;
+  if (!configuredMlbComplete) {
     return {
       hasMlbDraft,
       mlbComplete: false,
       farmComplete: false,
       complete: false,
-      blocker: hasMlbDraft ? "THE MLB DRAFT RECORD IS INCOMPLETE OR INVALID." : null,
+      blocker: hasMlbDraft ? "THE MLB DRAFT RECORD IS INCOMPLETE OR INVALID." : "THE MLB DRAFT HAS NOT STARTED.",
     };
   }
 
@@ -189,11 +197,13 @@ async function readDraftHandoffCompletion(leagueId: string): Promise<DraftHandof
   const farmSnakeSession = await getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER);
   const farmAuction = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
   let snakeFarmComplete = false;
-  if (mlb.snakeComplete) {
+  if (league.draftFormat === "snake" && mlb.snakeComplete) {
     if (mlb.snakeSession?.draftManifest) {
       if (farmSnakeSession?.draftManifest) {
         try {
+          await assertSnakeRosterHandoffReady(mlb.snakeSession, "MLB");
           readSnakeDraftTruth(farmSnakeSession, "FARM");
+          await assertSnakeRosterHandoffReady(farmSnakeSession, "FARM");
           snakeFarmComplete = true;
         } catch {
           snakeFarmComplete = false;
@@ -203,8 +213,8 @@ async function readDraftHandoffCompletion(leagueId: string): Promise<DraftHandof
       snakeFarmComplete = isCompletedLegacySnakeDraftSession(farmSnakeSession, "FARM");
     }
   }
-  const auctionFarmComplete = mlb.auctionComplete && farmAuction?.session.state === "AUCTION_COMPLETE";
-  const farmComplete = snakeFarmComplete || auctionFarmComplete;
+  const auctionFarmComplete = league.draftFormat === "auction" && mlb.auctionComplete && farmAuction?.session.state === "AUCTION_COMPLETE";
+  const farmComplete = league.draftFormat === "snake" ? snakeFarmComplete : auctionFarmComplete;
   return {
     hasMlbDraft,
     mlbComplete: true,
@@ -362,9 +372,12 @@ export function FranchiseSetup() {
   );
   const requestedHandoffCheck = requestedLeagueId ? draftHandoffChecks[requestedLeagueId] : null;
   const requestedCompletionError = requestedLeagueId ? draftCompletionErrors[requestedLeagueId] ?? null : null;
-  const requestedHandoffBlocker = requestedHandoffCheck?.hasMlbDraft && !requestedHandoffCheck.complete
-    ? requestedHandoffCheck.blocker
-    : null;
+  const requestedLeagueExists = requestedLeagueId ? leagues.some((league) => league.id === requestedLeagueId) : true;
+  const requestedHandoffBlocker = requestedLeagueId && draftCompletionChecked && !requestedLeagueExists
+    ? "THE REQUESTED LEAGUE DOES NOT EXIST."
+    : requestedHandoffCheck && !requestedHandoffCheck.complete
+      ? requestedHandoffCheck.blocker ?? "THE MLB AND FARM DRAFTS MUST BE COMPLETE."
+      : null;
   const draftHandoffMode = Boolean(
     requestedLeagueId
       && draftCompletionChecked
@@ -457,7 +470,7 @@ export function FranchiseSetup() {
     }
     switch (currentStep) {
       case 1:
-        return config.league !== null;
+        return config.league !== null && draftCompletionChecked && draftedLeagueIds.has(config.league);
       case 4:
         return config.teams.selectedTeams.length > 0;
       default:
@@ -473,7 +486,7 @@ export function FranchiseSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-6">
+    <div className="min-h-screen overflow-x-hidden bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-3 sm:p-6">
       {/* Initialization overlay */}
       {isInitializing && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
@@ -486,12 +499,12 @@ export function FranchiseSetup() {
       )}
 
       {showFreezeConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="freeze-confirm-title"
-            className="w-full max-w-[520px] bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+            className="min-w-0 w-full max-w-[520px] bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
           >
             <h2 id="freeze-confirm-title" className="text-lg font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>
               Start the franchise?
@@ -527,10 +540,10 @@ export function FranchiseSetup() {
         </div>
       )}
 
-      <div className="w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
+      <div className="min-w-0 w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
         {/* Init error banner */}
         {initError && (
-          <div className="bg-[#DD0000]/20 border-b-4 border-[#DD0000] px-6 py-3 flex items-center gap-2">
+          <div className="bg-[#DD0000]/20 border-b-4 border-[#DD0000] px-4 sm:px-6 py-3 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-[#DD0000] shrink-0" />
             <p className="text-xs text-[#DD0000]">{initError}</p>
             <button onClick={() => setInitError(null)} className="ml-auto text-xs text-[#DD0000]/70 hover:text-[#DD0000]">[Dismiss]</button>
@@ -538,7 +551,7 @@ export function FranchiseSetup() {
         )}
 
         {/* Header */}
-        <div className="bg-[#4A6A42] border-b-[6px] border-[#E8E8D8] px-8 py-4">
+        <div className="bg-[#4A6A42] border-b-[6px] border-[#E8E8D8] px-4 sm:px-8 py-4">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>{draftHandoffMode ? "FRANCHISE LAUNCH" : "NEW FRANCHISE"}</h1>
             <span className="text-sm text-[#E8E8D8]/80" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>Step {currentStep} of {totalSteps}</span>
@@ -597,7 +610,7 @@ export function FranchiseSetup() {
         </div>
 
         {/* Content */}
-        <div className="p-8 min-h-[400px] max-h-[60vh] overflow-y-auto">
+        <div className="min-w-0 p-4 sm:p-8 min-h-[400px] max-h-[60vh] overflow-y-auto">
           {isLoading || handoffCheckPending ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-8 h-8 animate-spin text-[#C4A853]" />
@@ -700,11 +713,11 @@ export function FranchiseSetup() {
         </div>
 
         {/* Footer */}
-        <div className="border-t-[6px] border-[#E8E8D8] px-8 py-5 flex items-center justify-end gap-3 bg-[#4A6A42]">
+        <div className="border-t-[6px] border-[#E8E8D8] px-4 sm:px-8 py-5 flex flex-wrap items-center justify-end gap-3 bg-[#4A6A42]">
           {handoffGateStopped ? null : postFreezeSummary ? (
             <button
               onClick={handleEnterFranchise}
-              className="px-8 py-3 border-4 border-[#E8E8D8] bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] font-bold text-sm tracking-wide flex items-center gap-2 transition-all"
+              className="min-w-0 px-4 sm:px-8 py-3 border-4 border-[#E8E8D8] bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] font-bold text-sm tracking-wide flex items-center gap-2 transition-all"
               style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
             >
               <Gamepad2 className="w-4 h-4" />
@@ -715,7 +728,7 @@ export function FranchiseSetup() {
               {(currentStep > 1 || draftHandoffMode) && (
                 <button
                   onClick={currentStep > 1 ? handleBack : handleCancel}
-                  className="px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
+                  className="min-w-0 px-4 sm:px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
                   style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -734,7 +747,7 @@ export function FranchiseSetup() {
               <button
                 onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}
                 disabled={!canAdvance}
-                className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
+                className={`min-w-0 px-4 sm:px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
                   canAdvance
                     ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
                     : "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
@@ -899,8 +912,9 @@ function Step1SelectLeague({
           return (
             <div
               key={league.id}
-              onClick={() => selectLeague(league.id)}
-              className={`border-4 p-4 transition-all cursor-pointer ${
+              onClick={isDrafted ? () => selectLeague(league.id) : undefined}
+              aria-disabled={!isDrafted}
+              className={`border-4 p-4 transition-all ${isDrafted ? "cursor-pointer" : "cursor-not-allowed opacity-80"} ${
                 isSelected
                   ? "border-[#C4A853] bg-[#C4A853]/10"
                   : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
@@ -922,7 +936,23 @@ function Step1SelectLeague({
                       <span className="border-2 border-[#C4A853] bg-[#243024] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#FFD27A]">
                         Draft complete
                       </span>
-                    ) : null}
+                    ) : (
+                      <>
+                        <span className="border-2 border-[#FFD27A] bg-[#6B3A3A] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#FFE8B0]">
+                          Draft required
+                        </span>
+                        <button
+                          type="button"
+                          className="border-2 border-[#E8E8D8] bg-[#C4A853] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#243024]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(draftSetupRouteForLeague(league));
+                          }}
+                        >
+                          Open draft setup
+                        </button>
+                      </>
+                    )}
                   </div>
                   <div className="h-[1px] bg-[#E8E8D8]/30 mb-2" />
                   <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>

@@ -43,6 +43,53 @@ Final verification:
 
 Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate and will occur after the complete mock-draft program is assembled.
 
+## Final assembly / hostile repo and UI close
+
+The approved slices are now one production path rather than separate demonstrations. Draft Setup
+creates the canonical room; the room carries MLB and farm drafts through durable recaps; confirmed
+manifests and roster-handoff markers reach staffing and zero-schedule Franchise launch; Living
+Season owns later schedule CSV/manual entry.
+
+The hostile close found and repaired:
+
+1. stale, overwrite-prone whole-session writes across picks, trades, corrections, companions, and
+   cloud sync;
+2. launch paths that trusted completion without exact immutable manifests and roster handoffs;
+3. farm privacy leaks or launch omissions involving hidden true value, settled salary, and morale;
+4. ranking/plan ambiguity, missing full-pool selection, and incomplete profile/money/fit/chemistry
+   consequences;
+5. privacy auto-reveal, inaccessible touch/focus states, terminal retry paths, recap correction
+   dead ends, and layouts that separated the board from the live decision at iPad width;
+6. obsolete POC engine/page ownership, dead routes, unused inputs, debug output, and stale tests;
+7. stale stock MLB/FARM assignments that survived recommit and blocked Franchise Setup after a
+   real 440+200 draft;
+8. MLB and farm first-confirm recap races against background revision writes;
+9. ambiguous same-name rows, missing farm prospect search/TOP, stranded Scout Hire errors, and
+   narrow-layout overflow; and
+10. checksum-only snake launch ownership that could not fail closed on a same-length hash
+    collision; ownership now embeds both full canonical immutable manifests.
+
+Final evidence on the assembled diff:
+
+- high-risk recovery gate: 11 files / 89 tests passed;
+- complete repository: 674 test files passed, 8 skipped (682 total); 9,955 tests passed, 15 skipped
+  (9,970 total), 0 failed;
+- TypeScript: clean;
+- focused active-path ESLint: clean;
+- production build: passed;
+- `git diff --check` and static orphan/debug/pronoun crawls: clean;
+- automated responsive crawl: no horizontal overflow at 768/1024/1366; 22 board names untruncated;
+  live recaps measured 1024/1024 and compact Franchise Setup measured 390/390. The main room remains
+  an iPad/desktop surface, while 390px phones use the dedicated covered companion.
+
+An external macOS temporary-directory purge erased the uncommitted worktree during the final
+recheck. Recovery used the ten safe branch checkpoints plus the task's retained ordered patch
+ledger; all 107 touched files were byte-compared and the high-risk gate was repeated before the
+independent audit resumed.
+
+Status: **READY FOR JK BROWSER WALK, NOT PRODUCT-ACCEPTED**. JK's hands-on browser walk is the only
+acceptance gate.
+
 ## Slice 2E — immutable manifest and franchise launch provenance
 
 Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2E_2026-07-12.md`

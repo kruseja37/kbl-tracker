@@ -19,6 +19,7 @@ import {
   type BoardBackfillEvent,
   type DeskEligibilityCandidate,
 } from './deskModel';
+import { snakePlayerSourceId } from '../../../../../utils/snakePlayerIdentity';
 
 export interface DeskRoomPlayer extends SnakeRationalPlayer {
   stored: Player;
@@ -31,13 +32,6 @@ const BALANCED_PRIORITIES = Object.fromEntries(BANDS.map((band) => [band, 1])) a
 
 function isTaxonomyPosition(position: Player['primaryPosition']): position is TaxonomyPosition {
   return ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP'].includes(position);
-}
-
-function sourceId(player: Player): string | undefined {
-  const carried = player as Player & { sourceId?: unknown; historicalSourceId?: unknown };
-  if (typeof carried.historicalSourceId === 'string' && carried.historicalSourceId.trim()) return carried.historicalSourceId.trim();
-  if (typeof carried.sourceId === 'string' && carried.sourceId.trim()) return carried.sourceId.trim();
-  return undefined;
 }
 
 function requiredRatings(player: Player, isPitcher: boolean): number[] {
@@ -70,7 +64,7 @@ export function buildDeskRoomPlayer(input: {
   });
   return {
     ...input.seating,
-    sourceId: sourceId(input.player),
+    sourceId: snakePlayerSourceId(input.player),
     price: input.price,
     worth: input.price,
     archetypeWeights,
@@ -167,7 +161,7 @@ export function rationalRisksForRoomUncached(input: {
 
 const rationalRiskCache = new Map<string, ReturnType<typeof rationalRisksForRoomUncached>>();
 
-function rationalRiskCacheKey(input: Parameters<typeof rationalRisksForRoomUncached>[0]): string {
+export function rationalRiskCacheKey(input: Parameters<typeof rationalRisksForRoomUncached>[0]): string {
   const poolSignature = input.availablePlayers.map((player) => [
     player.playerId,
     player.sourceId ?? '',
@@ -181,8 +175,8 @@ function rationalRiskCacheKey(input: Parameters<typeof rationalRisksForRoomUncac
   )).join('|');
   return [
     input.session.id,
-    input.session.revision ?? 0,
     input.session.currentPickIndex,
+    input.session.pickOrder.slice(input.session.currentPickIndex).map((slot) => `${slot.pick}:${slot.teamId}`).join(','),
     input.askingTeamId,
     input.askedPlayerIds.join(','),
     poolSignature,

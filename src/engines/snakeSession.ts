@@ -33,8 +33,14 @@ function snapshot(
   session: LeagueBuilderMlbDraftSession,
   action: SnakeDraftCorrectionSnapshot['action'],
 ): SnakeDraftCorrectionSnapshot {
-  const { correctionSnapshots: _discarded, ...priorSession } = session;
-  return { action, priorSession };
+  const priorSession = { ...session };
+  delete priorSession.correctionSnapshots;
+  return {
+    action,
+    // Run It Back is a real one-action rewind. Offers that were live immediately
+    // before the action are part of that truth and carry the restored revision.
+    priorSession,
+  };
 }
 
 /** One window only: every completed action overwrites the previous correction snapshot. */
@@ -84,6 +90,7 @@ export function applySnakePickWithCorrection<T extends VersionedPlayerIdentity>(
     }],
     currentPickIndex: input.session.currentPickIndex + 1,
     versionState: retired.state,
+    openTradeOffers: [],
     revision: (input.session.revision ?? 0) + 1,
   };
 }

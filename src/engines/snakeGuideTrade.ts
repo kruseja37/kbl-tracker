@@ -5,6 +5,7 @@ import {
 } from './leagueConstruction';
 import {
   proveSimultaneousSnakeSeating,
+  validateSnakeSeatingProof,
   type SnakeSeatingProof,
   type SimultaneousSnakeSeatingInput,
 } from './snakeSeatingProof';
@@ -43,6 +44,16 @@ export function primeSnakeGuideSeatingProof(input: SimultaneousSnakeSeatingInput
   return proof;
 }
 
+/** Accept a durable room certificate only after the same lightweight integrity verification. */
+export function seedSnakeGuideSeatingProof(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+): boolean {
+  if (!validateSnakeSeatingProof(input, proof)) return false;
+  seatingProofCache.set(input, proof);
+  return true;
+}
+
 export interface SearchSnakeGuidePackageInput extends SnakeGuideCommonInput {
   buyerTeamId: string;
   targetPick: number;
@@ -73,6 +84,19 @@ function packageValue(picks: readonly number[], values: ReadonlyMap<number, numb
     if (value === undefined) throw new Error(`Pick ${pick} is outside this draft.`);
     return sum + value;
   }, 0);
+}
+
+function toGuidePackage(candidate: SnakeGuidePackage & { imbalance: number }): SnakeGuidePackage {
+  return {
+    buyerTeamId: candidate.buyerTeamId,
+    sellerTeamId: candidate.sellerTeamId,
+    targetPick: candidate.targetPick,
+    offerPickNumbers: candidate.offerPickNumbers,
+    receivePickNumbers: candidate.receivePickNumbers,
+    offerValue: candidate.offerValue,
+    receiveValue: candidate.receiveValue,
+    sessionRevision: candidate.sessionRevision,
+  };
 }
 
 function swapOwnership(
@@ -127,13 +151,7 @@ export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackage
           [...input.pickValueChart],
         );
         if (!verdict.balanced) continue;
-        const proposedSession = swapOwnership(input.session, {
-          buyerTeamId: input.buyerTeamId,
-          sellerTeamId,
-          offerPickNumbers,
-          receivePickNumbers,
-        });
-        if (!proveSimultaneousSnakeSeating(input.seatingProofInput).feasible) continue;
+        if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) continue;
         candidates.push({
           buyerTeamId: input.buyerTeamId,
           sellerTeamId,
@@ -156,7 +174,7 @@ export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackage
     || left.receivePickNumbers.join(',').localeCompare(right.receivePickNumbers.join(','))
   ))[0];
   if (!best) return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
-  const { imbalance: _discarded, ...tradePackage } = best;
+  const tradePackage = toGuidePackage(best);
   return {
     package: tradePackage,
     message: `OFFER ${tradePackage.offerPickNumbers.join('+')}; RECEIVE ${tradePackage.receivePickNumbers.join('+')} — guide-matched and legal now.`,
@@ -246,7 +264,7 @@ export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): Sn
   if (!best || !primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
     return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
   }
-  const { imbalance: _discarded, ...tradePackage } = best;
+  const tradePackage = toGuidePackage(best);
   return {
     package: tradePackage,
     message: `OFFER ${tradePackage.offerPickNumbers.join('+')}; RECEIVE ${tradePackage.receivePickNumbers.join('+')} — guide-matched and legal now.`,
@@ -284,7 +302,7 @@ export function revalidateSnakeGuidePackage(input: SnakeGuideCommonInput & {
     return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
   }
   const proposedSession = swapOwnership(input.session, input.proposal);
-  if (!proveSimultaneousSnakeSeating(input.seatingProofInput).feasible) {
+  if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
     return { valid: false, message: 'The package would leave a club without a legal finish.', guideMatched: true, proposedSession: null };
   }
   return { valid: true, message: 'Guide-matched and legal now.', guideMatched: true, proposedSession };
@@ -313,6 +331,7 @@ export function executeSnakeGuidePackage(input: SnakeGuideCommonInput & {
     proposedSession: {
       ...owned,
       trades: [...(input.session.trades ?? []), trade],
+      openTradeOffers: [],
       revision: (input.session.revision ?? 0) + 1,
     },
   };

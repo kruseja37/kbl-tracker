@@ -43,6 +43,7 @@ export function SelectedPlayerCard(props: {
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED PLAYER</p>
           <h2 className="break-words text-xl font-black uppercase leading-tight">{profile.name}</h2>
+          {props.candidate.identityChips?.length ? <p className="text-[10px] font-black text-[var(--ballpark-brass)]">{props.candidate.identityChips.join(' · ')}</p> : null}
           <p className="text-xs font-bold">{positions}</p>
           <p className="text-[10px] font-bold">AGE {profile.age} · B/T {profile.bats}/{profile.throws}{profile.armSlot ? ` · ${profile.armSlot} SLOT` : ''}</p>
         </div>
@@ -56,6 +57,10 @@ export function SelectedPlayerCard(props: {
         {profile.traits.map((trait) => <span key={trait} className="border-2 border-[var(--ballpark-panel-border)] px-2 py-1">{trait}</span>)}
       </div>
       <div className="mt-3 grid grid-cols-4 gap-1 sm:grid-cols-8">
+        <div className="border-2 border-[var(--ballpark-brass)] p-1 text-center">
+          <p className="text-[9px] font-bold text-[var(--ballpark-brass)]">OVR</p>
+          <strong className="text-xs">{props.player.overallGrade}</strong>
+        </div>
         {ratings.map((rating) => (
           <div key={rating.key} className="border-2 border-[var(--ballpark-panel-border)] p-1 text-center">
             <p className="text-[9px] font-bold text-[var(--ballpark-brass)]">{rating.label}</p>
@@ -66,7 +71,7 @@ export function SelectedPlayerCard(props: {
       {profile.fullRatings?.arsenal.length ? <p className="mt-2 text-xs font-bold">ARSENAL · {profile.fullRatings.arsenal.join(' · ')}</p> : null}
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <p><span className="block text-[9px] font-bold">SALARY</span><strong>${Math.round(props.candidate.iv).toLocaleString()}</strong></p>
-        <p><span className="block text-[9px] font-bold">CURRENT TAX</span><strong>{props.moneyKnown === false ? '—' : signedMoney(props.candidate.marginalTax)}</strong></p>
+        <p><span className="block text-[9px] font-bold">TAX CHANGE</span><strong>{props.moneyKnown === false ? '—' : signedMoney(props.candidate.marginalTax)}</strong></p>
         <p><span className="block text-[9px] font-bold">TRUE COST</span><strong>{props.moneyKnown === false ? '—' : `$${Math.round(props.candidate.trueCost).toLocaleString()}`}</strong></p>
         <p><span className="block text-[9px] font-bold">CHEM VALUE</span><strong>{props.chemistryDelta ? signedMoney(props.chemistryDelta.premium) : '—'}</strong></p>
       </div>

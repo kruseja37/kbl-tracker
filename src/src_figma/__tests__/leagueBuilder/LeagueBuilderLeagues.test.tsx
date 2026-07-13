@@ -386,7 +386,7 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('draft route helper maps each format to its own draft entry', () => {
-      expect(draftRouteForFormat('snake')).toBe('/snake-setup');
+      expect(draftRouteForFormat('snake')).toBe('/snake-room');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
       expect(farmDraftRouteForFormat('snake')).toBe('/snake-room');
@@ -396,7 +396,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
     test('per-league Draft action opens Draft Setup threading leagueId; snake leagues route to the snake setup', async () => {
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/snake-setup?leagueId=league-2',
+        '/snake-room?leagueId=league-2',
       );
       expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/snake-room?leagueId=league-2&phase=farm',

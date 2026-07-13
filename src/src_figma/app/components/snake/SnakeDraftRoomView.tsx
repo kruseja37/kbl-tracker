@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
 import { Eye, EyeOff, HelpCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 import { useSeatReveal } from '../../hooks/useSeatReveal';
@@ -9,6 +9,7 @@ import { PlayerProfilePopover } from '../shared/PlayerProfilePopover';
 import { createSnakeRoomState, snakeRoomReducer } from './snakeRoomReducer';
 import { DraftTruthStrip } from './desk/DraftTruthStrip';
 import type { ChemistryStripRow, DraftMoneyLedger } from './desk/draftTruthModel';
+import { companionTeamBranding } from './companion/companionBranding';
 
 type HelpAwareRoomContent = ReactNode | ((showHelp: boolean) => ReactNode);
 
@@ -69,6 +70,7 @@ export interface SnakeDraftRoomViewProps {
   livePickMoveRevision?: number;
   hotseatNextName?: string | null;
   practiceMode?: boolean;
+  practiceFastForward?: boolean;
   privateSnipeKey?: string | null;
   dangerKey?: string | null;
   privateDesk?: HelpAwareRoomContent;
@@ -80,6 +82,7 @@ export interface SnakeDraftRoomViewProps {
   onReloadRoom?: () => void | Promise<void>;
   onDismissWriteNotice?: () => void;
   onPauseChange: (paused: boolean) => void | Promise<void>;
+  onPracticeFastForwardChange?: (enabled: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
@@ -94,13 +97,21 @@ function teamName(team: SnakeRoomTeam | undefined): string {
 
 export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const [state, dispatch] = useReducer(snakeRoomReducer, props.paused, createSnakeRoomState);
-  const [lensId, setLensId] = useState(props.activeSeatId ?? props.teams[0]?.id ?? null);
+  const [lensSelection, setLensSelection] = useState<{ seatId: string | null; teamId: string | null }>(() => ({
+    seatId: props.activeSeatId,
+    teamId: props.activeSeatId ?? props.teams[0]?.id ?? null,
+  }));
+  const defaultLensId = props.activeSeatId ?? props.teams[0]?.id ?? null;
+  const lensId = lensSelection.seatId === props.activeSeatId
+    && props.teams.some((team) => team.id === lensSelection.teamId)
+    ? lensSelection.teamId
+    : defaultLensId;
   const initialHotseatCover = Boolean(
     props.hotseatNextName
     && props.activeSeatId
     && props.order[props.currentPickIndex]?.teamId === props.activeSeatId,
   );
-  const [passCoverOpen, setPassCoverOpen] = useState(initialHotseatCover);
+  const [dismissedCoverPick, setDismissedCoverPick] = useState<number | null>(null);
   const [openRoomTool, setOpenRoomTool] = useState<'GUIDE' | 'TRADE' | 'COMPANIONS' | null>(null);
   const [showHelp, setShowHelp] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,6 +128,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const currentTeam = props.teams.find((team) => team.id === currentOrder?.teamId);
   const lensTeam = props.teams.find((team) => team.id === lensId);
   const activeSeatTeam = props.teams.find((team) => team.id === props.activeSeatId);
+  const activeSeatBrand = companionTeamBranding(activeSeatTeam?.colors);
+  const lensBrand = companionTeamBranding(lensTeam?.colors);
   const activeSeatOnClock = Boolean(props.activeSeatId && currentOrder?.teamId === props.activeSeatId);
   const draftComplete = props.currentPickIndex >= props.order.length;
   const orderWindow = useMemo(() => {
@@ -125,27 +138,32 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     const start = Math.min(Math.max(liveIndex - 2, 0), props.order.length - 7);
     return props.order.slice(start, start + 7).map((slot, offset) => ({ slot, index: start + offset }));
   }, [props.currentPickIndex, props.order]);
-  const reveal = useSeatReveal({
+  const { revealed, reveal: revealSeat, cover: coverSeat } = useSeatReveal({
     seatId: props.activeSeatId,
     pickKey: props.currentPickIndex,
     tradeKey: props.tradeRevision ?? 0,
     lensId,
   });
-  stateRef.current = state;
-
+  const passCoverOpen = Boolean(
+    props.hotseatNextName
+    && props.activeSeatId
+    && currentOrder?.teamId === props.activeSeatId
+    && dismissedCoverPick !== props.currentPickIndex,
+  );
+  const onPrivateSeatRevealedChange = props.onPrivateSeatRevealedChange;
   useLayoutEffect(() => {
-    setLensId(props.activeSeatId ?? props.teams[0]?.id ?? null);
-  }, [props.activeSeatId, props.teams]);
+    stateRef.current = state;
+  }, [state]);
 
-  const cancelHold = () => {
+  const cancelHold = useCallback(() => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
     completedHold.current = false;
-  };
-  const cancelAdvance = () => {
+  }, []);
+  const cancelAdvance = useCallback(() => {
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
     advanceTimer.current = null;
-  };
+  }, []);
 
   useEffect(() => {
     if (props.paused) {
@@ -153,7 +171,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       cancelAdvance();
     }
     dispatch({ type: props.paused ? 'PAUSE' : 'RESUME' });
-  }, [props.paused]);
+  }, [cancelAdvance, cancelHold, props.paused]);
 
   useEffect(() => {
     cancelAdvance();
@@ -163,7 +181,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       dispatch({ type: 'ADVANCE', candidateId: props.candidate?.id ?? null });
     }, 1_200);
     return cancelAdvance;
-  }, [props.candidate?.id, props.currentPickIndex, props.order.length, props.paused, state.paused, state.phase]);
+  }, [cancelAdvance, props.candidate?.id, props.currentPickIndex, props.order.length, props.paused, state.paused, state.phase]);
 
   useEffect(() => {
     armedCandidate.current = null;
@@ -174,19 +192,16 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       && currentOrder?.teamId === props.activeSeatId,
     );
     if (shouldCover && lastHotseatCoverPick.current !== props.currentPickIndex) {
-      reveal.cover();
+      coverSeat();
       lastHotseatCoverPick.current = props.currentPickIndex;
-      setPassCoverOpen(true);
-    } else if (!shouldCover) {
-      setPassCoverOpen(false);
     }
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
-  }, [currentOrder?.teamId, props.activeSeatId, props.currentPickIndex, props.hotseatNextName]);
+  }, [coverSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
 
   useEffect(() => {
-    if (!reveal.revealed || !props.candidate?.id) return;
+    if (!revealed || !props.candidate?.id) return;
     selectedPlayerRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-  }, [props.candidate?.id, reveal.revealed]);
+  }, [props.candidate?.id, revealed]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
@@ -201,24 +216,24 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       }
     }
     priorLivePickMoveRevision.current = nextRevision;
-  }, [props.livePickMoveRevision, props.tradeRevision]);
+  }, [cancelAdvance, cancelHold, props.livePickMoveRevision, props.tradeRevision]);
 
   useEffect(() => {
-    if (reveal.revealed && props.privateSnipeKey) soundPlayer.play('snipe');
-  }, [props.privateSnipeKey, reveal.revealed, soundPlayer]);
+    if (revealed && props.privateSnipeKey) soundPlayer.play('snipe');
+  }, [props.privateSnipeKey, revealed, soundPlayer]);
 
   useEffect(() => {
-    if (reveal.revealed && props.dangerKey) soundPlayer.play('danger');
-  }, [props.dangerKey, reveal.revealed, soundPlayer]);
+    if (revealed && props.dangerKey) soundPlayer.play('danger');
+  }, [props.dangerKey, revealed, soundPlayer]);
 
   useEffect(() => {
-    props.onPrivateSeatRevealedChange?.(reveal.revealed);
-  }, [props.onPrivateSeatRevealedChange, reveal.revealed]);
+    onPrivateSeatRevealedChange?.(revealed);
+  }, [onPrivateSeatRevealedChange, revealed]);
 
   useEffect(() => () => {
     cancelHold();
     cancelAdvance();
-  }, []);
+  }, [cancelAdvance, cancelHold]);
 
   useEffect(() => {
     if (props.currentPickIndex < props.order.length) completionRequested.current = false;
@@ -233,7 +248,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
         dispatch({ type: 'NEXT_TURN', candidateId: props.candidate?.id ?? null });
       }
     }
-    setLensId(teamId);
+    setLensSelection({ seatId: props.activeSeatId, teamId });
     props.onActiveSeatChange?.(teamId);
     soundPlayer.play('nav');
   };
@@ -307,7 +322,13 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   );
 
   return (
-    <main className="ballpark-page min-h-screen" data-testid="snake-draft-room">
+    <main
+      className="ballpark-page min-h-screen"
+      data-testid="snake-draft-room"
+      onPointerDownCapture={() => {
+        if (props.practiceMode && props.practiceFastForward) props.onPracticeFastForwardChange?.(false);
+      }}
+    >
       <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-bold tracking-[0.2em] text-[var(--ballpark-brass)]">SHARED DRAFT ROOM</p>
@@ -331,6 +352,11 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             {props.paused ? <Play size={15} /> : <Pause size={15} />}
             {props.paused ? 'RESUME' : 'PAUSE'}
           </button> : null}
+          {props.practiceMode && !draftComplete ? <button
+            className={`ballpark-press-button ballpark-press-sm ${props.practiceFastForward ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
+            aria-pressed={Boolean(props.practiceFastForward)}
+            onClick={() => props.onPracticeFastForwardChange?.(!props.practiceFastForward)}
+          >{props.practiceFastForward ? 'FAST FORWARD ON' : 'FAST FORWARD'}</button> : null}
           <button
             className="ballpark-press-button ballpark-press-sm ballpark-press-default"
             disabled={!props.correctionAvailable}
@@ -389,7 +415,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                 aria-label={`${teamName(team)} pick ${slot.pick}`}
                 aria-current={active ? 'step' : undefined}
                 className={`min-h-16 min-w-0 border-4 p-2 text-left font-bold ${active ? 'ring-4 ring-[var(--ballpark-brass)] ring-offset-2 ring-offset-[var(--ballpark-page-bg)]' : ''}`}
-                style={{ backgroundColor: team?.colors.primary, color: team?.colors.secondary, borderColor: team?.colors.accent ?? team?.colors.secondary }}
+                style={{ backgroundColor: companionTeamBranding(team?.colors).primary, color: companionTeamBranding(team?.colors).foreground, borderColor: companionTeamBranding(team?.colors).border }}
                 onClick={() => selectLens(slot.teamId)}
               >
                 <span className="block text-[10px]">PICK {slot.pick}{slot.endpoint ? ' · BACK-TO-BACK' : ''}</span>
@@ -407,14 +433,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
         <section className="ballpark-panel" aria-label="Private seat">
           <div
             className="ballpark-panel-strip sticky top-0 z-20 mb-3 flex min-h-11 items-center justify-between gap-3"
-            style={{ backgroundColor: activeSeatTeam?.colors.primary, color: activeSeatTeam?.colors.secondary, borderColor: activeSeatTeam?.colors.accent ?? activeSeatTeam?.colors.secondary }}
+            style={{ backgroundColor: activeSeatBrand.primary, color: activeSeatBrand.foreground, borderColor: activeSeatBrand.border }}
           >
             <span className="flex min-w-0 items-center gap-2 font-bold">
               {activeSeatTeam?.logoUrl ? <img className="h-8 w-8 shrink-0 object-contain" src={activeSeatTeam.logoUrl} alt={`${activeSeatTeam.name} private desk logo`} /> : null}
               <span className="truncate">{teamName(activeSeatTeam).toUpperCase()} · {activeSeatOnClock ? 'ON CLOCK' : 'VIEWING'}</span>
             </span>
-            {reveal.revealed ? (
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 shrink-0" onClick={reveal.cover}><EyeOff size={15} /> COVER</button>
+            {revealed ? (
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 shrink-0" onClick={coverSeat}><EyeOff size={15} /> COVER</button>
             ) : null}
           </div>
           {draftComplete ? (
@@ -422,7 +448,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               <p className="text-xs font-black tracking-[0.16em] text-[var(--ballpark-brass)]">DRAFT COMPLETE</p>
               <p className="mt-2 font-bold">THE BOARD IS CLOSED. CORRECT THE LAST ACTION OR RETURN TO THE RECAP.</p>
             </div>
-          ) : !props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : reveal.revealed ? (
+          ) : !props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : revealed ? (
             <div>
               {props.candidate ? (
                 <div ref={selectedPlayerRef} data-testid="selected-player-action">
@@ -435,7 +461,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                     {!props.candidate.blockReason && !props.paused && props.canDraftFromActiveSeat !== false ? (
                       <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11 shrink-0" onClick={() => {
                         armedCandidate.current = props.candidate;
-                        reveal.cover();
+                        coverSeat();
                         dispatch({ type: 'ARM', candidateId: props.candidate!.id });
                       }}>
                         {props.draftActionLabel ?? 'COVER & ARM'}
@@ -462,7 +488,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               {renderHelpAware(props.privateDesk)}
             </div>
           ) : (
-            <button className="ballpark-press-button ballpark-press-md ballpark-press-default" onClick={reveal.reveal}>
+            <button className="ballpark-press-button ballpark-press-md ballpark-press-default" onClick={revealSeat}>
               <Eye size={15} /> REVEAL {teamName(props.teams.find((team) => team.id === props.activeSeatId)).toUpperCase()} SEAT
             </button>
           )}
@@ -499,9 +525,9 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               className="flex min-h-44 flex-col items-center justify-center border-[6px] p-4 text-center"
               data-testid="ritual-card"
               style={{
-                backgroundColor: ritualTeam?.colors.primary,
-                color: ritualTeam?.colors.secondary,
-                borderColor: ritualTeam?.colors.accent ?? ritualTeam?.colors.secondary,
+                backgroundColor: companionTeamBranding(ritualTeam?.colors).primary,
+                color: companionTeamBranding(ritualTeam?.colors).foreground,
+                borderColor: companionTeamBranding(ritualTeam?.colors).border,
               }}
             >
               {ritualTeam?.logoUrl && <img className="mb-4 h-14 w-14 object-contain" src={ritualTeam.logoUrl} alt={`${ritualTeam.name} logo`} />}
@@ -554,7 +580,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </section>
 
           <section className="ballpark-panel" aria-label="Club lens">
-            <div className="ballpark-panel-strip" style={{ borderColor: lensTeam?.colors.accent ?? lensTeam?.colors.secondary }}>
+            <div className="ballpark-panel-strip" style={{ borderColor: lensBrand.border }}>
               <span className="font-bold">CLUB LENS</span>
             </div>
             <div className="mb-4 flex flex-wrap gap-2">
@@ -562,7 +588,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             </div>
             <div className="mb-2 flex items-center gap-3">
               {lensTeam?.logoUrl && <img className="h-14 w-14 object-contain" src={lensTeam.logoUrl} alt={`${lensTeam.name} logo in club lens`} />}
-              <h3 className="text-xl font-bold" style={{ color: lensTeam?.colors.secondary }}>{teamName(lensTeam)}</h3>
+              <h3 className="text-xl font-bold">{teamName(lensTeam)}</h3>
             </div>
             {lensId && props.publicTruthByTeamId?.[lensId] ? (
               <div className="mb-4"><DraftTruthStrip
@@ -587,7 +613,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       <section className="mt-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3" aria-label="Recent picks">
         <p className="mb-2 text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">RECENT PICKS</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2">
-          {props.ticker.map((item) => <p key={item.id} className="font-bold">{item.text}</p>)}
+          {props.ticker.map((item) => {
+            const team = props.teams.find((candidate) => candidate.id === item.teamId);
+            const brand = companionTeamBranding(team?.colors);
+            return <p key={item.id} className="flex items-center gap-2 border-l-4 pl-2 font-bold" style={{ borderColor: brand.primary }}>
+              {team?.logoUrl ? <img className="h-6 w-6 object-contain" src={team.logoUrl} alt="" /> : <span className="h-3 w-3 rounded-full" style={{ backgroundColor: brand.primary }} aria-hidden="true" />}
+              {item.text}
+            </p>;
+          })}
           {props.ticker.length === 0 && <p>THE BOARD IS OPEN.</p>}
         </div>
       </section>
@@ -597,7 +630,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           <div className="ballpark-panel max-w-lg text-center">
             <h2 className="mb-4 text-3xl font-black">PASS TO {props.hotseatNextName.toUpperCase()}</h2>
             <p className="mb-5">THE PRIVATE SEAT IS COVERED.</p>
-            <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold" onClick={() => setPassCoverOpen(false)}>I HAVE THE ROOM</button>
+            <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold" onClick={() => setDismissedCoverPick(props.currentPickIndex)}>I HAVE THE ROOM</button>
           </div>
         </div>
       )}

@@ -1068,6 +1068,41 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(options.poolBalancePreset).toBe("grounded");
     });
 
+    test("REPRO (d): asynchronously resolving the active league preserves every keyed setup preference", async () => {
+      const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+        makeLegalRosterPlayerSet(prefix, 10_000),
+      );
+      window.sessionStorage.setItem("kbl:draft-pool-source-mode:league-page:pool-first", "full-pool");
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "74");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:pool-first", "grounded");
+      window.sessionStorage.setItem("kbl:draft-reserve-price-k:league-page:pool-first", "0.8");
+      window.sessionStorage.setItem("kbl:draft-identity-auto-fill-nonce:league-page", "7");
+      mockLeagueData({
+        league: makeLeague({
+          teamIds: ["team-a", "team-b", "team-c", "team-d"],
+          draftPoolMode: "pool-first",
+        }),
+        teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+        players: currentPlayers,
+        pool: makePool({
+          locked: false,
+          players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: currentPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+
+      await waitFor(() => expect(extractPoolFromDemand).toHaveBeenCalled());
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as ExtractPoolOptions;
+      expect(options.poolSourceMode).toBe("full-pool");
+      expect(options.poolQualityCenter).toBe(74);
+      expect(options.poolBalancePreset).toBe("grounded");
+      expect(window.sessionStorage.getItem("kbl:draft-reserve-price-k:league-page:pool-first")).toBe("0.8");
+      expect(window.sessionStorage.getItem("kbl:draft-identity-auto-fill-nonce:league-page")).toBe("7");
+    });
+
     test("SURPRISE FIX: switching pool-first (with lock residue) to design-first clears the basis instead of leaking it across modes", async () => {
       // The pre-existing handlePoolModeChange only cleared poolExtractedAt/poolExtractedBasis when
       // SWITCHING TO pool-first -- safe under the old regime because pool-first never wrote those

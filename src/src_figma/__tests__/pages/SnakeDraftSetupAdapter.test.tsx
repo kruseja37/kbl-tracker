@@ -9,6 +9,7 @@ import {
   buildLockedSnakeSeatingPlayers,
   buildSnakeSetupProofInput,
   deriveSnakeVersionGroups,
+  lockedSnakeVersionSelections,
   selectedSnakePoolIds,
   validateSnakeCompanionSeats,
 } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
@@ -38,6 +39,9 @@ describe('SnakeDraftSetupAdapter', () => {
     const groups = deriveSnakeVersionGroups([ruthA, ruthB, mays]);
     const ruthGroup = groups.find(({ cards }) => cards.length === 2)!;
     expect(selectedSnakePoolIds(groups, { [ruthGroup.groupId]: 'ruth-b' })).toEqual(['ruth-b', 'mays']);
+    expect(lockedSnakeVersionSelections(groups, ['ruth-b', 'mays'])).toEqual({
+      [ruthGroup.groupId]: 'ruth-b',
+    });
   });
 
   test('uses the locked RegisteredPool IV even when the live player salary disagrees', () => {
@@ -120,12 +124,33 @@ describe('SnakeDraftSetupAdapter', () => {
     const players = [
       ...makeLegalRosterPlayerSet('first', 10_000),
       ...makeLegalRosterPlayerSet('second', 10_000),
+      makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
+      makePlayer(302, { id: 'floor-lf', primaryPosition: 'LF' }),
+      makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
+      makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
+      makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
     ];
     const handRanked = players.at(-1)!;
     const team = makeTeam('team-a', { boardRankOverrides: { global: [handRanked.id] } });
     const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: pool(players) });
     expect(boards['team-a'].rankings.global?.[0]).toBe(handRanked.id);
     expect(boards['team-a'].rankings.frozenPlayerIds).toContain(handRanked.id);
+  });
+
+  test('starts the default overall ranking with the same 22 players as the roster plan', () => {
+    const players = [
+      ...makeLegalRosterPlayerSet('first', 10_000),
+      ...makeLegalRosterPlayerSet('second', 10_000),
+      makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
+      makePlayer(302, { id: 'floor-lf', primaryPosition: 'LF' }),
+      makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
+      makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
+      makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
+    ];
+    const boards = buildInitialSnakeSeatBoards({ teams: [makeTeam('team-a')], players, pool: pool(players) });
+    const board = boards['team-a'];
+
+    expect(new Set(board.rankings.global.slice(0, 22))).toEqual(new Set(Object.values(board.slots)));
   });
 
   test('blocks unclaimable companion setup before the room can be created', () => {

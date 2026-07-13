@@ -1,6 +1,5 @@
 import {
   HISTORICAL_ARCHETYPES,
-  ARCHETYPE_STAT_LUX_KEY,
   archetypeCapShift,
   type HistoricalArchetype,
   type ArchetypeStat,
@@ -16,6 +15,16 @@ import {
 import { archetypeBandPriorities } from './cpuShillBidding';
 import type { ModStat } from '../data/tierParams';
 import { saveTeam, type Team } from '../utils/leagueBuilderStorage';
+
+const ARCHETYPE_BAND_PRIORITIES_CACHE = new Map<string, BandPriorities>();
+
+function cachedArchetypeBandPriorities(archetype: HistoricalArchetype): BandPriorities {
+  const cached = ARCHETYPE_BAND_PRIORITIES_CACHE.get(archetype.id);
+  if (cached) return cached;
+  const resolved = Object.freeze({ ...archetypeBandPriorities(archetype) }) as BandPriorities;
+  ARCHETYPE_BAND_PRIORITIES_CACHE.set(archetype.id, resolved);
+  return resolved;
+}
 
 export function archetypeStatToModName(stat: ArchetypeStat): string {
   if (stat.startsWith('ROT_') || stat.startsWith('PEN_')) {
@@ -59,7 +68,7 @@ export function resolveClubBandPriorities(input: {
     ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === input.mlbArchetypeKey)
     : undefined;
   if (archetype) {
-    return archetypeBandPriorities(archetype);
+    return cachedArchetypeBandPriorities(archetype);
   }
 
   const rawShift = input.capIdentity?.rawShift;

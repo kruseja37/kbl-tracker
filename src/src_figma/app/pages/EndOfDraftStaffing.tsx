@@ -19,6 +19,9 @@ import {
   type ReporterPersonaOption,
 } from "../utils/draftStaffingPersistence";
 import type { ReporterAvatarEra } from "../../../types/reporter";
+import { getMlbDraftSession } from "../../../utils/leagueBuilderStorage";
+import { FARM_SNAKE_SESSION_NUMBER } from "../../../engines/snakeFarmSlots";
+import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
 
 interface StaffForm {
   managerName: string;
@@ -84,6 +87,9 @@ export function EndOfDraftStaffing() {
   // (journey-wide placement) so the instruction banner can gate behind it instead of always
   // rendering.
   const [showHelp, setShowHelp] = useState(false);
+  const [handoffState, setHandoffState] = useState<"checking" | "ready" | "blocked">("checking");
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffRevision, setHandoffRevision] = useState(0);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -110,6 +116,33 @@ export function EndOfDraftStaffing() {
     () => leagueTeams.filter((team) => isHumanControlledTeam(team)),
     [leagueTeams],
   );
+
+  useEffect(() => {
+    if (!activeLeague) return;
+    if (activeLeague.draftFormat !== "snake") {
+      setHandoffState("ready");
+      setHandoffError(null);
+      return;
+    }
+    let cancelled = false;
+    setHandoffState("checking");
+    setHandoffError(null);
+    void getMlbDraftSession(activeLeague.id, 1)
+      .then(async (mlbSession) => {
+        if (!mlbSession) throw new Error("THE MLB SNAKE DRAFT HANDOFF IS MISSING.");
+        await assertSnakeRosterHandoffReady(mlbSession, "MLB");
+        const farmSession = await getMlbDraftSession(activeLeague.id, FARM_SNAKE_SESSION_NUMBER);
+        if (!farmSession) throw new Error("THE FARM SNAKE DRAFT HANDOFF IS MISSING.");
+        await assertSnakeRosterHandoffReady(farmSession, "FARM");
+        if (!cancelled) setHandoffState("ready");
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setHandoffError(caught instanceof Error ? caught.message : "THE FARM DRAFT HANDOFF IS NOT READY.");
+        setHandoffState("blocked");
+      });
+    return () => { cancelled = true; };
+  }, [activeLeague, handoffRevision]);
 
   useEffect(() => {
     setFormsByTeamId((current) => {
@@ -150,7 +183,7 @@ export function EndOfDraftStaffing() {
   });
 
   const continueToFreeze = async (): Promise<void> => {
-    if (!activeLeague || !staffReady) return;
+    if (!activeLeague || !staffReady || handoffState !== "ready") return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -257,6 +290,13 @@ export function EndOfDraftStaffing() {
           </div>
         ) : null}
 
+        {handoffState === "blocked" ? (
+          <div className="mb-5 flex flex-wrap items-center gap-3 border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold text-[var(--ballpark-warn-text)]">
+            <span>FARM DRAFT HANDOFF NOT READY · {handoffError}</span>
+            <PressButton type="button" size="sm" className="ml-auto" onClick={() => setHandoffRevision((value) => value + 1)}>RETRY</PressButton>
+          </div>
+        ) : null}
+
         {humanTeams.length === 0 ? (
           <div className="mb-5 bg-[var(--ballpark-warn-panel)] border-4 border-[var(--ballpark-warn-border)] p-4 text-[var(--ballpark-warn-text)] font-bold">
             No human-controlled teams are assigned in this league.
@@ -344,7 +384,7 @@ export function EndOfDraftStaffing() {
 
         <button
           type="button"
-          disabled={!staffReady || saving || humanTeams.length === 0}
+          disabled={!staffReady || saving || humanTeams.length === 0 || handoffState !== "ready"}
           onClick={() => void continueToFreeze()}
           className="flex items-center gap-2 bg-[var(--ballpark-brass)] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[var(--ballpark-chalk)] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >

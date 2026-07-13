@@ -7,6 +7,7 @@ import { TRACKER_DB_VERSION } from '../../../utils/trackerDb';
 
 const mocks = vi.hoisted(() => ({
   createFranchise: vi.fn(),
+  loadFranchise: vi.fn(),
   saveFranchiseConfig: vi.fn(),
   getFranchiseConfig: vi.fn(),
   updateFranchiseMetadata: vi.fn(),
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../utils/franchiseManager', () => ({
   createFranchise: mocks.createFranchise,
+  loadFranchise: mocks.loadFranchise,
   saveFranchiseConfig: mocks.saveFranchiseConfig,
   getFranchiseConfig: mocks.getFranchiseConfig,
   updateFranchiseMetadata: mocks.updateFranchiseMetadata,
@@ -56,6 +58,7 @@ vi.mock('../../../utils/leagueBuilderStorage', () => ({
   getTeam: mocks.getTeam,
   getAuctionSession: mocks.getAuctionSession,
   getAuctionSessionById: mocks.getAuctionSessionById,
+  getLeagueDraftFormat: (template: { draftFormat?: 'auction' | 'snake' } | null | undefined) => template?.draftFormat ?? 'auction',
   getMlbDraftSession: mocks.getMlbDraftSession,
   getRegisteredPool: mocks.getRegisteredPool,
   createFarmAuctionSessionId: mocks.createFarmAuctionSessionId,
@@ -222,11 +225,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     vi.clearAllMocks();
 
     mocks.createFranchise.mockResolvedValue('franchise-1');
-    mocks.getFranchiseConfig.mockResolvedValue({
-      ...franchiseConfig,
-      franchiseId: 'franchise-1',
-      createdAt: 1,
-    });
+    mocks.loadFranchise.mockResolvedValue(null);
+    mocks.getFranchiseConfig.mockResolvedValue(null);
     mocks.getLeagueTemplate.mockResolvedValue({
       id: 'league-1',
       name: 'League One',
@@ -238,8 +238,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         name: teamId === 'team-away' ? 'Away Club' : 'Home Club',
       }),
     );
-    mocks.getAuctionSession.mockResolvedValue(null);
-    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.getAuctionSession.mockResolvedValue({ session: auctionSession({}, []) });
+    mocks.getAuctionSessionById.mockResolvedValue({ session: auctionSession({}, []) });
     mocks.getMlbDraftSession.mockResolvedValue(null);
     mocks.getRegisteredPool.mockResolvedValue(null);
     mocks.getPlayer.mockResolvedValue(null);
@@ -290,12 +290,12 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
   test('initial setup copies league data into the franchise DB, writes zero schedule rows, and creates season metadata', async () => {
     const franchiseId = await initializeFranchise(franchiseConfig);
 
-    expect(franchiseId).toBe('franchise-1');
+    expect(franchiseId).toMatch(/^franchise-draft-/);
     expect(mocks.deepCopyLeagueToFranchise).toHaveBeenCalledWith(
-      'franchise-1',
+      franchiseId,
       'league-1',
       {
-        seasonId: 'franchise-1-season-1',
+        seasonId: `${franchiseId}-season-1`,
         seasonNumber: 1,
         teamControl: {
           'team-away': 'human',
@@ -306,7 +306,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     expect(mocks.generateSchedule).not.toHaveBeenCalled();
     expect(mocks.initScheduleDatabase).toHaveBeenCalled();
     expect(mocks.getOrCreateSeason).toHaveBeenCalledWith(
-      'franchise-1-season-1',
+      `${franchiseId}-season-1`,
       1,
       'Season 1',
       0,
@@ -316,9 +316,12 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     expect(mocks.deepCopyLeagueToFranchise.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.setActiveFranchise.mock.invocationCallOrder[0],
     );
+    expect(mocks.updateFranchiseMetadata.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.setActiveFranchise.mock.invocationCallOrder[0],
+    );
     expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        franchiseId: 'franchise-1',
+        franchiseId,
         franchiseType: 'solo',
         teamControl: {
           'team-away': 'human',
@@ -363,11 +366,15 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     );
   });
 
-  test('keeps generic non-draft setup available when no draft rows exist', async () => {
+  test('rejects a complete roster that has no completed draft rows', async () => {
     mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue(null);
     mocks.getMlbDraftSession.mockResolvedValue(null);
 
-    await expect(initializeFranchise(franchiseConfig)).resolves.toBe('franchise-1');
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow(
+      /finish both the MLB and farm drafts/i,
+    );
+    expect(mocks.createFranchise).not.toHaveBeenCalled();
   });
 
   test('rejects a completed MLB auction when its farm auction row is missing', async () => {
@@ -387,7 +394,11 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
 
     expect(mocks.createFranchise).toHaveBeenCalledWith(
       franchiseConfig.franchiseName,
-      { livingSeason: true },
+      expect.objectContaining({
+        livingSeason: true,
+        franchiseId: expect.stringMatching(/^franchise-draft-/),
+        sourceDraftIdentity: expect.any(String),
+      }),
     );
     expect(mocks.saveFranchiseConfig).toHaveBeenCalledWith(
       expect.not.objectContaining({ livingSeason: expect.anything() }),
@@ -500,11 +511,11 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
             null
     ));
 
-    await initializeFranchise(franchiseConfig);
+    const franchiseId = await initializeFranchise(franchiseConfig);
 
     expect(TRACKER_DB_VERSION).toBe(26);
     expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
-      'franchise-1',
+      franchiseId,
       expect.objectContaining({
         id: 'mlb-drafted',
         settledSalary: 90,
@@ -535,8 +546,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledTimes(1);
     expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith([
       expect.objectContaining({
-        franchiseId: 'franchise-1',
-        seasonId: 'franchise-1-season-1',
+        franchiseId,
+        seasonId: `${franchiseId}-season-1`,
         statsScopeId: 'draft-baseline',
         playerId: 'mlb-drafted',
         trueValue: 125,
@@ -549,8 +560,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         computedAt: expect.any(String),
       }),
       expect.objectContaining({
-        franchiseId: 'franchise-1',
-        seasonId: 'franchise-1-season-1',
+        franchiseId,
+        seasonId: `${franchiseId}-season-1`,
         statsScopeId: 'draft-baseline',
         playerId: 'farm-drafted',
         trueValue: 40,
@@ -563,8 +574,8 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
         computedAt: expect.any(String),
       }),
       expect.objectContaining({
-        franchiseId: 'franchise-1',
-        seasonId: 'franchise-1-season-1',
+        franchiseId,
+        seasonId: `${franchiseId}-season-1`,
         statsScopeId: 'draft-baseline',
         playerId: 'cpu-farm-drafted',
         trueValue: 55,
@@ -592,14 +603,43 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       },
       leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-away', rosterStatus: 'MLB' }],
     };
+    const farmSnakePlayer = {
+      id: 'farm-snake-drafted',
+      firstName: 'Farm',
+      lastName: 'Snake',
+      primaryPosition: 'CF',
+      secondaryPosition: 'OF',
+      age: 22,
+      bats: 'R',
+      throws: 'R',
+      power: 62,
+      contact: 61,
+      speed: 64,
+      fielding: 60,
+      arm: 59,
+      velocity: 0,
+      junk: 0,
+      accuracy: 0,
+      fame: 0,
+      personality: 'Competitive',
+      hiddenPersonalityModifiers: {
+        loyalty: 55,
+        ambition: 55,
+        resilience: 55,
+        charisma: 55,
+      },
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-away', rosterStatus: 'FARM' }],
+    };
     mocks.getLeagueTemplate.mockResolvedValue({
       id: 'league-1',
       name: 'League One',
       teamIds: ['team-away', 'team-home'],
       draftFormat: 'snake',
     });
-    mocks.getAllFranchisePlayers.mockResolvedValueOnce([snakePlayer]);
-    mocks.getFranchisePlayer.mockResolvedValue({ ...snakePlayer });
+    mocks.getAllFranchisePlayers.mockResolvedValueOnce([snakePlayer, farmSnakePlayer]);
+    mocks.getFranchisePlayer.mockImplementation(async (_franchiseId: string, playerId: string) => (
+      playerId === farmSnakePlayer.id ? { ...farmSnakePlayer } : { ...snakePlayer }
+    ));
     const mlbSnakeSession = {
       id: 'league-1::startup-mlb-draft::1',
       leagueId: 'league-1',
@@ -616,12 +656,17 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       createdDate: '2026-01-01',
       lastModified: '2026-01-01',
     };
+    const farmSnakeSession = {
+      ...mlbSnakeSession,
+      id: 'league-1::startup-farm-snake-draft::1',
+      seasonNumber: 2,
+      draftPhase: 'FARM' as const,
+      farmSlotSalaries: [27],
+      completedPicks: [{ round: 1, pick: 1, teamId: 'team-away', playerId: 'farm-snake-drafted' }],
+    };
     mocks.getMlbDraftSession.mockImplementation(async (_leagueId: string, seasonNumber = 1) => (
-      seasonNumber === 1 ? mlbSnakeSession : null
+      seasonNumber === 1 ? mlbSnakeSession : seasonNumber === 2 ? farmSnakeSession : null
     ));
-    mocks.getAuctionSessionById.mockResolvedValue({
-      session: auctionSession({}, []),
-    });
     mocks.getRegisteredPool.mockResolvedValue({
       leagueId: 'league-1',
       tier: 'standard',
@@ -634,23 +679,33 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       poolSurplusWarning: false,
     });
 
-    await initializeFranchise(franchiseConfig);
+    const franchiseId = await initializeFranchise(franchiseConfig);
 
     expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
-      'franchise-1',
+      franchiseId,
       expect.objectContaining({ id: 'snake-drafted', settledSalary: 125 }),
     );
     expect(mocks.seedFranchiseMoraleBaseline).toHaveBeenCalledWith(
       expect.objectContaining({ targetType: 'player', playerId: 'snake-drafted' }),
     );
-    expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith([
+    expect(mocks.saveFranchisePlayer).toHaveBeenCalledWith(
+      franchiseId,
+      expect.objectContaining({ id: 'farm-snake-drafted', settledSalary: 27 }),
+    );
+    expect(mocks.seedFranchiseMoraleBaseline).toHaveBeenCalledWith(
+      expect.objectContaining({ targetType: 'player', playerId: 'farm-snake-drafted' }),
+    );
+    expect(mocks.saveFranchiseTrueValueRows).toHaveBeenCalledWith(expect.arrayContaining([
       expect.objectContaining({
         playerId: 'snake-drafted',
         trueValue: 125,
         contractValue: 125,
         valueDelta: 0,
       }),
-    ]);
+    ]));
+    expect(mocks.saveFranchiseTrueValueRows).not.toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ playerId: 'farm-snake-drafted' }),
+    ]));
   });
 
   test('new season schedule initialization writes zero schedule rows by default', async () => {
@@ -685,14 +740,81 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     mocks.saveFranchiseConfig.mockRejectedValueOnce(new Error('config write failed'));
 
     await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('config write failed');
+    const failedFranchiseId = mocks.createFranchise.mock.calls.at(-1)?.[1]?.franchiseId as string;
 
-    expect(mocks.deleteSeasonMetadata).toHaveBeenCalledWith('franchise-1-season-1');
-    expect(mocks.deleteFranchiseFarmRecordsForSeason).toHaveBeenCalledWith('franchise-1', 'franchise-1-season-1');
-    expect(mocks.deleteFranchise).toHaveBeenCalledWith('franchise-1');
-    expect(mocks.deleteFranchiseDatabase).toHaveBeenCalledWith('franchise-1');
+    expect(mocks.deleteSeasonMetadata).toHaveBeenCalledWith(`${failedFranchiseId}-season-1`);
+    expect(mocks.deleteFranchiseFarmRecordsForSeason).toHaveBeenCalledWith(failedFranchiseId, `${failedFranchiseId}-season-1`);
+    expect(mocks.deleteFranchise).toHaveBeenCalledWith(failedFranchiseId);
+    expect(mocks.deleteFranchiseDatabase).toHaveBeenCalledWith(failedFranchiseId);
+  });
+
+  test('does not delete an unknown owner at a deterministic franchise ID', async () => {
+    mocks.loadFranchise.mockResolvedValueOnce({
+      franchiseId: 'unknown-owner',
+      name: 'Legacy Save',
+      createdAt: 1,
+      lastPlayedAt: 1,
+      schemaVersion: 1,
+      appVersionCreated: '1.0.0',
+      initializationComplete: false,
+    });
+    mocks.getFranchiseConfig.mockResolvedValueOnce({
+      ...franchiseConfig,
+      franchiseId: 'unknown-owner',
+      createdAt: 1,
+    });
+
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('No data was changed');
+    expect(mocks.createFranchise).not.toHaveBeenCalled();
+    expect(mocks.deleteFranchise).not.toHaveBeenCalled();
+    expect(mocks.deleteFranchiseDatabase).not.toHaveBeenCalled();
+  });
+
+  test('does not recreate a partial save when required preflight cleanup fails', async () => {
+    mocks.saveFranchiseConfig.mockRejectedValueOnce(new Error('initial launch interrupted'));
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('initial launch interrupted');
+
+    const creationOptions = mocks.createFranchise.mock.calls.at(-1)?.[1] as {
+      franchiseId: string;
+      sourceDraftIdentity: string;
+    };
+    mocks.createFranchise.mockClear();
+    mocks.saveFranchiseConfig.mockResolvedValue(undefined);
+    mocks.loadFranchise.mockResolvedValueOnce({
+      franchiseId: creationOptions.franchiseId,
+      name: 'Partial Save',
+      createdAt: 1,
+      lastPlayedAt: 1,
+      schemaVersion: 1,
+      appVersionCreated: '1.0.0',
+      sourceDraftIdentity: creationOptions.sourceDraftIdentity,
+      initializationComplete: false,
+    });
+    mocks.getFranchiseConfig.mockResolvedValueOnce(null);
+    mocks.deleteSeasonMetadata.mockRejectedValueOnce(new Error('database busy'));
+
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('A new franchise was not created');
+    expect(mocks.createFranchise).not.toHaveBeenCalled();
+  });
+
+  test('does not delete a completed save when setting the active pointer fails', async () => {
+    mocks.setActiveFranchise.mockRejectedValueOnce(new Error('active pointer unavailable'));
+
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow('active pointer unavailable');
+    expect(mocks.updateFranchiseMetadata).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ initializationComplete: true }),
+    );
+    expect(mocks.deleteFranchise).not.toHaveBeenCalled();
+    expect(mocks.deleteFranchiseDatabase).not.toHaveBeenCalled();
   });
 
   test('repair backfills missing franchise DB data and ensures canonical season metadata', async () => {
+    mocks.getFranchiseConfig.mockResolvedValueOnce({
+      ...franchiseConfig,
+      franchiseId: 'franchise-1',
+      createdAt: 1,
+    });
     mocks.getAllGamesByFranchise.mockResolvedValueOnce([
       { id: 'g1' },
       { id: 'g2' },
@@ -731,6 +853,11 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
   });
 
   test('repair does not recopy a non-empty franchise DB when the source league template changes', async () => {
+    mocks.getFranchiseConfig.mockResolvedValueOnce({
+      ...franchiseConfig,
+      franchiseId: 'franchise-1',
+      createdAt: 1,
+    });
     mocks.getLeagueTemplate.mockRejectedValueOnce(new Error('source template deleted'));
     mocks.getAllFranchisePlayers.mockResolvedValueOnce([
       {

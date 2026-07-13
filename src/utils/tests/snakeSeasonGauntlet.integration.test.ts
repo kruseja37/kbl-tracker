@@ -44,7 +44,12 @@ import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 import { listFranchiseMoraleSnapshots } from '../franchiseMoraleState';
 import { getFranchiseTrueValueRows } from '../franchiseTrueValueStorage';
 import { deriveSnakeMlbUnspentByTeamId } from '../mlbDraftCompletion';
-import { clearAllSchedules, getAllGamesByFranchise } from '../scheduleStorage';
+import {
+  addGame,
+  clearAllSchedules,
+  getAllGamesByFranchise,
+  importFranchiseScheduleRows,
+} from '../scheduleStorage';
 import { deleteSeasonMetadata } from '../seasonStorage';
 import {
   clearAllLeagueBuilderData,
@@ -56,8 +61,8 @@ import {
   getPlayer,
   getRegisteredPool,
   getScoutProfilesForLeague,
-  getTeam,
   getTeamRoster,
+  markSnakeRosterHandoff,
   saveLeagueTemplate,
   saveMlbDraftSession,
   savePlayer,
@@ -460,6 +465,14 @@ describe('S7 snake draft to season closing gauntlet', () => {
       expectedRevision: mlbSession.revision ?? 0,
     });
     await commitCompletedSnakeSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: mlbSession, pool: exactPool });
+    mlbSession = await markSnakeRosterHandoff({
+      leagueId: LEAGUE_ID,
+      seasonNumber: mlbSession.seasonNumber,
+      phase: 'MLB',
+      sourceSessionId: mlbSession.draftManifest!.source.sessionId,
+      manifestPoolIdentity: mlbSession.draftManifest!.pool.identity,
+      committedAt: '2026-07-12T12:00:01.000Z',
+    });
     for (const teamId of TEAM_IDS) {
       const roster = await getTeamRoster(teamId);
       const storedPlayers = await Promise.all((roster?.mlbRoster ?? []).map((playerId) => getPlayer(playerId)));
@@ -521,6 +534,7 @@ describe('S7 snake draft to season closing gauntlet', () => {
       farmBudgetsByTeamId,
       farmArchetypeIdByTeamId: Object.fromEntries(teams.map((team) => [team.id, team.farmArchetypeKey])),
       prospectIds: farmPool.prospects.map((prospect) => prospect.id),
+      prospects: farmPool.prospects,
       now: '2026-07-10T00:00:00.000Z',
     }));
     expect(farmSession.id).not.toBe(mlbSession.id);
@@ -575,6 +589,14 @@ describe('S7 snake draft to season closing gauntlet', () => {
       frozenAt: '2026-07-12T12:00:00.000Z',
     }));
     await commitCompletedSnakeFarmSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: farmSession, pool: farmPool });
+    farmSession = await markSnakeRosterHandoff({
+      leagueId: LEAGUE_ID,
+      seasonNumber: farmSession.seasonNumber,
+      phase: 'FARM',
+      sourceSessionId: farmSession.draftManifest!.source.sessionId,
+      manifestPoolIdentity: farmSession.draftManifest!.pool.identity,
+      committedAt: '2026-07-12T12:00:01.000Z',
+    });
     for (const teamId of TEAM_IDS) {
       const roster = await getTeamRoster(teamId);
       expect(roster?.farmRoster).toHaveLength(10);
@@ -670,6 +692,41 @@ describe('S7 snake draft to season closing gauntlet', () => {
       initialScheduleRows: 0,
     });
     expect(scheduleRows).toEqual([]);
+
+    const manualGame = await addGame({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber: 1,
+      gameNumber: 1,
+      dayNumber: 1,
+      awayTeamId: TEAM_IDS[0],
+      homeTeamId: TEAM_IDS[1],
+      source: 'manual',
+    });
+    const importedGames = await importFranchiseScheduleRows({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      seasonNumber: 1,
+      rows: [
+        { gameNumber: 2, dayNumber: 2, awayTeamId: TEAM_IDS[2], homeTeamId: TEAM_IDS[3] },
+        { gameNumber: 3, dayNumber: 3, awayTeamId: TEAM_IDS[4], homeTeamId: TEAM_IDS[5] },
+      ],
+    });
+    expect(manualGame).toMatchObject({
+      franchiseId,
+      seasonId,
+      statsScopeId: seasonId,
+      source: 'manual',
+      gameNumber: 1,
+    });
+    expect(importedGames).toHaveLength(2);
+    expect(await getAllGamesByFranchise(franchiseId, 1)).toMatchObject([
+      { gameNumber: 1, source: 'manual', awayTeamId: TEAM_IDS[0], homeTeamId: TEAM_IDS[1] },
+      { gameNumber: 2, source: 'csv-import', awayTeamId: TEAM_IDS[2], homeTeamId: TEAM_IDS[3] },
+      { gameNumber: 3, source: 'csv-import', awayTeamId: TEAM_IDS[4], homeTeamId: TEAM_IDS[5] },
+    ]);
     expect(storedConfig?.snakeDraftProvenance).toMatchObject({
       mlb: { phase: 'MLB', completedPicks: { length: 176 } },
       farm: { phase: 'FARM', completedPicks: { length: 80 } },

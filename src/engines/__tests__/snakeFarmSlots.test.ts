@@ -95,6 +95,7 @@ describe('S6 farm slot salaries', () => {
       farmBudgetsByTeamId: { a: 1_000_000, b: 1_000_000 },
       farmArchetypeIdByTeamId: { a: 'farm-speed', b: 'farm-defense' },
       prospectIds: ['p1', 'p2', 'p3', 'p4'],
+      prospects: ['p1', 'p2', 'p3', 'p4'].map((id) => ({ id } as never)),
       now: '2026-07-10T01:00:00.000Z',
     });
     expect(created).toEqual(expect.objectContaining({
@@ -104,6 +105,7 @@ describe('S6 farm slot salaries', () => {
     expect(created.pickOrder).toHaveLength(4);
     expect(created.farmSlotSalaries?.reduce((sum, value) => sum + value, 0)).toBe(1_500_000);
     expect(created.snakeSetup?.poolPlayerIds).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(created.farmProspectSnapshot?.map((prospect) => prospect.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
     expect(created.snakeSetup?.orderSeed).toBe('frozen-seed');
     expect(created.snakeSetup?.clubs.map((club) => [club.teamId, club.archetypeId])).toEqual([
       ['a', 'farm-speed'],

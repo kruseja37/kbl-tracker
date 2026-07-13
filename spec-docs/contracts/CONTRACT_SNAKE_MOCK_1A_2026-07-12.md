@@ -1,9 +1,9 @@
 # CONTRACT — SNAKE MOCK 1A: CHOOSE, INSPECT, DRAFT
 
-**Date:** 2026-07-12  
-**Builder:** separate implementation agent  
-**Auditor:** captain/audit agent that did not write the product diff  
-**Branch/worktree:** `codex/snake-mock-draft-ready` at `/private/tmp/kbl-snake-mock`  
+**Date:** 2026-07-12
+**Builder:** separate implementation agent
+**Auditor:** captain/audit agent that did not write the product diff
+**Branch/worktree:** `codex/snake-mock-draft-ready` at `/private/tmp/kbl-snake-mock`
 **Verified base:** `origin/main` `ea66830e0305d999f4140a101d452417f7d9152e`
 
 ## Binding product rulings

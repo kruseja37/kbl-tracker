@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   commitMlb: vi.fn(),
   commitFarm: vi.fn(),
   saveRoom: vi.fn(async (session: unknown) => session),
+  markHandoff: vi.fn(),
+  lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -37,15 +39,25 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
-    getScoutProfilesForLeague: vi.fn(async () => []),
+    getScoutProfilesForLeague: vi.fn(async () => [
+      { id: 'scout-a', leagueId: 'completion-league', teamId: 'a', name: 'Kodiaks Eyes', specialties: [], weaknesses: [] },
+      { id: 'scout-b', leagueId: 'completion-league', teamId: 'b', name: 'Comets Eyes', specialties: [], weaknesses: [] },
+    ]),
     saveMlbDraftRoomSession: mocks.saveRoom,
     freezeMlbDraftRoomSessionWithRegisteredPool: ({ session }: { session: unknown }) => mocks.saveRoom(session),
+    markSnakeRosterHandoff: mocks.markHandoff,
   };
 });
+vi.mock('../../../utils/snakeRosterHandoff', () => ({
+  assertSnakeRosterHandoffReady: vi.fn(async () => undefined),
+}));
 
 import type { LeagueBuilderMlbDraftSession, LeagueTemplate, Player, RegisteredPool, Team } from '../../hooks/useLeagueBuilderData';
 import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
-import { freezeSnakeDraftSession } from '../../../utils/snakeDraftManifest';
+import {
+  buildSnakeRosterHandoff,
+  freezeSnakeDraftSession,
+} from '../../../utils/snakeDraftManifest';
 
 const league: LeagueTemplate = {
   id: 'completion-league', name: 'Completion League', teamIds: ['a', 'b'], conferences: [], divisions: [],
@@ -111,7 +123,7 @@ function renderRoom(url: string) {
 function setMlbData(session = completedSession('MLB')) {
   mocks.data = {
     leagues: [league], teams, players, isLoading: false, error: null,
-    getRegisteredPool: vi.fn(async () => pool), getMlbDraftSession: vi.fn(async () => session),
+    getRegisteredPool: vi.fn(async () => pool), getMlbDraftSession: vi.fn(async () => mocks.lastSaved ?? session),
     saveMlbDraftSession: vi.fn(async (next) => next), getRoster: vi.fn(async () => ({ teamId: 'a', mlbRoster: [], farmRoster: [] })),
   };
   return session;
@@ -123,19 +135,40 @@ function setFarmData(session = completedSession('FARM')) {
     { ...player('f2', 'Fog', 'Two', 'CF'), prospectProfile: { trueGrade: 'B', scoutedGrade: 'C', potentialGrade: 'B', scoutAccuracy: 50, scoutConfidence: 'low', scoutGradeError: 1, scoutSpecialtiesVisible: [], scoutWeaknessesVisible: [], methodVersion: 'v1', source: 'test', draftYear: 1, draftRound: 1, draftPick: 2, teamId: 'pool' } },
   ];
   mocks.farmPool = { leagueId: league.id, seasonNumber: 1, prospects, auctionPlayers: prospects.map((row, index) => ({ id: row.id, iv: 20_000 + index * 10_000 })) };
+  const frozenMlb = freezeSnakeDraftSession({
+    session: completedSession('MLB'),
+    expectedPhase: 'MLB',
+    poolPlayerIds: pool.players.map((row) => row.id),
+    salaryByPlayerId: new Map(pool.players.map((row) => [row.id, row.iv])),
+    frozenAt: '2026-07-12T11:00:00.000Z',
+  });
+  const handedOffMlb = {
+    ...frozenMlb,
+    rosterHandoff: buildSnakeRosterHandoff(frozenMlb, 'MLB', '2026-07-12T11:01:00.000Z'),
+  };
+  const storedFarm = { ...session, farmProspectSnapshot: prospects };
   mocks.data = {
     leagues: [league], teams, players: [], isLoading: false, error: null,
-    getMlbDraftSession: vi.fn(async (_leagueId: string, seasonNumber: number) => seasonNumber === 2 ? session : completedSession('MLB')),
+    getMlbDraftSession: vi.fn(async (_leagueId: string, seasonNumber: number) => seasonNumber === 2 ? mocks.lastSaved ?? storedFarm : handedOffMlb),
     saveMlbDraftSession: vi.fn(async (next) => next), getRoster: vi.fn(async (teamId: string) => ({ teamId, mlbRoster: [], farmRoster: [] })),
   };
-  return session;
+  return storedFarm;
 }
 
 describe('snake draft durable completion and recap', () => {
   beforeEach(() => {
     mocks.commitMlb.mockReset().mockResolvedValue(undefined);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
-    mocks.saveRoom.mockClear();
+    mocks.lastSaved = null;
+    mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
+      mocks.lastSaved = session;
+      return session;
+    });
+    mocks.markHandoff.mockReset().mockImplementation(async (input: { phase: 'MLB' | 'FARM'; committedAt: string; seasonNumber: number }) => {
+      const loaded = await (mocks.data.getMlbDraftSession as (leagueId: string, seasonNumber: number) => Promise<LeagueBuilderMlbDraftSession>)(league.id, input.seasonNumber);
+      const current = mocks.lastSaved ?? loaded;
+      return { ...current, rosterHandoff: buildSnakeRosterHandoff(current, input.phase, input.committedAt) };
+    });
   });
   afterEach(() => cleanup());
 
@@ -159,6 +192,24 @@ describe('snake draft durable completion and recap', () => {
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitMlb.mock.invocationCallOrder[0]);
     expect(mocks.commitMlb).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/scout-hire?leagueId=${league.id}`);
+  });
+
+  test('the first recap confirmation freezes the latest stored revision', async () => {
+    const rendered = completedSession('MLB');
+    const fresh = { ...rendered, revision: 3 };
+    let reads = 0;
+    setMlbData(rendered);
+    mocks.data.getMlbDraftSession = vi.fn(async () => {
+      reads += 1;
+      return reads === 1 ? rendered : fresh;
+    });
+
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalled());
+    expect(mocks.commitMlb.mock.calls[0][0].session.draftManifest.source.revision).toBe(3);
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
   });
 
   test('an MLB commit failure stays on recap and retries without premature navigation', async () => {
@@ -220,11 +271,30 @@ describe('snake draft durable completion and recap', () => {
     await waitFor(() => expect(mocks.commitFarm).toHaveBeenCalled());
     expect(mocks.commitFarm.mock.calls[0][0]).toMatchObject({
       leagueId: league.id,
-      pool: mocks.farmPool,
+      pool: { prospects: expect.arrayContaining([expect.objectContaining({ id: 'f1' }), expect.objectContaining({ id: 'f2' })]) },
       session: { id: session.id, draftManifest: { phase: 'FARM', source: { sessionId: session.id } } },
     });
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitFarm.mock.invocationCallOrder[0]);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/staff-hire?leagueId=${league.id}`);
+  });
+
+  test('the first farm recap confirmation freezes the latest stored revision', async () => {
+    const rendered = setFarmData();
+    const fresh = { ...rendered, revision: 3 };
+    const originalRead = mocks.data.getMlbDraftSession as (leagueId: string, seasonNumber: number) => Promise<LeagueBuilderMlbDraftSession>;
+    let farmReads = 0;
+    mocks.data.getMlbDraftSession = vi.fn(async (leagueId: string, seasonNumber: number) => {
+      if (seasonNumber !== 2) return originalRead(leagueId, seasonNumber);
+      farmReads += 1;
+      return farmReads === 1 ? rendered : fresh;
+    });
+
+    renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM FARM DRAFT' }));
+
+    await waitFor(() => expect(mocks.commitFarm).toHaveBeenCalled());
+    expect(mocks.commitFarm.mock.calls[0][0].session.draftManifest.source.revision).toBe(3);
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/staff-hire');
   });
 
   test('an unconfirmed farm recap returns to a closed room and correction restores the actual prior slot', async () => {

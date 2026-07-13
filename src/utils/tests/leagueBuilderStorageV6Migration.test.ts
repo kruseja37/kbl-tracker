@@ -14,7 +14,6 @@ import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
 import {
   __resetLeagueBuilderDatabaseForTests,
   createMlbDraftSessionId,
-  deleteMlbDraftSession,
   deleteRegisteredPool,
   getMlbDraftSession,
   getTeam,
@@ -40,6 +39,7 @@ const expectedStores = [
   'registeredPools',
   'rulesPresets',
   'scoutProfiles',
+  'snakeSeatBoards',
   'startupDraftSessions',
   'teamRosters',
 ];
@@ -259,7 +259,32 @@ async function seedV7LeagueBuilderDatabase(): Promise<void> {
   });
 }
 
-describe('leagueBuilderStorage v8 auction session migration', () => {
+async function seedV8LeagueBuilderDatabase(): Promise<void> {
+  await seedV7LeagueBuilderDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 8);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const auctionSessions = db.createObjectStore('auctionSessions', { keyPath: 'id' });
+      auctionSessions.createIndex('leagueId', 'leagueId', { unique: false });
+      auctionSessions.put({
+        id: 'league-v7::auction-mlb::1',
+        leagueId: 'league-v7',
+        seasonNumber: 1,
+      });
+    };
+
+    request.onsuccess = () => {
+      request.result.close();
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+describe('leagueBuilderStorage v9 snake seat-board migration', () => {
   beforeEach(async () => {
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
@@ -270,11 +295,11 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test('fresh v8 database creates auctionSessions and preserves all prior stores', async () => {
+  test('fresh v9 database creates snakeSeatBoards and preserves all prior stores', async () => {
     const db = await initLeagueBuilderDatabase();
 
     expect(db.name).toBe(DB_NAME);
-    expect(db.version).toBe(8);
+    expect(db.version).toBe(9);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
   });
 
@@ -282,7 +307,7 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
     await seedV5LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(8);
+    expect(db.version).toBe(9);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const template = await getLeagueTemplate('league-v5');
@@ -312,11 +337,11 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
     rawDb.close();
   });
 
-  test('raw v6 database upgrades additively to v8 and preserves all nine prior stores with data', async () => {
+  test('raw v6 database upgrades additively to v9 and preserves all nine prior stores with data', async () => {
     await seedV6LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(8);
+    expect(db.version).toBe(9);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const priorStoreAssertions: Array<[string, string, string]> = [
@@ -341,13 +366,16 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
 
     const auctionSessions = await getAllFromStore(db, 'auctionSessions');
     expect(auctionSessions).toEqual([]);
+
+    const snakeSeatBoards = await getAllFromStore(db, 'snakeSeatBoards');
+    expect(snakeSeatBoards).toEqual([]);
   });
 
-  test('raw v7 database upgrades additively to v8 and preserves all prior stores + creates auctionSessions', async () => {
+  test('raw v7 database upgrades additively to v9 and preserves all prior stores + creates draft stores', async () => {
     await seedV7LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(8);
+    expect(db.version).toBe(9);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const priorStoreAssertions: Array<[string, string, string]> = [
@@ -370,6 +398,30 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
 
     const auctionSessions = await getAllFromStore(db, 'auctionSessions');
     expect(auctionSessions).toEqual([]);
+
+    const snakeSeatBoards = await getAllFromStore(db, 'snakeSeatBoards');
+    expect(snakeSeatBoards).toEqual([]);
+  });
+
+  test('raw v8 database upgrades additively to v9 without rewriting durable draft sessions', async () => {
+    await seedV8LeagueBuilderDatabase();
+
+    const db = await initLeagueBuilderDatabase();
+    expect(db.version).toBe(9);
+    expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
+
+    const mlbDraftSessions = await getAllFromStore(db, 'mlbDraftSessions');
+    expect(mlbDraftSessions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'league-v7::startup-mlb-draft::1', leagueId: 'league-v7' }),
+    ]));
+
+    const auctionSessions = await getAllFromStore(db, 'auctionSessions');
+    expect(auctionSessions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'league-v7::auction-mlb::1', leagueId: 'league-v7' }),
+    ]));
+
+    const snakeSeatBoards = await getAllFromStore(db, 'snakeSeatBoards');
+    expect(snakeSeatBoards).toEqual([]);
   });
 
   test('saveRegisteredPool, getRegisteredPool, and deleteRegisteredPool round-trip', async () => {
@@ -398,7 +450,7 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
     await expect(getRegisteredPool(pool.leagueId)).resolves.toBeNull();
   });
 
-  test('saveMlbDraftSession, getMlbDraftSession, and deleteMlbDraftSession round-trip', async () => {
+  test('saveMlbDraftSession and getMlbDraftSession round-trip without an unsafe direct-delete escape hatch', async () => {
     const session: LeagueBuilderMlbDraftSession = {
       id: createMlbDraftSessionId('league-mlb', 1),
       leagueId: 'league-mlb',
@@ -426,8 +478,6 @@ describe('leagueBuilderStorage v8 auction session migration', () => {
     expect(new Date(saved.lastModified).getTime()).toBeGreaterThanOrEqual(new Date(session.lastModified).getTime());
     await expect(getMlbDraftSession(session.leagueId)).resolves.toEqual(saved);
 
-    await deleteMlbDraftSession(session.leagueId);
-    await expect(getMlbDraftSession(session.leagueId)).resolves.toBeNull();
   });
 
   test('capIdentity is an additive Team field that round-trips when present and stays undefined when absent', async () => {

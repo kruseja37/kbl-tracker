@@ -1,7 +1,7 @@
 # Snake Draft UI Flow Crawl Report
 
-**Date:** 2026-07-12  
-**Initial verdict:** NOT VERIFIED  
+**Date:** 2026-07-12
+**Initial verdict:** NOT VERIFIED
 **Target device:** iPad landscape, pass-around main device, optional same-room companion devices.
 
 ## Crawled path
@@ -38,3 +38,39 @@ League Builder -> Draft Setup -> snake room registration -> covered team lens ->
 5. Static focused tests, full relevant test gate, TypeScript, production build, and `git diff --check`.
 
 JK's browser walk is the sole acceptance gate; automation can only make the build ready for that walk.
+
+## Post-repair recrawl — 2026-07-12
+
+**Automated verdict:** READY FOR JK WALK. This is not product acceptance.
+
+- The iPad shell keeps the team board and live decision rail together; the active pick is a
+  bounded window instead of a 176-pick wall. At 768, 1024, and 1366 widths the 22 seeded board
+  rows showed 0 truncated player names, and the money truth remained a readable 2×2 strip.
+- Covered team switching is fail-closed. Cover/leave is durable, a new live pick returns to the
+  on-clock team under cover, and companions stay pinned to their authorized team.
+- Full-pool search and selection, profile inspection, overall/position ranking, explicit 22-slot
+  planning, live roster, Assistant-GM reads, trade/correction, recap return/confirm, MLB→farm,
+  staffing, Franchise launch, and later CSV/manual schedule entry are wired.
+- Ranking moves alter preference only. Explicit plan membership changes recalculate plan salary,
+  tax, fit, chemistry, cushion, and legality. Availability backfill preserves saved rankings.
+- Final-pick recap no longer steals the last correction opportunity. Confirm writes one immutable
+  manifest and handoff marker; failed or concurrent confirmation remains retryable/fail-closed.
+- Farm boards remain fog-safe, with salary fixed to absolute draft slot after trades. Hidden farm
+  true-value rows remain excluded while settled salary and morale reach Franchise launch.
+- The old POC page/engine, unused pass-cover input, and noncanonical route ownership are removed;
+  legacy URLs redirect to the shared setup/canonical room.
+- Touch targets, selected semantics, focus-managed privacy/confirm overlays, retry states, and
+  Help-button placement were repaired on the crawled surfaces.
+- The closing hostile walk re-proved both first-click recap confirmations, stale-assignment
+  recommit, all 20 clubs `ROSTERS READY`, exact 440 MLB + 200 farm persistence, created-franchise
+  entry, and the empty Living Season schedule with `Add Game` and `Review CSV`. MLB/farm recaps
+  measured 1024/1024, both Franchise Setup steps measured 390/390, and no console/page errors
+  appeared.
+- Same-name identity chips and farm `FIND PROSPECT` / `TOP` interactions passed dedicated component
+  tests and static wiring review. A disposable unfrozen browser fixture violated the immutable
+  handoff contract, so it was discarded rather than misreported as live evidence; these two
+  controls remain explicit items for JK's sole acceptance walk.
+
+The independent closing repository gate passed 674 test files with 8 skipped (682 total): 9,955
+tests passed, 15 skipped (9,970 total), 0 failed. JK's own hands-on browser walk remains the sole visual and
+product acceptance gate.

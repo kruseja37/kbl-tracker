@@ -688,7 +688,7 @@ describe("LeagueBuilderDraftSetup", () => {
   test("B5 recomputes draftability on pool membership changes, not roster-design edits", async () => {
     const basePlayers = makePlayers(24);
     const baseTeams = [makeTeam("team-a"), makeTeam("team-b")];
-    mockLeagueData({ players: basePlayers, teams: baseTeams });
+    mockLeagueData({ players: basePlayers, teams: baseTeams, pool: makePool({ locked: false }) });
     const { rerender } = render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
@@ -706,6 +706,7 @@ describe("LeagueBuilderDraftSetup", () => {
         }),
         makeTeam("team-b"),
       ],
+      pool: makePool({ locked: false }),
     });
     rerender(<LeagueBuilderDraftSetup />);
 
@@ -720,6 +721,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const ratingEditData = mockLeagueData({
       players: ratingEditedPlayers,
       teams: baseTeams,
+      pool: makePool({ locked: false }),
     });
     await act(async () => {
       await ratingEditData.updatePlayer(ratingEditedPlayers[0]);
@@ -737,12 +739,47 @@ describe("LeagueBuilderDraftSetup", () => {
         makePlayer(200, { id: "new-pool-member", primaryPosition: "SS" }),
       ],
       teams: baseTeams,
+      pool: makePool({ locked: false }),
     });
     rerender(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
       expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(3);
     });
+  });
+
+  test("draftability worker failure falls back and releases identity auto-fill", async () => {
+    class FailingDraftabilityWorker {
+      static instance: FailingDraftabilityWorker | null = null;
+      onmessage: ((event: MessageEvent<{ rows: unknown[] }>) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      constructor() {
+        FailingDraftabilityWorker.instance = this;
+      }
+      postMessage() {}
+      terminate() {}
+    }
+    vi.stubGlobal("Worker", FailingDraftabilityWorker as unknown as typeof Worker);
+    const players = makePlayers(24);
+    mockLeagueData({
+      players,
+      teams: [makeTeam("team-a", {
+        controlledBy: "ai",
+        mlbArchetypeKey: undefined,
+        farmArchetypeKey: undefined,
+      })],
+      pool: makePool({ locked: false }),
+    });
+    try {
+      render(<LeagueBuilderDraftSetup />);
+      const autoFill = await screen.findByRole("button", { name: /Auto-fill remaining/i });
+      expect(autoFill).toBeDisabled();
+      act(() => FailingDraftabilityWorker.instance?.onerror?.(new Event("error")));
+      await waitFor(() => expect(rankAllArchetypesForPool).toHaveBeenCalled());
+      await waitFor(() => expect(autoFill).toBeEnabled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   // -----------------------------------------------------------------------------------------

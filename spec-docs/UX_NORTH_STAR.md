@@ -161,8 +161,8 @@ KILL. "Register" = target language per §1 (all non-menu screens → Ballpark).
 | ScoutHire | **KEEP** | Tightest screen in the leg. Move the "scouting gate" internals sentence behind help. |
 | LeagueBuilderAuctionDraft + AuctionStage | **KEEP — reference implementation** | Rationalize three overlapping advisors into ONE scout voice (§4); pre-session setup panel dies per R-IA3; unify "Market Shill" vs "Pure shills" terminology. |
 | LeagueBuilderFarmAuctionDraft | **FOLD onto AuctionStage** (R-IA4) | Highest-leverage single fix in the journey. |
-| LeagueBuilderSnakeDraft | **KEEP (lower priority)** | Fix the dead end (R-IA5); translate engine-speak solvency messages to plain lines; setup inputs per R-IA3. |
-| LeagueBuilderDraft (startup snake) | **NEEDS-POLISH (lower priority)** | Reads as an internal harness (seed input, blocker prose). Dead end per R-IA5. Long-press scout fog is on-philosophy — keep it. |
+| SnakeDraftRoom + SnakeDraftSetupAdapter | **KEEP — v1 flagship** | One shared setup shell, canonical `/snake-room`, team-first covered desks, persisted overall/position boards, profiles, exact money/tax/fit/chemistry, durable trades/corrections, MLB+farm recap confirmation, and zero-schedule Franchise handoff. The old `LeagueBuilderSnakeDraft` shell is deleted. |
+| Farm phase inside SnakeDraftRoom | **KEEP — v1 flagship** | Fog-safe private boards, frozen absolute-slot salaries, durable trades/corrections, explicit recap confirmation, then staffing. No true farm ratings or IV may render or persist in another team's board. |
 | DraftSetupArchetypePreview | **KILL after harvest** | Its MLB-vs-farm-identity explainer paragraph is the best onboarding copy in the flow — move into the archetype picker's help layer, then remove route. (Stale "15 archetypes" comment; catalog is 24.) |
 | EndOfDraftStaffing | **KEEP** | Kill the dead "Draft recap flag" toggle (read by nothing, never persisted); CTA says "Review Freeze" but goes straight to `/franchise/setup` — make copy honest. |
 

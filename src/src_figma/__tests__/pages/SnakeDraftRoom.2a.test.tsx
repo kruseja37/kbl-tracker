@@ -21,7 +21,12 @@ vi.mock('../../utils/snakeSounds', () => ({
 }));
 vi.mock('../../../engines/snakeGuideTrade', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../engines/snakeGuideTrade')>();
-  return { ...actual, primeSnakeGuideSeatingProof: vi.fn() };
+  return {
+    ...actual,
+    primeSnakeGuideSeatingProof: vi.fn((input: Parameters<typeof actual.primeSnakeGuideSeatingProof>[0]) => (
+      actual.primeSnakeGuideSeatingProof(input)
+    )),
+  };
 });
 vi.mock('../../app/components/snake/trade/tradeGuideModel', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app/components/snake/trade/tradeGuideModel')>();
@@ -40,6 +45,23 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
     saveMlbDraftRoomSession: async (next: LeagueBuilderMlbDraftSession, ...args: unknown[]) => {
       mocks.roomState = next;
       return mocks.saveRoom(next, ...args);
+    },
+    updateMlbDraftSessionAtomically: async (
+      _leagueId: string,
+      _seasonNumber: number,
+      update: (current: LeagueBuilderMlbDraftSession) => LeagueBuilderMlbDraftSession,
+    ) => {
+      const prior = mocks.roomState!;
+      const next = update(prior);
+      mocks.roomState = next;
+      const roomLogOnly = prior.completedPicks.length === next.completedPicks.length
+        && prior.currentPickIndex === next.currentPickIndex
+        && prior.paused === next.paused
+        && JSON.stringify(prior.pickOrder) === JSON.stringify(next.pickOrder)
+        && JSON.stringify(prior.seatBoards) === JSON.stringify(next.seatBoards)
+        && JSON.stringify(prior.openTradeOffers) === JSON.stringify(next.openTradeOffers)
+        && JSON.stringify(prior.trades) === JSON.stringify(next.trades);
+      return roomLogOnly ? next : mocks.saveRoom(next);
     },
     patchMlbDraftSessionSeatBoard: async (input: { teamId: string; board: SnakeSeatBoardRecord }) => {
       const current = mocks.roomState!;
@@ -90,6 +112,20 @@ function player(id: string, position: Player['primaryPosition'], secondaryPositi
   } as Player;
 }
 
+function legalDepth(prefix: string): Player[] {
+  return [
+    player(`${prefix}-c`, 'C'), player(`${prefix}-1b`, '1B'), player(`${prefix}-2b`, '2B'),
+    player(`${prefix}-3b`, '3B'), player(`${prefix}-ss`, 'SS'), player(`${prefix}-lf`, 'LF'),
+    player(`${prefix}-cf`, 'CF'), player(`${prefix}-rf`, 'RF'), player(`${prefix}-backup-c`, '1B', 'C'),
+    ...Array.from({ length: 4 }, (_, index) => player(`${prefix}-sp-${index + 1}`, 'SP')),
+    ...Array.from({ length: 3 }, (_, index) => player(`${prefix}-rp-${index + 1}`, 'RP')),
+    player(`${prefix}-cp`, 'CP'),
+    player(`${prefix}-flex-1`, '1B'), player(`${prefix}-flex-2`, '2B'),
+    player(`${prefix}-flex-3`, '3B'), player(`${prefix}-flex-4`, 'SS'),
+    player(`${prefix}-swing`, 'SP/RP'),
+  ];
+}
+
 const players: Player[] = [
   player('gone-c', 'C'), player('a-replacement', '1B', 'C'), player('b-replacement', 'C'), player('c-replacement', 'C'), player('backup-c', 'C'),
   player('one-b', '1B'), player('two-b', '2B'), player('three-b', '3B'), player('short', 'SS'),
@@ -98,6 +134,7 @@ const players: Player[] = [
   ...Array.from({ length: 3 }, (_, index) => player(`rp-${index + 1}`, 'RP')),
   player('closer', 'CP'), player('swing', 'SP/RP'),
   ...Array.from({ length: 8 }, (_, index) => player(`flex-${index + 1}`, index % 2 === 0 ? 'CF' : '1B')),
+  ...Array.from({ length: 4 }, (_, index) => legalDepth(`depth-${index + 1}`)).flat(),
 ];
 
 const pool: RegisteredPool = {
@@ -153,6 +190,14 @@ function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: T
   return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
 }
 
+async function revealSeatAndSettle(teamName: string): Promise<void> {
+  mocks.saveRoom.mockClear();
+  fireEvent.click(screen.getByRole('button', { name: `REVEAL ${teamName.toUpperCase()} SEAT` }));
+  await screen.findByTestId('private-draft-desk');
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 75)); });
+  mocks.saveRoom.mockClear();
+}
+
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
   beforeEach(() => {
     mocks.saveRoom.mockReset().mockImplementation(async (next) => next);
@@ -171,10 +216,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(mocks.saveRoom).toHaveBeenCalledTimes(1);
   });
 
-  test('persists overall and position reorders through the page and refits the chosen slot', async () => {
+  test('persists overall and position reorders while leaving the 22-player plan untouched', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await revealSeatAndSettle('Club A');
     fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
@@ -187,7 +232,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(2));
     const afterPosition = mocks.saveRoom.mock.calls[1][0] as LeagueBuilderMlbDraftSession;
     expect(afterPosition.seatBoards?.a.rankings.byPosition?.C?.slice(0, 2)).toEqual(['a-replacement', 'gone-c']);
-    expect(afterPosition.seatBoards?.a.slots.C).toBe('a-replacement');
+    expect(afterPosition.seatBoards?.a.slots).toEqual(baseSlots);
   });
 
   test('shows a recoverable room notice when a revision-safe write is rejected', async () => {
@@ -231,7 +276,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' }));
+    await revealSeatAndSettle('Club B');
     const alternate = (await screen.findAllByRole('button', { name: /^SELECT / }))[1];
     const selectedId = alternate.getAttribute('data-player-id')!;
     const selectedPlayer = players.find((row) => row.id === selectedId)!;
@@ -255,18 +300,18 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await revealSeatAndSettle('Club A');
     expect(await screen.findByRole('button', { name: 'DRAFT PLAYER' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' }));
+    await revealSeatAndSettle('Club B');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
   });
 
   test('a recorded live pick selects the new on-clock club and opens its private seat covered', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await revealSeatAndSettle('Club A');
     fireEvent.click(await screen.findByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
@@ -282,7 +327,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('0/22');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive0 · L1');
 
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await revealSeatAndSettle('Club A');
     expect(await screen.findByTestId('plan-truth-strip')).toHaveTextContent('22/22');
     fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
@@ -313,7 +358,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     };
     renderRoom(source, { teams: identityTeams, pool: identityPool });
     await screen.findByTestId('snake-draft-room');
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await revealSeatAndSettle('Club A');
     fireEvent.click(await screen.findByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });

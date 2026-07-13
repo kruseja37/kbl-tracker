@@ -1,7 +1,7 @@
 # CONTRACT — SNAKE MOCK 2D: FARM BOARD PARITY UNDER SCOUTING FOG
 
-**Date:** 2026-07-12  
-**Base checkpoint:** `17526ae5`  
+**Date:** 2026-07-12
+**Base checkpoint:** `17526ae5`
 **Builder/auditor law:** separate agents; JK browser walk is the sole acceptance gate.
 
 ## Binding rulings

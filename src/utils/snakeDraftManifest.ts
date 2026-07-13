@@ -2,6 +2,7 @@ import type {
   LeagueBuilderMlbDraftSession,
   SnakeDraftManifest,
   SnakeDraftManifestPick,
+  SnakeRosterHandoff,
 } from './leagueBuilderStorage';
 
 export type SnakeDraftPhase = 'MLB' | 'FARM';
@@ -24,6 +25,17 @@ export interface SnakeDraftTruth {
   manifest: SnakeDraftManifest | null;
 }
 
+export interface SnakeDraftResetReceipt {
+  formatVersion: 'snake-draft-reset-v1';
+  leagueId: string;
+  phase: SnakeDraftPhase;
+  sourceSessionId: string;
+  manifestPoolIdentity: string;
+  manifestIdentity: string;
+  rosterHandoffCommittedAt: string | null;
+  resetAt: string;
+}
+
 function phaseFor(session: LeagueBuilderMlbDraftSession): SnakeDraftPhase {
   return session.draftPhase ?? 'MLB';
 }
@@ -42,6 +54,34 @@ function finiteSignedMoney(value: number | undefined, label: string): number | n
 
 function canonicalPoolIds(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+    .join(',')}}`;
+}
+
+/**
+ * Collision-free draft ownership key. Unlike `snakeManifestIdentity`, this embeds
+ * the complete canonical manifest so a hash collision can never reopen or erase
+ * a franchise created from different frozen draft truth.
+ */
+export function snakeManifestOwnershipIdentity(manifest: SnakeDraftManifest): string {
+  return `snake-manifest-ownership-v1:${canonicalJson(manifest)}`;
+}
+
+export function snakeManifestIdentity(manifest: SnakeDraftManifest): string {
+  const source = canonicalJson(manifest);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `snake-manifest-v1:${hash.toString(16).padStart(8, '0')}:${source.length}`;
 }
 
 /** FNV-1a is an identity checksum, not a security boundary. Full membership is persisted beside it. */
@@ -303,6 +343,78 @@ export function readSnakeDraftTruth(
   };
 }
 
+export function buildSnakeRosterHandoff(
+  session: LeagueBuilderMlbDraftSession,
+  phase: SnakeDraftPhase,
+  committedAt: string,
+): SnakeRosterHandoff {
+  const manifest = readSnakeDraftTruth(session, phase).manifest;
+  if (!manifest) throw new Error('A snake roster handoff requires a frozen draft manifest.');
+  if (!Number.isFinite(Date.parse(committedAt))) throw new Error('Snake roster handoff time is invalid.');
+  return {
+    formatVersion: 'snake-roster-handoff-v1',
+    phase,
+    sourceSessionId: manifest.source.sessionId,
+    manifestPoolIdentity: manifest.pool.identity,
+    manifestIdentity: snakeManifestIdentity(manifest),
+    committedAt,
+  };
+}
+
+export function validateSnakeRosterHandoff(
+  session: LeagueBuilderMlbDraftSession,
+  expectedPhase: SnakeDraftPhase,
+): SnakeRosterHandoff {
+  const manifest = readSnakeDraftTruth(session, expectedPhase).manifest;
+  const marker = session.rosterHandoff;
+  if (!manifest || !marker) throw new Error('The snake roster handoff is missing.');
+  if (
+    marker.formatVersion !== 'snake-roster-handoff-v1'
+    || marker.phase !== expectedPhase
+    || marker.sourceSessionId !== manifest.source.sessionId
+    || marker.manifestPoolIdentity !== manifest.pool.identity
+    || marker.manifestIdentity !== snakeManifestIdentity(manifest)
+    || !Number.isFinite(Date.parse(marker.committedAt))
+  ) {
+    throw new Error('The snake roster handoff does not match its frozen draft manifest.');
+  }
+  return marker;
+}
+
+export function hasValidSnakeRosterHandoff(
+  session: LeagueBuilderMlbDraftSession | null | undefined,
+  expectedPhase: SnakeDraftPhase,
+): boolean {
+  if (!session) return false;
+  try {
+    validateSnakeRosterHandoff(session, expectedPhase);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function buildSnakeDraftResetReceipt(
+  session: LeagueBuilderMlbDraftSession,
+  resetAt: string,
+): SnakeDraftResetReceipt {
+  const phase = session.draftManifest?.phase;
+  if (phase !== 'MLB' && phase !== 'FARM') throw new Error('A snake reset receipt requires a frozen draft manifest.');
+  const manifest = readSnakeDraftTruth(session, phase).manifest!;
+  const marker = session.rosterHandoff ? validateSnakeRosterHandoff(session, phase) : null;
+  if (!Number.isFinite(Date.parse(resetAt))) throw new Error('Snake reset receipt time is invalid.');
+  return {
+    formatVersion: 'snake-draft-reset-v1',
+    leagueId: session.leagueId,
+    phase,
+    sourceSessionId: manifest.source.sessionId,
+    manifestPoolIdentity: manifest.pool.identity,
+    manifestIdentity: snakeManifestIdentity(manifest),
+    rosterHandoffCommittedAt: marker?.committedAt ?? null,
+    resetAt,
+  };
+}
+
 /** Fail-closed invariant for every storage writer that can touch a snake session. */
 export function preservePersistedSnakeDraftManifest(
   current: LeagueBuilderMlbDraftSession | null | undefined,
@@ -322,4 +434,25 @@ export function preservePersistedSnakeDraftManifest(
   }
   if (incoming.draftManifest) readSnakeDraftTruth(incoming, incoming.draftManifest.phase);
   return incoming.draftManifest;
+}
+
+/** Fail-closed companion invariant for every writer touching a roster handoff. */
+export function preservePersistedSnakeRosterHandoff(
+  current: LeagueBuilderMlbDraftSession | null | undefined,
+  incoming: LeagueBuilderMlbDraftSession,
+): SnakeRosterHandoff | undefined {
+  const persisted = current?.rosterHandoff;
+  if (persisted) {
+    validateSnakeRosterHandoff(current!, persisted.phase);
+    if (!incoming.rosterHandoff) {
+      throw new Error('A persisted snake roster handoff cannot be removed by a stale session write.');
+    }
+    validateSnakeRosterHandoff(incoming, persisted.phase);
+    if (JSON.stringify(incoming.rosterHandoff) !== JSON.stringify(persisted)) {
+      throw new Error('A persisted snake roster handoff cannot be replaced.');
+    }
+    return persisted;
+  }
+  if (incoming.rosterHandoff) validateSnakeRosterHandoff(incoming, incoming.rosterHandoff.phase);
+  return incoming.rosterHandoff;
 }

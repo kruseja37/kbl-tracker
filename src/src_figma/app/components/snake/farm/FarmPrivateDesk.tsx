@@ -54,13 +54,24 @@ export function FarmPrivateDesk(props: {
   onReorder?: (view: string, orderedIds: string[]) => void;
 }) {
   const [view, setView] = useState('OVERALL');
+  const [query, setQuery] = useState('');
   const cardById = useMemo(() => new Map(props.cards.map((card) => [card.id, card])), [props.cards]);
   const positions = useMemo(() => [...new Set(props.cards.flatMap((card) => card.eligiblePositions))].sort(), [props.cards]);
   const ids = props.board
     ? view === 'OVERALL' ? props.board.overall : props.board.byPosition[view] ?? []
     : props.cards.map((card) => card.id);
   const visibleIds = ids.filter((id) => cardById.has(id));
-  const visibleCards = visibleIds.flatMap((id) => cardById.get(id) ?? []);
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleCards = visibleIds
+    .flatMap((id) => cardById.get(id) ?? [])
+    .filter((card) => !normalizedQuery || [
+      card.name,
+      card.position,
+      card.scoutedGrade,
+      card.gradeRange,
+      card.scoutName,
+      ...card.eligiblePositions,
+    ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)));
   const move = (index: number, direction: -1 | 1) => {
     const target = index + direction;
     if (target < 0 || target >= visibleIds.length) return;
@@ -97,6 +108,17 @@ export function FarmPrivateDesk(props: {
           onClick={() => setView(position)}
         >{position}</button>)}
       </div> : null}
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h3 className="text-lg font-black">{view} RANKINGS</h3>
+        <label className="text-[10px] font-black">FIND PROSPECT
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="mt-1 block min-h-11 w-52 max-w-full border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-sm"
+          />
+        </label>
+      </div>
       <div className="max-h-80 space-y-2 overflow-y-auto" aria-label="Scouted prospect board">
         {visibleCards.map((card, index) => (
           <div key={card.id} className="flex gap-1">
@@ -109,12 +131,20 @@ export function FarmPrivateDesk(props: {
               <span className="block text-sm">{card.position} · YOUR SCOUT · {card.scoutName}: {card.scoutedGrade} · RANGE {card.gradeRange} · {card.confidence.toUpperCase()} CONFIDENCE</span>
               <span className="mt-1 block text-sm font-bold">{card.scoutsCall}</span>
             </button>
-            {props.onReorder ? <div className="flex flex-col gap-1">
+            {normalizedQuery && props.onReorder ? <button
+              className="min-h-11 border-2 px-2 text-xs font-black"
+              type="button"
+              aria-label={`Send ${card.name} to top`}
+              disabled={ids[0] === card.id}
+              onClick={() => props.onReorder?.(view, [card.id, ...ids.filter((id) => id !== card.id)])}
+            >TOP</button> : null}
+            {props.onReorder && !normalizedQuery ? <div className="flex flex-col gap-1">
               <button className="min-h-11 min-w-11 border-2 font-black" type="button" aria-label={`Move ${card.name} up`} disabled={index === 0} onClick={() => move(index, -1)}>▲</button>
               <button className="min-h-11 min-w-11 border-2 font-black" type="button" aria-label={`Move ${card.name} down`} disabled={index === visibleIds.length - 1} onClick={() => move(index, 1)}>▼</button>
             </div> : null}
           </div>
         ))}
+        {visibleCards.length === 0 ? <p className="border-2 border-[var(--ballpark-panel-border)] p-3 font-black">NO MATCHES</p> : null}
       </div>
     </section>
   );

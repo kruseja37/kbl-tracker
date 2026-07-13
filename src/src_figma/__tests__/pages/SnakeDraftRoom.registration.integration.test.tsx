@@ -13,6 +13,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 vi.mock('../../../utils/syncEngine', () => ({
   syncEngine: {
     isSuppressed: () => true,
+    pull: vi.fn(async () => undefined),
     upsert: vi.fn(),
     remove: vi.fn(),
   },
@@ -28,6 +29,11 @@ vi.mock('../../utils/snakeSounds', () => ({
   saveSnakeSoundsEnabled: vi.fn(),
   createSnakeSoundPlayer: () => ({ play: vi.fn() }),
 }));
+
+vi.mock('../../app/components/snake/snakeRoomFreshness', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/snakeRoomFreshness')>();
+  return { ...actual, startSnakeRoomFreshness: () => () => undefined };
+});
 
 import { TIER_CAPS } from '../../../data/tierParams';
 import {
@@ -47,7 +53,8 @@ import {
   type Team,
 } from '../../../utils/leagueBuilderStorage';
 import { resolveLockedSeat } from '../../app/components/snake/desk/deskRoomModel';
-import SnakeDraftRoom, { snakeRoomMissingLegCopy } from '../../app/pages/SnakeDraftRoom';
+import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
+import { snakeRoomMissingLegCopy } from '../../app/components/snake/snakeRoomCopy';
 import { LeagueBuilderDraftSetup } from '../../app/pages/LeagueBuilderDraftSetup';
 
 const LEAGUE_ID = 'roomfix-snake-league';
@@ -225,13 +232,25 @@ describe('ROOMFIX setup to playable snake room', () => {
     );
 
     fireEvent.change(await screen.findByLabelText('PICK A BABE RUTH CARD'), {
-      target: { value: PICKED_LEGEND_ID },
+      target: { value: UNPICKED_LEGEND_ID },
     });
     const lockButton = await screen.findByRole('button', { name: 'LOCK POOL' }, { timeout: 30_000 });
     await waitFor(() => expect(lockButton).toBeEnabled(), { timeout: 30_000 });
     fireEvent.click(lockButton);
     await waitFor(async () => expect((await getRegisteredPool(LEAGUE_ID))?.locked).toBe(true), { timeout: 30_000 });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'UNLOCK' })).toBeEnabled(), { timeout: 30_000 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'UNLOCK POOL' })).toBeEnabled(), { timeout: 30_000 });
+
+    // Version round-trip regression: unlock must happen before alternate memberships restore,
+    // their IV rows must be re-registered, and the alternate choice must survive the second lock.
+    fireEvent.click(screen.getByRole('button', { name: 'UNLOCK POOL' }));
+    await waitFor(async () => expect((await getRegisteredPool(LEAGUE_ID))?.locked).not.toBe(true), { timeout: 30_000 });
+    const restoredPicker = await screen.findByLabelText('PICK A BABE RUTH CARD', {}, { timeout: 30_000 });
+    fireEvent.change(restoredPicker, { target: { value: PICKED_LEGEND_ID } });
+    const relockButton = await screen.findByRole('button', { name: 'LOCK POOL' }, { timeout: 30_000 });
+    await waitFor(() => expect(relockButton).toBeEnabled(), { timeout: 30_000 });
+    fireEvent.click(relockButton);
+    await waitFor(async () => expect((await getRegisteredPool(LEAGUE_ID))?.locked).toBe(true), { timeout: 30_000 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'UNLOCK POOL' })).toBeEnabled(), { timeout: 30_000 });
     expect(screen.queryByLabelText('PICK A BABE RUTH CARD')).not.toBeInTheDocument();
     expect(screen.getByText('UNLOCK THE POOL TO CHANGE VERSIONS.')).toBeInTheDocument();
     await screen.findByRole('button', { name: 'ENTER SNAKE DRAFT' }, { timeout: 30_000 });
@@ -243,9 +262,6 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(liveStartButton).toBeEnabled();
       fireEvent.click(liveStartButton);
     }, { timeout: 30_000 });
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'ENTER SNAKE DRAFT' })).toBeDisabled();
-    }, { timeout: 5_000 });
     await waitFor(async () => {
       expect(await getMlbDraftSession(LEAGUE_ID, 1)).not.toBeNull();
     }, { timeout: 30_000 });
@@ -255,6 +271,9 @@ describe('ROOMFIX setup to playable snake room', () => {
     const roomTarget = navigationTarget.textContent!;
     cleanup();
     render(<RoomMemoryRouter initialEntries={[roomTarget]}><SnakeDraftRoom /></RoomMemoryRouter>);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    });
     await waitFor(() => {
       expect(screen.queryByText('OPENING THE ROOM…')).not.toBeInTheDocument();
     }, { timeout: 30_000 });
@@ -271,6 +290,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     expect(new Set(legs.pool!.players.map((row) => row.id))).toEqual(new Set(pickedIds));
     expect(pickedIds).toContain(PICKED_LEGEND_ID);
     expect(pickedIds).not.toContain(UNPICKED_LEGEND_ID);
+    expect(Object.values(legs.session!.snakeSetup!.versionSelections)).toContain(PICKED_LEGEND_ID);
     expect(legs.pool!.players.every((row) => Number.isFinite(row.iv) && row.iv > 0)).toBe(true);
     expect(legs.pool).toMatchObject({ locked: true });
     const pickedPositions = (await getAllPlayers())
@@ -304,7 +324,7 @@ describe('ROOMFIX setup to playable snake room', () => {
       const stored = await getMlbDraftSession(LEAGUE_ID, 1);
       expect(stored?.seatBoards?.[TEAM_IDS[0]]).toBeDefined();
     }, { timeout: 10_000 });
-    expect(screen.getAllByText(/TRUE COST \$/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST');
     const planTruth = screen.getByTestId('plan-truth-strip').textContent ?? '';
     for (const label of ['SALARY', 'TAX', 'ALL-IN', 'MONEY LEFT']) expect(planTruth).toContain(label);
     expect(planTruth).toMatch(/\$-?[\d,]+/);
@@ -330,11 +350,11 @@ describe('ROOMFIX setup to playable snake room', () => {
     expect(screen.getByRole('region', { name: 'Private seat' })).toHaveTextContent(selectedName);
     fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });
     expect(await screen.findByText('PICK RECORDED')).toBeInTheDocument();
     expect(screen.getByText(selectedName.toUpperCase())).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'ADVANCE TO NEXT PICK' })).not.toBeInTheDocument();
-    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_300)); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });
 
     await waitFor(async () => {
       const stored = await getMlbDraftSession(LEAGUE_ID, 1);

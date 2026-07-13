@@ -781,6 +781,7 @@ export function FranchiseHome() {
       });
     } catch (err) {
       console.error('[FranchiseHome] Failed to add game:', err);
+      throw err;
     }
   };
 
@@ -797,6 +798,7 @@ export function FranchiseHome() {
       setEditingScheduleGame(null);
     } catch (err) {
       console.error('[FranchiseHome] Failed to update game:', err);
+      throw err;
     }
   };
 
@@ -806,6 +808,8 @@ export function FranchiseHome() {
       await scheduleData.addSeries({
         seasonId: activeSeasonId,
         statsScopeId: activeSeasonId,
+        gameNumber: gameData.gameNumber,
+        dayNumber: gameData.dayNumber,
         date: gameData.date,
         time: gameData.time,
         awayTeamId: gameData.awayTeamId,
@@ -813,6 +817,7 @@ export function FranchiseHome() {
       }, count);
     } catch (err) {
       console.error('[FranchiseHome] Failed to add series:', err);
+      throw err;
     }
   };
 
@@ -3025,6 +3030,7 @@ export function FranchiseHome() {
         nextDayNumber={getNextDayNumber()}
         nextDate={getNextDate()}
         teams={availableTeams}
+        teamNameMap={franchiseData.teamNameMap}
       />
 
       {scoreOnlyGame && (
