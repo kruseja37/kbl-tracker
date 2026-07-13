@@ -3799,3 +3799,15 @@ Each farm club owns a covered scout-conditioned overall ranking, position views,
 Only prospect ids and order persist; true ratings, true grade, IV, and rival scout reads stay outside
 the farm board record. Candidate ordering never changes money: salary remains attached to the
 absolute pick, including after valid pick trades.
+
+## 2026-07-12 — Confirmed snake drafts freeze one immutable launch record
+
+MLB and farm confirmation each persist one validated draft manifest before any roster write. That
+record, not later room state, owns pick order, selected players, teams, frozen money, pool
+provenance, engine/workflow versions, and the phase-appropriate team archetypes. Retries reuse the
+first persisted record byte-for-byte; stale room or generic saves cannot remove or replace it.
+
+The MLB record freezes public IV for every active-pool player. The farm record stores no true IV
+and retains scout fog; salaries remain the frozen absolute-slot amounts. Franchise setup stores
+both manifests as launch provenance and still begins with zero schedule rows. Schedule CSV upload
+and manual entry remain inside Living Season.

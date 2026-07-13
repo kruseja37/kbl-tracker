@@ -89,6 +89,7 @@ import { buildLiveScoutPool } from '../utils/draftStaffingPersistence';
 import { commitCompletedSnakeFarmSessionToLeagueRosters, commitCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
 import { scoutHireRouteForLeague, staffHireRouteForLeague } from '../utils/draftRouting';
 import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snakeSounds';
+import { freezeSnakeDraftSession, readSnakeDraftTruth } from '../../../utils/snakeDraftManifest';
 
 const SEASON_NUMBER = 1;
 
@@ -152,7 +153,11 @@ function FarmSnakeRoom() {
   const [recapError, setRecapError] = useState<string | null>(null);
   const [committingRecap, setCommittingRecap] = useState(false);
   const recapCommitInFlight = useRef(false);
-  const persist = useCallback(async (next: NonNullable<typeof session>) => setSession(await saveMlbDraftRoomSession(next)), []);
+  const persist = useCallback(async (next: NonNullable<typeof session>) => {
+    const saved = await saveMlbDraftRoomSession(next);
+    setSession(saved);
+    return saved;
+  }, []);
 
   const loadFarm = useCallback(async () => {
     if (!league || leagueTeams.length === 0) return;
@@ -165,7 +170,7 @@ function FarmSnakeRoom() {
       ]);
       const stored = storedFarm ?? storedMlb;
       if (!stored) throw new Error('Finish the MLB snake draft before opening the farm room.');
-      if (!storedFarm && stored.currentPickIndex < stored.pickOrder.length) {
+      if (!storedFarm && !stored.draftManifest && stored.currentPickIndex < stored.pickOrder.length) {
         throw new Error('Finish the MLB snake draft before opening the farm room.');
       }
       const savedProfiles = await getScoutProfilesForLeague(league.id);
@@ -180,7 +185,9 @@ function FarmSnakeRoom() {
           weaknesses: generated.weaknesses as ProspectScoutDescriptor['weaknesses'],
         } : undefined];
       }));
-      const seed = storedFarm ? stored.seed : `${stored.seed}:farm`;
+      const seed = storedFarm
+        ? storedFarm.draftManifest?.seed ?? storedFarm.seed
+        : `${stored.draftManifest?.seed ?? stored.seed}:farm`;
       const nextPool = buildFarmAuctionPool({
         leagueId: league.id,
         seasonNumber: SEASON_NUMBER,
@@ -200,7 +207,10 @@ function FarmSnakeRoom() {
 
       let nextSession = stored;
       if (!storedFarm) {
-        const firstRoundOrder = stored.pickOrder.slice(0, leagueTeams.length).map((slot) => slot.teamId);
+        const mlbPickOrder = stored.draftManifest
+          ? readSnakeDraftTruth(stored, 'MLB').pickOrder
+          : stored.pickOrder;
+        const firstRoundOrder = mlbPickOrder.slice(0, leagueTeams.length).map((slot) => slot.teamId);
         const order = firstRoundOrder.length === leagueTeams.length ? firstRoundOrder : leagueTeams.map((team) => team.id);
         const now = new Date().toISOString();
         nextSession = await saveMlbDraftSession(createFarmSnakeSession({
@@ -208,6 +218,7 @@ function FarmSnakeRoom() {
           teamOrder: order,
           existingFarmRosterCountsByTeamId: Object.fromEntries(rosters.map(([teamId, roster]) => [teamId, roster?.farmRoster.length ?? 0])),
           farmBudgetsByTeamId: nextBudgets,
+          farmArchetypeIdByTeamId: Object.fromEntries(leagueTeams.map((team) => [team.id, team.farmArchetypeKey])),
           prospectIds: nextPool.prospects.map((prospect) => prospect.id),
           now,
         }));
@@ -216,7 +227,7 @@ function FarmSnakeRoom() {
       setFarmBudgets(nextBudgets);
       setFarmPool(nextPool);
       setSession(nextSession);
-      setRecapOpen(nextSession.currentPickIndex >= nextSession.pickOrder.length);
+      setRecapOpen(Boolean(nextSession.draftManifest || nextSession.currentPickIndex >= nextSession.pickOrder.length));
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -329,12 +340,19 @@ function FarmSnakeRoom() {
     setRecapOpen(true);
   }, [session]);
   const confirmFarm = useCallback(async () => {
-    if (recapCommitInFlight.current || !league || !session || !farmPool || session.currentPickIndex < session.pickOrder.length) return;
+    if (recapCommitInFlight.current || !league || !session || !farmPool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;
     recapCommitInFlight.current = true;
     setCommittingRecap(true);
     setRecapError(null);
     try {
-      await commitCompletedSnakeFarmSessionToLeagueRosters({ leagueId: league.id, session, pool: farmPool });
+      const frozen = freezeSnakeDraftSession({
+        session,
+        expectedPhase: 'FARM',
+        poolPlayerIds: farmPool.prospects.map((prospect) => prospect.id),
+        frozenAt: new Date().toISOString(),
+      });
+      const persisted = frozen === session ? session : await persist(frozen);
+      await commitCompletedSnakeFarmSessionToLeagueRosters({ leagueId: league.id, session: persisted, pool: farmPool });
       navigate(staffHireRouteForLeague(league));
     } catch (cause) {
       setRecapError((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
@@ -342,7 +360,7 @@ function FarmSnakeRoom() {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
     }
-  }, [farmPool, league, navigate, session]);
+  }, [farmPool, league, navigate, persist, session]);
   const pickValueChart = useMemo(() => session ? farmSlotPickValueChart(session) : [], [session]);
   const askTradeGuide = useCallback((buyerTeamId: string, targetPick: number) => {
     if (!session) return { message: `No legal guide trade reaches pick ${targetPick}.`, proposal: null, nextPickMoves: [] };
@@ -413,10 +431,13 @@ function FarmSnakeRoom() {
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
   if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p></main>;
   if (!league || !session || !farmPool) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
+  const farmRecapPicks = session.draftManifest
+    ? readSnakeDraftTruth(session, 'FARM').completedPicks
+    : session.completedPicks;
   if (recapOpen) return <SnakeDraftRecap
     phase="FARM"
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
-    picks={session.completedPicks.map((pick) => {
+    picks={farmRecapPicks.map((pick) => {
       const prospect = farmPool.prospects.find((row) => row.id === pick.playerId);
       return {
         pick: pick.pick,
@@ -424,7 +445,7 @@ function FarmSnakeRoom() {
         playerId: pick.playerId,
         playerName: prospect ? `${prospect.firstName} ${prospect.lastName}` : pick.playerId,
         ...(prospect?.primaryPosition ? { position: prospect.primaryPosition } : {}),
-        ...(pick.settledSalary !== undefined ? { salary: pick.settledSalary } : {}),
+        ...(typeof pick.settledSalary === 'number' ? { salary: pick.settledSalary } : {}),
       };
     })}
     committing={committingRecap}
@@ -537,7 +558,7 @@ function MlbSnakeDraftRoom() {
       ]);
       setPool(nextPool);
       setSession(nextSession);
-      setRecapOpen(Boolean(nextSession && nextSession.currentPickIndex >= nextSession.pickOrder.length));
+      setRecapOpen(Boolean(nextSession && (nextSession.draftManifest || nextSession.currentPickIndex >= nextSession.pickOrder.length)));
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -769,6 +790,7 @@ function MlbSnakeDraftRoom() {
   const persist = useCallback(async (next: NonNullable<typeof session>) => {
     const saved = await saveMlbDraftRoomSession(next);
     setSession(saved);
+    return saved;
   }, []);
 
   const rememberBackfillEvents = useCallback((eventsByTeamId: Record<string, BoardBackfillEvent[]>) => {
@@ -1160,12 +1182,20 @@ function MlbSnakeDraftRoom() {
   }, [deskTeam, draftingTeam, leagueTeams.length, persist, pool, poolById, reconcileAllExistingBoards, rememberBackfillEvents, seatingById, seatingPlayers, session, unavailable]);
 
   const confirmMlb = useCallback(async () => {
-    if (recapCommitInFlight.current || !league || !session || !pool || session.currentPickIndex < session.pickOrder.length) return;
+    if (recapCommitInFlight.current || !league || !session || !pool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;
     recapCommitInFlight.current = true;
     setCommittingRecap(true);
     setRecapError(null);
     try {
-      await commitCompletedSnakeSessionToLeagueRosters({ leagueId: league.id, session, pool });
+      const frozen = freezeSnakeDraftSession({
+        session,
+        expectedPhase: 'MLB',
+        poolPlayerIds: session.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
+        salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
+        frozenAt: new Date().toISOString(),
+      });
+      const persisted = frozen === session ? session : await persist(frozen);
+      await commitCompletedSnakeSessionToLeagueRosters({ leagueId: league.id, session: persisted, pool });
       navigate(scoutHireRouteForLeague(league));
     } catch (cause) {
       setRecapError((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
@@ -1173,7 +1203,7 @@ function MlbSnakeDraftRoom() {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
     }
-  }, [league, navigate, pool, session]);
+  }, [league, navigate, persist, pool, session]);
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
@@ -1235,10 +1265,13 @@ function MlbSnakeDraftRoom() {
   if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p></div></main>;
   if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
 
+  const mlbRecapPicks = session.draftManifest
+    ? readSnakeDraftTruth(session, 'MLB').completedPicks
+    : session.completedPicks;
   if (recapOpen) return <SnakeDraftRecap
     phase="MLB"
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
-    picks={session.completedPicks.map((pick) => {
+    picks={mlbRecapPicks.map((pick) => {
       const player = playerById.get(pick.playerId);
       return {
         pick: pick.pick,
@@ -1246,8 +1279,8 @@ function MlbSnakeDraftRoom() {
         playerId: pick.playerId,
         playerName: player ? fullName(player.firstName, player.lastName) : pick.playerId,
         ...(player?.primaryPosition ? { position: player.primaryPosition } : {}),
-        ...(pick.settledSalary !== undefined ? { salary: pick.settledSalary } : {}),
-        ...(pick.marginalTax !== undefined ? { tax: pick.marginalTax } : {}),
+        ...(typeof pick.settledSalary === 'number' ? { salary: pick.settledSalary } : {}),
+        ...(typeof pick.marginalTax === 'number' ? { tax: pick.marginalTax } : {}),
       };
     })}
     committing={committingRecap}

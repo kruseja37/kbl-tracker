@@ -43,6 +43,52 @@ Final verification:
 
 Status: **INDEPENDENTLY APPROVED**. JK browser acceptance remains the sole product gate and will occur after the complete mock-draft program is assembled.
 
+## Slice 2E — immutable manifest and franchise launch provenance
+
+Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2E_2026-07-12.md`
+
+Built:
+
+- Separate backward-compatible MLB and farm manifests frozen before roster commit.
+- Strict runtime provenance checks for phase, source session, league/storage season, versions,
+  contiguous pick order, unique players, exact teams, active-pool membership, money, and locked
+  club identities.
+- Full active MLB pool IV snapshot; farm retains no true-IV payload and uses frozen absolute-slot
+  salary only.
+- Manifest-first recap, roster commit, money, draft-freeze/morale, farm-session creation, and
+  franchise initialization.
+- Byte-stable confirmation retry and session-mutation immunity.
+- Stored MLB+farm franchise provenance with phase-correct MLB/farm archetype identities.
+- Zero-row franchise launch with CSV and manual schedule entry preserved inside Living Season.
+
+Independent audit findings fixed:
+
+1. Completed picks could duplicate one absolute pick while omitting another.
+2. Locked-club coverage and persisted salary-source relationships were not fully validated.
+3. A valid foreign manifest could be attached to another session.
+4. Roster and freeze consumers still read mutable completion/phase fields before frozen truth.
+5. The initial roster-commit edit placed an MLB settlement cache in the wrong function.
+6. An active MLB source-pool member could be frozen without a finite IV.
+7. A stale or generic session write could remove or replace an already-persisted manifest.
+8. Two simultaneous confirmations could reject forever instead of reusing the first persisted record.
+9. Corrupt truthy manifest objects could count as completed drafts.
+10. MLB pick salary could disagree with its frozen pool IV.
+11. Roster commit did not initially require every frozen pool member in the supplied pool.
+12. Farm-session creation copied MLB archetype ids into the farm manifest.
+
+Final verification:
+
+- Independent focused manifest/storage/completion/farm/gauntlet gate: 5 files / 19 tests passed.
+- Independent broader snake/companion/performance/auction gate: 42 files / 287 tests passed.
+- The formerly hanging real setup-to-room registration integration passed both tests in the broad
+  run; the full first-pick ritual completed in 11.2 seconds.
+- Production-scale profile remained green: 939 ms reveal, 22 legal-finish calls; guide 432 ms.
+- Independent TypeScript, production build, and `git diff --check`: passed.
+- Full 8-club gauntlet: 176 MLB picks, 80 farm picks, all 256 morale rows, both immutable
+  manifests, copied team-identity parity, and zero schedule rows.
+
+Status: **INDEPENDENTLY APPROVED**. This is engineering-complete and remains browser-pending; JK's walk is the sole acceptance gate.
+
 ## Slice 2B — team-first private seats and off-clock boards
 
 Contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2B_2026-07-12.md`

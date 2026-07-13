@@ -30787,3 +30787,12 @@ team-first off-clock editing, frozen-slot money truth, and all-seat backfill.
 No true prospect ratings/IV, farm tax, chemistry claim, companion expansion,
 manifest, franchise, schedule, or auction change.
 <!-- ===== END CONTRACT: SNAKE-MOCK-2D ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2E ===== -->
+# SNAKE-MOCK-2E — IMMUTABLE DRAFT MANIFEST AND FRANCHISE LAUNCH
+
+Full binding contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2E_2026-07-12.md`.
+Confirmation freezes one validated manifest consumed by recap/commit/freeze/launch;
+retry is idempotent; franchise launches with zero schedule rows and CSV/manual entry
+inside Living Season. No auction, formula, staffing, or auto-schedule change.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2E ===== -->

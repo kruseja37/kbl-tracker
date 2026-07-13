@@ -101,6 +101,7 @@ import {
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
 import { readMlbDraftCompletion } from './mlbDraftCompletion';
+import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
@@ -120,6 +121,15 @@ async function assertMlbDraftReadyForFranchise(leagueId: string): Promise<void> 
   if (!hasMlbDraft) return;
 
   if (!completion.complete) {
+    throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+  }
+
+  const farmSnakeSession = await getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER);
+  if (completion.snakeSession?.draftManifest) {
+    readSnakeDraftTruth(completion.snakeSession, 'MLB');
+    if (!farmSnakeSession?.draftManifest) throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+    readSnakeDraftTruth(farmSnakeSession, 'FARM');
+  } else if (farmSnakeSession && farmSnakeSession.currentPickIndex < farmSnakeSession.pickOrder.length) {
     throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
 
@@ -706,6 +716,16 @@ export async function initializeFranchise(
     );
 
     const teamControlSnapshot = buildTeamControlSnapshot(franchiseConfig, teams);
+    const [confirmedMlbSnake, confirmedFarmSnake] = await Promise.all([
+      getMlbDraftSession(franchiseLeagueId, 1),
+      getMlbDraftSession(franchiseLeagueId, FARM_SNAKE_SESSION_NUMBER),
+    ]);
+    const snakeDraftProvenance = confirmedMlbSnake?.draftManifest && confirmedFarmSnake?.draftManifest
+      ? {
+          mlb: readSnakeDraftTruth(confirmedMlbSnake, 'MLB').manifest!,
+          farm: readSnakeDraftTruth(confirmedFarmSnake, 'FARM').manifest!,
+        }
+      : undefined;
 
     // 3. Seed the per-franchise roster/team database from the selected league.
     const copyResult = await deepCopyLeagueToFranchise(franchiseId, franchiseLeagueId, {
@@ -756,6 +776,7 @@ export async function initializeFranchise(
       rosterRequirements: copyResult.rosterRequirements,
       stadiums: copyResult.stadiums,
       salaryBaseline: copyResult.salaryBaseline,
+      ...(snakeDraftProvenance ? { snakeDraftProvenance } : {}),
     };
     const storedConfig: StoredFranchiseConfig = {
       ...franchiseConfig,
@@ -770,6 +791,7 @@ export async function initializeFranchise(
       rosterRequirements: copyResult.rosterRequirements,
       stadiums: copyResult.stadiums,
       salaryBaseline: copyResult.salaryBaseline,
+      ...(snakeDraftProvenance ? { snakeDraftProvenance } : {}),
       handoffContract,
       franchiseId,
       createdAt: Date.now(),
@@ -813,10 +835,14 @@ export async function initializeFranchise(
           getRegisteredPool(config.league),
           getMlbDraftSession(config.league, FARM_SNAKE_SESSION_NUMBER),
         ]);
-        const farmSnakeSession = storedFarmSnakeSession?.draftPhase === 'FARM'
-          ? storedFarmSnakeSession
-          : null;
-        for (const pick of farmSnakeSession?.completedPicks ?? []) {
+        const farmSnakeSession = storedFarmSnakeSession && (
+          storedFarmSnakeSession.draftManifest?.phase === 'FARM'
+          || storedFarmSnakeSession.draftPhase === 'FARM'
+        ) ? storedFarmSnakeSession : null;
+        const frozenFarmPicks = farmSnakeSession
+          ? readSnakeDraftTruth(farmSnakeSession, 'FARM').completedPicks
+          : [];
+        for (const pick of frozenFarmPicks) {
           const player = playerById.get(pick.playerId);
           const meta = metaByPlayerId.get(pick.playerId);
           if (!player || !meta) continue;

@@ -112,6 +112,7 @@ import { getFranchiseFarmRecordsForSeason } from '../franchiseFarmStorage';
 import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 import { initializeFranchise } from '../franchiseInitializer';
 import { buildDraftFreezeInputs } from '../draftFreezeInputs';
+import { freezeSnakeDraftSession } from '../snakeDraftManifest';
 import { computeMlbToFarmCarryover } from '../farmAuctionWallet';
 import { deriveSnakeMlbUnspentByTeamId } from '../mlbDraftCompletion';
 import { clearAllSchedules } from '../scheduleStorage';
@@ -2158,6 +2159,38 @@ describe('draft pipeline integration', () => {
       settledSalary: 234_567,
       leagueAssignments: [{ leagueId, teamId: teamIds[1], rosterStatus: 'MLB' }],
     });
+
+    const provenancePool = {
+      ...pool,
+      players: [...pool.players, { id: 'snake-active-reserve', iv: 345_678, salary: 10_000 }],
+    };
+    const frozen = freezeSnakeDraftSession({
+      session: { ...baseSession, currentPickIndex: 2 },
+      expectedPhase: 'MLB',
+      poolPlayerIds: provenancePool.players.map((player) => player.id),
+      salaryByPlayerId: new Map(provenancePool.players.map((player) => [player.id, player.iv])),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    });
+    const postFreezeMutated = {
+      ...frozen,
+      currentPickIndex: 0,
+      pickOrder: [],
+      completedPicks: [],
+      workflowVersion: 'mutated-after-freeze',
+    };
+    await expect(commitCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: postFreezeMutated,
+      pool,
+    })).rejects.toThrow(/pool.*manifest/i);
+    const immutableReport = await commitCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: postFreezeMutated,
+      pool: { ...provenancePool, players: provenancePool.players.map((player) => ({ ...player, iv: 1 })) },
+    });
+    expect(immutableReport.committedPlayerIds).toEqual([...playerIds]);
+    await expect(getPlayer(playerIds[0])).resolves.toMatchObject({ settledSalary: 123_456 });
+    await expect(getPlayer(playerIds[1])).resolves.toMatchObject({ settledSalary: 234_567 });
   });
 
   test('S6 commits a completed farm snake with the frozen absolute-slot salaries', async () => {
@@ -2219,6 +2252,33 @@ describe('draft pipeline integration', () => {
       ratingRevealState: 'hidden',
     });
     await expect(getPlayer(chosen[1].id)).resolves.toMatchObject({ salary: 10_000, settledSalary: 10_000 });
+
+    const frozen = freezeSnakeDraftSession({
+      session,
+      expectedPhase: 'FARM',
+      poolPlayerIds: built.pool.prospects.map((prospect) => prospect.id),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    });
+    await expect(commitCompletedSnakeFarmSessionToLeagueRosters({
+      leagueId,
+      session: frozen,
+      pool: { ...built.pool, prospects: built.pool.prospects.slice(0, -1) },
+    })).rejects.toThrow(/pool.*manifest/i);
+    const immutableReport = await commitCompletedSnakeFarmSessionToLeagueRosters({
+      leagueId,
+      session: {
+        ...frozen,
+        draftPhase: 'MLB',
+        currentPickIndex: 0,
+        pickOrder: [],
+        completedPicks: [],
+        farmSlotSalaries: [1, 1],
+      },
+      pool: built.pool,
+    });
+    expect(immutableReport.committedPlayerIds).toEqual(chosen.map((prospect) => prospect.id));
+    await expect(getPlayer(chosen[0].id)).resolves.toMatchObject({ settledSalary: 30_000 });
+    await expect(getPlayer(chosen[1].id)).resolves.toMatchObject({ settledSalary: 10_000 });
   });
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {

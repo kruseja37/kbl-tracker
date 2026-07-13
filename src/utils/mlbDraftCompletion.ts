@@ -5,6 +5,7 @@ import {
   type LeagueBuilderAuctionSession,
   type LeagueBuilderMlbDraftSession,
 } from './leagueBuilderStorage';
+import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 export interface MlbDraftCompletionState {
   auctionSession: LeagueBuilderAuctionSession | null;
@@ -23,7 +24,16 @@ export function isCompletedAuctionMlbDraftSession(
 export function isCompletedSnakeMlbDraftSession(
   session: LeagueBuilderMlbDraftSession | null | undefined,
 ): boolean {
-  return Boolean(session && session.currentPickIndex >= session.pickOrder.length);
+  if (!session) return false;
+  if (session.draftManifest) {
+    try {
+      readSnakeDraftTruth(session, 'MLB');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return session.currentPickIndex >= session.pickOrder.length;
 }
 
 export async function readMlbDraftCompletion(
@@ -57,12 +67,23 @@ export function deriveSnakeMlbUnspentByTeamId(input: {
 }): Map<string, number> {
   if (!isCompletedSnakeMlbDraftSession(input.session)) return new Map();
 
+  const frozenTruth = input.session.draftManifest ? readSnakeDraftTruth(input.session, 'MLB') : null;
+  const availablePoolIds = new Set(input.pool.players.map((player) => player.id));
+  if (frozenTruth?.manifest && frozenTruth.manifest.pool.playerIds.some((playerId) => !availablePoolIds.has(playerId))) {
+    throw new Error('The MLB snake pool no longer matches its frozen manifest.');
+  }
+
   const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
+  const frozenSalaryByPlayerId = new Map(
+    (frozenTruth?.completedPicks ?? []).map((pick) => [pick.playerId, pick.launchSalary]),
+  );
   const spentByTeamId = new Map<string, number>();
 
-  for (const pick of input.session.completedPicks) {
+  for (const pick of frozenTruth?.completedPicks ?? input.session.completedPicks) {
     const poolPlayer = poolById.get(pick.playerId);
-    const settledSalary = Number.isFinite(pick.settledSalary)
+    const settledSalary = frozenTruth
+      ? frozenSalaryByPlayerId.get(pick.playerId)
+      : Number.isFinite(pick.settledSalary)
       ? pick.settledSalary!
       : poolPlayer?.iv;
     if (!Number.isFinite(settledSalary) || settledSalary! < 0) {
@@ -75,7 +96,7 @@ export function deriveSnakeMlbUnspentByTeamId(input: {
   }
 
   return new Map(
-    [...new Set(input.session.pickOrder.map((pick) => pick.teamId))].map((teamId) => [
+    [...new Set((frozenTruth?.pickOrder ?? input.session.pickOrder).map((pick) => pick.teamId))].map((teamId) => [
       teamId,
       Math.max(0, input.salaryCap - (spentByTeamId.get(teamId) ?? 0)),
     ]),

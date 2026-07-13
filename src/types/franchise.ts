@@ -5,6 +5,8 @@
  * Extracted from FranchiseSetup.tsx to avoid circular imports.
  */
 
+import type { SnakeDraftManifest } from '../utils/leagueBuilderStorage';
+
 export type FranchiseType = 'solo' | 'couch-coop' | 'custom';
 export type FranchiseTeamControl = 'human' | 'ai';
 
@@ -123,6 +125,11 @@ export interface FranchiseModeHandoffContract {
   rosterRequirements: FranchiseRosterRequirementSnapshot;
   stadiums: FranchiseTeamStadiumSnapshot[];
   salaryBaseline: FranchiseSalaryBaselineProof;
+  /** Present for the confirmed two-stage snake path; absent for auction/legacy launches. */
+  snakeDraftProvenance?: {
+    mlb: SnakeDraftManifest;
+    farm: SnakeDraftManifest;
+  };
 }
 
 export interface FranchiseStartupProspectDraftConfig {
@@ -216,5 +223,6 @@ export interface StoredFranchiseConfig extends FranchiseConfig {
   rosterRequirements: FranchiseRosterRequirementSnapshot;
   stadiums: FranchiseTeamStadiumSnapshot[];
   salaryBaseline: FranchiseSalaryBaselineProof;
+  snakeDraftProvenance?: FranchiseModeHandoffContract['snakeDraftProvenance'];
   handoffContract: FranchiseModeHandoffContract;
 }

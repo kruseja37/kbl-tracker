@@ -71,10 +71,11 @@ export function createFarmSnakeSession(input: {
   teamOrder: readonly string[];
   existingFarmRosterCountsByTeamId: Readonly<Record<string, number>>;
   farmBudgetsByTeamId: Readonly<Record<string, number>>;
+  farmArchetypeIdByTeamId: Readonly<Record<string, string | undefined>>;
   prospectIds: readonly string[];
   now: string;
 }): LeagueBuilderMlbDraftSession {
-  if (input.mlbSession.currentPickIndex < input.mlbSession.pickOrder.length) {
+  if (!input.mlbSession.draftManifest && input.mlbSession.currentPickIndex < input.mlbSession.pickOrder.length) {
     throw new Error('Finish the MLB snake draft before opening the farm room.');
   }
   const rawOrder = buildSnakeOrder([...input.teamOrder], 10).filter((slot) => (
@@ -101,7 +102,7 @@ export function createFarmSnakeSession(input: {
     ...input.mlbSession,
     id: createMlbDraftSessionId(input.mlbSession.leagueId, FARM_SNAKE_SESSION_NUMBER),
     seasonNumber: FARM_SNAKE_SESSION_NUMBER,
-    seed: `${input.mlbSession.seed}:farm`,
+    seed: `${input.mlbSession.draftManifest?.seed ?? input.mlbSession.seed}:farm`,
     workflowVersion: 'snake-v1-farm',
     engineMethodVersion: 'snake-s6',
     rounds: 10,
@@ -111,13 +112,32 @@ export function createFarmSnakeSession(input: {
     completedPicks: [],
     trades: [],
     versionState: undefined,
+    // FARM confirmation owns a separate manifest; never inherit the frozen MLB record.
+    draftManifest: undefined,
     correctionSnapshots: [],
     currentPickIndex: 0,
     revision: 0,
-    snakeSetup: input.mlbSession.snakeSetup ? {
-      ...input.mlbSession.snakeSetup,
+    snakeSetup: (input.mlbSession.draftManifest || input.mlbSession.snakeSetup) ? {
+      ...(input.mlbSession.snakeSetup ?? {
+        poolPlayerIds: [],
+        versionSelections: {},
+        clubs: [],
+        orderSeed: input.mlbSession.draftManifest!.seed,
+      }),
       poolPlayerIds: [...input.prospectIds],
       versionSelections: {},
+      orderSeed: input.mlbSession.draftManifest?.seed ?? input.mlbSession.snakeSetup!.orderSeed,
+      clubs: input.teamOrder.map((teamId) => {
+        const source = input.mlbSession.draftManifest?.lockedClubs.find((club) => club.teamId === teamId)
+          ?? input.mlbSession.snakeSetup?.clubs.find((club) => club.teamId === teamId);
+        const farmArchetypeId = input.farmArchetypeIdByTeamId[teamId];
+        return {
+          teamId,
+          ...(source?.gmName ? { gmName: source.gmName } : {}),
+          hotseat: source?.hotseat ?? false,
+          ...(farmArchetypeId ? { archetypeId: farmArchetypeId } : {}),
+        };
+      }),
     } : undefined,
     createdDate: input.now,
     lastModified: input.now,

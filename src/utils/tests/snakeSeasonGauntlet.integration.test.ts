@@ -38,13 +38,13 @@ import { buildFarmAuctionPool } from '../farmAuctionPool';
 import { computeFarmTierCap, computeMlbToFarmCarryover } from '../farmAuctionWallet';
 import { initializeFranchise } from '../franchiseInitializer';
 import { deleteFranchise, getFranchiseConfig } from '../franchiseManager';
-import { deleteFranchiseDatabase, getAllFranchisePlayers } from '../franchisePlayerStorage';
+import { deleteFranchiseDatabase, getAllFranchisePlayers, getAllFranchiseTeams } from '../franchisePlayerStorage';
 import { getFranchiseFarmRecordsForSeason } from '../franchiseFarmStorage';
 import { getFranchiseSeasonId } from '../franchisePersistenceContract';
 import { listFranchiseMoraleSnapshots } from '../franchiseMoraleState';
 import { getFranchiseTrueValueRows } from '../franchiseTrueValueStorage';
 import { deriveSnakeMlbUnspentByTeamId } from '../mlbDraftCompletion';
-import { clearAllSchedules } from '../scheduleStorage';
+import { clearAllSchedules, getAllGamesByFranchise } from '../scheduleStorage';
 import { deleteSeasonMetadata } from '../seasonStorage';
 import {
   clearAllLeagueBuilderData,
@@ -85,6 +85,7 @@ import {
   persistScoutHiresForLeague,
 } from '../../src_figma/app/utils/draftStaffingPersistence';
 import { staffHireRouteForLeague } from '../../src_figma/app/utils/draftRouting';
+import { freezeSnakeDraftSession, readSnakeDraftTruth } from '../snakeDraftManifest';
 
 const LEAGUE_ID = 's7-snake-season-gauntlet';
 const TEAM_IDS = Array.from({ length: 8 }, (_, index) => `s7-club-${index + 1}`);
@@ -113,6 +114,7 @@ function makeTeam(teamId: string, index: number): Team {
     controlledBy: 'human',
     leagueIds: [LEAGUE_ID],
     capIdentity: 'balanced' as Team['capIdentity'],
+    mlbArchetypeKey: 'balanced',
     farmArchetypeKey: index % 2 === 0 ? 'web-gems' : 'bomba-squad',
     createdDate: '2026-07-10',
     lastModified: '2026-07-10',
@@ -441,6 +443,13 @@ describe('S7 snake draft to season closing gauntlet', () => {
     expect(mlbSession.versionState?.draftedPlayerIdByGroupId['source:ruthba01']).toBe(LEGEND_SELECTED_ID);
     expect(mlbSession.versionState?.retiredPlayerIdsByGroupId['source:ruthba01']).toEqual([LEGEND_SIBLING_ID]);
 
+    mlbSession = await saveMlbDraftSession(freezeSnakeDraftSession({
+      session: mlbSession,
+      expectedPhase: 'MLB',
+      poolPlayerIds: mlbSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
+      salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    }));
     await commitCompletedSnakeSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: mlbSession, pool });
     for (const teamId of TEAM_IDS) {
       const roster = await getTeamRoster(teamId);
@@ -501,6 +510,7 @@ describe('S7 snake draft to season closing gauntlet', () => {
       teamOrder: mlbSession.pickOrder.slice(0, TEAM_IDS.length).map((slot) => slot.teamId),
       existingFarmRosterCountsByTeamId: Object.fromEntries(TEAM_IDS.map((teamId) => [teamId, 0])),
       farmBudgetsByTeamId,
+      farmArchetypeIdByTeamId: Object.fromEntries(teams.map((team) => [team.id, team.farmArchetypeKey])),
       prospectIds: farmPool.prospects.map((prospect) => prospect.id),
       now: '2026-07-10T00:00:00.000Z',
     }));
@@ -549,6 +559,12 @@ describe('S7 snake draft to season closing gauntlet', () => {
       }));
     }
     farmSession = (await getMlbDraftSession(LEAGUE_ID, FARM_SNAKE_SESSION_NUMBER))!;
+    farmSession = await saveMlbDraftSession(freezeSnakeDraftSession({
+      session: farmSession,
+      expectedPhase: 'FARM',
+      poolPlayerIds: farmPool.prospects.map((prospect) => prospect.id),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    }));
     await commitCompletedSnakeFarmSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: farmSession, pool: farmPool });
     for (const teamId of TEAM_IDS) {
       const roster = await getTeamRoster(teamId);
@@ -607,15 +623,33 @@ describe('S7 snake draft to season closing gauntlet', () => {
     expect(freezeInputs.some((input) => input.payClassOverride === 'above')).toBe(true);
     expect(freezeInputs.some((input) => input.payClassOverride === 'below')).toBe(true);
 
+    await saveMlbDraftSession({
+      ...storedMlbSession!,
+      currentPickIndex: 0,
+      pickOrder: [],
+      completedPicks: [],
+      workflowVersion: 'mutated-after-freeze',
+    });
+    await saveMlbDraftSession({
+      ...farmSession,
+      draftPhase: 'MLB',
+      currentPickIndex: 0,
+      pickOrder: [],
+      completedPicks: [],
+      farmSlotSalaries: [],
+    });
+
     const franchiseId = await initializeFranchise(franchiseConfig());
     CREATED_FRANCHISE_IDS.push(franchiseId);
     const seasonId = getFranchiseSeasonId(franchiseId, 1);
-    const [storedConfig, franchisePlayers, farmRecords, moraleSnapshots, draftBaselineRows] = await Promise.all([
+    const [storedConfig, franchisePlayers, franchiseTeams, farmRecords, moraleSnapshots, draftBaselineRows, scheduleRows] = await Promise.all([
       getFranchiseConfig(franchiseId),
       getAllFranchisePlayers(franchiseId),
+      getAllFranchiseTeams(franchiseId),
       getFranchiseFarmRecordsForSeason(franchiseId, seasonId),
       listFranchiseMoraleSnapshots(franchiseId, seasonId, seasonId, 1),
       getFranchiseTrueValueRows({ franchiseId, seasonId, statsScopeId: 'draft-baseline' }),
+      getAllGamesByFranchise(franchiseId, 1),
     ]);
     expect(storedConfig?.rosterRequirements).toMatchObject({
       validationStatus: 'passed',
@@ -626,9 +660,24 @@ describe('S7 snake draft to season closing gauntlet', () => {
       generatedSchedulesAllowed: false,
       initialScheduleRows: 0,
     });
+    expect(scheduleRows).toEqual([]);
+    expect(storedConfig?.snakeDraftProvenance).toMatchObject({
+      mlb: { phase: 'MLB', completedPicks: { length: 176 } },
+      farm: { phase: 'FARM', completedPicks: { length: 80 } },
+    });
+    expect(storedConfig?.handoffContract.snakeDraftProvenance).toEqual(storedConfig?.snakeDraftProvenance);
+    const franchiseTeamById = new Map(franchiseTeams.map((team) => [team.id, team]));
+    for (const club of storedConfig!.snakeDraftProvenance!.mlb.lockedClubs) {
+      expect(club.archetypeId).toBe(franchiseTeamById.get(club.teamId)?.mlbArchetypeKey ?? null);
+    }
+    for (const club of storedConfig!.snakeDraftProvenance!.farm.lockedClubs) {
+      expect(club.archetypeId).toBe(franchiseTeamById.get(club.teamId)?.farmArchetypeKey ?? null);
+    }
+    const frozenMlbPicks = readSnakeDraftTruth((await getMlbDraftSession(LEAGUE_ID, 1))!, 'MLB').completedPicks;
+    const frozenFarmPicks = readSnakeDraftTruth((await getMlbDraftSession(LEAGUE_ID, FARM_SNAKE_SESSION_NUMBER))!, 'FARM').completedPicks;
     const committedRosterIds = new Set([
-      ...storedMlbSession!.completedPicks.map((pick) => pick.playerId),
-      ...farmSession.completedPicks.map((pick) => pick.playerId),
+      ...frozenMlbPicks.map((pick) => pick.playerId),
+      ...frozenFarmPicks.map((pick) => pick.playerId),
     ]);
     const franchisePlayerIds = new Set(franchisePlayers.map((player) => player.id));
     expect(committedRosterIds.size).toBe(TEAM_IDS.length * 32);
@@ -639,14 +688,14 @@ describe('S7 snake draft to season closing gauntlet', () => {
     const moralePlayerIds = new Set(
       moraleSnapshots.filter((snapshot) => snapshot.targetType === 'player').map((snapshot) => snapshot.playerId),
     );
-    for (const pick of storedMlbSession!.completedPicks) expect(moralePlayerIds.has(pick.playerId)).toBe(true);
+    for (const pick of frozenMlbPicks) expect(moralePlayerIds.has(pick.playerId)).toBe(true);
     // The season handoff is not complete unless farm slot-vs-talent morale survives the real
     // farm-snake storage record into franchise initialization too.
     expect(
       moralePlayerIds.size,
       'franchise initialization must seed draft-day morale for 176 MLB and 80 farm snake picks',
     ).toBe(TEAM_IDS.length * 32);
-    for (const pick of farmSession.completedPicks) {
+    for (const pick of frozenFarmPicks) {
       expect(moralePlayerIds.has(pick.playerId), `missing farm-snake morale for ${pick.playerId}`).toBe(true);
     }
   }, 120_000);

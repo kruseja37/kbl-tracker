@@ -6,6 +6,7 @@ import {
   deriveSnakeMlbUnspentByTeamId,
   isCompletedSnakeMlbDraftSession,
 } from '../mlbDraftCompletion';
+import { freezeSnakeDraftSession } from '../snakeDraftManifest';
 
 function session(overrides: Partial<LeagueBuilderMlbDraftSession> = {}): LeagueBuilderMlbDraftSession {
   return {
@@ -54,6 +55,19 @@ describe('D1 MLB draft completion helpers', () => {
     expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 1 }))).toBe(false);
     expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 2 }))).toBe(true);
     expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 3 }))).toBe(true);
+  });
+
+  test('manifest completion validates bound persisted truth and rejects corrupt or foreign objects', () => {
+    const frozen = freezeSnakeDraftSession({
+      session: session(),
+      expectedPhase: 'MLB',
+      poolPlayerIds: pool.players.map((player) => player.id),
+      salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    });
+    expect(isCompletedSnakeMlbDraftSession({ ...frozen, currentPickIndex: 0, pickOrder: [] })).toBe(true);
+    expect(isCompletedSnakeMlbDraftSession({ ...frozen, id: 'foreign-session' })).toBe(false);
+    expect(isCompletedSnakeMlbDraftSession({ ...frozen, draftManifest: { truthy: true } as never })).toBe(false);
   });
 
   test('snake unspent uses persisted settlement or IV fallback and clamps cap headroom at zero', () => {

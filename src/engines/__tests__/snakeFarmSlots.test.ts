@@ -79,13 +79,21 @@ describe('S6 farm slot salaries', () => {
   test('creates the farm session once from the completed MLB session and freezes its table', () => {
     const mlb = {
       ...farmSession(), draftPhase: 'MLB' as const, currentPickIndex: 4,
-      snakeSetup: { poolPlayerIds: ['mlb'], versionSelections: {}, clubs: [], orderSeed: 'order' },
+      draftManifest: { phase: 'MLB', seed: 'frozen-seed', lockedClubs: [] } as never,
+      snakeSetup: {
+        poolPlayerIds: ['mlb'], versionSelections: {}, orderSeed: 'order',
+        clubs: [
+          { teamId: 'a', hotseat: true, archetypeId: 'mlb-power' },
+          { teamId: 'b', hotseat: true, archetypeId: 'mlb-contact' },
+        ],
+      },
     };
     const created = createFarmSnakeSession({
       mlbSession: mlb,
       teamOrder: ['a', 'b'],
       existingFarmRosterCountsByTeamId: { a: 8, b: 8 },
       farmBudgetsByTeamId: { a: 1_000_000, b: 1_000_000 },
+      farmArchetypeIdByTeamId: { a: 'farm-speed', b: 'farm-defense' },
       prospectIds: ['p1', 'p2', 'p3', 'p4'],
       now: '2026-07-10T01:00:00.000Z',
     });
@@ -96,6 +104,12 @@ describe('S6 farm slot salaries', () => {
     expect(created.pickOrder).toHaveLength(4);
     expect(created.farmSlotSalaries?.reduce((sum, value) => sum + value, 0)).toBe(1_500_000);
     expect(created.snakeSetup?.poolPlayerIds).toEqual(['p1', 'p2', 'p3', 'p4']);
+    expect(created.snakeSetup?.orderSeed).toBe('frozen-seed');
+    expect(created.snakeSetup?.clubs.map((club) => [club.teamId, club.archetypeId])).toEqual([
+      ['a', 'farm-speed'],
+      ['b', 'farm-defense'],
+    ]);
+    expect(created.draftManifest).toBeUndefined();
   });
 
   test('rejects a trade that overruns a farm wallet and accepts one that fits', () => {

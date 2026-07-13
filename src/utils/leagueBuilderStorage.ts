@@ -39,6 +39,7 @@ import {
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
 } from './optimalLineup';
 import { syncEngine } from './syncEngine';
+import { preservePersistedSnakeDraftManifest, readSnakeDraftTruth } from './snakeDraftManifest';
 
 export type { EditHistoryEntry } from './editHistoryTracker';
 export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
@@ -379,6 +380,49 @@ export interface SnakeDraftCorrectionSnapshot {
   priorSession: Omit<LeagueBuilderMlbDraftSession, 'correctionSnapshots'>;
 }
 
+export interface SnakeDraftManifestPick {
+  round: number;
+  pick: number;
+  teamId: string;
+  playerId: string;
+  /** Null is an explicit legacy/unknown recap value, never an omitted field. */
+  settledSalary: number | null;
+  /** Null is an explicit legacy/unknown recap value, never an omitted field. */
+  marginalTax: number | null;
+  /** Exact immutable salary used by roster/freeze/launch consumers. */
+  launchSalary: number;
+  salarySource: 'pick' | 'pool-legacy' | 'farm-slot';
+}
+
+export interface SnakeDraftManifest {
+  formatVersion: 'snake-draft-manifest-v1';
+  phase: 'MLB' | 'FARM';
+  leagueId: string;
+  seasonNumber: number;
+  frozenAt: string;
+  source: { sessionId: string; revision: number };
+  versions: { workflow: string; engine: string };
+  seed: string;
+  tier: TierKey;
+  balanceMode: BalanceMode;
+  rounds: number;
+  lockedClubs: Array<{
+    teamId: string;
+    gmName: string | null;
+    hotseat: boolean;
+    archetypeId: string | null;
+  }>;
+  pickOrder: Array<{ round: number; pick: number; teamId: string }>;
+  completedPicks: SnakeDraftManifestPick[];
+  versionState: SnakeVersionState | null;
+  pool: {
+    identity: string;
+    playerIds: string[];
+    /** MLB-only public IV snapshot for complete active-pool provenance. FARM must stay null. */
+    mlbIvByPlayerId: Record<string, number> | null;
+  };
+}
+
 export interface LeagueBuilderMlbDraftSession {
   id: string;
   leagueId: string;
@@ -411,6 +455,8 @@ export interface LeagueBuilderMlbDraftSession {
   /** Optional so old FARM sessions seed deterministically on first use. */
   farmSeatBoards?: Record<string, FarmSeatBoardRecord>;
   versionState?: SnakeVersionState;
+  /** Confirmation-time immutable truth. Optional so all pre-manifest sessions remain loadable. */
+  draftManifest?: SnakeDraftManifest;
   snakeSetup?: {
     /** Final trimmed pool: the chosen version card per human, plus all non-versioned picks. */
     poolPlayerIds: string[];
@@ -1968,20 +2014,35 @@ export async function saveMlbDraftSession(
 ): Promise<LeagueBuilderMlbDraftSession> {
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
-  const existing = await getMlbDraftSession(session.leagueId, session.seasonNumber);
-  const fullSession: LeagueBuilderMlbDraftSession = {
-    ...session,
-    createdDate: session.createdDate ?? existing?.createdDate ?? now,
-    lastModified: now,
-  };
+  const id = createMlbDraftSessionId(session.leagueId, session.seasonNumber);
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
     const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
-    const request = store.put(fullSession);
-
-    request.onerror = () => reject(request.error);
+    const read = store.get(id);
+    let fullSession: LeagueBuilderMlbDraftSession | null = null;
+    read.onsuccess = () => {
+      const existing = read.result as LeagueBuilderMlbDraftSession | undefined;
+      try {
+        const candidate: LeagueBuilderMlbDraftSession = {
+          ...session,
+          createdDate: session.createdDate ?? existing?.createdDate ?? now,
+          lastModified: now,
+        };
+        const draftManifest = preservePersistedSnakeDraftManifest(existing, candidate);
+        fullSession = { ...candidate, ...(draftManifest ? { draftManifest } : {}) };
+        store.put(fullSession);
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+    read.onerror = () => reject(read.error);
     tx.oncomplete = () => {
+      if (!fullSession) {
+        reject(new Error(`MLB draft session ${id} was not saved.`));
+        return;
+      }
       if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', fullSession.id, fullSession);
       resolve(fullSession);
     };
@@ -2014,7 +2075,14 @@ async function updateMlbDraftSessionAtomically(
         tx.abort();
         return;
       }
-      const updated = update(current);
+      let updated: LeagueBuilderMlbDraftSession;
+      try {
+        updated = update(current);
+      } catch (error) {
+        reject(error);
+        tx.abort();
+        return;
+      }
       if (updated === current) {
         saved = current;
         return;
@@ -2125,12 +2193,23 @@ function mergeFreshSeatBoards(
 export async function saveMlbDraftRoomSession(
   incoming: LeagueBuilderMlbDraftSession,
 ): Promise<LeagueBuilderMlbDraftSession> {
-  return updateMlbDraftSessionAtomically(incoming.leagueId, incoming.seasonNumber, (fresh) => ({
-    ...incoming,
-    snakeCompanions: fresh.snakeCompanions ?? incoming.snakeCompanions,
-    seatBoards: mergeFreshSeatBoards(fresh.seatBoards, incoming.seatBoards),
-    revision: Math.max(incoming.revision ?? 0, (fresh.revision ?? 0) + 1),
-  }));
+  return updateMlbDraftSessionAtomically(incoming.leagueId, incoming.seasonNumber, (fresh) => {
+    if (fresh.draftManifest && incoming.draftManifest) {
+      // Two devices may confirm from the same pre-freeze revision with different
+      // timestamps. Validate both candidates, then let the first persisted truth win.
+      readSnakeDraftTruth(fresh, fresh.draftManifest.phase);
+      readSnakeDraftTruth(incoming, fresh.draftManifest.phase);
+      return fresh;
+    }
+    const draftManifest = preservePersistedSnakeDraftManifest(fresh, incoming);
+    return {
+      ...incoming,
+      ...(draftManifest ? { draftManifest } : {}),
+      snakeCompanions: fresh.snakeCompanions ?? incoming.snakeCompanions,
+      seatBoards: mergeFreshSeatBoards(fresh.seatBoards, incoming.seatBoards),
+      revision: Math.max(incoming.revision ?? 0, (fresh.revision ?? 0) + 1),
+    };
+  });
 }
 
 export async function deleteMlbDraftSession(leagueId: string, seasonNumber = 1): Promise<void> {

@@ -38,6 +38,7 @@ import {
 } from './leagueBuilderStorage';
 import { leagueHasLinkedFranchise } from './franchiseManager';
 import { farmPickSalary } from '../engines/snakeFarmSlots';
+import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 export const MLB_AUCTION_ROSTER_SLOTS = 22;
 export const MLB_AUCTION_SEASON = 1;
@@ -388,35 +389,52 @@ export async function commitCompletedSnakeSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: RegisteredPool;
 }): Promise<AuctionRosterCommitReport> {
-  if (input.session.currentPickIndex < input.session.pickOrder.length) {
+  if (!input.session.draftManifest && input.session.currentPickIndex < input.session.pickOrder.length) {
     throw new Error(
       `Cannot commit snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
     );
   }
 
+  const frozenTruth = input.session.draftManifest ? readSnakeDraftTruth(input.session, 'MLB') : null;
+  if (frozenTruth?.manifest?.leagueId !== undefined && frozenTruth.manifest.leagueId !== input.leagueId) {
+    throw new Error('The MLB snake manifest belongs to a different league.');
+  }
+  const availableMlbPoolIds = new Set(input.pool.players.map((player) => player.id));
+  if (frozenTruth?.manifest && frozenTruth.manifest.pool.playerIds.some((playerId) => !availableMlbPoolIds.has(playerId))) {
+    throw new Error('The MLB snake pool no longer matches its frozen manifest.');
+  }
+  const completedPicks = frozenTruth?.completedPicks ?? input.session.completedPicks;
+  const pickOrder = frozenTruth?.pickOrder ?? input.session.pickOrder;
+  if (completedPicks.length !== pickOrder.length) {
+    throw new Error('Cannot commit snake rosters until every MLB pick is recorded.');
+  }
   const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
+  const frozenSettlementByPlayerId = new Map(
+    (frozenTruth?.completedPicks ?? []).map((pick) => [pick.playerId, pick.launchSalary]),
+  );
   const settlementByPlayerId = new Map<string, number>();
   const seenPlayerIds = new Set<string>();
-  for (const pick of input.session.completedPicks) {
+  for (const pick of completedPicks) {
     if (seenPlayerIds.has(pick.playerId)) {
       throw new Error(`Snake draft player "${pick.playerId}" appears in more than one completed pick.`);
     }
     seenPlayerIds.add(pick.playerId);
     const poolPlayer = poolById.get(pick.playerId);
-    if (!poolPlayer || !Number.isFinite(poolPlayer.iv) || poolPlayer.iv < 0) {
+    const settlement = frozenTruth ? frozenSettlementByPlayerId.get(pick.playerId) : poolPlayer?.iv;
+    if (!Number.isFinite(settlement) || settlement! < 0) {
       throw new Error(`Snake draft player "${pick.playerId}" was not found with a finite RegisteredPool IV.`);
     }
-    settlementByPlayerId.set(pick.playerId, poolPlayer.iv);
+    settlementByPlayerId.set(pick.playerId, settlement!);
   }
 
-  const picksByTeamId = new Map<string, typeof input.session.completedPicks>();
-  for (const pick of input.session.completedPicks) {
+  const picksByTeamId = new Map<string, Array<{ round: number; pick: number; teamId: string; playerId: string }>>();
+  for (const pick of completedPicks) {
     picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
   }
 
   const teamRosterCounts: Record<string, number> = {};
   const committedPlayerIds: string[] = [];
-  const teamIds = [...new Set(input.session.pickOrder.map((pick) => pick.teamId))];
+  const teamIds = [...new Set(pickOrder.map((pick) => pick.teamId))];
 
   for (const teamId of teamIds) {
     const picks = picksByTeamId.get(teamId) ?? [];
@@ -491,21 +509,34 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: FarmAuctionPool;
 }): Promise<AuctionRosterCommitReport> {
-  if (input.session.draftPhase !== 'FARM') {
+  if (!input.session.draftManifest && input.session.draftPhase !== 'FARM') {
     throw new Error('Cannot commit a non-farm snake session to farm rosters.');
   }
-  if (input.session.currentPickIndex < input.session.pickOrder.length) {
+  if (!input.session.draftManifest && input.session.currentPickIndex < input.session.pickOrder.length) {
     throw new Error(
       `Cannot commit farm snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
     );
   }
+  const frozenTruth = input.session.draftManifest ? readSnakeDraftTruth(input.session, 'FARM') : null;
+  if (frozenTruth?.manifest?.leagueId !== undefined && frozenTruth.manifest.leagueId !== input.leagueId) {
+    throw new Error('The FARM snake manifest belongs to a different league.');
+  }
+  const availableFarmPoolIds = new Set(input.pool.prospects.map((prospect) => prospect.id));
+  if (frozenTruth?.manifest && frozenTruth.manifest.pool.playerIds.some((playerId) => !availableFarmPoolIds.has(playerId))) {
+    throw new Error('The FARM snake pool no longer matches its frozen manifest.');
+  }
+  const completedPicks = frozenTruth?.completedPicks ?? input.session.completedPicks;
+  const pickOrder = frozenTruth?.pickOrder ?? input.session.pickOrder;
+  const frozenSettlementByPlayerId = new Map(
+    (frozenTruth?.completedPicks ?? []).map((pick) => [pick.playerId, pick.launchSalary]),
+  );
   const prospectsById = new Map(input.pool.prospects.map((prospect) => [prospect.id, prospect]));
-  if (input.session.completedPicks.length !== input.session.pickOrder.length) {
+  if (completedPicks.length !== pickOrder.length) {
     throw new Error('Cannot commit farm snake rosters until every farm pick is recorded.');
   }
   const seenPlayerIds = new Set<string>();
-  const picksByTeamId = new Map<string, typeof input.session.completedPicks>();
-  for (const pick of input.session.completedPicks) {
+  const picksByTeamId = new Map<string, Array<{ round: number; pick: number; teamId: string; playerId: string }>>();
+  for (const pick of completedPicks) {
     if (seenPlayerIds.has(pick.playerId)) {
       throw new Error(`Farm snake prospect "${pick.playerId}" appears in more than one completed pick.`);
     }
@@ -518,7 +549,7 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
 
   const teamRosterCounts: Record<string, number> = {};
   const committedPlayerIds: string[] = [];
-  const teamIds = [...new Set(input.session.pickOrder.map((pick) => pick.teamId))];
+  const teamIds = [...new Set(pickOrder.map((pick) => pick.teamId))];
   for (const teamId of teamIds) {
     const picks = picksByTeamId.get(teamId) ?? [];
     const priorRoster = await getTeamRoster(teamId);
@@ -527,7 +558,9 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
     teamRosterCounts[teamId] = playerIds.length;
     for (const pick of picks) {
       const prospect = prospectsById.get(pick.playerId)!;
-      const salary = farmPickSalary(input.session, pick.pick);
+      const salary = frozenTruth
+        ? frozenSettlementByPlayerId.get(pick.playerId)!
+        : farmPickSalary(input.session, pick.pick);
       await savePlayer(farmProspectToPlayer(prospect, input.leagueId, teamId, salary));
       committedPlayerIds.push(pick.playerId);
     }

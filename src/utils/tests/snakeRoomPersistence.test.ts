@@ -26,6 +26,7 @@ import {
   ensureCompanionRoom,
   submitCompanionClaim,
 } from '../../src_figma/app/components/snake/companion/companionModel';
+import { freezeSnakeDraftSession } from '../snakeDraftManifest';
 
 function session(): LeagueBuilderMlbDraftSession {
   return {
@@ -174,5 +175,37 @@ describe('PERFROOM room-session persistence', () => {
     })).rejects.toThrow('Seat board team-a changed before it could be saved.');
     expect((await getMlbDraftSession('perfroom-league', 1))?.seatBoards?.['team-a'])
       .toEqual(board(2, 'phone-board-a-2'));
+  });
+
+  test('persisted manifest truth cannot be removed or replaced by generic or stale-room writes', async () => {
+    const completed = {
+      ...session(),
+      completedPicks: [{ round: 1, pick: 1, teamId: 'team-a', playerId: 'player-a', settledSalary: 100 }],
+      currentPickIndex: 1,
+    };
+    const frozen = freezeSnakeDraftSession({
+      session: completed,
+      expectedPhase: 'MLB',
+      poolPlayerIds: ['player-a'],
+      salaryByPlayerId: new Map([['player-a', 100]]),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    });
+    await saveMlbDraftSession(frozen);
+
+    await expect(saveMlbDraftSession(completed)).rejects.toThrow(/manifest/i);
+    await expect(saveMlbDraftRoomSession(completed)).rejects.toThrow(/manifest/i);
+
+    const replaced = {
+      ...frozen,
+      draftManifest: { ...frozen.draftManifest!, frozenAt: '2026-07-13T12:00:00.000Z' },
+    };
+    await expect(saveMlbDraftSession(replaced)).rejects.toThrow(/manifest/i);
+    const concurrentWinner = await saveMlbDraftRoomSession(replaced);
+    expect(JSON.stringify(concurrentWinner.draftManifest)).toBe(JSON.stringify(frozen.draftManifest));
+
+    const retry = await saveMlbDraftSession({ ...frozen, paused: true });
+    expect(JSON.stringify(retry.draftManifest)).toBe(JSON.stringify(frozen.draftManifest));
+    expect(JSON.stringify((await getMlbDraftSession(frozen.leagueId, frozen.seasonNumber))?.draftManifest))
+      .toBe(JSON.stringify(frozen.draftManifest));
   });
 });

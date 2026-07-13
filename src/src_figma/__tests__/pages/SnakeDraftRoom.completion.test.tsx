@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   farmPool: null as unknown,
   commitMlb: vi.fn(),
   commitFarm: vi.fn(),
+  saveRoom: vi.fn(async (session: unknown) => session),
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -37,12 +38,13 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   return {
     ...actual,
     getScoutProfilesForLeague: vi.fn(async () => []),
-    saveMlbDraftRoomSession: vi.fn(async (session) => session),
+    saveMlbDraftRoomSession: mocks.saveRoom,
   };
 });
 
 import type { LeagueBuilderMlbDraftSession, LeagueTemplate, Player, RegisteredPool, Team } from '../../hooks/useLeagueBuilderData';
 import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
+import { freezeSnakeDraftSession } from '../../../utils/snakeDraftManifest';
 
 const league: LeagueTemplate = {
   id: 'completion-league', name: 'Completion League', teamIds: ['a', 'b'], conferences: [], divisions: [],
@@ -132,6 +134,7 @@ describe('snake draft durable completion and recap', () => {
   beforeEach(() => {
     mocks.commitMlb.mockReset().mockResolvedValue(undefined);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
+    mocks.saveRoom.mockClear();
   });
   afterEach(() => cleanup());
 
@@ -146,7 +149,13 @@ describe('snake draft durable completion and recap', () => {
     expect(screen.getByText('$105,000')).toBeInTheDocument();
     expect(mocks.commitMlb).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
-    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledWith({ leagueId: league.id, session, pool }));
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalled());
+    expect(mocks.commitMlb.mock.calls[0][0]).toMatchObject({
+      leagueId: league.id,
+      pool,
+      session: { id: session.id, draftManifest: { phase: 'MLB', source: { sessionId: session.id } } },
+    });
+    expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitMlb.mock.invocationCallOrder[0]);
     expect(mocks.commitMlb).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/scout-hire?leagueId=${league.id}`);
   });
@@ -160,6 +169,34 @@ describe('snake draft durable completion and recap', () => {
     expect(screen.queryByTestId('navigation-target')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
     expect(await screen.findByTestId('navigation-target')).toBeInTheDocument();
+    const manifests = mocks.commitMlb.mock.calls.map(([input]) => JSON.stringify(input.session.draftManifest));
+    expect(manifests[1]).toBe(manifests[0]);
+  });
+
+  test('a frozen reload recaps manifest picks even if mutable room progress is later corrupted', async () => {
+    const frozen = freezeSnakeDraftSession({
+      session: completedSession('MLB'),
+      expectedPhase: 'MLB',
+      poolPlayerIds: pool.players.map((player) => player.id),
+      salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
+      frozenAt: '2026-07-12T12:00:00.000Z',
+    });
+    setMlbData({
+      ...frozen,
+      currentPickIndex: 0,
+      pickOrder: [],
+      completedPicks: [{ round: 1, pick: 1, teamId: 'b', playerId: 'attacker', settledSalary: 1 }],
+    });
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' })).toBeInTheDocument();
+    expect(screen.getByText('MARA DIAZ')).toBeInTheDocument();
+    expect(screen.getByText('JO STONE')).toBeInTheDocument();
+    expect(screen.queryByText('attacker')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledWith(expect.objectContaining({
+      session: expect.objectContaining({ draftManifest: frozen.draftManifest }),
+    })));
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
   });
 
   test('a completed farm reload opens fog-safe recap and commits only before Staff Hire navigation', async () => {
@@ -170,7 +207,13 @@ describe('snake draft durable completion and recap', () => {
     expect(document.body.textContent).not.toMatch(/TRUE GRADE|POWER 60|CONTACT 60|\bTAX\b/);
     expect(mocks.commitFarm).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM FARM DRAFT' }));
-    await waitFor(() => expect(mocks.commitFarm).toHaveBeenCalledWith({ leagueId: league.id, session, pool: mocks.farmPool }));
+    await waitFor(() => expect(mocks.commitFarm).toHaveBeenCalled());
+    expect(mocks.commitFarm.mock.calls[0][0]).toMatchObject({
+      leagueId: league.id,
+      pool: mocks.farmPool,
+      session: { id: session.id, draftManifest: { phase: 'FARM', source: { sessionId: session.id } } },
+    });
+    expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitFarm.mock.invocationCallOrder[0]);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/staff-hire?leagueId=${league.id}`);
   });
 
