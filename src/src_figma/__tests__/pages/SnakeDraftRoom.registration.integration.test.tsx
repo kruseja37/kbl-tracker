@@ -234,9 +234,21 @@ describe('ROOMFIX setup to playable snake room', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'UNLOCK' })).toBeEnabled(), { timeout: 30_000 });
     expect(screen.queryByLabelText('PICK A BABE RUTH CARD')).not.toBeInTheDocument();
     expect(screen.getByText('UNLOCK THE POOL TO CHANGE VERSIONS.')).toBeInTheDocument();
-    const startButton = await screen.findByRole('button', { name: 'ENTER SNAKE DRAFT' }, { timeout: 30_000 });
-    await waitFor(() => expect(startButton).toBeEnabled(), { timeout: 30_000 });
-    fireEvent.click(startButton);
+    await screen.findByRole('button', { name: 'ENTER SNAKE DRAFT' }, { timeout: 30_000 });
+    // The proof can briefly re-check after the pool lock and replace/disable
+    // the control between two separate queries. Assert readiness and click the
+    // same live node in one waitFor attempt so this test follows a real click.
+    await waitFor(() => {
+      const liveStartButton = screen.getByRole('button', { name: 'ENTER SNAKE DRAFT' });
+      expect(liveStartButton).toBeEnabled();
+      fireEvent.click(liveStartButton);
+    }, { timeout: 30_000 });
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'ENTER SNAKE DRAFT' })).toBeDisabled();
+    }, { timeout: 5_000 });
+    await waitFor(async () => {
+      expect(await getMlbDraftSession(LEAGUE_ID, 1)).not.toBeNull();
+    }, { timeout: 30_000 });
 
     const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 150_000 });
     expect(navigationTarget).toHaveTextContent(`/snake-room?leagueId=${LEAGUE_ID}`);

@@ -38,6 +38,7 @@ export function SnakeDraftRecap(props: {
   committing: boolean;
   error?: string | null;
   onConfirm: () => void | Promise<void>;
+  onBack?: () => void;
 }) {
   const showTax = props.phase === 'MLB';
   return (
@@ -58,11 +59,11 @@ export function SnakeDraftRecap(props: {
                 {team.logoUrl ? <img src={team.logoUrl} alt={`${team.name} logo`} className="h-10 w-10 object-contain" /> : null}
                 <strong>{team.name.toUpperCase()}</strong>
               </div>
-              <div className={`mb-3 grid gap-2 ${showTax ? 'grid-cols-4' : 'grid-cols-3'}`}>
+              <div className={`mb-3 grid gap-2 ${showTax ? 'grid-cols-4' : 'grid-cols-2'}`}>
                 <div><p className="text-[10px] font-bold text-[var(--ballpark-brass)]">ROSTER</p><strong>{picks.length}</strong></div>
                 <div><p className="text-[10px] font-bold text-[var(--ballpark-brass)]">SALARY</p><strong>{moneyOrUnknown(salary)}</strong></div>
                 {showTax ? <div><p className="text-[10px] font-bold text-[var(--ballpark-brass)]">TAX</p><strong>{moneyOrUnknown(tax)}</strong></div> : null}
-                <div><p className="text-[10px] font-bold text-[var(--ballpark-brass)]">ALL-IN</p><strong>{moneyOrUnknown(allIn)}</strong></div>
+                {showTax ? <div><p className="text-[10px] font-bold text-[var(--ballpark-brass)]">ALL-IN</p><strong>{moneyOrUnknown(allIn)}</strong></div> : null}
               </div>
               <ol className="space-y-2">
                 {picks.map((pick) => (
@@ -81,9 +82,12 @@ export function SnakeDraftRecap(props: {
         })}
       </div>
       {props.error ? <p className="mt-5 border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-3 font-black text-[var(--ballpark-warn-text)]" role="alert">{props.error}</p> : null}
-      <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5" disabled={props.committing} onClick={() => void props.onConfirm()}>
-        {props.committing ? 'COMMITTING…' : `CONFIRM ${props.phase} DRAFT`}
-      </button>
+      <div className="mt-5 flex flex-wrap gap-3">
+        {props.onBack ? <button className="ballpark-press-button ballpark-press-lg ballpark-press-default" disabled={props.committing} onClick={props.onBack}>BACK TO ROOM</button> : null}
+        <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold" disabled={props.committing} onClick={() => void props.onConfirm()}>
+          {props.committing ? 'COMMITTING…' : `CONFIRM ${props.phase} DRAFT`}
+        </button>
+      </div>
     </main>
   );
 }

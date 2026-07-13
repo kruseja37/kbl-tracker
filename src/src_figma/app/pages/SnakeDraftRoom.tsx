@@ -67,7 +67,7 @@ import {
   guideForAskedPick,
   type ExecutedAskedPickTrade,
 } from '../components/snake/trade/tradeGuideModel';
-import { FarmPrivateDesk } from '../components/snake/farm/FarmPrivateDesk';
+import { FarmPrivateDesk, FarmSelectedProspectCard } from '../components/snake/farm/FarmPrivateDesk';
 import {
   buildFarmFogCard,
   buildFarmScoutPressure,
@@ -119,6 +119,16 @@ function isSnakeRoomEnabled(): boolean {
 
 function fullName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName}`.trim();
+}
+
+function hotseatPassName(
+  session: { snakeSetup?: { clubs: Array<{ teamId: string; gmName?: string; hotseat: boolean }> } } | null,
+  team: { id: string; name: string } | null,
+): string | null {
+  if (!session || !team) return null;
+  const seat = session.snakeSetup?.clubs.find((club) => club.teamId === team.id);
+  if (!seat?.hotseat) return null;
+  return seat.gmName?.trim() || team.name;
 }
 
 function scoutDescriptor(profile: LeagueBuilderScoutProfile): ProspectScoutDescriptor {
@@ -241,8 +251,7 @@ function FarmSnakeRoom() {
 
   useEffect(() => { void loadFarm(); }, [loadFarm]);
   const unavailable = useMemo(() => new Set(session?.completedPicks.map((pick) => pick.playerId) ?? []), [session]);
-  const currentSlot = session?.pickOrder[session.currentPickIndex]
-    ?? (session && session.currentPickIndex === session.pickOrder.length ? session.pickOrder.at(-1) ?? null : null);
+  const currentSlot = session?.pickOrder[session.currentPickIndex] ?? null;
   const currentTeam = leagueTeams.find((team) => team.id === currentSlot?.teamId) ?? null;
   useLayoutEffect(() => { setDeskTeamId(currentTeam?.id ?? null); }, [currentSlot?.pick, currentTeam?.id]);
   const deskTeam = leagueTeams.find((team) => team.id === deskTeamId) ?? currentTeam;
@@ -436,7 +445,7 @@ function FarmSnakeRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><p>THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p></main>;
+  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5" onClick={() => void loadFarm()}>RETRY</button></main>;
   if (!league || !session || !farmPool) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
   const farmRecapPicks = session.draftManifest
     ? readSnakeDraftTruth(session, 'FARM').completedPicks
@@ -458,8 +467,9 @@ function FarmSnakeRoom() {
     committing={committingRecap}
     error={recapError}
     onConfirm={confirmFarm}
+    onBack={session.draftManifest ? undefined : () => setRecapOpen(false)}
   />;
-  if (!currentSlot) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
+  const farmDraftComplete = session.currentPickIndex >= session.pickOrder.length;
   return <SnakeDraftRoomView
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     order={session.pickOrder.map((slot, index, all) => ({ pick: slot.pick, teamId: slot.teamId, endpoint: all[index - 1]?.teamId === slot.teamId || all[index + 1]?.teamId === slot.teamId }))}
@@ -467,12 +477,23 @@ function FarmSnakeRoom() {
     ticker={session.completedPicks.slice(-8).reverse().map((pick) => ({ id: `${pick.pick}-${pick.playerId}`, teamId: pick.teamId, text: `${leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB'} SELECTED ${farmPool.prospects.find((row) => row.id === pick.playerId)?.firstName ?? 'A PROSPECT'}` }))}
     rostersByTeamId={rostersByTeamId}
     ownedPicksByTeamId={ownedPicksByTeamId}
-    activeSeatId={deskTeam?.id ?? null}
-    canDraftFromActiveSeat={Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
-    candidate={selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
+    activeSeatId={farmDraftComplete ? null : deskTeam?.id ?? null}
+    canDraftFromActiveSeat={!farmDraftComplete && Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
+    candidate={currentSlot && selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
+    selectedPlayerCard={currentSlot && selected && deskTeam ? <FarmSelectedProspectCard
+      card={selected}
+      slotPick={currentSlot.pick}
+      slotSalary={farmPickSalary(session, currentSlot.pick)}
+      farmMoneyLeft={(farmBudgets[deskTeam.id] ?? 0) - teamSpent}
+      teamName={deskTeam.name}
+      teamLogoUrl={deskTeam.logoUrl}
+    /> : undefined}
+    selectedFitLabel={selected ? `SCOUT · ${selected.scoutedGrade}` : null}
+    draftActionLabel="DRAFT PROSPECT"
     paused={Boolean(session.paused)} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
+    hotseatNextName={hotseatPassName(session, currentTeam)}
     practiceMode={false}
-    privateDesk={<FarmPrivateDesk
+    privateDesk={currentSlot ? <FarmPrivateDesk
       key={deskTeam?.id ?? 'none'}
       cards={cards}
       selectedId={selected?.id ?? null}
@@ -489,9 +510,9 @@ function FarmSnakeRoom() {
           setWriteNotice(cause instanceof Error ? cause.message : String(cause));
         });
       }}
-    />}
-    tradeGuide={(showHelp) => <SnakeTradeGuide showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} pickValueChart={pickValueChart} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} />}
-    commissionerTrade={(showHelp) => <SnakeCommissionerTrade showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} ownedPicksByTeamId={ownedPicksByTeamId} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} onExecute={executeTrade} />}
+    /> : undefined}
+    tradeGuide={farmDraftComplete ? undefined : (showHelp) => <SnakeTradeGuide showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} pickValueChart={pickValueChart} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} />}
+    commissionerTrade={farmDraftComplete ? undefined : (showHelp) => <SnakeCommissionerTrade showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} ownedPicksByTeamId={ownedPicksByTeamId} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} onExecute={executeTrade} />}
     roomHelpNotes={['SLOT SALARIES STAY WITH THE PICKS.']}
     writeNotice={writeNotice}
     onReloadRoom={async () => { setWriteNotice(null); await loadFarm(); }}
@@ -505,7 +526,14 @@ function FarmSnakeRoom() {
       }
     }}
     onActiveSeatChange={setDeskTeamId}
-    onRecordPick={recordPick}
+    onRecordPick={async (playerId) => {
+      try {
+        await recordPick(playerId);
+      } catch (cause) {
+        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+        throw cause;
+      }
+    }}
     onCorrectLatest={async () => {
       try {
         await persist(restoreLatestSnakeCorrection(session));
@@ -1089,23 +1117,12 @@ function MlbSnakeDraftRoom() {
     });
   }, [deskTeam, deskState]);
 
-  useEffect(() => {
-    if (!deskState || !candidateId || deskState.canSelectCandidate(candidateId)) return;
-    const repaired = [
-      ...(currentBoard?.rankings.global ?? []),
-      ...Object.values(currentBoard?.slots ?? {}),
-      ...deskState.candidates.map((row) => row.id),
-    ].find((id) => deskState.canSelectCandidate(id));
-    if (deskTeam) setSelectedPlayerIdByTeam((current) => ({ ...current, [deskTeam.id]: repaired ?? null }));
-  }, [candidateId, currentBoard, deskState, deskTeam]);
-
   const selectCandidate = useCallback((playerId: string) => {
-    if (!deskState?.canSelectCandidate(playerId)
-      || unavailable.has(playerId)
+    if (unavailable.has(playerId)
       || !playerById.has(playerId)
       || !poolById.has(playerId)) return;
     if (deskTeam) setSelectedPlayerIdByTeam((current) => ({ ...current, [deskTeam.id]: playerId }));
-  }, [deskState, deskTeam, playerById, poolById, unavailable]);
+  }, [deskTeam, playerById, poolById, unavailable]);
 
   useEffect(() => { setWhatIf(null); }, [deskTeam?.id, session?.currentPickIndex]);
 
@@ -1143,6 +1160,7 @@ function MlbSnakeDraftRoom() {
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!deskState?.board || !pool || !deskTeam || !session) return;
+    if (unavailable.has(playerId)) return;
     const slots = { ...deskState.board.slots };
     const priorPlayerId = slots[slotId];
     const existingSlot = Object.entries(slots).find(([, id]) => id === playerId)?.[0] as SnakeBoardSlotId | undefined;
@@ -1175,7 +1193,7 @@ function MlbSnakeDraftRoom() {
       },
       board,
     });
-  }, [deskRoomPlayers, deskState, deskTeam, leagueTeams.length, pool, session]);
+  }, [deskRoomPlayers, deskState, deskTeam, leagueTeams.length, pool, session, unavailable]);
 
   const keepWhatIf = useCallback(async () => {
     if (!whatIf || !session || !deskTeam || !deskState?.board) return;
@@ -1320,7 +1338,7 @@ function MlbSnakeDraftRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5" onClick={() => void loadSession()}>RETRY</button></div></main>;
   if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
 
   const mlbRecapPicks = session.draftManifest
@@ -1344,6 +1362,7 @@ function MlbSnakeDraftRoom() {
     committing={committingRecap}
     error={recapError}
     onConfirm={confirmMlb}
+    onBack={session.draftManifest ? undefined : () => setRecapOpen(false)}
   />;
 
   return (
@@ -1379,12 +1398,14 @@ function MlbSnakeDraftRoom() {
           <p className="text-xs font-bold">{candidate.position}</p>
         </section>
       ) : undefined}
+      selectedFitLabel={deskState?.selectedCandidate ? `FIT · ${deskState.selectedCandidate.fitWord}` : null}
       draftActionLabel="DRAFT PLAYER"
       paused={Boolean(session.paused)}
       soundsEnabled={soundsEnabled}
       correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
       tradeRevision={session.trades?.length ?? 0}
       livePickMoveRevision={livePickMoveRevision}
+      hotseatNextName={hotseatPassName(session, draftingTeam)}
       practiceMode={session.workflowVersion.toLowerCase().includes('practice')}
       privateSnipeKey={privateSnipeKey}
       dangerKey={candidate?.blockReason ? `${candidate.id}:${candidate.blockReason}` : null}
@@ -1463,7 +1484,14 @@ function MlbSnakeDraftRoom() {
         onChange={acceptCompanionSession}
       />}
       onPauseChange={setPaused}
-      onRecordPick={recordPick}
+      onRecordPick={async (playerId) => {
+        try {
+          await recordPick(playerId);
+        } catch (cause) {
+          setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+          throw cause;
+        }
+      }}
       onCorrectLatest={correctLatest}
       onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
       onPrivateSeatRevealedChange={setPrivateDeskRevealed}

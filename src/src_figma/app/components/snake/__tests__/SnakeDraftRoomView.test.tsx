@@ -77,6 +77,8 @@ describe('SnakeDraftRoomView', () => {
     })} />);
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('$88,000');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive');
+    expect(screen.getByTestId('drafted-truth-a').querySelector('[data-testid="compact-money-grid"]')).not.toBeNull();
+    expect(screen.getByLabelText('DRAFTED ROSTER chemistry')).toHaveClass('grid-cols-1');
     expect(screen.queryByText('PRIVATE PLAN $777,777')).not.toBeInTheDocument();
     expect(screen.queryByText('PRIVATE FIT STRONG · CHEM 2→3')).not.toBeInTheDocument();
 
@@ -85,14 +87,14 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('PRIVATE FIT STRONG · CHEM 2→3')).toBeInTheDocument();
   });
 
-  it('puts the private desk first in the wide room layout and compacts the sticky ritual rail', () => {
+  it('puts the private desk first in the 1024-wide room layout and keeps the ritual rail sticky', () => {
     render(<SnakeDraftRoomView {...props()} />);
     const privateSeat = screen.getByRole('region', { name: 'Private seat' });
     const ritual = screen.getByRole('region', { name: 'Draft ritual' });
 
-    expect(privateSeat.parentElement).toHaveClass('xl:grid-cols-[1fr_400px]');
+    expect(privateSeat.parentElement).toHaveClass('lg:grid-cols-[minmax(0,1fr)_minmax(340px,38vw)]');
     expect(privateSeat.compareDocumentPosition(ritual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(ritual.parentElement).toHaveClass('self-start', 'xl:sticky', 'xl:top-4');
+    expect(ritual.parentElement).toHaveClass('self-start', 'lg:sticky', 'lg:top-4');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD').parentElement).toHaveClass('min-h-36');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toHaveClass('text-xl');
 
@@ -101,6 +103,45 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByTestId('ritual-card')).toHaveClass('min-h-44', 'p-4');
     expect(screen.getByAltText('Kodiaks logo')).toHaveClass('h-14', 'w-14');
     expect(screen.getByText('THE KODIAKS SELECT…')).toHaveClass('text-lg');
+  });
+
+  it('keeps cover, the full selected name, and draft action ahead of profile details and the board', () => {
+    render(<SnakeDraftRoomView {...props({
+      candidate: { id: 'p1', name: 'Buzz Pastimm', position: 'CF', consequence: 'A legal finish remains.' },
+      selectedFitLabel: 'FIT · STRONG FIT',
+      selectedPlayerCard: <div data-testid="profile-details">PROFILE RATINGS AND TRAITS</div>,
+      privateDesk: <div data-testid="private-board">22-PLAYER BOARD</div>,
+    })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    const cover = screen.getByRole('button', { name: 'COVER' });
+    const fullName = screen.getByRole('heading', { name: 'Buzz Pastimm' });
+    const action = screen.getByRole('button', { name: 'DRAFT PLAYER' });
+    const profile = screen.getByTestId('profile-details');
+    const board = screen.getByTestId('private-board');
+    expect(fullName).toHaveClass('break-words');
+    expect(cover.compareDocumentPosition(fullName) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(fullName.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(action.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(profile.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('windows the draft order around the active pick and marks the live pick', () => {
+    const order = Array.from({ length: 20 }, (_, index) => ({ pick: index + 1, teamId: index % 2 ? 'b' : 'a' }));
+    render(<SnakeDraftRoomView {...props({ order, currentPickIndex: 11 })} />);
+    expect(screen.getByText('PICKS 10–16 OF 20')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comets pick 12' })).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByRole('button', { name: 'Kodiaks pick 1' })).not.toBeInTheDocument();
+  });
+
+  it('opens the pass cover only for the hotseat club on the clock', () => {
+    const { rerender } = render(<SnakeDraftRoomView {...props({ hotseatNextName: 'Alex', activeSeatId: 'a' })} />);
+    expect(screen.getByRole('dialog')).toHaveTextContent('PASS TO ALEX');
+    fireEvent.click(screen.getByRole('button', { name: 'I HAVE THE ROOM' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COMETS' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    rerender(<SnakeDraftRoomView {...props({ hotseatNextName: 'Alex', activeSeatId: 'b', currentPickIndex: 0 })} />);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('opens the public guide and commissioner trade from separate shared-main buttons', () => {
@@ -325,6 +366,19 @@ describe('SnakeDraftRoomView', () => {
     expect(oscillator.start).toHaveBeenCalled();
   });
 
+  it('supports a full keyboard gavel hold', async () => {
+    vi.useFakeTimers();
+    const onRecordPick = vi.fn();
+    render(<SnakeDraftRoomView {...props({ onRecordPick })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    const gavel = screen.getByRole('button', { name: 'HOLD THE GAVEL' });
+    fireEvent.keyDown(gavel, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'KEEP HOLDING' })).toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(onRecordPick).toHaveBeenCalledWith('p1');
+  });
+
   it('does not show PICK RECORDED when the page rejects an invalid save', async () => {
     vi.useFakeTimers();
     const onRecordPick = vi.fn().mockRejectedValue(new Error('selected player is no longer available'));
@@ -411,6 +465,28 @@ describe('SnakeDraftRoomView', () => {
     expect(onDraftComplete).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
     expect(onDraftComplete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'VIEW DRAFT RECAP' }));
+    expect(onDraftComplete).toHaveBeenCalledTimes(1);
+  });
+
+  it('mounts a completed room as closed and exposes no seat, candidate, or draft action', () => {
+    const onDraftComplete = vi.fn();
+    render(<SnakeDraftRoomView {...props({
+      currentPickIndex: 3,
+      activeSeatId: null,
+      canDraftFromActiveSeat: false,
+      candidate: null,
+      privateDesk: undefined,
+      onDraftComplete,
+    })} />);
+
+    expect(screen.getByTestId('draft-complete-private-state')).toHaveTextContent('THE BOARD IS CLOSED');
+    expect(screen.getByTestId('draft-complete-ritual-state')).toHaveTextContent('THE DRAFT IS COMPLETE');
+    expect(screen.queryByRole('button', { name: /REVEAL .* SEAT/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /DRAFT (?:PLAYER|PROSPECT)/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'THE GUIDE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'TRADE' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'VIEW DRAFT RECAP' }));
     expect(onDraftComplete).toHaveBeenCalledTimes(1);
   });

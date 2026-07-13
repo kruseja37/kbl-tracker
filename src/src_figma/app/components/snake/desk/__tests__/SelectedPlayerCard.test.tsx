@@ -42,10 +42,11 @@ describe('SelectedPlayerCard', () => {
     expect(screen.getByText('ARSENAL · 4F · SL · CH')).toBeInTheDocument();
     expect(screen.getByText('Big Hack')).toBeInTheDocument();
     expect(screen.getByText('Tough Out')).toBeInTheDocument();
-    expect(screen.getByText('Effectively-Wild')).toBeInTheDocument();
+    expect(screen.getByText('PLAYER ARCHETYPE · Effectively-Wild')).toBeInTheDocument();
+    expect(screen.getByText('TEAM ARCHETYPE · BALANCED')).toBeInTheDocument();
     expect(screen.getByText('Competitive')).toBeInTheDocument();
     expect(screen.getAllByText('Scholarly').length).toBeGreaterThan(0);
-    expect(screen.getByText('TEAM FIT · STRONG FIT')).toHaveClass('text-[var(--ballpark-status-green)]');
+    expect(screen.getByText('FIT · STRONG FIT')).toHaveClass('text-[var(--ballpark-status-green)]');
     expect(screen.getByText('+$12,500')).toBeInTheDocument();
     expect(screen.getByText('$102,500')).toBeInTheDocument();
     expect(screen.getByText('−$4,000')).toBeInTheDocument();
@@ -81,5 +82,33 @@ describe('DraftTruthStrip', () => {
     expect(screen.getAllByText('— · —')).toHaveLength(5);
     for (const word of ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined']) expect(screen.getByText(word)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('$0');
+  });
+
+  it('uses two-column money and full-width chemistry rows in a narrow public rail without changing the wide plan layout', () => {
+    const chemistry = buildChemistryStrip(null);
+    const { rerender } = render(<DraftTruthStrip
+      title="DRAFTED ROSTER"
+      ledger={{ rosterCount: 1, salary: 77_000, tax: null, allIn: null, moneyLeft: null }}
+      chemistry={chemistry}
+      compact
+    />);
+    expect(screen.getByTestId('compact-money-grid')).toHaveClass('grid-cols-2');
+    expect(screen.getByTestId('compact-money-grid')).not.toHaveClass('sm:grid-cols-4');
+    expect(screen.getByLabelText('DRAFTED ROSTER chemistry')).toHaveClass('grid-cols-1');
+    expect(screen.getByLabelText('DRAFTED ROSTER chemistry')).not.toHaveClass('grid-cols-2', 'grid-cols-5');
+    for (const word of ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined']) {
+      const label = screen.getByText(word);
+      expect(label).toHaveClass('whitespace-nowrap');
+      expect(label).not.toHaveClass('truncate');
+      expect(label).not.toHaveClass('overflow-hidden', 'text-ellipsis');
+    }
+
+    rerender(<DraftTruthStrip
+      title="22-PLAYER PLAN"
+      ledger={{ rosterCount: 22, salary: 77_000, tax: null, allIn: null, moneyLeft: null }}
+      chemistry={chemistry}
+    />);
+    expect(screen.queryByTestId('compact-money-grid')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('22-PLAYER PLAN chemistry')).toHaveClass('grid-cols-5');
   });
 });

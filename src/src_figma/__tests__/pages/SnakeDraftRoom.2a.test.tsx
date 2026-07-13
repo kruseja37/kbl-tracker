@@ -203,6 +203,25 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByTestId('room-write-notice')).not.toBeInTheDocument();
   });
 
+  test('retries a terminal room load failure without leaving the draft path', async () => {
+    const source = session(false);
+    mocks.roomState = source;
+    const getRegisteredPool = vi.fn()
+      .mockRejectedValueOnce(new Error('temporary room read failure'))
+      .mockResolvedValueOnce(pool);
+    mocks.data = {
+      leagues: [league], teams, players, isLoading: false, error: null,
+      getRegisteredPool,
+      getMlbDraftSession: vi.fn(async () => source),
+      saveMlbDraftSession: vi.fn(async (next) => next),
+    };
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByText(/temporary room read failure/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RETRY' }));
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    expect(getRegisteredPool).toHaveBeenCalledTimes(2);
+  });
+
   test('edits only an explicitly revealed off-clock board, fixes its trade-guide buyer, and restores the live draft path', async () => {
     const source = session(false);
     const originalA = structuredClone(source.seatBoards!.a);

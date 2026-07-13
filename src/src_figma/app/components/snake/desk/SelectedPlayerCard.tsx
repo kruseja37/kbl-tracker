@@ -42,14 +42,15 @@ export function SelectedPlayerCard(props: {
         {props.teamLogoUrl ? <img className="h-14 w-14 object-contain" src={props.teamLogoUrl} alt={`${props.teamName} logo`} /> : null}
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED PLAYER</p>
-          <h2 className="truncate text-xl font-black uppercase">{profile.name}</h2>
+          <h2 className="break-words text-xl font-black uppercase leading-tight">{profile.name}</h2>
           <p className="text-xs font-bold">{positions}</p>
           <p className="text-[10px] font-bold">AGE {profile.age} · B/T {profile.bats}/{profile.throws}{profile.armSlot ? ` · ${profile.armSlot} SLOT` : ''}</p>
         </div>
-        <span className={`border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>TEAM FIT · {props.candidate.fitWord}</span>
+        <span className={`border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>FIT · {props.candidate.fitWord}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1 text-[10px] font-black">
-        {profile.archetype ? <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1">{profile.archetype}</span> : null}
+        {profile.archetype ? <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1">PLAYER ARCHETYPE · {profile.archetype}</span> : null}
+        <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1">TEAM ARCHETYPE · {props.candidate.archetypeChip}</span>
         <span className="border-2 border-[var(--ballpark-panel-border)] px-2 py-1">{profile.personality}</span>
         <span className="border-2 border-[var(--ballpark-panel-border)] px-2 py-1">{profile.chemistry}</span>
         {profile.traits.map((trait) => <span key={trait} className="border-2 border-[var(--ballpark-panel-border)] px-2 py-1">{trait}</span>)}

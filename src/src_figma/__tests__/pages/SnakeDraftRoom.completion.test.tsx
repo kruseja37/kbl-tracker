@@ -174,6 +174,14 @@ describe('snake draft durable completion and recap', () => {
     expect(manifests[1]).toBe(manifests[0]);
   });
 
+  test('an unconfirmed MLB recap can return to the room for the final correction', async () => {
+    setMlbData();
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'BACK TO ROOM' }));
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'MLB DRAFT RECAP' })).not.toBeInTheDocument();
+  });
+
   test('a frozen reload recaps manifest picks even if mutable room progress is later corrupted', async () => {
     const frozen = freezeSnakeDraftSession({
       session: completedSession('MLB'),
@@ -193,6 +201,7 @@ describe('snake draft durable completion and recap', () => {
     expect(screen.getByText('MARA DIAZ')).toBeInTheDocument();
     expect(screen.getByText('JO STONE')).toBeInTheDocument();
     expect(screen.queryByText('attacker')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'BACK TO ROOM' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
     await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledWith(expect.objectContaining({
       session: expect.objectContaining({ draftManifest: frozen.draftManifest }),
@@ -216,6 +225,40 @@ describe('snake draft durable completion and recap', () => {
     });
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitFarm.mock.invocationCallOrder[0]);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/staff-hire?leagueId=${league.id}`);
+  });
+
+  test('an unconfirmed farm recap returns to a closed room and correction restores the actual prior slot', async () => {
+    const completed = completedSession('FARM');
+    const priorSession = {
+      ...completed,
+      completedPicks: completed.completedPicks.slice(0, 1),
+      currentPickIndex: 1,
+      revision: 1,
+    };
+    const session = {
+      ...completed,
+      correctionSnapshots: [{ action: 'pick' as const, priorSession }],
+    };
+    setFarmData(session);
+    renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'BACK TO ROOM' }));
+    expect(await screen.findByTestId('draft-complete-ritual-state')).toHaveTextContent('THE DRAFT IS COMPLETE');
+    expect(screen.getByTestId('draft-complete-private-state')).toHaveTextContent('THE BOARD IS CLOSED');
+    expect(screen.queryByRole('button', { name: 'DRAFT PROSPECT' })).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toContain('PICK 2 PAYS');
+
+    fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
+    fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledWith(expect.objectContaining({
+      currentPickIndex: 1,
+      completedPicks: [expect.objectContaining({ playerId: 'f1' })],
+    }), expect.any(Number)));
+    expect(await screen.findByText('COMETS IS REVIEWING THE BOARD')).toBeInTheDocument();
+    expect(screen.queryByTestId('draft-complete-ritual-state')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL COMETS SEAT' }));
+    expect(await screen.findByRole('button', { name: 'DRAFT PROSPECT' })).toBeInTheDocument();
+    expect(screen.getAllByText(/PICK 2 PAYS/).length).toBeGreaterThan(0);
   });
 
   test('a farm commit failure remains on recap and never navigates', async () => {

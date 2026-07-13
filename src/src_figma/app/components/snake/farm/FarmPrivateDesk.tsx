@@ -10,6 +10,36 @@ function money(value: number): string {
   return `$${Math.round(value).toLocaleString()}`;
 }
 
+export function FarmSelectedProspectCard(props: {
+  card: FarmFogCardModel;
+  slotPick: number;
+  slotSalary: number;
+  farmMoneyLeft: number;
+  teamName: string;
+  teamLogoUrl?: string;
+}) {
+  return (
+    <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-farm-prospect-card">
+      <div className="flex items-start gap-3">
+        {props.teamLogoUrl ? <img className="h-14 w-14 shrink-0 object-contain" src={props.teamLogoUrl} alt={`${props.teamName} logo`} /> : null}
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED PROSPECT</p>
+          <h2 className="text-xl font-black uppercase">{props.card.name}</h2>
+          <p className="text-xs font-bold">{props.card.eligiblePositions.join(' · ') || props.card.position}</p>
+        </div>
+        <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1 text-sm font-black">{props.card.scoutedGrade}</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+        <p><span className="block text-[10px] font-bold text-[var(--ballpark-brass)]">SCOUT RANGE</span><strong>{props.card.gradeRange}</strong></p>
+        <p><span className="block text-[10px] font-bold text-[var(--ballpark-brass)]">CONFIDENCE</span><strong>{props.card.confidence.toUpperCase()}</strong></p>
+        <p><span className="block text-[10px] font-bold text-[var(--ballpark-brass)]">PICK {props.slotPick}</span><strong>{money(props.slotSalary)}</strong></p>
+        <p><span className="block text-[10px] font-bold text-[var(--ballpark-brass)]">AFTER PICK</span><strong>{money(props.farmMoneyLeft - props.slotSalary)}</strong></p>
+      </div>
+      <p className="mt-3 text-xs font-black">{props.card.scoutName.toUpperCase()} · {props.card.scoutsCall}</p>
+    </section>
+  );
+}
+
 export function FarmPrivateDesk(props: {
   cards: readonly FarmFogCardModel[];
   selectedId: string | null;
@@ -63,7 +93,7 @@ export function FarmPrivateDesk(props: {
           key={position}
           type="button"
           aria-pressed={view === position}
-          className={`ballpark-press-button ballpark-press-sm ${view === position ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
+          className={`ballpark-press-button ballpark-press-sm min-h-11 ${view === position ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
           onClick={() => setView(position)}
         >{position}</button>)}
       </div> : null}
@@ -80,8 +110,8 @@ export function FarmPrivateDesk(props: {
               <span className="mt-1 block text-sm font-bold">{card.scoutsCall}</span>
             </button>
             {props.onReorder ? <div className="flex flex-col gap-1">
-              <button type="button" aria-label={`Move ${card.name} up`} disabled={index === 0} onClick={() => move(index, -1)}>▲</button>
-              <button type="button" aria-label={`Move ${card.name} down`} disabled={index === visibleIds.length - 1} onClick={() => move(index, 1)}>▼</button>
+              <button className="min-h-11 min-w-11 border-2 font-black" type="button" aria-label={`Move ${card.name} up`} disabled={index === 0} onClick={() => move(index, -1)}>▲</button>
+              <button className="min-h-11 min-w-11 border-2 font-black" type="button" aria-label={`Move ${card.name} down`} disabled={index === visibleIds.length - 1} onClick={() => move(index, 1)}>▼</button>
             </div> : null}
           </div>
         ))}

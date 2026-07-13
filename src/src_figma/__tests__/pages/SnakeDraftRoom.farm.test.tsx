@@ -81,7 +81,7 @@ describe('S6 farm room continuation', () => {
     expect(created.farmSlotSalaries[0]).toBe(3 * created.farmSlotSalaries.at(-1));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /REVEAL COMETS SEAT/i }));
-    expect(screen.getByRole('button', { name: 'COVER & ARM' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DRAFT PROSPECT' })).toBeInTheDocument();
     expect(screen.getAllByText(/PICK 1 PAYS/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/SCOUT’S CALL/).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/TRUE COST|SAFE TO WAIT|LIKELY GONE|LEGAL-FINISH|\bIV\b/);
@@ -102,7 +102,7 @@ describe('S6 farm room continuation', () => {
     fireEvent.click(screen.getByRole('button', { name: /REVEAL BEARS SEAT/i }));
     expect(document.body).toHaveTextContent('Bears Eyes');
     expect(document.body).not.toHaveTextContent('Comets Eyes');
-    expect(screen.queryByRole('button', { name: 'COVER & ARM' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'DRAFT PROSPECT' })).not.toBeInTheDocument();
     const moveDown = screen.getAllByRole('button', { name: /Move .* down/i }).find((button) => !button.hasAttribute('disabled'))!;
     fireEvent.click(moveDown);
     await waitFor(() => {
@@ -124,6 +124,6 @@ describe('S6 farm room continuation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Comets pick 1$/i }));
     fireEvent.click(await screen.findByRole('button', { name: /REVEAL COMETS SEAT/i }));
-    expect(screen.getByRole('button', { name: 'COVER & ARM' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'DRAFT PROSPECT' })).toBeInTheDocument();
   });
 });

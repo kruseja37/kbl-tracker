@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, test, vi } from 'vitest';
 
-import { FarmPrivateDesk } from '../FarmPrivateDesk';
+import { FarmPrivateDesk, FarmSelectedProspectCard } from '../FarmPrivateDesk';
 import { buildFarmFogCard, buildFarmScoutPressure } from '../farmRoomModel';
 import type { LeagueBuilderProspectPlayerDto } from '../../../../../../utils/prospectScoutingDraftEngine';
 
@@ -62,6 +62,22 @@ describe('S6 farm fog', () => {
     const weak = buildFarmFogCard({ prospect: player, scout: { scoutId: 'weak', scoutName: 'Weak', accuracyModifier: -35 }, seed: 'variance' });
     expect({ grade: strong.scoutedGrade, range: strong.gradeRange, confidence: strong.confidence })
       .not.toEqual({ grade: weak.scoutedGrade, range: weak.gradeRange, confidence: weak.confidence });
+  });
+
+  test('renders a real selected prospect card from only fog-safe scout truth', () => {
+    const card = buildFarmFogCard({ prospect: prospect(), scout: { scoutId: 'ours', scoutName: 'Jo Scout' }, seed: 'fog-card' });
+    const { container } = render(<FarmSelectedProspectCard
+      card={card}
+      slotPick={7}
+      slotSalary={25_000}
+      farmMoneyLeft={200_000}
+      teamName="Beewolves"
+      teamLogoUrl="data:image/png;base64,AA=="
+    />);
+    expect(screen.getByRole('heading', { name: 'Mara Diaz' })).toBeInTheDocument();
+    expect(screen.getByTestId('selected-farm-prospect-card')).toHaveTextContent(`SCOUT RANGE${card.gradeRange}`);
+    expect(screen.getByTestId('selected-farm-prospect-card')).toHaveTextContent('AFTER PICK$175,000');
+    expect(container.textContent).not.toMatch(/POWER 97|CONTACT 96|SPEED 95|FIELDING 94|ARM 93|TRUE GRADE|999,999/);
   });
 
   test('shows one compact ranking view, planned class, and separate drafted/planned money', () => {

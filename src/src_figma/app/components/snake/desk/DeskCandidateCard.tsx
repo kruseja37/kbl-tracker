@@ -30,8 +30,8 @@ export function DeskCandidateCard({
     <div className={`border-4 bg-[var(--ballpark-well)] p-3 ${selected ? 'border-[var(--ballpark-brass)] shadow-[inset_0_0_0_2px_var(--ballpark-brass)]' : 'border-[var(--ballpark-panel-border)]'}`}>
       <div className="flex flex-wrap items-center gap-2">
         <strong className={`uppercase ${candidate.drafted ? 'line-through opacity-60' : ''}`}>{candidate.name}</strong>
-        <span className="border-2 border-[var(--ballpark-brass)] px-2 py-0.5 text-[10px] font-bold">{candidate.archetypeChip}</span>
-        <span className={`border-2 px-2 py-0.5 text-[10px] font-black ${fitClass}`}>TEAM FIT · {displayedFitWord}</span>
+        <span className="border-2 border-[var(--ballpark-brass)] px-2 py-0.5 text-[10px] font-bold">TEAM ARCHETYPE · {candidate.archetypeChip}</span>
+        <span className={`border-2 px-2 py-0.5 text-[10px] font-black ${fitClass}`}>FIT · {displayedFitWord}</span>
         {selected && <span className="bg-[var(--ballpark-brass)] px-2 py-0.5 text-[10px] font-black text-[var(--ballpark-page-bg)]">SELECTED</span>}
       </div>
       <p className="mt-2 text-sm font-bold">CURRENT TAX {candidate.consequencesKnown === false ? '—' : `${candidate.marginalTax > 0 ? '+' : candidate.marginalTax < 0 ? '−' : ''}$${Math.round(Math.abs(candidate.marginalTax)).toLocaleString()}`} · TRUE COST {candidate.consequencesKnown === false ? '—' : `$${Math.round(candidate.trueCost).toLocaleString()}`}</p>
@@ -51,10 +51,10 @@ export function DeskCandidateCard({
           aria-label={`SELECT ${candidate.name}`}
           aria-pressed={selected}
           data-player-id={candidate.id}
-          disabled={Boolean(candidate.drafted) || !selectable}
+          disabled={Boolean(candidate.drafted)}
           onClick={() => onSelect(candidate.id)}
         >
-          {selected ? 'SELECTED' : candidate.drafted ? 'DRAFTED' : !selectable ? 'BLOCKED' : 'SELECT'}
+          {selected ? 'SELECTED' : candidate.drafted ? 'DRAFTED' : !selectable ? 'INSPECT' : 'SELECT'}
         </button>
       )}
     </div>

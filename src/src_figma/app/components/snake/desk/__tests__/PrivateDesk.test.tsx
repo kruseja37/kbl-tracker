@@ -60,6 +60,28 @@ describe('PrivateDesk', () => {
     for (const word of ['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined']) expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent(word);
     expect(screen.getByRole('region', { name: 'Assistant GM status' })).toHaveTextContent('SHAPE 3 OPEN');
     expect(screen.queryByText(/SHAPE READS THE CANONICAL/)).not.toBeInTheDocument();
+    expect(screen.queryByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('board-slot-grid')).toHaveClass('grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))]');
+    expect(screen.getByTestId('board-slot-grid').className).not.toMatch(/(?:sm|md|lg|xl):grid-cols/);
+  });
+
+  it('keeps tax-core explanation behind Help while leaving the tax rows available', () => {
+    const common = {
+      candidates: [candidate],
+      rankings: { SS: ['muraski'] } as const,
+      overallRankings: ['muraski'] as const,
+      boardSlots: { SS: 'muraski' } as const,
+      brokenSlots: [], planBill: null, advisorLog: [],
+      taxCoreRows: [{ key: 'core', label: 'TOP SALARY', playerNames: ['MURASKI'] }],
+      slotDepth: { SS: 3 },
+      onReorder: () => undefined, onStartWhatIf: () => undefined,
+      onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
+    };
+    const { rerender } = render(<PrivateDesk {...common} showHelp={false} />);
+    expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'TOP SALARY: MURASKI')).toBeInTheDocument();
+    expect(screen.queryByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).not.toBeInTheDocument();
+    rerender(<PrivateDesk {...common} showHelp />);
+    expect(screen.getByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).toBeInTheDocument();
   });
 
   it('shows one chosen overall or position ranking and routes each reorder to the matching persisted list', () => {
@@ -83,7 +105,9 @@ describe('PrivateDesk', () => {
       onRevertWhatIf={() => undefined}
     />);
 
+    expect(screen.getByRole('button', { name: 'BOARD' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(screen.getByRole('button', { name: 'RANKINGS' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'SS RANKINGS' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Move AVAILABLE PLAYER up' }));
@@ -112,13 +136,17 @@ describe('PrivateDesk', () => {
       onReorder: () => undefined, onStartWhatIf: () => undefined, onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
     };
     render(<PrivateDesk {...common} />);
+    expect(screen.queryByRole('option', { name: 'DRAFTED PLAYER' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'BLOCKED PLAYER' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT AVAILABLE PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('available');
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
     expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' }));
+    expect(onSelectCandidate).toHaveBeenCalledWith('blocked');
     fireEvent.click(screen.getAllByRole('button', { name: 'SELECT AVAILABLE PLAYER' })[0]);
-    expect(onSelectCandidate).toHaveBeenCalledTimes(2);
+    expect(onSelectCandidate).toHaveBeenCalledTimes(3);
   });
 
   it('renders distinct engine bills, verbatim risk, fallout, and keep/revert what-if controls', () => {
@@ -173,7 +201,8 @@ describe('downward tax consequence copy (TAXSWING seam)', () => {
   it('renders unknown fit and money instead of partial-roster calculations', async () => {
     const { DeskCandidateCard } = await import('../DeskCandidateCard');
     render(<DeskCandidateCard candidate={{ ...candidate, consequencesKnown: false }} />);
-    expect(screen.getByText('TEAM FIT · FIT UNKNOWN')).toBeInTheDocument();
+    expect(screen.getByText('TEAM ARCHETYPE · WHITEYBALL')).toBeInTheDocument();
+    expect(screen.getByText('FIT · FIT UNKNOWN')).toBeInTheDocument();
     expect(screen.getByText('CURRENT TAX — · TRUE COST —')).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('$90');
   });

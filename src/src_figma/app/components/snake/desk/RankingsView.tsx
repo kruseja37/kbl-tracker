@@ -64,11 +64,11 @@ export function RankingsView(props: {
           rowClassName={(_candidate, _index, dragged) => `grid grid-cols-[1fr_auto] gap-2 border-4 p-2 ${dragged ? 'opacity-60' : ''}`}
           leftWrapClassName="flex min-w-0 items-start gap-2"
           rightWrapClassName="flex items-center gap-1"
-          dragHandleClassName="cursor-grab p-1"
-          arrowButtonClassName="border-2 px-1 font-bold"
+          dragHandleClassName="min-h-11 min-w-11 cursor-grab touch-none p-2"
+          arrowButtonClassName="min-h-11 min-w-11 border-2 px-2 font-bold"
           rankBadgeClassName="border-2 border-[var(--ballpark-brass)] px-2 py-1 font-bold"
-          rankInputClassName="w-14 border-2 bg-[var(--ballpark-action-green)] px-1"
-          sendToTopClassName="border-2 px-1 text-xs font-bold"
+          rankInputClassName="min-h-11 w-16 border-2 bg-[var(--ballpark-action-green)] px-2"
+          sendToTopClassName="min-h-11 border-2 px-2 text-xs font-bold"
         />
       </section>
     </div>

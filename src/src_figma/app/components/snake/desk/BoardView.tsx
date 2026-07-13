@@ -22,7 +22,10 @@ export function BoardView(props: {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
     <div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+      <div
+        className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,22rem),1fr))] gap-2"
+        data-testid="board-slot-grid"
+      >
         {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
           <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
             <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
@@ -57,7 +60,7 @@ export function BoardView(props: {
       ) : null}
       <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
         <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
-        <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p>
+        {props.showHelp ? <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p> : null}
         <div className="mt-3 space-y-2">
           {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
         </div>

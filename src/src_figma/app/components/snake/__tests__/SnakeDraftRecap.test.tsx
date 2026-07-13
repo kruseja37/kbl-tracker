@@ -43,4 +43,21 @@ describe('SnakeDraftRecap', () => {
     expect(total(comets, 'TAX')).toHaveTextContent('-$500');
     expect(total(comets, 'ALL-IN')).toHaveTextContent('-$500');
   });
+
+  it('removes the duplicate farm all-in column and permits an unconfirmed return to the room', () => {
+    const onBack = vi.fn();
+    render(<SnakeDraftRecap
+      phase="FARM"
+      teams={teams}
+      picks={[{ pick: 1, teamId: 'a', playerId: 'farm-1', playerName: 'Mara Diaz', salary: 25_000 }]}
+      committing={false}
+      onConfirm={vi.fn()}
+      onBack={onBack}
+    />);
+    const kodiaks = screen.getByRole('region', { name: 'Kodiaks draft recap' });
+    expect(within(kodiaks).getByText('SALARY')).toBeInTheDocument();
+    expect(within(kodiaks).queryByText('ALL-IN')).not.toBeInTheDocument();
+    screen.getByRole('button', { name: 'BACK TO ROOM' }).click();
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
 });
