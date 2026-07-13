@@ -315,9 +315,74 @@ and the old manual-pick-only guide cannot satisfy the prefill test.
 
 ### Batch 5 — UI consolidation and final wiring
 
-Allowed product files: snake MLB room/desk/trade components and owned tests. Remove superseded
-pathways only after their replacement is proven. Preserve iPad usability, keyboard/touch controls,
-team colors/logos, privacy cover, and Help-only explanation.
+Allowed product files are exactly:
+
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx` (MLB path only),
+- `src/src_figma/app/pages/SnakeCompanion.tsx`,
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`,
+- `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`,
+- `src/src_figma/app/components/snake/desk/BoardView.tsx`,
+- `src/src_figma/app/components/snake/desk/RankingsView.tsx`,
+- `src/src_figma/app/components/snake/desk/DeskCandidateRow.tsx`,
+- `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`,
+- `src/src_figma/app/components/snake/desk/DraftTruthStrip.tsx`,
+- `src/src_figma/app/components/snake/desk/WhatIfSandbox.tsx` (delete only),
+- `src/src_figma/app/components/snake/companion/SnakeCompanionFrame.tsx`,
+- `src/src_figma/app/components/snake/trade/SnakeTradeGuide.tsx`,
+- `src/src_figma/app/components/snake/trade/TradePackageCard.tsx`, and
+- `src/src_figma/app/components/snake/trade/SnakeCommissionerTrade.tsx` only for presentation parity.
+
+Owned tests are the matching component tests, `SnakeDraftRoomView.test.tsx`, companion surface/privacy/auth
+tests, trade-guide tests, and existing MLB main/companion integration/performance tests. `deskModel.ts`,
+`tradeGuideModel.ts`, engines, storage, routes, draft setup, farm components/logic, auction, manifests,
+handoff, and Living Season are read-only unless an auditor proves a stop condition requiring a new contract.
+
+Frozen implementation rulings:
+
+- One `TEAM` selector controls the shared device's private seat. It must show selected club identity/branding,
+  cover and synchronously remove the old club's private DOM/action handlers before switching, then require
+  reveal. Live-pick cards are non-mutating public status. Remove the second all-team `CLUB LENS` button cloud;
+  public roster/truth/owned picks follow the one selected team. Off-clock private work and live-owner-only
+  drafting remain unchanged.
+- The private MLB tabs are exactly `MY BOARD`, `ASST GM BOARD`, `PLAYER POOL`, and `TRADE PICKS` when the
+  guide is available. `PLAYER POOL` contains the overall/position selector, searchable available players,
+  drag/arrow/top ranking controls, and player selection. A fifth `ACTIVITY` tab may render only when it has
+  nonempty consequential history. Do not retain generic `BOARD`, `RANKINGS`, `LOG`, or duplicate guide tabs.
+- Delete `WhatIfSandbox.tsx`, its imports/state/handlers, and tests that assert the detached slot/player flow
+  only after Batch 3B direct consequences pass on main and companion. `evaluateSnakePlanWhatIf` must have no
+  remaining MLB page caller. Do not change the frozen engine solely to erase an unused export.
+- `BoardView` renders plan ledger and five-family chemistry before rows, then every canonical design slot in
+  canonical order. Missing assignment, unavailable player, broken legality, and unknown player identity have
+  explicit value/state labels; a raw id is never display text. The read-only assistant board follows the same
+  order and aggregate-first layout. Tax-core detail stays collapsed.
+- One `SelectedPlayerCard` owns player identity/logo or pixel portrait, positions, all nonzero ratings,
+  attributes/traits/archetype/personality, team-fit signal, exact Batch 3 consequences, optimize/Keep/Revert,
+  Batch 4 action call, and the existing guarded draft action. Remove the separate duplicate selected header,
+  detached consequence box, and private note outside the card. Pronouns remain engine-only and are not shown.
+- The MLB GM guide renders only inside the selected private desk. Remove the MLB shared top-level `THE GUIDE`
+  control/content; retain the commissioner trade control and the farm room's existing shared guide behavior.
+  Proposed and open offers show named counterparty, `YOU GIVE`, `YOU GET`, offer and receive posted totals,
+  and raw seller premium. Values must come from the current proposal/session, never recomputed in JSX or
+  inferred from labels. The full posted chart remains a collapsed disclosure.
+- The active companion frame has a `?` Help toggle using the existing companion Help pattern. Combine current
+  order and ticker into one compact horizontal live strip; preserve selected profile, drafted truth, and private
+  desk above optional history. Remove `FORGET ROOM` from the active desk only; keep it on covered, invalid,
+  pending, and recovery screens where it is an actual escape action.
+- In the shared room, hide correction entirely when unavailable. Fold recent picks into a compact collapsed
+  rail by default, with current public pick/team state still visible. Do not remove pause, sound, Help,
+  companion approval, commissioner trade, gavel ritual, recap, reload, or material write/error warnings.
+- All persistent elements must support a repeat GM/commissioner decision or action. Labels, values, state, and
+  one-line action consequences may remain inline; tutorials, definitions, workflow prose, and neutral assistant
+  narration live behind Help. Preserve the established KBL palette, club primary/secondary/accent branding,
+  logos, minimum 44px touch targets, keyboard semantics, focus visibility, horizontal overflow containment,
+  and usable 1024x768 iPad portrait/landscape layouts.
+
+Mutation-honest gates must prove: one team selector and cover-before-switch DOM removal; pick-window buttons
+cannot switch seats; exact tab set and conditional activity; What-If import/caller/file absence; aggregate-first
+canonical 22 including missing/broken/unavailable and no raw id; one selected identity/action owner; one private
+MLB guide plus separate commissioner and unchanged farm guide; two-sided package/open-offer values; correction
+absence; collapsed recent history; companion Help/live strip/no active Forget Room; main/companion privacy;
+keyboard/touch behavior; and automated 1024x768/768x1024 overflow and critical-action visibility.
 
 ## Verification after every batch
 

@@ -417,3 +417,44 @@ Compute version-unique, role-applicable, affordable, legal-finish supply and the
 decision resolver may emit `TAKE NOW`, `SAFE TO WAIT`, `TRADE TO #N`, or `PASS` only when its prerequisites
 are proved; a trade call must carry the current Batch 2 guide package and may only prefill the guide. Full
 Batch 4A/4B allowlists and adversarial gates are frozen in the Snake Intelligence contract.
+
+---
+
+### FINDING-156
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 5 pre-build UI trace
+**Status:** CONFIRMED-OPEN — final MLB room consolidation contracted
+**File:** MLB `SnakeDraftRoom.tsx`; `SnakeDraftRoomView.tsx`; private desk/board/selected-player components; `SnakeCompanion.tsx`; `SnakeCompanionFrame.tsx`; MLB trade-guide presentation
+
+**Evidence:**
+1. The MLB main room exposes a fixed-team private `GUIDE`, a second shared top-level `THE GUIDE`, and
+   a commissioner trade tool. Two GM guide entry points answer the same question while only the private
+   one has the correct team-first context.
+2. Team switching is duplicated in the clickable live-pick window and a second all-team `CLUB LENS`
+   button cloud. A pick-status control unexpectedly changes the private seat, and the two selectors consume
+   scarce iPad width without establishing one obvious team-first lens.
+3. `PrivateDesk` still renders the superseded `WhatIfSandbox` and exposes generic `BOARD`, `RANKINGS`,
+   `LOG`, and `GUIDE` tabs. The replacement needs explicit `MY BOARD`, `ASST GM BOARD`, `PLAYER POOL`,
+   and `TRADE PICKS`; an empty activity surface has no recurring decision value.
+4. `BoardView` iterates `Object.entries(boardSlots)`, so omitted slots disappear rather than appearing as
+   missing/broken. Unknown ids render as raw storage ids. The 22 rows precede the plan money/chemistry
+   ledger, forcing the GM to scroll past the plan before seeing its aggregate consequence.
+5. Selected identity is repeated in the room action header and `SelectedPlayerCard`, with consequence text
+   split into another panel. The draft control lives outside the profile/consequence owner, weakening the
+   click-player -> understand -> act path.
+6. `TradePackageCard` omits `YOU GIVE`, `YOU GET`, both posted totals, and seller premium. Open-offer cards
+   render only one receive side and omit the counterparty/value truth needed to evaluate an offer.
+7. The active companion desk has no Help control, uses two full-width panels for order and ticker, and keeps
+   `FORGET ROOM` in the live header. The shared room keeps an always-expanded recent-picks block at the very
+   bottom and displays disabled correction even when no correction exists.
+
+**Impact:** The MLB room is functionally dense but strategically ambiguous: duplicate entry points compete,
+the board hides its own total consequence below the fold, missing slots can vanish, and trade offers omit the
+facts a GM needs. On iPad, repeated selectors and full-width status panels crowd the actual player/board work.
+
+**Required repair:** Delete the retired What-If after Batch 3 proof; establish one covered team selector; make
+the private tabs name the four recurring jobs; put plan truth before canonical 22-slot rows; consolidate selected
+identity/consequences/action; make every trade package two-sided and valued; collapse public history/status; and
+give the active companion a Help control. Preserve the KBL/team palette, touch/keyboard sizing, farm behavior,
+privacy teardown, and Help-only explanations. Full Batch 5 allowlist and UI gates are frozen in the Snake
+Intelligence contract.

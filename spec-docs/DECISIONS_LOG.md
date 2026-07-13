@@ -3907,3 +3907,31 @@ the target to be gone/at-risk without an equivalent replacement. Off-clock, the 
 `TRADE TO #N` only with the latest viable destination before the earliest threat and a current Batch 2
 posted-value package. A trade action opens and prefills the guide; it never posts or executes. Any state
 outside these proofs emits no persistent advice.
+
+## 2026-07-13 — Snake MLB room is one team-first, four-job draft desk
+
+The shared iPad has one `TEAM` selector. Changing it covers and tears down the prior private DOM before
+the next club can be revealed. The live pick window is public status only and may not double as a private
+seat selector; the duplicate all-club button cloud is removed. The selected club's branding, private board,
+drafted roster, and owned picks remain the lens. Only the live pick owner can record a pick.
+
+The private MLB desk has four durable jobs: `MY BOARD`, `ASST GM BOARD`, `PLAYER POOL`, and `TRADE PICKS`.
+`PLAYER POOL` owns overall/position rankings, search, and player selection. `ACTIVITY` appears only when it
+contains meaningful history; empty or neutral assistant output is absent. The retired dropdown What-If is
+deleted after the direct selected-player replacement is verified. Farm snake remains unchanged.
+
+Plan salary/tax/all-in/money-left and five chemistry families appear before the canonical 22 slots. All 22
+slots render in canonical order, including missing, broken, and unavailable states; raw storage ids never
+reach the screen. One selected-player card owns the identity/profile, direct consequences, Asst GM action,
+Keep/Revert, and the existing guarded draft action. The surrounding room may not repeat the identity or
+split its decision consequence into detached cards.
+
+The GM trade guide exists once, inside the selected team's private `TRADE PICKS` tab; the commissioner tool
+remains separate because it performs the room write. Every proposed/open package shows the counterparty,
+`YOU GIVE`, `YOU GET`, both current posted totals, and seller premium. A recommendation may prefill the guide
+but cannot post. The full chart remains collapsed by default.
+
+On companion, order and recent activity become one compact live strip, active-desk Help is always reachable,
+and `FORGET ROOM` is limited to covered/recovery screens. On the shared room, correction is absent when
+unavailable and recent picks are a compact/collapsed rail. Existing KBL palette and club primary/secondary
+colors, 44px touch targets, keyboard operation, privacy cover, and Help-only explanation remain mandatory.
