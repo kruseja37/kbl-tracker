@@ -112,19 +112,28 @@ describe('private desk model', () => {
     expect(new Set(Object.values(position.slots)).size).toBe(22);
   });
 
-  it('keeps the 22-player plan byte-stable when a GM reorders a ranking', () => {
-    const board = buildSeededSeatBoard(fullPool()).board!;
+  it('immediately refits a unique 22-player plan when a GM reorders a ranking', () => {
+    const pool = fullPool();
+    const board = buildSeededSeatBoard(pool).board!;
     const priorSlots = structuredClone(board.slots);
-    const target = board.rankings.global.at(-1)!;
+    const target = '1B-6';
     const orderedIds = [target, ...board.rankings.global.filter((id) => id !== target)];
 
-    const reordered = reorderSeatBoardRankings({ board, view: 'OVERALL', orderedIds });
+    const reordered = reorderSeatBoardRankings({ board, view: 'OVERALL', orderedIds, candidates: pool });
 
-    expect(reordered.slots).toBe(board.slots);
-    expect(reordered.slots).toEqual(priorSlots);
-    expect(reordered.rankings.global[0]).toBe(target);
-    expect(reordered.revision).toBe(board.revision + 1);
-    expect(reordered.rankings.frozenPlayerIds).toContain(target);
+    expect(reordered.brokenSlots).toEqual([]);
+    expect(reordered.board).not.toBeNull();
+    expect(reordered.board!.slots).not.toEqual(priorSlots);
+    expect(Object.values(reordered.board!.slots)).toContain(target);
+    expect(new Set(Object.values(reordered.board!.slots))).toHaveLength(22);
+    const exactChangedSlotCount = Object.keys(priorSlots)
+      .filter((slotId) => priorSlots[slotId as keyof typeof priorSlots] !== reordered.board!.slots[slotId as keyof typeof priorSlots]).length;
+    expect(exactChangedSlotCount).toBeGreaterThan(0);
+    expect(reordered.changedSlotCount).toBe(exactChangedSlotCount);
+    expect(reordered.board!.rankings.global?.[0]).toBe(target);
+    expect(reordered.board!.revision).toBe(board.revision + 1);
+    expect(reordered.board!.rankings.frozenPlayerIds).toContain(target);
+    expect(board.slots).toEqual(priorSlots);
   });
 
   it('reports the exact broken slot instead of inventing a player', () => {
@@ -133,6 +142,25 @@ describe('private desk model', () => {
     const refit = refitBoardSlots({ candidates: full.filter((row) => row.position !== 'CP'), rankings });
     expect(refit.brokenSlots).toEqual(['CP']);
     expect(refit.slots.CP).toBeUndefined();
+  });
+
+  it('fails a ranking refit closed instead of returning a partial board', () => {
+    const full = fullPool();
+    const board = buildSeededSeatBoard(full).board!;
+    const prior = structuredClone(board);
+    const orderedIds = [...board.rankings.global].reverse();
+
+    const reordered = reorderSeatBoardRankings({
+      board,
+      view: 'OVERALL',
+      orderedIds,
+      candidates: full.filter((row) => row.position !== 'CP'),
+    });
+
+    expect(reordered.board).toBeNull();
+    expect(reordered.brokenSlots).toEqual(['CP']);
+    expect(reordered.changedSlotCount).toBe(0);
+    expect(board).toEqual(prior);
   });
 
   it('protects a scarce C/1B dual from the 1B slot when only that player can finish BACKUP_C', () => {

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
   roomState: null as LeagueBuilderMlbDraftSession | null,
   saveRoom: vi.fn(),
+  patchBoard: vi.fn(),
   guideAsk: vi.fn(),
 }));
 
@@ -63,12 +64,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
         && JSON.stringify(prior.trades) === JSON.stringify(next.trades);
       return roomLogOnly ? next : mocks.saveRoom(next);
     },
-    patchMlbDraftSessionSeatBoard: async (input: { teamId: string; board: SnakeSeatBoardRecord }) => {
-      const current = mocks.roomState!;
-      const next = { ...current, seatBoards: { ...current.seatBoards, [input.teamId]: input.board } };
-      mocks.roomState = next;
-      return mocks.saveRoom(next);
-    },
+    patchMlbDraftSessionSeatBoard: (...args: unknown[]) => mocks.patchBoard(...args),
     getScoutProfilesForLeague: vi.fn(async () => []),
   };
 });
@@ -84,8 +80,30 @@ import type {
 } from '../../../utils/leagueBuilderStorage';
 import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
 import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
+import { canonicalDeskEligiblePositions, isCandidateEligibleForBoardSlot } from '../../app/components/snake/desk/deskModel';
 import { resolveLockedSeat } from '../../app/components/snake/desk/deskRoomModel';
 import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function changedSlotCount(before: SnakeSeatBoardRecord, after: SnakeSeatBoardRecord): number {
+  return (Object.keys(before.slots) as SnakeBoardSlotId[])
+    .filter((slotId) => before.slots[slotId] !== after.slots[slotId]).length;
+}
+
+function truthMoney(testId: string, label: string): string {
+  const strip = screen.getByTestId(testId);
+  const heading = Array.from(strip.querySelectorAll('p')).find((node) => node.textContent === label);
+  return heading?.parentElement?.querySelector('strong')?.textContent ?? '';
+}
 
 const TEAM_IDS = ['a', 'b', 'c'] as const;
 const league: LeagueTemplate = {
@@ -101,12 +119,13 @@ const teams = TEAM_IDS.map((id): Team => ({
 
 function player(id: string, position: Player['primaryPosition'], secondaryPosition?: Player['secondaryPosition']): Player {
   const pitcher = ['SP', 'SP/RP', 'RP', 'CP'].includes(position);
+  const replacement = id === 'a-replacement';
   return {
     id, firstName: id, lastName: 'Player', gender: 'F', age: 25, bats: 'R', throws: 'R',
     primaryPosition: position, secondaryPosition,
-    power: pitcher ? 20 : 60, contact: pitcher ? 20 : 60, speed: 60, fielding: 60, arm: 60,
+    power: replacement ? 90 : pitcher ? 20 : 60, contact: pitcher ? 20 : 60, speed: 60, fielding: 60, arm: 60,
     velocity: pitcher ? 60 : 0, junk: pitcher ? 60 : 0, accuracy: pitcher ? 60 : 0, arsenal: pitcher ? ['4F'] : [],
-    overallGrade: 'B', personality: 'Competitive', chemistry: 'Competitive', morale: 50, mojo: 'Normal', fame: 0,
+    overallGrade: 'B', personality: replacement ? 'Spirited' : 'Competitive', chemistry: replacement ? 'Spirited' : 'Competitive', morale: 50, mojo: 'Normal', fame: 0,
     salary: 10_000, leagueAssignments: [], hiddenPersonalityModifiers: { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 },
     createdDate: '2026-07-12', lastModified: '2026-07-12', isCustom: true,
   } as Player;
@@ -140,7 +159,9 @@ const players: Player[] = [
 const pool: RegisteredPool = {
   leagueId: league.id, tier: 'standard', balanceMode: 'taxed',
   players: players.map((row, index) => ({ id: row.id, iv: 10_000 + index * 100, salary: 10_000 + index * 100 })),
-  tierCap: 10_000_000, luxuryCaps: [], pickValueChart: [], totalSlots: players.length,
+  tierCap: 10_000_000,
+  luxuryCaps: [{ group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 1_000, minAdder: 100 }],
+  pickValueChart: [], totalSlots: players.length,
   poolSurplusWarning: false, locked: true, lockedAt: 1,
 };
 
@@ -201,6 +222,19 @@ async function revealSeatAndSettle(teamName: string): Promise<void> {
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
   beforeEach(() => {
     mocks.saveRoom.mockReset().mockImplementation(async (next) => next);
+    mocks.patchBoard.mockReset().mockImplementation(async (input: {
+      teamId: string;
+      board: SnakeSeatBoardRecord;
+      expectedBoardRevision: number;
+    }) => {
+      const current = mocks.roomState!;
+      if (current.seatBoards?.[input.teamId]?.revision !== input.expectedBoardRevision) {
+        throw new Error('board revision changed');
+      }
+      const next = { ...current, seatBoards: { ...current.seatBoards, [input.teamId]: input.board } };
+      mocks.roomState = next;
+      return mocks.saveRoom(next);
+    });
     mocks.guideAsk.mockReset();
   });
   afterEach(() => cleanup());
@@ -216,23 +250,159 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(mocks.saveRoom).toHaveBeenCalledTimes(1);
   });
 
-  test('persists overall and position reorders while leaving the 22-player plan untouched', async () => {
-    renderRoom(session(false));
+  test('refits only the active club plan after every reorder and restores the exact prior board with Undo', async () => {
+    const source = session(false);
+    const originalA = structuredClone(source.seatBoards!.a);
+    const untouchedB = structuredClone(source.seatBoards!.b);
+    const untouchedC = structuredClone(source.seatBoards!.c);
+    renderRoom(source);
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
+    fireEvent.click(screen.getByRole('button', { name: 'BOARD' }));
+    const initialPlanTruth = screen.getByTestId('plan-truth-strip').textContent;
+    const initialTax = truthMoney('plan-truth-strip', 'TAX');
+    expect(initialTax).toBe('$700');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Competitive22 · L3');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Spirited0 · L1');
     fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     const afterOverall = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
+    expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: originalA.revision });
     expect(afterOverall.seatBoards?.a.rankings.global?.slice(0, 2)).toEqual(['gone-c', 'a-replacement']);
+    expect(Object.values(afterOverall.seatBoards!.a.slots)).toContain('a-replacement');
+    expect(new Set(Object.values(afterOverall.seatBoards!.a.slots))).toHaveLength(22);
+    expect(Object.entries(afterOverall.seatBoards!.a.slots).every(([slotId, playerId]) => {
+      const stored = players.find((entry) => entry.id === playerId)!;
+      const eligiblePositions = canonicalDeskEligiblePositions(stored.primaryPosition, stored.secondaryPosition);
+      return isCandidateEligibleForBoardSlot(slotId as SnakeBoardSlotId, {
+        id: stored.id,
+        position: eligiblePositions[0]!,
+        eligiblePositions,
+      });
+    })).toBe(true);
+    expect(afterOverall.seatBoards?.b).toEqual(untouchedB);
+    expect(afterOverall.seatBoards?.c).toEqual(untouchedC);
+    const firstChangedCount = changedSlotCount(originalA, afterOverall.seatBoards!.a);
+    expect(firstChangedCount).toBeGreaterThan(0);
+    expect(await screen.findByTestId('main-board-update-banner'))
+      .toHaveTextContent(`MY BOARD UPDATED — ${firstChangedCount} SLOT${firstChangedCount === 1 ? '' : 'S'} CHANGED.`);
+
+    fireEvent.click(screen.getByRole('button', { name: 'BOARD' }));
+    expect(screen.getByTestId('plan-truth-strip').textContent).not.toBe(initialPlanTruth);
+    const frozenIv = new Map(pool.players.map((row) => [row.id, row.iv]));
+    const expectedSalary = Object.values(afterOverall.seatBoards!.a.slots)
+      .reduce((sum, playerId) => sum + frozenIv.get(playerId)!, 0);
+    const expectedTax = 1_000;
+    const expectedAllIn = expectedSalary + expectedTax;
+    const expectedMoneyLeft = pool.tierCap - expectedAllIn;
+    expect(truthMoney('plan-truth-strip', 'SALARY')).toBe(`$${expectedSalary.toLocaleString()}`);
+    expect(truthMoney('plan-truth-strip', 'TAX')).toBe(`$${expectedTax.toLocaleString()}`);
+    expect(truthMoney('plan-truth-strip', 'ALL-IN')).toBe(`$${expectedAllIn.toLocaleString()}`);
+    expect(truthMoney('plan-truth-strip', 'MONEY LEFT')).toBe(`$${expectedMoneyLeft.toLocaleString()}`);
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('22/22');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Competitive21 · L3');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Spirited1 · L1');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Crafty0 · L1');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Disciplined0 · L1');
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Scholarly0 · L1');
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'C' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(2));
     const afterPosition = mocks.saveRoom.mock.calls[1][0] as LeagueBuilderMlbDraftSession;
+    expect(mocks.patchBoard.mock.calls[1][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterOverall.seatBoards!.a.revision });
     expect(afterPosition.seatBoards?.a.rankings.byPosition?.C?.slice(0, 2)).toEqual(['a-replacement', 'gone-c']);
-    expect(afterPosition.seatBoards?.a.slots).toEqual(baseSlots);
+    expect(afterPosition.seatBoards?.a.slots).not.toEqual(afterOverall.seatBoards?.a.slots);
+    expect(new Set(Object.values(afterPosition.seatBoards!.a.slots))).toHaveLength(22);
+    expect(afterPosition.seatBoards?.b).toEqual(untouchedB);
+    expect(afterPosition.seatBoards?.c).toEqual(untouchedC);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'UNDO BOARD UPDATE' }));
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(3));
+    const restored = (mocks.saveRoom.mock.calls[2][0] as LeagueBuilderMlbDraftSession).seatBoards!.a;
+    expect(mocks.patchBoard.mock.calls[2][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterPosition.seatBoards!.a.revision });
+    expect(restored.slots).toEqual(afterOverall.seatBoards!.a.slots);
+    expect(restored.rankings).toEqual(afterOverall.seatBoards!.a.rankings);
+    expect(restored.revision).toBe(afterPosition.seatBoards!.a.revision + 1);
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  }, 10_000);
+
+  test('rapid double Undo produces exactly one revision-safe restore and no false stale error', async () => {
+    const source = session(false);
+    const originalA = structuredClone(source.seatBoards!.a);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+
+    const undo = await screen.findByRole('button', { name: 'UNDO BOARD UPDATE' });
+    fireEvent.click(undo);
+    fireEvent.click(undo);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
+
+    const restored = mocks.patchBoard.mock.calls[1][0].board as SnakeSeatBoardRecord;
+    expect(restored.slots).toEqual(originalA.slots);
+    expect(restored.rankings).toEqual(originalA.rankings);
+    expect(mocks.patchBoard.mock.calls[1][0]).toMatchObject({ expectedBoardRevision: originalA.revision + 1 });
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(2);
+    expect(mocks.saveRoom).toHaveBeenCalledTimes(2);
+    expect(screen.queryByTestId('room-write-notice')).not.toBeInTheDocument();
+    expect(screen.queryByText(/THE DRAFT MOVED BEFORE UNDO/i)).not.toBeInTheDocument();
+  });
+
+  test('an unrelated room write error does not consume a valid private-board Undo', async () => {
+    renderRoom(session(false));
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId('main-board-update-banner')).toBeInTheDocument();
+
+    mocks.saveRoom.mockRejectedValueOnce(new Error('unrelated commissioner sync error'));
+    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
+    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('UNRELATED COMMISSIONER SYNC ERROR');
+    expect(screen.getByTestId('main-board-update-banner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'DISMISS' }));
+    expect(screen.queryByTestId('room-write-notice')).not.toBeInTheDocument();
+    expect(screen.getByTestId('main-board-update-banner')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' })).toBeInTheDocument();
+  });
+
+  test('a deferred private-board save cannot restore its banner after cover and a seat switch', async () => {
+    const source = session(false);
+    const pending = deferred<LeagueBuilderMlbDraftSession>();
+    mocks.patchBoard.mockImplementationOnce(() => pending.promise);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'COVER' }));
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    const passButton = screen.queryByRole('button', { name: 'I HAVE THE ROOM' });
+    if (passButton) fireEvent.click(passButton);
+
+    const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };
+    const saved = { ...source, seatBoards: { ...source.seatBoards, [input.teamId]: input.board } };
+    mocks.roomState = saved;
+    await act(async () => { pending.resolve(saved); await pending.promise; });
+
+    expect(screen.queryByTestId('main-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+    await revealSeatAndSettle('Club B');
+    expect(screen.queryByTestId('main-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   });
 
   test('shows a recoverable room notice when a revision-safe write is rejected', async () => {
@@ -337,7 +507,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('1/22');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('$10,100');
-    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive1 · L1');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive0 · L1');
+    expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Spirited1 · L1');
 
     fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
     fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));

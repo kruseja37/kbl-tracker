@@ -120,7 +120,7 @@ export function seedPositionalRankings(
 
 export function refitBoardSlots(input: {
   rankings: SnakeSeatBoardRecord['rankings'];
-  candidates: readonly DeskCandidate[];
+  candidates: readonly DeskEligibilityCandidate[];
   unavailablePlayerIds?: ReadonlySet<string>;
 }): { slots: Partial<Record<SnakeBoardSlotId, string>>; brokenSlots: SnakeBoardSlotId[] } {
   const byId = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
@@ -190,16 +190,17 @@ export function refitBoardSlots(input: {
   return { slots, brokenSlots };
 }
 
-/**
- * A ranking gesture is private scouting work, not a roster-plan transaction.
- * Keep the 22-player board byte-stable; the explicit what-if/KEEP flow is the
- * only place where a GM changes board membership.
- */
 export function reorderSeatBoardRankings(input: {
   board: SnakeSeatBoardRecord;
   view: 'OVERALL' | TaxonomyPosition;
   orderedIds: readonly string[];
-}): SnakeSeatBoardRecord {
+  candidates: readonly DeskEligibilityCandidate[];
+  unavailablePlayerIds?: ReadonlySet<string>;
+}): {
+  board: SnakeSeatBoardRecord | null;
+  changedSlotCount: number;
+  brokenSlots: SnakeBoardSlotId[];
+} {
   const priorOrder = input.view === 'OVERALL'
     ? input.board.rankings.global ?? []
     : input.board.rankings.byPosition?.[input.view] ?? [];
@@ -230,11 +231,27 @@ export function reorderSeatBoardRankings(input: {
         },
         frozenPlayerIds,
       };
-  return {
-    ...input.board,
-    slots: input.board.slots,
+  const refit = refitBoardSlots({
     rankings,
-    revision: input.board.revision + 1,
+    candidates: input.candidates,
+    unavailablePlayerIds: input.unavailablePlayerIds,
+  });
+  if (refit.brokenSlots.length > 0) {
+    return { board: null, changedSlotCount: 0, brokenSlots: refit.brokenSlots };
+  }
+  const slots = refit.slots as Record<SnakeBoardSlotId, string>;
+  const changedSlotCount = SNAKE_BOARD_SLOT_IDS.reduce((count, slotId) => (
+    count + (slots[slotId] === input.board.slots[slotId] ? 0 : 1)
+  ), 0);
+  return {
+    board: {
+      ...input.board,
+      slots,
+      rankings,
+      revision: input.board.revision + 1,
+    },
+    changedSlotCount,
+    brokenSlots: [],
   };
 }
 

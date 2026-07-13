@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -41,6 +41,17 @@ import type {
   Team,
 } from '../../../utils/leagueBuilderStorage';
 import SnakeCompanion from '../../app/pages/SnakeCompanion';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
+function changedSlotCount(before: SnakeSeatBoardRecord, after: SnakeSeatBoardRecord): number {
+  return (Object.keys(before.slots) as SnakeBoardSlotId[])
+    .filter((slotId) => before.slots[slotId] !== after.slots[slotId]).length;
+}
 
 const league: LeagueTemplate = {
   id: 'companion-2b', name: 'Companion 2B', teamIds: ['a', 'b'], conferences: [], divisions: [],
@@ -150,7 +161,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
   });
   afterEach(() => cleanup());
 
-  test('an approved off-clock companion reorders both rankings without changing either club plan', async () => {
+  test('an approved off-clock companion refits only its plan and can undo the last reorder exactly', async () => {
     const originalA = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
     const originalB = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.b);
     render(<SnakeCompanion />);
@@ -159,18 +170,34 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
-    expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({ teamId: 'a' });
-    let saved = mocks.patchBoard.mock.calls[0][0].board as SnakeSeatBoardRecord;
-    expect(new Set(Object.values(saved.slots))).toHaveLength(22);
+    expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: originalA.revision });
+    const afterOverall = mocks.patchBoard.mock.calls[0][0].board as SnakeSeatBoardRecord;
+    expect(afterOverall.slots).not.toEqual(originalA.slots);
+    expect(new Set(Object.values(afterOverall.slots))).toHaveLength(22);
+    const firstChangedCount = changedSlotCount(originalA, afterOverall);
+    expect(firstChangedCount).toBeGreaterThan(0);
+    expect(screen.getByTestId('companion-board-update-banner'))
+      .toHaveTextContent(`MY BOARD UPDATED — ${firstChangedCount} SLOT${firstChangedCount === 1 ? '' : 'S'} CHANGED.`);
 
     fireEvent.click(screen.getByRole('button', { name: 'C' }));
     expect(screen.getByText('DUAL PLAYER')).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
-    saved = mocks.patchBoard.mock.calls[1][0].board as SnakeSeatBoardRecord;
-    expect(saved.rankings.byPosition?.C?.slice(0, 2)).toEqual(['dual', 'catcher']);
-    expect(saved.slots).toEqual(originalA.slots);
+    expect(mocks.patchBoard.mock.calls[1][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterOverall.revision });
+    const afterPosition = mocks.patchBoard.mock.calls[1][0].board as SnakeSeatBoardRecord;
+    expect(afterPosition.rankings.byPosition?.C?.slice(0, 2)).toEqual(['dual', 'catcher']);
+    expect(afterPosition.slots).not.toEqual(afterOverall.slots);
+    expect(new Set(Object.values(afterPosition.slots))).toHaveLength(22);
     expect((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards?.b).toEqual(originalB);
+
+    fireEvent.click(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(3));
+    expect(mocks.patchBoard.mock.calls[2][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterPosition.revision });
+    const restored = mocks.patchBoard.mock.calls[2][0].board as SnakeSeatBoardRecord;
+    expect(restored.slots).toEqual(afterOverall.slots);
+    expect(restored.rankings).toEqual(afterOverall.rankings);
+    expect(restored.revision).toBe(afterPosition.revision + 1);
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
@@ -184,9 +211,11 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     };
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
-    await waitFor(() => expect(screen.getByText('MAIN-DEVICE APPROVAL IS REQUIRED.')).toBeInTheDocument());
-    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
-    expect(mocks.refresh).toHaveBeenCalled();
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument());
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(screen.queryByText('MAIN-DEVICE APPROVAL IS REQUIRED.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   });
 
   test('a stale companion board write shows the existing stale message and refreshes', async () => {
@@ -198,13 +227,19 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await waitFor(() => expect(screen.getByText('THE DRAFT MOVED ON — REFRESH')).toBeInTheDocument());
     expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.refresh).toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   });
 
-  test('cover and return synchronize immediately across two open companion instances', async () => {
+  test('cover and return synchronize immediately across two open companion instances and erase an old undo', async () => {
     render(<><SnakeCompanion /><SnakeCompanion /></>);
     await waitFor(() => expect(screen.getAllByTestId('snake-companion-frame')).toHaveLength(2));
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'COVER THIS DEVICE' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'RANKINGS' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    expect(screen.getAllByTestId('companion-board-update-banner')).toHaveLength(1);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'COVER THIS DEVICE' })[1]);
     await waitFor(() => expect(screen.getAllByTestId('snake-companion-covered')).toHaveLength(2));
     expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
     expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBe('true');
@@ -213,5 +248,107 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await waitFor(() => expect(screen.getAllByTestId('snake-companion-frame')).toHaveLength(2));
     expect(screen.queryByTestId('snake-companion-covered')).not.toBeInTheDocument();
     expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBeNull();
+    expect(screen.queryByTestId('companion-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  });
+
+  test('a deferred companion save resolved after cover cannot restore private status or undo', async () => {
+    const source = structuredClone(mocks.currentSession as LeagueBuilderMlbDraftSession);
+    const pending = deferred<LeagueBuilderMlbDraftSession>();
+    mocks.patchBoard.mockImplementationOnce(() => pending.promise);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };
+    const saved = {
+      ...source,
+      revision: source.revision + 1,
+      seatBoards: { ...source.seatBoards, [input.teamId]: input.board },
+    };
+    mocks.currentSession = saved;
+    await act(async () => { pending.resolve(saved); await pending.promise; });
+    expect(screen.queryByText(/MY BOARD UPDATED/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(screen.queryByTestId('companion-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  });
+
+  test('a deferred Room A save cannot reopen that room after the device forgets it', async () => {
+    const source = structuredClone(mocks.currentSession as LeagueBuilderMlbDraftSession);
+    const pending = deferred<LeagueBuilderMlbDraftSession>();
+    mocks.patchBoard.mockImplementationOnce(() => pending.promise);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'FORGET ROOM' }));
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+
+    const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };
+    const staleRoomA = {
+      ...source,
+      revision: source.revision + 1,
+      seatBoards: { ...source.seatBoards, [input.teamId]: input.board },
+    };
+    mocks.currentSession = staleRoomA;
+    await act(async () => { pending.resolve(staleRoomA); await pending.promise; });
+
+    expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('companion-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  });
+
+  test('a same-revision device reassignment cannot expose or undo the prior club snapshot', async () => {
+    const source = structuredClone(mocks.currentSession as LeagueBuilderMlbDraftSession);
+    const pending = deferred<LeagueBuilderMlbDraftSession>();
+    mocks.patchBoard.mockImplementationOnce(() => pending.promise);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+
+    const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };
+    const externalB = {
+      ...source,
+      revision: source.revision + 1,
+      seatBoards: {
+        ...source.seatBoards,
+        b: { ...source.seatBoards!.b, revision: input.board.revision },
+      },
+      snakeCompanions: {
+        ...source.snakeCompanions!,
+        claims: source.snakeCompanions!.claims.map((claim) => ({ ...claim, teamId: 'b' })),
+      },
+    };
+    mocks.currentSession = externalB;
+    fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    await waitFor(() => expect(screen.getByTestId('companion-team-header')).toHaveTextContent('CLUB B'));
+
+    const staleRoomA = {
+      ...source,
+      revision: source.revision + 1,
+      seatBoards: { ...source.seatBoards, a: input.board },
+    };
+    await act(async () => { pending.resolve(staleRoomA); await pending.promise; });
+
+    expect(screen.getByTestId('companion-team-header')).toHaveTextContent('CLUB B');
+    expect(externalB.seatBoards!.b.revision).toBe(input.board.revision);
+    expect(screen.queryByTestId('companion-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
   });
 });

@@ -133,6 +133,29 @@ import { snakeRoomMissingLegCopy } from '../components/snake/snakeRoomCopy';
 const SEASON_NUMBER = 1;
 const PRACTICE_SEASON_NUMBER = 99;
 
+interface MainPrivateIdentity {
+  sessionId: string;
+  leagueId: string;
+  seasonNumber: number;
+  teamId: string;
+}
+
+interface MainPrivateGuard {
+  epoch: number;
+  identity: MainPrivateIdentity;
+}
+
+function sameMainPrivateIdentity(
+  left: MainPrivateIdentity | null,
+  right: MainPrivateIdentity | null,
+): boolean {
+  return Boolean(left && right
+    && left.sessionId === right.sessionId
+    && left.leagueId === right.leagueId
+    && left.seasonNumber === right.seasonNumber
+    && left.teamId === right.teamId);
+}
+
 function isSnakeRoomEnabled(): boolean {
   const maybeEnabled = (phaseFlags as typeof phaseFlags & { isSnakeDraftV1Enabled?: () => boolean }).isSnakeDraftV1Enabled;
   return maybeEnabled?.() ?? false;
@@ -735,6 +758,14 @@ function MlbSnakeDraftRoom() {
   const [backfillEventsBySeat, setBackfillEventsBySeat] = useState<Record<string, BoardBackfillEvent[]>>({});
   const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
+  const [boardUndo, setBoardUndo] = useState<{
+    teamId: string;
+    board: SnakeSeatBoardRecord;
+    expectedBoardRevision: number;
+    identity: MainPrivateIdentity;
+    changedSlotCount: number;
+  } | null>(null);
+  const [undoWorking, setUndoWorking] = useState(false);
   const [livePickMoveRevision, setLivePickMoveRevision] = useState(0);
   const [privateDeskRevealed, setPrivateDeskRevealed] = useState(false);
   const [privateDeskReady, setPrivateDeskReady] = useState(false);
@@ -747,6 +778,30 @@ function MlbSnakeDraftRoom() {
   const recapCommitInFlight = useRef(false);
   const legalFinishCacheRef = useRef(new Map<string, SnakeLegalFinishBill>());
   const seatingPickProofCacheRef = useRef(new Map<string, SnakeSeatingProof>());
+  const privateEpochRef = useRef(0);
+  const privateRevealedRef = useRef(false);
+  const privateIdentityRef = useRef<MainPrivateIdentity | null>(null);
+  const privateIdentityKeyRef = useRef<string | null>(null);
+  const undoOperationRef = useRef<object | null>(null);
+  const invalidatePrivateContext = useCallback(() => {
+    privateEpochRef.current += 1;
+    privateRevealedRef.current = false;
+    setPrivateDeskRevealed(false);
+    setWhatIf(null);
+    setBoardUndo(null);
+    undoOperationRef.current = null;
+    setUndoWorking(false);
+  }, []);
+  const capturePrivateContext = useCallback((): MainPrivateGuard | null => {
+    const identity = privateIdentityRef.current;
+    if (!privateRevealedRef.current || !identity) return null;
+    return { epoch: privateEpochRef.current, identity: { ...identity } };
+  }, []);
+  const privateContextIsCurrent = useCallback((guard: MainPrivateGuard): boolean => (
+    privateRevealedRef.current
+    && privateEpochRef.current === guard.epoch
+    && sameMainPrivateIdentity(privateIdentityRef.current, guard.identity)
+  ), []);
   const practiceMode = practiceRequested || Boolean(session?.workflowVersion.toLowerCase().includes('practice'));
 
   useEffect(() => {
@@ -833,6 +888,26 @@ function MlbSnakeDraftRoom() {
     setDeskTeamId(draftingTeam?.id ?? null);
   }, [draftingTeam?.id, session?.currentPickIndex]);
   const deskTeam = leagueTeams.find((team) => team.id === deskTeamId) ?? draftingTeam;
+  const currentPrivateIdentity: MainPrivateIdentity | null = session && deskTeam ? {
+    sessionId: session.id,
+    leagueId: session.leagueId,
+    seasonNumber: session.seasonNumber,
+    teamId: deskTeam.id,
+  } : null;
+  const currentPrivateIdentityKey = currentPrivateIdentity
+    ? `${currentPrivateIdentity.sessionId}|${currentPrivateIdentity.leagueId}|${currentPrivateIdentity.seasonNumber}|${currentPrivateIdentity.teamId}`
+    : null;
+  if (privateIdentityKeyRef.current !== currentPrivateIdentityKey) {
+    privateIdentityKeyRef.current = currentPrivateIdentityKey;
+    privateEpochRef.current += 1;
+  }
+  privateIdentityRef.current = currentPrivateIdentity;
+  useLayoutEffect(() => {
+    setWhatIf(null);
+    setBoardUndo(null);
+    undoOperationRef.current = null;
+    setUndoWorking(false);
+  }, [currentPrivateIdentityKey]);
   const currentLocked = useMemo(() => deskTeam && session
     ? resolveLockedSeat({ team: deskTeam, session })
     : null, [deskTeam, session]);
@@ -1484,16 +1559,90 @@ function MlbSnakeDraftRoom() {
 
   const reorderRanking = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!session || !deskTeam || !deskState?.board) return;
-    const board = reorderSeatBoardRankings({ board: deskState.board, view, orderedIds });
-    const saved = await patchMlbDraftSessionSeatBoard({
-      leagueId: session.leagueId,
-      seasonNumber: session.seasonNumber,
-      teamId: deskTeam.id,
-      board,
-      expectedBoardRevision: deskState.board.revision,
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== deskTeam.id) return;
+    const priorBoard = structuredClone(deskState.board);
+    const reordered = reorderSeatBoardRankings({
+      board: deskState.board,
+      view,
+      orderedIds,
+      candidates: boardEligibilityCandidates,
+      unavailablePlayerIds: unavailable,
     });
+    if (!reordered.board) {
+      if (privateContextIsCurrent(guard)) {
+        setWriteNotice(`MY BOARD COULD NOT REFIT — ${reordered.brokenSlots.join(', ')} HAS NO AVAILABLE PLAYER.`);
+      }
+      return;
+    }
+    let saved: LeagueBuilderMlbDraftSession;
+    try {
+      saved = await patchMlbDraftSessionSeatBoard({
+        leagueId: session.leagueId,
+        seasonNumber: session.seasonNumber,
+        teamId: deskTeam.id,
+        board: reordered.board,
+        expectedBoardRevision: deskState.board.revision,
+      });
+    } catch (cause) {
+      if (privateContextIsCurrent(guard)) {
+        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+      }
+      return;
+    }
+    const savedBoard = saved.seatBoards?.[deskTeam.id];
     setSession(saved);
-  }, [deskTeam, deskState, session]);
+    if (!savedBoard || !privateContextIsCurrent(guard)) return;
+    setBoardUndo({
+      teamId: deskTeam.id,
+      board: priorBoard,
+      expectedBoardRevision: savedBoard.revision,
+      identity: guard.identity,
+      changedSlotCount: reordered.changedSlotCount,
+    });
+  }, [boardEligibilityCandidates, capturePrivateContext, deskTeam, deskState, privateContextIsCurrent, session, unavailable]);
+
+  const undoBoardUpdate = useCallback(async () => {
+    if (!session || !deskTeam || !boardUndo || boardUndo.teamId !== deskTeam.id || undoOperationRef.current) return;
+    const guard = capturePrivateContext();
+    if (!guard || !sameMainPrivateIdentity(guard.identity, boardUndo.identity)) {
+      setBoardUndo(null);
+      return;
+    }
+    const currentBoard = session.seatBoards?.[deskTeam.id];
+    if (!currentBoard || currentBoard.revision !== boardUndo.expectedBoardRevision) {
+      setBoardUndo(null);
+      setWriteNotice('THE DRAFT MOVED BEFORE UNDO COULD BE SAVED. RELOAD THE ROOM.');
+      return;
+    }
+    const operation = {};
+    undoOperationRef.current = operation;
+    setUndoWorking(true);
+    const restoredBoard: SnakeSeatBoardRecord = {
+      ...structuredClone(boardUndo.board),
+      revision: currentBoard.revision + 1,
+    };
+    try {
+      const saved = await patchMlbDraftSessionSeatBoard({
+        leagueId: session.leagueId,
+        seasonNumber: session.seasonNumber,
+        teamId: deskTeam.id,
+        board: restoredBoard,
+        expectedBoardRevision: currentBoard.revision,
+      });
+      setSession(saved);
+      if (privateContextIsCurrent(guard)) setBoardUndo(null);
+    } catch (cause) {
+      if (privateContextIsCurrent(guard)) {
+        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+      }
+    } finally {
+      if (undoOperationRef.current === operation) {
+        undoOperationRef.current = null;
+        setUndoWorking(false);
+      }
+    }
+  }, [boardUndo, capturePrivateContext, deskTeam, privateContextIsCurrent, session]);
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!deskState?.board || !pool || !deskTeam || !session) return;
@@ -1913,7 +2062,21 @@ function MlbSnakeDraftRoom() {
       practiceFastForward={practiceFastForward}
       privateSnipeKey={privateSnipeKey}
       dangerKey={candidate?.blockReason ? `${candidate.id}:${candidate.blockReason}` : null}
-      privateDesk={deskState?.board ? ((showHelp) => (
+      privateDesk={deskState?.board ? ((showHelp) => (<>
+        {boardUndo
+          && privateDeskRevealed
+          && sameMainPrivateIdentity(boardUndo.identity, currentPrivateIdentity)
+          && boardUndo.expectedBoardRevision === deskState.board!.revision ? (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-warn-panel)] p-3" data-testid="main-board-update-banner">
+            <p className="font-bold" role="status">MY BOARD UPDATED — {boardUndo.changedSlotCount} SLOT{boardUndo.changedSlotCount === 1 ? '' : 'S'} CHANGED.</p>
+            <button
+              type="button"
+              className="ballpark-press-button ballpark-press-sm ballpark-press-action"
+              disabled={undoWorking}
+              onClick={() => void undoBoardUpdate()}
+            >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
+          </div>
+        ) : null}
         <PrivateDesk
           candidates={deskState.candidates}
           rankings={deskState.board!.rankings.byPosition ?? {}}
@@ -1942,14 +2105,10 @@ function MlbSnakeDraftRoom() {
           selectedCandidateId={candidateId}
           onSelectCandidate={selectCandidate}
           onReorder={(position, orderedIds) => {
-            void reorderRanking(position, orderedIds).catch((cause) => {
-              setWriteNotice(cause instanceof Error ? cause.message : String(cause));
-            });
+            void reorderRanking(position, orderedIds);
           }}
           onReorderOverall={(orderedIds) => {
-            void reorderRanking('OVERALL', orderedIds).catch((cause) => {
-              setWriteNotice(cause instanceof Error ? cause.message : String(cause));
-            });
+            void reorderRanking('OVERALL', orderedIds);
           }}
           onStartWhatIf={startWhatIf}
           onKeepWhatIf={() => {
@@ -1972,7 +2131,7 @@ function MlbSnakeDraftRoom() {
             onFailure={refreshRoomTruth}
           />}
         />
-      )) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
+      </>)) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
       tradeGuide={(showHelp) => <SnakeTradeGuide
         showHelp={showHelp}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
@@ -2019,8 +2178,16 @@ function MlbSnakeDraftRoom() {
       }}
       onCorrectLatest={correctLatest}
       onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
-      onPrivateSeatRevealedChange={setPrivateDeskRevealed}
+      onPrivateSeatRevealedChange={(revealed) => {
+        if (!revealed) {
+          invalidatePrivateContext();
+          return;
+        }
+        privateRevealedRef.current = true;
+        setPrivateDeskRevealed(true);
+      }}
       onActiveSeatChange={(teamId) => {
+        invalidatePrivateContext();
         setDeskTeamId(teamId);
         void refreshRoomTruth();
       }}

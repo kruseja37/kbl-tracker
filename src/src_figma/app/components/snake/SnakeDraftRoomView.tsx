@@ -150,7 +150,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     && currentOrder?.teamId === props.activeSeatId
     && dismissedCoverPick !== props.currentPickIndex,
   );
-  const onPrivateSeatRevealedChange = props.onPrivateSeatRevealedChange;
+  const onPrivateSeatRevealedChangeRef = useRef(props.onPrivateSeatRevealedChange);
+  useLayoutEffect(() => {
+    onPrivateSeatRevealedChangeRef.current = props.onPrivateSeatRevealedChange;
+  }, [props.onPrivateSeatRevealedChange]);
+  const coverPrivateSeat = useCallback(() => {
+    onPrivateSeatRevealedChangeRef.current?.(false);
+    coverSeat();
+  }, [coverSeat]);
   useLayoutEffect(() => {
     stateRef.current = state;
   }, [state]);
@@ -192,11 +199,11 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       && currentOrder?.teamId === props.activeSeatId,
     );
     if (shouldCover && lastHotseatCoverPick.current !== props.currentPickIndex) {
-      coverSeat();
+      coverPrivateSeat();
       lastHotseatCoverPick.current = props.currentPickIndex;
     }
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
-  }, [coverSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
+  }, [coverPrivateSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
 
   useEffect(() => {
     if (!revealed || !props.candidate?.id) return;
@@ -227,8 +234,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   }, [props.dangerKey, revealed, soundPlayer]);
 
   useEffect(() => {
-    onPrivateSeatRevealedChange?.(revealed);
-  }, [onPrivateSeatRevealedChange, revealed]);
+    onPrivateSeatRevealedChangeRef.current?.(revealed);
+  }, [revealed]);
 
   useEffect(() => () => {
     cancelHold();
@@ -440,7 +447,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               <span className="truncate">{teamName(activeSeatTeam).toUpperCase()} · {activeSeatOnClock ? 'ON CLOCK' : 'VIEWING'}</span>
             </span>
             {revealed ? (
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 shrink-0" onClick={coverSeat}><EyeOff size={15} /> COVER</button>
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 shrink-0" onClick={coverPrivateSeat}><EyeOff size={15} /> COVER</button>
             ) : null}
           </div>
           {draftComplete ? (
@@ -461,7 +468,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
                     {!props.candidate.blockReason && !props.paused && props.canDraftFromActiveSeat !== false ? (
                       <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11 shrink-0" onClick={() => {
                         armedCandidate.current = props.candidate;
-                        coverSeat();
+                        setDismissedCoverPick(props.currentPickIndex);
+                        coverPrivateSeat();
                         dispatch({ type: 'ARM', candidateId: props.candidate!.id });
                       }}>
                         {props.draftActionLabel ?? 'COVER & ARM'}

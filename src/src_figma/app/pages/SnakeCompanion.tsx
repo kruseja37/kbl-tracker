@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
@@ -87,6 +87,47 @@ const LEFT_SESSIONS_KEY = 'kbl-snake-companion-left-session-ids';
 const FRESHNESS_MS = 5_000;
 const NO_OPEN_ROOM_COPY = 'NO OPEN SNAKE ROOM FOUND ON THIS ACCOUNT.';
 
+interface CompanionPrivateIdentity {
+  sessionId: string;
+  leagueId: string;
+  seasonNumber: number;
+  teamId: string;
+  deviceId: string;
+}
+
+interface CompanionPrivateGuard {
+  epoch: number;
+  identity: CompanionPrivateIdentity;
+}
+
+function sameCompanionPrivateIdentity(
+  left: CompanionPrivateIdentity | null,
+  right: CompanionPrivateIdentity | null,
+): boolean {
+  return Boolean(left && right
+    && left.sessionId === right.sessionId
+    && left.leagueId === right.leagueId
+    && left.seasonNumber === right.seasonNumber
+    && left.teamId === right.teamId
+    && left.deviceId === right.deviceId);
+}
+
+function companionPrivateIdentity(
+  source: LeagueBuilderMlbDraftSession | null,
+  ownDeviceId: string,
+): CompanionPrivateIdentity | null {
+  if (!source) return null;
+  const claim = approvedClaimForDevice(source, ownDeviceId);
+  if (!claim) return null;
+  return {
+    sessionId: source.id,
+    leagueId: source.leagueId,
+    seasonNumber: source.seasonNumber,
+    teamId: claim.teamId,
+    deviceId: ownDeviceId,
+  };
+}
+
 function snakeEnabled(): boolean {
   const enabled = (phaseFlags as typeof phaseFlags & { isSnakeDraftV1Enabled?: () => boolean }).isSnakeDraftV1Enabled;
   return enabled?.() ?? false;
@@ -145,6 +186,13 @@ export default function SnakeCompanion() {
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [whatIf, setWhatIf] = useState<{ view: DeskWhatIf; board: SnakeSeatBoardRecord } | null>(null);
+  const [boardUndo, setBoardUndo] = useState<{
+    board: SnakeSeatBoardRecord;
+    expectedBoardRevision: number;
+    identity: CompanionPrivateIdentity;
+    changedSlotCount: number;
+  } | null>(null);
+  const [undoWorking, setUndoWorking] = useState(false);
   const [pullState, setPullState] = useState<{
     userId: string;
     status: 'complete' | 'error';
@@ -155,6 +203,31 @@ export default function SnakeCompanion() {
     value: 'open' | 'empty';
   } | null>(null);
   const pulledUserId = useRef<string | null>(null);
+  const privacyEpochRef = useRef(0);
+  const deviceCoveredRef = useRef(deviceCovered);
+  const privateIdentityRef = useRef<CompanionPrivateIdentity | null>(null);
+  const privateIdentityKeyRef = useRef<string | null>(null);
+  const undoOperationRef = useRef<object | null>(null);
+  deviceCoveredRef.current = deviceCovered;
+  const invalidatePrivateContext = useCallback(() => {
+    privacyEpochRef.current += 1;
+    setSelectedPlayerId(null);
+    setMessage(null);
+    setWhatIf(null);
+    setBoardUndo(null);
+    undoOperationRef.current = null;
+    setUndoWorking(false);
+  }, []);
+  const capturePrivateContext = useCallback((): CompanionPrivateGuard | null => {
+    const identity = privateIdentityRef.current;
+    if (deviceCoveredRef.current || !identity) return null;
+    return { epoch: privacyEpochRef.current, identity: { ...identity } };
+  }, []);
+  const privateContextIsCurrent = useCallback((guard: CompanionPrivateGuard): boolean => (
+    !deviceCoveredRef.current
+    && privacyEpochRef.current === guard.epoch
+    && sameCompanionPrivateIdentity(privateIdentityRef.current, guard.identity)
+  ), []);
   const authenticatedUserId = auth.isAuthenticated ? auth.user?.id ?? null : null;
   const initialPull = authenticatedUserId && pullState?.userId === authenticatedUserId
     ? pullState.status
@@ -167,11 +240,16 @@ export default function SnakeCompanion() {
   const sessionLeagueId = session?.leagueId ?? null;
 
   useEffect(() => {
+    const syncCover = (covered: boolean) => {
+      deviceCoveredRef.current = covered;
+      invalidatePrivateContext();
+      setDeviceCovered(covered);
+    };
     const syncFromStorage = (event: StorageEvent) => {
-      if (event.key === DEVICE_COVERED_KEY) setDeviceCovered(event.newValue === 'true');
+      if (event.key === DEVICE_COVERED_KEY) syncCover(event.newValue === 'true');
     };
     const syncFromSameWindow = (event: Event) => {
-      setDeviceCovered(Boolean((event as CustomEvent<boolean>).detail));
+      syncCover(Boolean((event as CustomEvent<boolean>).detail));
     };
     window.addEventListener('storage', syncFromStorage);
     window.addEventListener(DEVICE_COVER_EVENT, syncFromSameWindow);
@@ -179,7 +257,7 @@ export default function SnakeCompanion() {
       window.removeEventListener('storage', syncFromStorage);
       window.removeEventListener(DEVICE_COVER_EVENT, syncFromSameWindow);
     };
-  }, []);
+  }, [invalidatePrivateContext]);
 
   useEffect(() => {
     const userId = authenticatedUserId;
@@ -239,21 +317,34 @@ export default function SnakeCompanion() {
 
   useEffect(() => {
     if (!auth.isAuthenticated || initialPull !== 'complete' || isLoading || deviceCovered) return;
-    void findDeviceSession().then(setSession).catch((cause) => setMessage(cause instanceof Error ? cause.message : String(cause)));
+    const requestEpoch = privacyEpochRef.current;
+    void findDeviceSession().then((found) => {
+      if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) setSession(found);
+    }).catch((cause) => {
+      if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
+        setMessage(cause instanceof Error ? cause.message : String(cause));
+      }
+    });
   }, [auth.isAuthenticated, deviceCovered, findDeviceSession, initialPull, isLoading]);
 
   const refreshSession = useCallback(async () => {
+    const requestEpoch = privacyEpochRef.current;
     try {
       await syncEngine.pull({ throwOnError: true });
+      if (privacyEpochRef.current !== requestEpoch || deviceCoveredRef.current) return;
       if (session) {
         const fresh = await getMlbDraftSession(session.leagueId, session.seasonNumber);
-        setSession(fresh);
+        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) setSession(fresh);
       } else {
-        setSession(await findDeviceSession());
+        const recovered = await findDeviceSession();
         const open = await hasOpenRoom();
-        setRoomAvailabilityResult({ key: roomAvailabilityKey, value: open ? 'open' : 'empty' });
+        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
+          setSession(recovered);
+          setRoomAvailabilityResult({ key: roomAvailabilityKey, value: open ? 'open' : 'empty' });
+        }
       }
     } catch (cause) {
+      if (privacyEpochRef.current !== requestEpoch || deviceCoveredRef.current) return;
       const detail = cause instanceof Error ? cause.message : String(cause);
       setMessage(`LIVE ROOM SYNC FAILED — ${detail}`);
     }
@@ -268,13 +359,20 @@ export default function SnakeCompanion() {
 
   useEffect(() => {
     if (!sessionLeagueId) return;
+    const requestEpoch = privacyEpochRef.current;
     void getRegisteredPool(sessionLeagueId)
-      .then((value) => setPoolResult({ leagueId: sessionLeagueId, value }))
-      .catch((cause) => setMessage(cause instanceof Error ? cause.message : String(cause)));
+      .then((value) => {
+        if (privacyEpochRef.current === requestEpoch) setPoolResult({ leagueId: sessionLeagueId, value });
+      })
+      .catch((cause) => {
+        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
+          setMessage(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
   }, [getRegisteredPool, sessionLeagueId]);
 
   const claimDesk = useCallback(async (gmName: string, roomCode: string) => {
-    setMessage(null);
+    invalidatePrivateContext();
     try {
       await syncEngine.pull({ throwOnError: true });
       let foundOpenRoom = false;
@@ -306,46 +404,50 @@ export default function SnakeCompanion() {
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [getMlbDraftSession, leagues, ownDeviceId]);
+  }, [getMlbDraftSession, invalidatePrivateContext, leagues, ownDeviceId]);
 
   const authSignOut = auth.signOut;
   const signOut = useCallback(async () => {
+    deviceCoveredRef.current = true;
+    invalidatePrivateContext();
     await authSignOut();
     pulledUserId.current = null;
     setPullState(null);
     setRoomAvailabilityResult(null);
     setSession(null);
     setPoolResult(null);
-    setMessage(null);
-  }, [authSignOut]);
+  }, [authSignOut, invalidatePrivateContext]);
 
   const coverDevice = useCallback(() => {
     broadcastDeviceCover(true);
-    setWhatIf(null);
-    setMessage(null);
   }, []);
 
   const returnToDesk = useCallback(async () => {
-    setMessage(null);
+    deviceCoveredRef.current = true;
+    invalidatePrivateContext();
+    const recoveryEpoch = privacyEpochRef.current;
     try {
       await syncEngine.pull({ throwOnError: true });
       const recovered = await findDeviceSession();
+      if (privacyEpochRef.current !== recoveryEpoch || !deviceCoveredRef.current) return;
       broadcastDeviceCover(false);
       setSession(recovered);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
+      if (privacyEpochRef.current === recoveryEpoch) {
+        setMessage(cause instanceof Error ? cause.message : String(cause));
+      }
     }
-  }, [findDeviceSession]);
+  }, [findDeviceSession, invalidatePrivateContext]);
 
   const forgetCurrentRoom = useCallback(async () => {
     if (!session) return;
+    invalidatePrivateContext();
     rememberLeftSession(session.id);
     setSession(null);
     setPoolResult(null);
-    setWhatIf(null);
     const open = await hasOpenRoom();
     setRoomAvailabilityResult({ key: roomAvailabilityKey, value: open ? 'open' : 'empty' });
-  }, [hasOpenRoom, roomAvailabilityKey, session]);
+  }, [hasOpenRoom, invalidatePrivateContext, roomAvailabilityKey, session]);
 
   const approved = session ? approvedClaimForDevice(session, ownDeviceId) : null;
   const activeClaim = session ? claimForDevice(session, ownDeviceId) : null;
@@ -355,6 +457,23 @@ export default function SnakeCompanion() {
     return team ? [team] : [];
   }) ?? [], [league, teams]);
   const team = leagueTeams.find((entry) => entry.id === approved?.teamId) ?? null;
+  const currentPrivateIdentity = team ? companionPrivateIdentity(session, ownDeviceId) : null;
+  const currentPrivateIdentityKey = currentPrivateIdentity
+    ? `${currentPrivateIdentity.sessionId}|${currentPrivateIdentity.leagueId}|${currentPrivateIdentity.seasonNumber}|${currentPrivateIdentity.teamId}|${currentPrivateIdentity.deviceId}`
+    : null;
+  if (privateIdentityKeyRef.current !== currentPrivateIdentityKey) {
+    privateIdentityKeyRef.current = currentPrivateIdentityKey;
+    privacyEpochRef.current += 1;
+  }
+  privateIdentityRef.current = currentPrivateIdentity;
+  useLayoutEffect(() => {
+    setSelectedPlayerId(null);
+    setMessage(null);
+    setWhatIf(null);
+    setBoardUndo(null);
+    undoOperationRef.current = null;
+    setUndoWorking(false);
+  }, [currentPrivateIdentityKey]);
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const activePoolRows = useMemo(() => {
     const selected = session?.snakeSetup?.poolPlayerIds;
@@ -557,8 +676,12 @@ export default function SnakeCompanion() {
     ? buildSelectedChemistryDelta(selectedStoredPlayer, deskState.draftedStoredPlayers)
     : null;
 
-  const saveBoard = useCallback(async (nextBoard: SnakeSeatBoardRecord) => {
-    if (!session || !board || !team) return;
+  const saveBoard = useCallback(async (
+    nextBoard: SnakeSeatBoardRecord,
+    successMessage: string | null,
+    guard: CompanionPrivateGuard,
+  ): Promise<{ saved: LeagueBuilderMlbDraftSession; privateContextStillCurrent: boolean } | null> => {
+    if (!session || !board || !team) return null;
     try {
       await syncEngine.pull({ throwOnError: true });
       const saved = await patchApprovedCompanionSeatBoard({
@@ -569,21 +692,87 @@ export default function SnakeCompanion() {
         board: nextBoard,
         expectedBoardRevision: board.revision,
       });
-      setSession(saved);
-      setMessage('SAVED.');
+      const guardStillCurrent = privateContextIsCurrent(guard);
+      const privateContextStillCurrent = guardStillCurrent
+        && sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId), guard.identity);
+      if (privateContextStillCurrent) {
+        setSession(saved);
+        if (successMessage) setMessage(successMessage);
+      } else if (guardStillCurrent) {
+        // The write returned canonical truth for a different private identity.
+        // Re-read that truth instead of installing a response born from the old desk.
+        await refreshSession();
+      }
+      return { saved, privateContextStillCurrent };
     } catch (cause) {
-      const copy = cause instanceof Error ? cause.message : '';
-      setMessage(copy === COMPANION_DRAFT_COMPLETE_COPY || copy === 'MAIN-DEVICE APPROVAL IS REQUIRED.'
-        ? copy
-        : COMPANION_STALE_COPY);
-      await refreshSession();
+      if (privateContextIsCurrent(guard)) {
+        const copy = cause instanceof Error ? cause.message : '';
+        setMessage(copy === COMPANION_DRAFT_COMPLETE_COPY || copy === 'MAIN-DEVICE APPROVAL IS REQUIRED.'
+          ? copy
+          : COMPANION_STALE_COPY);
+        await refreshSession();
+      }
+      return null;
     }
-  }, [board, ownDeviceId, refreshSession, session, team]);
+  }, [board, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
 
-  const reorder = useCallback((view: SnakeRankingView, orderedIds: readonly string[]) => {
-    if (!board) return;
-    void saveBoard(reorderSeatBoardRankings({ board, view, orderedIds }));
-  }, [board, saveBoard]);
+  const reorder = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
+    if (!board || !deskState) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team?.id) return;
+    const priorBoard = structuredClone(board);
+    const reordered = reorderSeatBoardRankings({
+      board,
+      view,
+      orderedIds,
+      candidates: deskState.candidates,
+      unavailablePlayerIds: unavailable,
+    });
+    if (!reordered.board) {
+      setMessage(`MY BOARD COULD NOT REFIT — ${reordered.brokenSlots.join(', ')} HAS NO AVAILABLE PLAYER.`);
+      return;
+    }
+    const outcome = await saveBoard(reordered.board, null, guard);
+    const savedBoard = outcome?.saved.seatBoards?.[guard.identity.teamId];
+    if (!outcome?.privateContextStillCurrent || !savedBoard || !privateContextIsCurrent(guard)) return;
+    setBoardUndo({
+      board: priorBoard,
+      expectedBoardRevision: savedBoard.revision,
+      identity: guard.identity,
+      changedSlotCount: reordered.changedSlotCount,
+    });
+  }, [board, capturePrivateContext, deskState, privateContextIsCurrent, saveBoard, team?.id, unavailable]);
+
+  const undoBoardUpdate = useCallback(async () => {
+    if (!board || !boardUndo || undoOperationRef.current) return;
+    const guard = capturePrivateContext();
+    if (!guard || !sameCompanionPrivateIdentity(guard.identity, boardUndo.identity)) {
+      setBoardUndo(null);
+      return;
+    }
+    if (board.revision !== boardUndo.expectedBoardRevision) {
+      setBoardUndo(null);
+      setMessage(COMPANION_STALE_COPY);
+      await refreshSession();
+      return;
+    }
+    const operation = {};
+    undoOperationRef.current = operation;
+    setUndoWorking(true);
+    const restoredBoard: SnakeSeatBoardRecord = {
+      ...structuredClone(boardUndo.board),
+      revision: board.revision + 1,
+    };
+    try {
+      const outcome = await saveBoard(restoredBoard, null, guard);
+      if (outcome?.privateContextStillCurrent && privateContextIsCurrent(guard)) setBoardUndo(null);
+    } finally {
+      if (undoOperationRef.current === operation) {
+        undoOperationRef.current = null;
+        setUndoWorking(false);
+      }
+    }
+  }, [board, boardUndo, capturePrivateContext, privateContextIsCurrent, refreshSession, saveBoard]);
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!board || !deskState || !pool || !team || !session) return;
@@ -736,7 +925,21 @@ export default function SnakeCompanion() {
       chemistry={deskState.draftedChemistry}
       testId="companion-drafted-truth"
     />}
-    privateDesk={<PrivateDesk
+    privateDesk={<>
+      {boardUndo
+        && sameCompanionPrivateIdentity(boardUndo.identity, currentPrivateIdentity)
+        && boardUndo.expectedBoardRevision === board.revision ? (
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-warn-panel)] p-3" data-testid="companion-board-update-banner">
+          <p className="font-bold" role="status">MY BOARD UPDATED — {boardUndo.changedSlotCount} SLOT{boardUndo.changedSlotCount === 1 ? '' : 'S'} CHANGED.</p>
+          <button
+            type="button"
+            className="ballpark-press-button ballpark-press-sm ballpark-press-action"
+            disabled={undoWorking}
+            onClick={() => void undoBoardUpdate()}
+          >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
+        </div>
+      ) : null}
+      <PrivateDesk
       candidates={deskState.candidates}
       rankings={board.rankings.byPosition ?? {}}
       overallRankings={board.rankings.global ?? []}
@@ -756,10 +959,14 @@ export default function SnakeCompanion() {
       whatIf={whatIf?.view ?? null}
       selectedCandidateId={selectedCandidateId}
       onSelectCandidate={setSelectedPlayerId}
-      onReorder={(position, orderedIds) => reorder(position, orderedIds)}
-      onReorderOverall={(orderedIds) => reorder('OVERALL', orderedIds)}
+      onReorder={(position, orderedIds) => { void reorder(position, orderedIds); }}
+      onReorderOverall={(orderedIds) => { void reorder('OVERALL', orderedIds); }}
       onStartWhatIf={startWhatIf}
-      onKeepWhatIf={() => { if (whatIf) void saveBoard(whatIf.board); setWhatIf(null); }}
+      onKeepWhatIf={() => {
+        const guard = capturePrivateContext();
+        if (whatIf && guard) void saveBoard(whatIf.board, 'SAVED.', guard);
+        setWhatIf(null);
+      }}
       onRevertWhatIf={() => setWhatIf(null)}
       tradeGuide={<SnakeTradeGuide
         teams={leagueTeams.map((entry) => ({ id: entry.id, name: entry.name }))}
@@ -772,6 +979,7 @@ export default function SnakeCompanion() {
         onNod={(offerId) => respondToTradeOffer(offerId, 'NOD')}
         onClose={(offerId, action) => respondToTradeOffer(offerId, action === 'WITHDRAWN' ? 'WITHDRAW' : 'DECLINE')}
       />}
-    />}
+      />
+    </>}
   />;
 }
