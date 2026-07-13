@@ -116,6 +116,7 @@ export async function registerLeaguePoolForLeague(leagueId: string): Promise<Reg
     tier: league.tier ?? 'juiced',
     balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,
     totalSlots: league.teamIds.length * LEGAL_ROSTER.size,
+    teamCount: league.teamIds.length,
     salaryCap: resolveLeagueSalaryCap(league),
     players: leaguePlayers.map((player) => ({
       id: player.id,

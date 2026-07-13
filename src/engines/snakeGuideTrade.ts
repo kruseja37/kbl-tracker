@@ -86,7 +86,12 @@ function packageValue(picks: readonly number[], values: ReadonlyMap<number, numb
   }, 0);
 }
 
-function toGuidePackage(candidate: SnakeGuidePackage & { imbalance: number }): SnakeGuidePackage {
+type SnakeGuideCandidate = SnakeGuidePackage & {
+  imbalance: number;
+  sellerPremium: number;
+};
+
+function toGuidePackage(candidate: SnakeGuideCandidate): SnakeGuidePackage {
   return {
     buyerTeamId: candidate.buyerTeamId,
     sellerTeamId: candidate.sellerTeamId,
@@ -97,6 +102,14 @@ function toGuidePackage(candidate: SnakeGuidePackage & { imbalance: number }): S
     receiveValue: candidate.receiveValue,
     sessionRevision: candidate.sessionRevision,
   };
+}
+
+function compareGuideCandidates(left: SnakeGuideCandidate, right: SnakeGuideCandidate): number {
+  return left.sellerPremium - right.sellerPremium
+    || left.imbalance - right.imbalance
+    || left.offerPickNumbers.length - right.offerPickNumbers.length
+    || packageLex(left.offerPickNumbers, right.offerPickNumbers)
+    || packageLex(left.receivePickNumbers, right.receivePickNumbers);
 }
 
 function swapOwnership(
@@ -139,40 +152,42 @@ export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackage
   const buyerPicks = futureOwnedPicks(input.session, input.buyerTeamId);
   const sellerReturns = futureOwnedPicks(input.session, sellerTeamId).filter((pick) => pick !== input.targetPick);
   const values = valueMap(input.pickValueChart);
-  const candidates: Array<SnakeGuidePackage & { imbalance: number }> = [];
+  const candidates: SnakeGuideCandidate[] = [];
+
+  if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
+    return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
+  }
 
   for (let count = 1; count <= 3; count += 1) {
     for (const offerPickNumbers of combinations(buyerPicks, count)) {
       for (const returnExtras of combinations(sellerReturns, count - 1)) {
         const receivePickNumbers = [input.targetPick, ...returnExtras].sort((left, right) => left - right);
+        const offerValue = packageValue(offerPickNumbers, values);
+        const receiveValue = packageValue(receivePickNumbers, values);
+        if (offerValue < receiveValue) continue;
         const verdict = validateTrade(
           offerPickNumbers.map((pick) => ({ pick })),
           receivePickNumbers.map((pick) => ({ pick })),
           [...input.pickValueChart],
         );
         if (!verdict.balanced) continue;
-        if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) continue;
         candidates.push({
           buyerTeamId: input.buyerTeamId,
           sellerTeamId,
           targetPick: input.targetPick,
           offerPickNumbers,
           receivePickNumbers,
-          offerValue: packageValue(offerPickNumbers, values),
-          receiveValue: packageValue(receivePickNumbers, values),
+          offerValue,
+          receiveValue,
           sessionRevision: input.session.revision ?? 0,
           imbalance: verdict.imbalancePct,
+          sellerPremium: offerValue - receiveValue,
         });
       }
     }
   }
 
-  const best = candidates.sort((left, right) => (
-    left.offerPickNumbers.length - right.offerPickNumbers.length
-    || left.imbalance - right.imbalance
-    || left.offerPickNumbers.join(',').localeCompare(right.offerPickNumbers.join(','))
-    || left.receivePickNumbers.join(',').localeCompare(right.receivePickNumbers.join(','))
-  ))[0];
+  const best = candidates.sort(compareGuideCandidates)[0];
   if (!best) return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
   const tradePackage = toGuidePackage(best);
   return {
@@ -182,10 +197,14 @@ export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackage
 }
 
 function packageLex(left: readonly number[], right: readonly number[]): number {
-  return left.join(',').localeCompare(right.join(','));
+  const sharedLength = Math.min(left.length, right.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return left.length - right.length;
 }
 
-function closestReceivePackages(input: {
+function closestSellerProtectedReceivePackages(input: {
   rows: readonly { picks: number[]; value: number }[];
   offerValue: number;
 }): Array<{ picks: number[]; value: number }> {
@@ -194,21 +213,22 @@ function closestReceivePackages(input: {
   let high = input.rows.length;
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
-    if (input.rows[middle].value < input.offerValue) low = middle + 1;
+    if (input.rows[middle].value <= input.offerValue) low = middle + 1;
     else high = middle;
   }
-  const values = new Set<number>();
-  if (low < input.rows.length) values.add(input.rows[low].value);
-  if (low > 0) values.add(input.rows[low - 1].value);
-  return [...values].flatMap((value) => (
-    input.rows.filter((row) => row.value === value).sort((left, right) => packageLex(left.picks, right.picks))[0] ?? []
-  ));
+  if (low === 0) return [];
+  const value = input.rows[low - 1].value;
+  const best = input.rows
+    .filter((row) => row.value === value)
+    .sort((left, right) => packageLex(left.picks, right.picks))[0];
+  return best ? [best] : [];
 }
 
 /**
- * Exact posted-price search. For a fixed offer value, imbalance is monotonic on either side of
- * that value, so only the nearest receive total below and above can win. This prunes the old
- * Cartesian product without changing its length/imbalance/lexicographic winner rules.
+ * Exact posted-price search. Seller protection removes receive totals above the buyer's offer;
+ * among the survivors, only the nearest receive total can minimize the raw seller premium. This
+ * prunes the Cartesian product without changing the premium/imbalance/complexity/lexicographic
+ * winner rules shared with the brute-force oracle.
  */
 export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
   const targetSlot = input.session.pickOrder
@@ -221,7 +241,11 @@ export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): Sn
   const buyerPicks = futureOwnedPicks(input.session, input.buyerTeamId);
   const sellerReturns = futureOwnedPicks(input.session, sellerTeamId).filter((pick) => pick !== input.targetPick);
   const values = valueMap(input.pickValueChart);
-  const candidates: Array<SnakeGuidePackage & { imbalance: number }> = [];
+  const candidates: SnakeGuideCandidate[] = [];
+
+  if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
+    return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
+  }
 
   for (let count = 1; count <= 3; count += 1) {
     const receives = combinations(sellerReturns, count - 1)
@@ -232,7 +256,7 @@ export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): Sn
       .sort((left, right) => left.value - right.value || packageLex(left.picks, right.picks));
     for (const offerPickNumbers of combinations(buyerPicks, count)) {
       const offerValue = packageValue(offerPickNumbers, values);
-      for (const receive of closestReceivePackages({ rows: receives, offerValue })) {
+      for (const receive of closestSellerProtectedReceivePackages({ rows: receives, offerValue })) {
         const verdict = validateTrade(
           offerPickNumbers.map((pick) => ({ pick })),
           receive.picks.map((pick) => ({ pick })),
@@ -249,19 +273,14 @@ export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): Sn
           receiveValue: receive.value,
           sessionRevision: input.session.revision ?? 0,
           imbalance: verdict.imbalancePct,
+          sellerPremium: offerValue - receive.value,
         });
       }
     }
-    if (candidates.length > 0) break;
   }
 
-  const best = candidates.sort((left, right) => (
-    left.offerPickNumbers.length - right.offerPickNumbers.length
-    || left.imbalance - right.imbalance
-    || packageLex(left.offerPickNumbers, right.offerPickNumbers)
-    || packageLex(left.receivePickNumbers, right.receivePickNumbers)
-  ))[0];
-  if (!best || !primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
+  const best = candidates.sort(compareGuideCandidates)[0];
+  if (!best) {
     return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
   }
   const tradePackage = toGuidePackage(best);
@@ -278,61 +297,167 @@ export interface RevalidateSnakeGuideResult {
   proposedSession: LeagueBuilderMlbDraftSession | null;
 }
 
-export function revalidateSnakeGuidePackage(input: SnakeGuideCommonInput & {
+type RevalidateSnakeGuideSnapshotResult = RevalidateSnakeGuideResult & {
+  canonicalValues?: Readonly<{ offer: number; receive: number }>;
+};
+
+type RevalidateSnakeGuideInput = SnakeGuideCommonInput & {
   proposal: SnakeGuidePackage;
-}): RevalidateSnakeGuideResult {
-  if ((input.session.revision ?? 0) !== input.proposal.sessionRevision) {
+};
+
+function snapshotSnakeGuidePackage(proposal: SnakeGuidePackage): SnakeGuidePackage | null {
+  try {
+    const buyerTeamId = proposal.buyerTeamId;
+    const sellerTeamId = proposal.sellerTeamId;
+    const targetPick = proposal.targetPick;
+    const offerSource = proposal.offerPickNumbers;
+    const receiveSource = proposal.receivePickNumbers;
+    const offerValue = proposal.offerValue;
+    const receiveValue = proposal.receiveValue;
+    const sessionRevision = proposal.sessionRevision;
+    if (!Array.isArray(offerSource) || !Array.isArray(receiveSource)) return null;
+    const offerPickNumbers = Object.freeze([...offerSource]) as unknown as number[];
+    const receivePickNumbers = Object.freeze([...receiveSource]) as unknown as number[];
+    return Object.freeze({
+      buyerTeamId,
+      sellerTeamId,
+      targetPick,
+      offerPickNumbers,
+      receivePickNumbers,
+      offerValue,
+      receiveValue,
+      sessionRevision,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function snapshotSnakeGuideInput(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideInput | null {
+  try {
+    const session = input.session;
+    const pickValueChart = input.pickValueChart;
+    const seatingProofInput = input.seatingProofInput;
+    const proposal = snapshotSnakeGuidePackage(input.proposal);
+    if (!proposal) return null;
+    return Object.freeze({ session, pickValueChart, seatingProofInput, proposal });
+  } catch {
+    return null;
+  }
+}
+
+function invalidGuidePackage(message: string, guideMatched = false): RevalidateSnakeGuideResult {
+  return { valid: false, message, guideMatched, proposedSession: null };
+}
+
+function revalidateSnakeGuidePackageSnapshot(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideSnapshotResult {
+  const { proposal } = input;
+  if ((input.session.revision ?? 0) !== proposal.sessionRevision) {
     return { valid: false, message: 'The draft moved on — refresh.', guideMatched: false, proposedSession: null };
   }
-  if (input.proposal.offerPickNumbers.length !== input.proposal.receivePickNumbers.length) {
+  if (proposal.buyerTeamId === proposal.sellerTeamId) {
+    return { valid: false, message: 'A trade needs two different clubs.', guideMatched: false, proposedSession: null };
+  }
+  const offerSet = new Set(proposal.offerPickNumbers);
+  const receiveSet = new Set(proposal.receivePickNumbers);
+  if (offerSet.size === 0
+    || offerSet.size > 3
+    || offerSet.size !== proposal.offerPickNumbers.length
+    || receiveSet.size !== proposal.receivePickNumbers.length
+    || offerSet.size !== receiveSet.size) {
     return { valid: false, message: 'Both clubs must keep the same number of turns.', guideMatched: false, proposedSession: null };
   }
-  const buyerOwned = new Set(futureOwnedPicks(input.session, input.proposal.buyerTeamId));
-  const sellerOwned = new Set(futureOwnedPicks(input.session, input.proposal.sellerTeamId));
-  if (input.proposal.offerPickNumbers.some((pick) => !buyerOwned.has(pick))
-    || input.proposal.receivePickNumbers.some((pick) => !sellerOwned.has(pick))) {
+  if ([...offerSet].some((pick) => receiveSet.has(pick))) {
+    return { valid: false, message: 'A pick cannot appear on both sides.', guideMatched: false, proposedSession: null };
+  }
+  if (!receiveSet.has(proposal.targetPick)) {
+    return { valid: false, message: 'The requested target pick is not in this package.', guideMatched: false, proposedSession: null };
+  }
+  const targetSlots = input.session.pickOrder
+    .slice(input.session.currentPickIndex)
+    .filter((slot) => slot.pick === proposal.targetPick);
+  if (targetSlots.length !== 1 || targetSlots[0].teamId !== proposal.sellerTeamId) {
     return { valid: false, message: 'The draft moved on — refresh.', guideMatched: false, proposedSession: null };
   }
-  const verdict = validateTrade(
-    input.proposal.offerPickNumbers.map((pick) => ({ pick })),
-    input.proposal.receivePickNumbers.map((pick) => ({ pick })),
-    [...input.pickValueChart],
-  );
-  if (!verdict.balanced) {
+  const buyerOwned = new Set(futureOwnedPicks(input.session, proposal.buyerTeamId));
+  const sellerOwned = new Set(futureOwnedPicks(input.session, proposal.sellerTeamId));
+  if (proposal.offerPickNumbers.some((pick) => !buyerOwned.has(pick))
+    || proposal.receivePickNumbers.some((pick) => !sellerOwned.has(pick))) {
+    return { valid: false, message: 'The draft moved on — refresh.', guideMatched: false, proposedSession: null };
+  }
+  const values = valueMap(input.pickValueChart);
+  let offerValue: number;
+  let receiveValue: number;
+  try {
+    offerValue = packageValue(proposal.offerPickNumbers, values);
+    receiveValue = packageValue(proposal.receivePickNumbers, values);
+  } catch {
     return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
   }
-  const proposedSession = swapOwnership(input.session, input.proposal);
+  if (offerValue !== proposal.offerValue || receiveValue !== proposal.receiveValue) {
+    return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
+  }
+  const verdict = validateTrade(
+    proposal.offerPickNumbers.map((pick) => ({ pick })),
+    proposal.receivePickNumbers.map((pick) => ({ pick })),
+    [...input.pickValueChart],
+  );
+  if (!verdict.balanced || offerValue < receiveValue) {
+    return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
+  }
+  const proposedSession = swapOwnership(input.session, proposal);
   if (!primeSnakeGuideSeatingProof(input.seatingProofInput).feasible) {
     return { valid: false, message: 'The package would leave a club without a legal finish.', guideMatched: true, proposedSession: null };
   }
-  return { valid: true, message: 'Guide-matched and legal now.', guideMatched: true, proposedSession };
+  return {
+    valid: true,
+    message: 'Guide-matched and legal now.',
+    guideMatched: true,
+    proposedSession,
+    canonicalValues: Object.freeze({ offer: offerValue, receive: receiveValue }),
+  };
 }
 
-export function executeSnakeGuidePackage(input: SnakeGuideCommonInput & {
-  proposal: SnakeGuidePackage;
-}): RevalidateSnakeGuideResult {
-  const checked = revalidateSnakeGuidePackage(input);
-  if (!checked.valid || !checked.proposedSession || !checked.guideMatched) return checked;
-  const base = withLatestSnakeCorrection(input.session, 'trade');
-  const owned = swapOwnership(base, input.proposal);
+export function revalidateSnakeGuidePackage(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideResult {
+  const snapshot = snapshotSnakeGuideInput(input);
+  if (!snapshot) return invalidGuidePackage('This package no longer matches the posted guide.');
+  const checked = revalidateSnakeGuidePackageSnapshot(snapshot);
+  return {
+    valid: checked.valid,
+    message: checked.message,
+    guideMatched: checked.guideMatched,
+    proposedSession: checked.proposedSession,
+  };
+}
+
+export function executeSnakeGuidePackage(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideResult {
+  const snapshot = snapshotSnakeGuideInput(input);
+  if (!snapshot) return invalidGuidePackage('This package no longer matches the posted guide.');
+  const { proposal, session } = snapshot;
+  const checked = revalidateSnakeGuidePackageSnapshot(snapshot);
+  if (!checked.valid || !checked.proposedSession || !checked.guideMatched || !checked.canonicalValues) return checked;
+  const base = withLatestSnakeCorrection(session, 'trade');
+  const owned = { ...base, pickOrder: checked.proposedSession.pickOrder };
   const trade: SnakeDraftTradeRecord = {
-    id: `snake-guide-${input.session.revision ?? 0}-${(input.session.trades?.length ?? 0) + 1}`,
-    atPickIndex: input.session.currentPickIndex,
-    humanTeamId: input.proposal.buyerTeamId,
-    cpuTeamId: input.proposal.sellerTeamId,
-    humanPickNumbers: [...input.proposal.offerPickNumbers],
-    cpuPickNumbers: [...input.proposal.receivePickNumbers],
-    humanValue: input.proposal.offerValue,
-    cpuValue: input.proposal.receiveValue,
+    id: `snake-guide-${session.revision ?? 0}-${(session.trades?.length ?? 0) + 1}`,
+    atPickIndex: session.currentPickIndex,
+    humanTeamId: proposal.buyerTeamId,
+    cpuTeamId: proposal.sellerTeamId,
+    humanPickNumbers: [...proposal.offerPickNumbers],
+    cpuPickNumbers: [...proposal.receivePickNumbers],
+    humanValue: checked.canonicalValues.offer,
+    cpuValue: checked.canonicalValues.receive,
     greedMargin: 0,
   };
   return {
-    ...checked,
+    valid: checked.valid,
+    message: checked.message,
+    guideMatched: checked.guideMatched,
     proposedSession: {
       ...owned,
-      trades: [...(input.session.trades ?? []), trade],
+      trades: [...(session.trades ?? []), trade],
       openTradeOffers: [],
-      revision: (input.session.revision ?? 0) + 1,
+      revision: (session.revision ?? 0) + 1,
     },
   };
 }

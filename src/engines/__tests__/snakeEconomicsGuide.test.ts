@@ -11,6 +11,7 @@ import {
   revalidateSnakeGuidePackage,
   searchSnakeGuidePackage,
   searchSnakeGuidePackageBruteForce,
+  type SnakeGuidePackage,
 } from '../snakeGuideTrade';
 import { restoreLatestSnakeCorrection } from '../snakeSession';
 import { proveSimultaneousSnakeSeating, type SnakeSeatingPlayer } from '../snakeSeatingProof';
@@ -47,6 +48,57 @@ function legalPlayers(prefix: string, price: number): SnakeSeatingPlayer[] {
     ...Array.from({ length: 3 }, (_, i) => player(`${prefix}-RP${i}`, price, { isPitcher: true, position: 'RP', role: 'RP' })),
     player(`${prefix}-CP`, price, { isPitcher: true, position: 'CP', role: 'CP' }),
   ];
+}
+
+function chart(values: readonly number[]) {
+  return values.map((value, index) => ({ pick: index + 1, value }));
+}
+
+function sessionWithOwners(input: {
+  id: string;
+  pickCount: number;
+  owners: Readonly<Record<number, string>>;
+  revision?: number;
+}): LeagueBuilderMlbDraftSession {
+  return {
+    id: input.id,
+    leagueId: 'league',
+    seasonNumber: 1,
+    seed: input.id,
+    workflowVersion: 'v2',
+    engineMethodVersion: 'snakeFoundations.v1',
+    tier: 'standard',
+    balanceMode: 'taxed',
+    rounds: input.pickCount,
+    pickOrder: Array.from({ length: input.pickCount }, (_, index) => ({
+      round: index + 1,
+      pick: index + 1,
+      teamId: input.owners[index + 1] ?? `other-${index + 1}`,
+    })),
+    completedPicks: [],
+    currentPickIndex: 0,
+    revision: input.revision ?? 7,
+    createdDate: '2026-07-10',
+    lastModified: '2026-07-10',
+  };
+}
+
+function legalSeating() {
+  return {
+    clubs: ['buyer', 'seller'].map((teamId) => ({
+      teamId,
+      roster: [],
+      budgetRemaining: 10_000,
+    })),
+    pool: [
+      ...legalPlayers('guide-a', 5),
+      ...legalPlayers('guide-b', 5),
+      ...legalPlayers('guide-slack-a', 5),
+      ...legalPlayers('guide-slack-b', 5),
+    ],
+    baseCaps: [],
+    realTeamCount: 2,
+  };
 }
 
 describe('snake two-bills economics and guide packages', () => {
@@ -101,78 +153,142 @@ describe('snake two-bills economics and guide packages', () => {
     expect(second.planTax).toBe(first.planTax);
   });
 
-  test('guide search finds OFFER 14+41 / RECEIVE 9+62 and refuses a stranding package', () => {
-    const values = Array.from({ length: 70 }, (_, index) => 200 - index);
-    values[8] = 150;
-    values[13] = 120;
-    values[40] = 60;
-    values[61] = 30;
-    values.sort((a, b) => b - a);
-    const chart = derivePickValueChart(values);
-    // Pin the documented posted-price relationship without bypassing derivePickValueChart.
-    chart[8].value = 150;
-    chart[13].value = 120;
-    chart[40].value = 60;
-    chart[61].value = 30;
-
-    const pickOrder = Array.from({ length: 70 }, (_, index) => ({
-      round: Math.floor(index / 2) + 1,
-      pick: index + 1,
-      teamId: [14, 41].includes(index + 1) ? 'buyer' : [9, 62].includes(index + 1) ? 'seller' : `other-${index}`,
-    }));
-    const session: LeagueBuilderMlbDraftSession = {
-      id: 'guide', leagueId: 'league', seasonNumber: 1, seed: 'guide', workflowVersion: 'v2',
-      engineMethodVersion: 'snakeFoundations.v1', tier: 'standard', balanceMode: 'taxed', rounds: 35,
-      pickOrder, completedPicks: [], currentPickIndex: 0, revision: 7,
-      createdDate: '2026-07-10', lastModified: '2026-07-10',
-    };
-    const legalSeating = {
-      clubs: ['buyer', 'seller'].map((teamId) => ({
-        teamId,
-        roster: [],
-        budgetRemaining: 10_000,
-      })),
-      pool: [
-        ...legalPlayers('guide-a', 5),
-        ...legalPlayers('guide-b', 5),
-        ...legalPlayers('guide-slack-a', 5),
-        ...legalPlayers('guide-slack-b', 5),
-      ],
-      baseCaps: [],
-      realTeamCount: 2,
-    };
+  test('guide search finds a balancing-return package from a generated surplus chart', () => {
+    const values = Array.from({ length: 32 }, (_, index) => Math.round(1_000 * (0.91 ** index)));
+    const pickValueChart = derivePickValueChart(values, 20, 4);
+    const session = sessionWithOwners({
+      id: 'generated-guide',
+      pickCount: 20,
+      owners: { 2: 'seller', 4: 'buyer', 12: 'buyer', 20: 'seller' },
+    });
+    const seatingProofInput = legalSeating();
     const found = searchSnakeGuidePackage({
       session,
       buyerTeamId: 'buyer',
-      targetPick: 9,
-      pickValueChart: chart,
-      seatingProofInput: legalSeating,
+      targetPick: 2,
+      pickValueChart,
+      seatingProofInput,
     });
-    expect(proveSimultaneousSnakeSeating(legalSeating).shortfall).toBeNull();
-    expect(found.package).toMatchObject({ offerPickNumbers: [14, 41], receivePickNumbers: [9, 62] });
-    expect(found.message).toContain('OFFER 14+41; RECEIVE 9+62');
+    expect(proveSimultaneousSnakeSeating(seatingProofInput).shortfall).toBeNull();
+    expect(found.package).toMatchObject({ offerPickNumbers: [4, 12], receivePickNumbers: [2, 20] });
+    expect(found.package!.offerValue).toBeGreaterThanOrEqual(found.package!.receiveValue);
     const executed = executeSnakeGuidePackage({
       session,
       proposal: found.package!,
-      pickValueChart: chart,
-      seatingProofInput: legalSeating,
+      pickValueChart,
+      seatingProofInput,
     });
     expect(executed.valid).toBe(true);
     expect(restoreLatestSnakeCorrection(executed.proposedSession!)).toEqual(session);
     expect(revalidateSnakeGuidePackage({
       session: { ...session, revision: 8 },
       proposal: found.package!,
-      pickValueChart: chart,
-      seatingProofInput: legalSeating,
+      pickValueChart,
+      seatingProofInput,
     }).message).toContain('draft moved on');
 
     expect(searchSnakeGuidePackage({
       session,
       buyerTeamId: 'buyer',
-      targetPick: 9,
-      pickValueChart: chart,
-      seatingProofInput: { ...legalSeating, pool: [] },
-    })).toEqual({ package: null, message: 'No legal guide trade reaches pick 9.' });
+      targetPick: 2,
+      pickValueChart,
+      seatingProofInput: { ...seatingProofInput, pool: [] },
+    })).toEqual({ package: null, message: 'No legal guide trade reaches pick 2.' });
+  });
+
+  test('searches every package size and chooses value gap before complexity', () => {
+    const pickValueChart = chart([110, 100, 80, 70, 60, 50, 40, 30, 25, 20, 20, 10]);
+    const session = sessionWithOwners({
+      id: 'all-sizes',
+      pickCount: 12,
+      owners: { 2: 'seller', 4: 'buyer', 5: 'buyer', 10: 'seller', 11: 'seller', 12: 'buyer' },
+    });
+    const input = {
+      session,
+      buyerTeamId: 'buyer',
+      targetPick: 2,
+      pickValueChart,
+      seatingProofInput: legalSeating(),
+    };
+    expect(searchSnakeGuidePackage(input).package).toMatchObject({
+      offerPickNumbers: [4, 5, 12],
+      receivePickNumbers: [2, 10, 11],
+      offerValue: 140,
+      receiveValue: 140,
+    });
+    expect(searchSnakeGuidePackage(input)).toEqual(searchSnakeGuidePackageBruteForce(input));
+  });
+
+  test('rejects a buyer underpay that shared 15% validation still considers balanced', () => {
+    const pickValueChart = chart([100, 90]);
+    const session = sessionWithOwners({ id: 'underpay', pickCount: 2, owners: { 1: 'seller', 2: 'buyer' } });
+    const result = revalidateSnakeGuidePackage({
+      session,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 1,
+        offerPickNumbers: [2], receivePickNumbers: [1], offerValue: 90, receiveValue: 100,
+        sessionRevision: session.revision ?? 0,
+      },
+      pickValueChart,
+      seatingProofInput: legalSeating(),
+    });
+    expect(result).toMatchObject({ valid: false, guideMatched: false, proposedSession: null });
+  });
+
+  test('returns no package when the buyer lacks enough posted capital', () => {
+    const pickValueChart = chart([100, 80, 70, 60, 50, 40, 35, 30, 25, 20, 10, 5]);
+    const session = sessionWithOwners({
+      id: 'insufficient-capital',
+      pickCount: 12,
+      owners: { 1: 'seller', 8: 'seller', 9: 'seller', 10: 'buyer', 11: 'buyer', 12: 'buyer' },
+    });
+    expect(searchSnakeGuidePackage({
+      session,
+      buyerTeamId: 'buyer',
+      targetPick: 1,
+      pickValueChart,
+      seatingProofInput: legalSeating(),
+    }).package).toBeNull();
+  });
+
+  test('execution uses the exact immutable proposal snapshot that passed revalidation', () => {
+    const pickValueChart = chart([100, 100, 1]);
+    const session = sessionWithOwners({
+      id: 'mutable-proposal',
+      pickCount: 3,
+      owners: { 1: 'seller', 2: 'buyer', 3: 'buyer' },
+    });
+    let offerReads = 0;
+    const proposal = {
+      buyerTeamId: 'buyer',
+      sellerTeamId: 'seller',
+      targetPick: 1,
+      get offerPickNumbers() {
+        offerReads += 1;
+        return offerReads <= 8 ? [2] : [3];
+      },
+      receivePickNumbers: [1],
+      offerValue: 100,
+      receiveValue: 100,
+      sessionRevision: 7,
+    } as SnakeGuidePackage;
+
+    const executed = executeSnakeGuidePackage({
+      session,
+      proposal,
+      pickValueChart,
+      seatingProofInput: legalSeating(),
+    });
+    expect(executed.valid).toBe(true);
+    expect(executed.proposedSession?.pickOrder.find((slot) => slot.pick === 2)?.teamId).toBe('seller');
+    expect(executed.proposedSession?.pickOrder.find((slot) => slot.pick === 3)?.teamId).toBe('buyer');
+    expect(executed.proposedSession?.trades?.at(-1)).toMatchObject({
+      humanPickNumbers: [2],
+      cpuPickNumbers: [1],
+      humanValue: 100,
+      cpuValue: 100,
+    });
+    expect(offerReads).toBe(1);
   });
 
   test('optimized guide answers are byte-identical to the original search across 40 deterministic fixtures', () => {
@@ -185,7 +301,7 @@ describe('snake two-bills economics and guide packages', () => {
       const teamIds = ['buyer', 'seller', 'third', 'fourth'];
       const pickOrder = buildSnakeOrder(teamIds, 5);
       const values = Array.from({ length: pickOrder.length }, () => 10 + Math.floor(random() * 990));
-      const chart = derivePickValueChart(values);
+      const chart = derivePickValueChart(values, pickOrder.length, teamIds.length);
       const session: LeagueBuilderMlbDraftSession = {
         id: `property-${fixtureIndex}`, leagueId: 'league', seasonNumber: 1, seed: `seed-${fixtureIndex}`,
         workflowVersion: 'v2', engineMethodVersion: 'snakeFoundations.v1', tier: 'standard', balanceMode: 'taxed', rounds: 5,

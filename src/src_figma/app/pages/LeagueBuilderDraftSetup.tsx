@@ -3014,6 +3014,7 @@ export function LeagueBuilderDraftSetup() {
       tier: league.tier ?? "juiced",
       balanceMode: league.balanceMode ?? "taxed",
       totalSlots: league.teamIds.length * LEGAL_ROSTER.size,
+      teamCount: league.teamIds.length,
       salaryCap: tierBudget,
       players: inPoolPlayers.map((player) => ({
         id: player.id,

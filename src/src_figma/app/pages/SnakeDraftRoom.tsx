@@ -979,8 +979,11 @@ function MlbSnakeDraftRoom() {
       return [team.id, { ledger, chemistry }];
     }));
   }, [frozenIvById, leagueTeams, pool, session, truthPlayersById]);
-  const pickValueChart = useMemo(() => derivePickValueChart(activePoolRows.map((row) => row.iv))
-    .slice(0, session?.pickOrder.length ?? 0), [activePoolRows, session?.pickOrder.length]);
+  const pickValueChart = useMemo(() => derivePickValueChart(
+    activePoolRows.map((row) => row.iv),
+    session?.pickOrder.length ?? 0,
+    Math.max(1, leagueTeams.length),
+  ), [activePoolRows, leagueTeams.length, session?.pickOrder.length]);
   const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
     if (!session || !pool) return null;
     return {

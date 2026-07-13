@@ -408,27 +408,59 @@ describe('leagueConstruction T8a pure engine', () => {
     });
   });
 
-  test('derivePickValueChart sorts descending, preserves length, and reflects steeper juiced-shaped pools', () => {
-    const chart = derivePickValueChart([20, 100, 50, 50, 5]);
+  test('derivePickValueChart prices exactly the drafted picks from forward-cohort surplus', () => {
+    const chart = derivePickValueChart([30, 100, 50, 80, 40, 90, 60, 70], 4, 2);
     expect(chart).toEqual([
-      { pick: 1, value: 100 },
-      { pick: 2, value: 50 },
-      { pick: 3, value: 50 },
-      { pick: 4, value: 20 },
-      { pick: 5, value: 5 },
+      { pick: 1, value: 40 },
+      { pick: 2, value: 30 },
+      { pick: 3, value: 20 },
+      { pick: 4, value: 10 },
     ]);
-    expect(chart).toHaveLength(5);
+    expect(chart).toHaveLength(4);
     for (let i = 1; i < chart.length; i += 1) {
       expect(chart[i].value).toBeLessThanOrEqual(chart[i - 1].value);
     }
+  });
 
-    const juiced = derivePickValueChart([240, 180, 130, 95, 70]);
-    const nerfed = derivePickValueChart([120, 105, 95, 88, 82]);
-    expect((juiced[0].value - juiced[4].value) / juiced[0].value).toBeGreaterThan((nerfed[0].value - nerfed[4].value) / nerfed[0].value);
+  test('derivePickValueChart stays positive, finite, monotone, and deterministic for flat and exact-floor pools', () => {
+    const flat = derivePickValueChart([50, 50, 50, 50, 50, 50], 4, 2);
+    expect(flat).toEqual(Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })));
+
+    const exactFloor = derivePickValueChart([10, 9.8, 9.6, 9.4, 9.2, 9], 4, 2);
+    expect(exactFloor).toEqual(Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })));
+    expect(derivePickValueChart([10, Number.NaN, 9.8, Number.POSITIVE_INFINITY, 9.6, 9.4, 9.2, 9], 4, 2))
+      .toEqual(exactFloor);
+    for (const row of [...flat, ...exactFloor]) {
+      expect(Number.isFinite(row.value)).toBe(true);
+      expect(row.value).toBeGreaterThan(0);
+    }
+  });
+
+  test('derivePickValueChart stays finite and monotone at finite numeric extremes', () => {
+    const repeatedMaximum = derivePickValueChart(
+      [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE],
+      4,
+      2,
+    );
+    expect(repeatedMaximum).toEqual(
+      Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })),
+    );
+
+    const fullSpan = derivePickValueChart(
+      [Number.MAX_VALUE, Number.MAX_VALUE, -Number.MAX_VALUE, -Number.MAX_VALUE],
+      3,
+      1,
+    );
+    expect(fullSpan).toHaveLength(3);
+    for (let index = 0; index < fullSpan.length; index += 1) {
+      expect(Number.isFinite(fullSpan[index].value)).toBe(true);
+      expect(fullSpan[index].value).toBeGreaterThan(0);
+      if (index > 0) expect(fullSpan[index].value).toBeLessThanOrEqual(fullSpan[index - 1].value);
+    }
   });
 
   test('validateTrade applies the §7.3 15% advisory tolerance and favored side', () => {
-    const chart = derivePickValueChart([100, 90, 80, 70, 60]);
+    const chart = [100, 90, 80, 70, 60].map((value, index) => ({ pick: index + 1, value }));
     const balanced = validateTrade([{ pick: 1 }], [{ pick: 2 }], chart);
     expect(balanced.imbalancePct).toBeCloseTo(0.10, 10);
     expect(balanced.imbalancePct).toBeLessThanOrEqual(TRADE_TOLERANCE_BAND);
@@ -697,7 +729,7 @@ describe('registerPool T8b assembler', () => {
     }
   });
 
-  test('derives pick value chart from player IV sorted descending', () => {
+  test('derives a drafted-length pick chart from pool opportunity surplus', () => {
     const pool = registerPool({
       leagueId: 'league-chart',
       tier: 'juiced',
@@ -706,11 +738,45 @@ describe('registerPool T8b assembler', () => {
       players,
     });
 
-    expect(pool.pickValueChart).toEqual([
-      { pick: 1, value: 90_000 },
-      { pick: 2, value: 50_000 },
-      { pick: 3, value: 10_000 },
+    expect(pool.pickValueChart).toHaveLength(22);
+    expect(pool.pickValueChart.slice(0, 4)).toEqual([
+      { pick: 1, value: 80_000 },
+      { pick: 2, value: 40_000 },
+      { pick: 3, value: 1 },
+      { pick: 4, value: 1 },
     ]);
+    expect(pool.pickValueChart.at(-1)).toEqual({ pick: 22, value: 1 });
+  });
+
+  test('uses an explicitly supplied league club count instead of slot inference', () => {
+    const pool = registerPool({
+      leagueId: 'league-explicit-clubs',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      totalSlots: 4,
+      teamCount: 2,
+      players,
+    });
+
+    expect(pool.pickValueChart).toEqual([
+      { pick: 1, value: 60_000 },
+      { pick: 2, value: 20_000 },
+      { pick: 3, value: 1 },
+      { pick: 4, value: 1 },
+    ]);
+  });
+
+  test('rejects invalid explicitly supplied league club counts', () => {
+    for (const teamCount of [0, -1, 1.5, Number.NaN]) {
+      expect(() => registerPool({
+        leagueId: `league-invalid-clubs-${teamCount}`,
+        tier: 'standard',
+        balanceMode: 'taxed',
+        totalSlots: 22,
+        teamCount,
+        players,
+      })).toThrow('Team count must be a positive integer.');
+    }
   });
 
   test('passes through leagueId, balanceMode, totalSlots, and players', () => {

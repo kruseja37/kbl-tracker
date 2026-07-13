@@ -264,7 +264,7 @@ describe('PERFROOM production-scale call profile', () => {
       session: profileSession,
       buyerTeamId: TEAM_IDS[0],
       targetPick: 2,
-      pickValueChart: derivePickValueChart(profilePool.players.map((row) => row.iv)).slice(0, 176),
+      pickValueChart: derivePickValueChart(profilePool.players.map((row) => row.iv), 176, 8),
       seatingProofInput: { clubs: [], pool: [], baseCaps: [], realTeamCount: 8 },
     });
     const directSearchMs = performance.now() - directStart;

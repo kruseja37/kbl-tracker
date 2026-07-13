@@ -25,7 +25,7 @@ import {
   farmPickSalary,
   searchFarmGuidePackage,
 } from '../../engines/snakeFarmSlots';
-import { executeSnakeGuidePackage } from '../../engines/snakeGuideTrade';
+import { executeSnakeGuidePackage, searchSnakeGuidePackage } from '../../engines/snakeGuideTrade';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../engines/snakeSession';
 import {
   proveSimultaneousSnakeSeating,
@@ -338,7 +338,11 @@ describe('S7 snake draft to season closing gauntlet', () => {
       players: registeredRows,
       tierCap: SALARY_CAP,
       luxuryCaps: LUXURY_CAP_TABLES.standard,
-      pickValueChart: derivePickValueChart(registeredRows.map((row) => row.iv)),
+      pickValueChart: derivePickValueChart(
+        registeredRows.map((row) => row.iv),
+        TEAM_IDS.length * 22,
+        TEAM_IDS.length,
+      ),
       totalSlots: TEAM_IDS.length * 22,
       poolSurplusWarning: true,
       locked: true,
@@ -392,21 +396,17 @@ describe('S7 snake draft to season closing gauntlet', () => {
 
     const buyerTeamId = pickOrder[1].teamId;
     const targetPick = pickOrder[0].pick;
-    const offeredPick = pickOrder[1].pick;
-    const offerValue = pool.pickValueChart[offeredPick - 1].value;
-    const receiveValue = pool.pickValueChart[targetPick - 1].value;
+    const guide = searchSnakeGuidePackage({
+      session: mlbSession,
+      buyerTeamId,
+      targetPick,
+      pickValueChart: pool.pickValueChart,
+      seatingProofInput,
+    });
+    expect(guide.package).not.toBeNull();
     const traded = executeSnakeGuidePackage({
       session: mlbSession,
-      proposal: {
-        buyerTeamId,
-        sellerTeamId: pickOrder[0].teamId,
-        targetPick,
-        offerPickNumbers: [offeredPick],
-        receivePickNumbers: [targetPick],
-        offerValue,
-        receiveValue,
-        sessionRevision: mlbSession.revision ?? 0,
-      },
+      proposal: guide.package!,
       pickValueChart: pool.pickValueChart,
       seatingProofInput,
     });
