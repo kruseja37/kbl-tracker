@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Check, ChevronRight, Eye, RefreshCw, Target } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, CircleHelp, Eye, RefreshCw, Target } from "lucide-react";
 
 import { useLeagueBuilderData, type Team } from "../../hooks/useLeagueBuilderData";
 import {
@@ -27,10 +27,11 @@ export function ScoutHire() {
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
   const requestedReservePriceK = useMemo(() => reservePriceKFromSearch(window.location.search), []);
-  const { leagues, teams, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, refresh } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -95,7 +96,17 @@ export function ScoutHire() {
   if (error) {
     return (
       <div className="min-h-screen bg-[#243024] text-[#E8E8D8] p-8 flex items-center justify-center">
-        <div className="text-xl text-[#E0857A] font-bold">Error: {error}</div>
+        <div className="max-w-lg border-4 border-[#E0857A] bg-[#2d3d2f] p-5 text-center">
+          <div className="text-xl text-[#E0857A] font-bold">SCOUT HIRE COULD NOT LOAD</div>
+          <div className="mt-2 text-sm text-[#E8E8D8]/75">{error}</div>
+          <button
+            type="button"
+            className="mt-4 inline-flex items-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-2 font-bold text-[#1A1A1A]"
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className="h-4 w-4" /> RETRY
+          </button>
+        </div>
       </div>
     );
   }
@@ -113,13 +124,15 @@ export function ScoutHire() {
       <div className="max-w-[1120px] mx-auto">
         <div className="flex items-center gap-4 mb-6">
           <button
-            aria-label="Back to MLB auction"
+            aria-label={activeLeague.draftFormat === "snake" ? "Back to MLB snake draft" : "Back to MLB auction"}
             type="button"
             onClick={() => {
-              navigate(draftRouteForLeague(activeLeague, {
-                shillCount: requestedShillCount,
-                reservePriceK: requestedReservePriceK,
-              }));
+              navigate(activeLeague.draftFormat === "snake"
+                ? `/snake-room?leagueId=${encodeURIComponent(activeLeague.id)}`
+                : draftRouteForLeague(activeLeague, {
+                    shillCount: requestedShillCount,
+                    reservePriceK: requestedReservePriceK,
+                  }));
             }}
             className="p-3 bg-[#4A6844] hover:bg-[#5A8352] border-4 border-[#E8E8D8] transition active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]"
           >
@@ -130,11 +143,22 @@ export function ScoutHire() {
             <h1 className="text-2xl font-bold" style={{ textShadow: "2px 2px 0 rgba(0,0,0,0.8)" }}>Meet Your Draft Scouts</h1>
             <div className="text-sm text-[#E8E8D8]/65">{activeLeague.name}</div>
           </div>
+          <button
+            type="button"
+            aria-label="SCOUT HIRE HELP"
+            aria-expanded={helpOpen}
+            onClick={() => setHelpOpen((current) => !current)}
+            className="ml-auto flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6844] font-bold shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]"
+          >
+            <CircleHelp className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="mb-5 bg-[#2d3d2f] border-4 border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
-          Each club's scout is assigned from its farm identity. CPU clubs are assigned quietly when you continue, so the farm draft keeps one scout per team.
-        </div>
+        {helpOpen ? (
+          <aside aria-label="Scout hire instructions" className="mb-5 bg-[#2d3d2f] border-4 border-[#4A6844] p-4 text-sm text-[#E8E8D8]/75">
+            Each club's scout is assigned from its farm identity. CPU clubs are assigned when you continue, keeping one scout per team for the farm draft.
+          </aside>
+        ) : null}
 
         {humanTeams.length === 0 ? (
           <div className="mb-5 bg-[#6B3A3A] border-4 border-[#FFD27A] p-4 text-[#FFE8B0] font-bold">
@@ -169,9 +193,25 @@ export function ScoutHire() {
                 const scout = scoutByTeamId.get(team.id);
                 if (!scout) return null;
                 return (
-                  <div key={scout.id} className="relative text-left border-4 border-[#4A6844] bg-[#34472f] p-4 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.6)]">
-                    <span className="absolute top-2 right-2 flex items-center gap-1 bg-[#C4A853] text-[#1A1A1A] text-[9px] font-bold tracking-wider px-1.5 py-0.5">
-                      <Check className="w-2.5 h-2.5" /> {team.abbreviation}
+                  <div
+                    key={scout.id}
+                    data-testid={`scout-card-${team.id}`}
+                    className="relative text-left border-4 bg-[#34472f] p-4"
+                    style={{
+                      borderColor: team.colors.primary,
+                      boxShadow: `5px 5px 0 ${team.colors.secondary}`,
+                    }}
+                  >
+                    <span
+                      className="absolute top-2 right-2 flex items-center gap-1 border-2 text-[9px] font-bold tracking-wider px-1.5 py-0.5"
+                      style={{
+                        backgroundColor: team.colors.primary,
+                        borderColor: team.colors.secondary,
+                        color: team.colors.secondary,
+                      }}
+                    >
+                      {team.logoUrl ? <img alt="" src={team.logoUrl} className="h-5 w-5 object-contain" /> : <Check className="w-2.5 h-2.5" />}
+                      {team.abbreviation}
                     </span>
                     <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-[0.12em] text-[#C4A853] mb-2">
                       <Target className="w-3 h-3" /> {scout.specialtyLabel.toUpperCase()}

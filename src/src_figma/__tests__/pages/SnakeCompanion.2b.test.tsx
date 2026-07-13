@@ -26,7 +26,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
-    patchMlbDraftSessionSeatBoard: (...args: unknown[]) => mocks.patchBoard(...args),
+    patchApprovedCompanionSeatBoard: (...args: unknown[]) => mocks.patchBoard(...args),
     patchMlbDraftSessionSnakeCompanions: vi.fn(),
   };
 });
@@ -120,8 +120,19 @@ function prepare(source = session()) {
     getRegisteredPool: vi.fn(async () => pool),
     getMlbDraftSession: vi.fn(async () => mocks.currentSession as LeagueBuilderMlbDraftSession),
   };
-  mocks.patchBoard.mockImplementation(async (input: { teamId: string; board: SnakeSeatBoardRecord }) => {
+  mocks.patchBoard.mockImplementation(async (input: {
+    deviceId: string;
+    teamId: string;
+    board: SnakeSeatBoardRecord;
+    expectedBoardRevision: number;
+  }) => {
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    const claim = current.snakeCompanions?.claims.find((candidate) => (
+      candidate.deviceId === input.deviceId && candidate.status === 'approved'
+    ));
+    if (!claim || claim.teamId !== input.teamId) throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
+    if (current.currentPickIndex >= current.pickOrder.length) throw new Error('THIS DRAFT IS COMPLETE.');
+    if (current.seatBoards?.[input.teamId]?.revision !== input.expectedBoardRevision) throw new Error('board revision changed');
     const saved = { ...current, seatBoards: { ...current.seatBoards, [input.teamId]: input.board }, revision: (current.revision ?? 0) + 1 };
     mocks.currentSession = saved;
     return saved;
@@ -162,7 +173,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
-  test('a revoked approval fails closed before the companion board patch', async () => {
+  test('a revoked approval fails closed inside the atomic companion board patch', async () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
@@ -173,7 +184,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(screen.getByText('MAIN-DEVICE APPROVAL IS REQUIRED.')).toBeInTheDocument());
-    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
@@ -186,5 +197,20 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await waitFor(() => expect(screen.getByText('THE DRAFT MOVED ON — REFRESH')).toBeInTheDocument());
     expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  test('cover and return synchronize immediately across two open companion instances', async () => {
+    render(<><SnakeCompanion /><SnakeCompanion /></>);
+    await waitFor(() => expect(screen.getAllByTestId('snake-companion-frame')).toHaveLength(2));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'COVER THIS DEVICE' })[0]);
+    await waitFor(() => expect(screen.getAllByTestId('snake-companion-covered')).toHaveLength(2));
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBe('true');
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'RETURN TO DESK' })[0]);
+    await waitFor(() => expect(screen.getAllByTestId('snake-companion-frame')).toHaveLength(2));
+    expect(screen.queryByTestId('snake-companion-covered')).not.toBeInTheDocument();
+    expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBeNull();
   });
 });

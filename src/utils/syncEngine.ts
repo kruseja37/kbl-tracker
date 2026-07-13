@@ -167,6 +167,70 @@ interface PullApplyResult {
   skippedConflicts: boolean;
 }
 
+interface SnakeProtectedApplyResult {
+  writeBasesChanged: boolean;
+  deferredRows: CloudStoreRow[];
+}
+
+type SnakeSyncPool = { leagueId?: string; players?: Array<{ id?: string; iv?: number }> } | null;
+type SnakeSyncSession = { leagueId?: string; draftManifest?: {
+  formatVersion?: string;
+  phase?: string;
+  leagueId?: string;
+  pool?: { playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
+} } | null;
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+    .join(',')}}`;
+}
+
+function isProtectedSnakeMlbRecord(record: CloudStoreRow): boolean {
+  if (record.store_name === 'registeredPools') return true;
+  if (record.store_name !== 'mlbDraftSessions') return false;
+  const recordKey = JSON.parse(record.record_key);
+  return typeof recordKey === 'string' && recordKey.endsWith('::startup-mlb-draft::1');
+}
+
+/** Exported for adversarial tests; the pull path calls this before any IDB write. */
+export function assertSnakeManifestPoolInboundInvariant(input: {
+  currentPool: SnakeSyncPool;
+  currentSession: SnakeSyncSession;
+  proposedPool: SnakeSyncPool;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+}): void {
+  const currentManifest = input.currentSession?.draftManifest;
+  const proposedManifest = input.proposedSession?.draftManifest;
+  if (currentManifest && canonicalJson(input.proposedPool) !== canonicalJson(input.currentPool)) {
+    throw new Error('Inbound sync cannot mutate the RegisteredPool frozen by a completed snake manifest.');
+  }
+  if (currentManifest && !input.sessionDeleted) {
+    if (!proposedManifest || canonicalJson(proposedManifest) !== canonicalJson(currentManifest)) {
+      throw new Error('Inbound sync cannot remove or replace a completed snake manifest.');
+    }
+  }
+  if (!proposedManifest) return;
+  if (
+    proposedManifest.formatVersion !== 'snake-draft-manifest-v1'
+    || proposedManifest.phase !== 'MLB'
+    || !proposedManifest.leagueId
+  ) throw new Error('Inbound sync carried an invalid MLB snake manifest.');
+  const ids = [...(proposedManifest.pool?.playerIds ?? [])].sort();
+  const rows = [...(input.proposedPool?.players ?? [])].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  if (!input.proposedPool || input.proposedPool.leagueId !== proposedManifest.leagueId
+    || ids.length === 0 || rows.length !== ids.length
+    || rows.some((row, index) => row.id !== ids[index]
+      || !Number.isFinite(row.iv)
+      || proposedManifest.pool?.mlbIvByPlayerId?.[String(row.id)] !== row.iv)) {
+    throw new Error('Inbound sync snake manifest and RegisteredPool do not match exactly.');
+  }
+}
+
 interface QueueSnapshot {
   pushQueue: Map<string, PendingOp>;
   localQueue: Map<string, PendingLocalOp>;
@@ -257,6 +321,7 @@ const QUEUE_PERSIST_KEY = 'kbl-sync-queue';
 const LOCAL_QUEUE_PERSIST_KEY = 'kbl-sync-local-queue';
 const STORE_WRITE_BASES_PERSIST_KEY = 'kbl-sync-store-write-bases';
 const LOCAL_WRITE_BASES_PERSIST_KEY = 'kbl-sync-local-write-bases';
+const DEFERRED_SNAKE_PROTECTED_ROWS_KEY = 'kbl-sync-deferred-snake-protected-rows';
 const LAST_WRITE_TIME_KEY = 'kbl-sync-last-write-time';
 const DRAIN_INTERVAL_MS = 5_000;
 const PULL_INTERVAL_MS = 60_000;
@@ -1419,6 +1484,44 @@ class SyncEngine {
       }
 
       try {
+        if (dbName === 'kbl-league-builder') {
+          const pageProtectedRecords = records.filter(isProtectedSnakeMlbRecord);
+          const protectedRecordsByIdentity = new Map<string, CloudStoreRow>();
+          for (const record of [
+            ...this.loadDeferredSnakeProtectedRows(),
+            ...pageProtectedRecords,
+          ]) {
+            protectedRecordsByIdentity.set(
+              this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+              record,
+            );
+          }
+          const protectedRecords = [...protectedRecordsByIdentity.values()].filter((record) => {
+            if (!this.hasQueuedStoreWrite(record, mutationBaseline)) return true;
+            markSkippedConflict(record);
+            return false;
+          });
+          if (protectedRecords.length > 0) {
+            const result = await this.applySnakeManifestPoolInboundAtomically(
+              db,
+              protectedRecords,
+              mutationBaseline,
+              markSkippedConflict,
+            );
+            this.persistDeferredSnakeProtectedRows(result.deferredRows);
+            writeBasesChanged = result.writeBasesChanged || writeBasesChanged;
+          } else {
+            this.persistDeferredSnakeProtectedRows([]);
+          }
+          if (pageProtectedRecords.length > 0) {
+            byStore.delete('registeredPools');
+            const ordinaryDraftSessions = byStore.get('mlbDraftSessions')?.filter((record) => (
+              !isProtectedSnakeMlbRecord(record)
+            )) ?? [];
+            if (ordinaryDraftSessions.length > 0) byStore.set('mlbDraftSessions', ordinaryDraftSessions);
+            else byStore.delete('mlbDraftSessions');
+          }
+        }
         for (const [storeName, storeRecords] of byStore) {
           if (!db.objectStoreNames.contains(storeName)) {
             throw new Error(`Store ${storeName} not found in ${dbName} while applying cloud pull`);
@@ -1493,6 +1596,166 @@ class SyncEngine {
         : null,
       skippedConflicts,
     };
+  }
+
+  private async applySnakeManifestPoolInboundAtomically(
+    db: IDBDatabase,
+    relevant: CloudStoreRow[],
+    mutationBaseline: number,
+    markSkippedConflict: (record: CloudStoreRow) => void,
+  ): Promise<SnakeProtectedApplyResult> {
+    const affectedLeagueIds = new Set<string>();
+    const sessionIds = new Map<string, string>();
+    for (const record of relevant) {
+      const data = record.data as { leagueId?: string } | null;
+      const recordKey = JSON.parse(record.record_key);
+      if (data?.leagueId) {
+        affectedLeagueIds.add(data.leagueId);
+        if (record.store_name === 'mlbDraftSessions') {
+          sessionIds.set(data.leagueId, recordKey);
+        }
+      }
+      else if (record.store_name === 'registeredPools') {
+        if (typeof recordKey === 'string') affectedLeagueIds.add(recordKey);
+      }
+      else if (record.store_name === 'mlbDraftSessions' && typeof recordKey === 'string') {
+        const delimiter = recordKey.indexOf('::startup-mlb-draft::');
+        if (delimiter > 0) {
+          const leagueId = recordKey.slice(0, delimiter);
+          affectedLeagueIds.add(leagueId);
+          sessionIds.set(leagueId, recordKey);
+        }
+      }
+    }
+    if (affectedLeagueIds.size === 0) {
+      return { writeBasesChanged: false, deferredRows: [] };
+    }
+    return new Promise<SnakeProtectedApplyResult>((resolve, reject) => {
+      const tx = db.transaction(['registeredPools', 'mlbDraftSessions'], 'readwrite');
+      const poolStore = tx.objectStore('registeredPools');
+      const sessionStore = tx.objectStore('mlbDraftSessions');
+      const currentPools = new Map<string, SnakeSyncPool>();
+      const currentSessions = new Map<string, SnakeSyncSession>();
+      const requests: IDBRequest[] = [];
+      for (const leagueId of affectedLeagueIds) {
+        const poolRead = poolStore.get(leagueId);
+        poolRead.onsuccess = () => currentPools.set(leagueId, poolRead.result ?? null);
+        const sessionRead = sessionStore.get(sessionIds.get(leagueId) ?? `${leagueId}::startup-mlb-draft::1`);
+        sessionRead.onsuccess = () => currentSessions.set(leagueId, sessionRead.result ?? null);
+        requests.push(poolRead, sessionRead);
+      }
+      let completed = 0;
+      const appliedBases = new Map<string, { receivedAt: string; id: string }>();
+      const deferredLeagueIds = new Set<string>();
+      const apply = () => {
+        completed += 1;
+        if (completed !== requests.length) return;
+        try {
+          for (const leagueId of affectedLeagueIds) {
+            const sessionId = sessionIds.get(leagueId) ?? `${leagueId}::startup-mlb-draft::1`;
+            const poolRecord = [...relevant].reverse().find((record) => (
+              record.store_name === 'registeredPools'
+              && ((record.data as { leagueId?: string } | null)?.leagueId === leagueId
+                || JSON.parse(record.record_key) === leagueId)
+            ));
+            const sessionRecord = [...relevant].reverse().find((record) => (
+              record.store_name === 'mlbDraftSessions'
+              && ((record.data as { leagueId?: string } | null)?.leagueId === leagueId
+                || JSON.parse(record.record_key) === sessionId)
+            ));
+            const currentPool = currentPools.get(leagueId) ?? null;
+            const currentSession = currentSessions.get(leagueId) ?? null;
+            const proposedPool = poolRecord
+              ? (poolRecord.deleted ? null : poolRecord.data as SnakeSyncPool)
+              : currentPool;
+            const proposedSession = sessionRecord
+              ? (sessionRecord.deleted ? null : sessionRecord.data as SnakeSyncSession)
+              : currentSession;
+            if (
+              proposedSession?.draftManifest
+              && !currentPool
+              && !poolRecord
+            ) {
+              deferredLeagueIds.add(leagueId);
+              continue;
+            }
+            assertSnakeManifestPoolInboundInvariant({
+              currentPool,
+              currentSession,
+              proposedPool,
+              proposedSession,
+              sessionDeleted: Boolean(sessionRecord?.deleted),
+            });
+          }
+          for (const record of relevant) {
+            const dataLeagueId = (record.data as { leagueId?: string } | null)?.leagueId;
+            const recordKey = JSON.parse(record.record_key);
+            const keyLeagueId = record.store_name === 'registeredPools'
+              ? recordKey
+              : typeof recordKey === 'string'
+                ? recordKey.split('::startup-mlb-draft::')[0]
+                : null;
+            if (deferredLeagueIds.has(dataLeagueId ?? keyLeagueId)) continue;
+            if (this.hasQueuedStoreWrite(record, mutationBaseline)) {
+              markSkippedConflict(record);
+              continue;
+            }
+            const store = record.store_name === 'registeredPools' ? poolStore : sessionStore;
+            if (record.deleted) store.delete(JSON.parse(record.record_key));
+            else store.put(record.data);
+            if (record.received_at) {
+              appliedBases.set(
+                this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+                { receivedAt: record.received_at, id: record.id },
+              );
+            }
+          }
+        } catch (error) {
+          reject(error);
+          tx.abort();
+        }
+      };
+      for (const request of requests) {
+        request.onerror = () => reject(request.error);
+        request.addEventListener('success', apply);
+      }
+      tx.oncomplete = () => {
+        if (appliedBases.size > 0) this.rememberStoreWriteBaseOverrides(appliedBases);
+        resolve({
+          writeBasesChanged: appliedBases.size > 0,
+          deferredRows: relevant.filter((record) => {
+            const dataLeagueId = (record.data as { leagueId?: string } | null)?.leagueId;
+            const recordKey = JSON.parse(record.record_key);
+            const keyLeagueId = record.store_name === 'registeredPools'
+              ? recordKey
+              : typeof recordKey === 'string'
+                ? recordKey.split('::startup-mlb-draft::')[0]
+                : null;
+            return deferredLeagueIds.has(dataLeagueId ?? keyLeagueId);
+          }),
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('Inbound snake manifest/pool sync transaction aborted.'));
+    });
+  }
+
+  private loadDeferredSnakeProtectedRows(): CloudStoreRow[] {
+    const raw = localStorage.getItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY);
+    if (!raw) return [];
+    const rows = JSON.parse(raw) as CloudStoreRow[];
+    if (!Array.isArray(rows)) {
+      throw new Error('Deferred snake sync rows are corrupt.');
+    }
+    return rows;
+  }
+
+  private persistDeferredSnakeProtectedRows(rows: CloudStoreRow[]): void {
+    if (rows.length === 0) {
+      localStorage.removeItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY);
+      return;
+    }
+    localStorage.setItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY, JSON.stringify(rows));
   }
 
   private async pullLocalStorage(userId: string, mutationBaseline: number): Promise<boolean> {

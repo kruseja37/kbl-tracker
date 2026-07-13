@@ -31,7 +31,7 @@ describe('S5 companion surfaces', () => {
     const onChange = vi.fn();
     patchCompanions.mockImplementation(async (input) => ({
       ...session,
-      snakeCompanions: input.patch(session.snakeCompanions),
+      snakeCompanions: input.patch(session.snakeCompanions, session),
     }));
     render(<CompanionApprovalCard
       session={session}
@@ -39,9 +39,10 @@ describe('S5 companion surfaces', () => {
       onChange={onChange}
     />);
     expect(screen.getByText('ROOM CODE 4821')).toBeInTheDocument();
-    expect(screen.getByText(`ON YOUR PHONE, GO TO: ${window.location.origin}/snake-companion — SAME WI-FI`)).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(`${window.location.origin}/snake-companion`))).not.toBeInTheDocument();
     expect(screen.queryByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
+    expect(screen.getByText(new RegExp(`${window.location.origin}/snake-companion`))).toBeInTheDocument();
     expect(screen.getByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).toBeInTheDocument();
     expect(screen.getByText('LET ALEX SEE THE KODIAKS DESK?')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
@@ -53,6 +54,41 @@ describe('S5 companion surfaces', () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
   });
 
+  it('cannot approve a stale pending row after that seat was replaced', async () => {
+    const stale = {
+      ...session,
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [{ claimId: 'old-claim', claimVersion: 1, deviceId: 'ipad-old', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const }],
+      },
+    };
+    const fresh = {
+      ...stale,
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [
+          { ...stale.snakeCompanions.claims[0], status: 'revoked' as const, claimVersion: 2 },
+          { claimId: 'new-claim', claimVersion: 1, deviceId: 'ipad-new', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const },
+        ],
+      },
+    };
+    const onChange = vi.fn();
+    patchCompanions.mockImplementation(async (input) => ({
+      ...fresh,
+      snakeCompanions: input.patch(fresh.snakeCompanions, fresh),
+    }));
+    render(<CompanionApprovalCard
+      session={stale}
+      teams={[{ id: 'team-a', name: 'Kodiaks' }]}
+      onChange={onChange}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('THAT COMPANION REQUEST IS STALE. REFRESH.');
+    expect(onChange).not.toHaveBeenCalled();
+    expect(fresh.snakeCompanions.claims.find((claim) => claim.claimId === 'old-claim')?.status).toBe('revoked');
+  });
+
   it('renders only the supplied claimed-seat desk and public read surfaces, with no execute controls', () => {
     const { container } = render(<SnakeCompanionFrame
       team={{ id: 'team-a', name: 'Kodiaks', abbreviation: 'KOD' }}
@@ -60,7 +96,7 @@ describe('S5 companion surfaces', () => {
       order={[{ pick: 7, teamName: 'Kodiaks' }, { pick: 8, teamName: 'Comets' }]}
       ticker={['COMETS SELECTED PLAYER B']}
       privateDesk={<div>TEAM A PRIVATE BOARD</div>}
-      onSignOut={() => undefined}
+      onCover={() => undefined}
     />);
     expect(screen.getByText('YOUR PRIVATE DRAFT DESK')).toBeInTheDocument();
     expect(screen.getByText('TEAM A PRIVATE BOARD')).toBeInTheDocument();
@@ -82,5 +118,20 @@ describe('S5 companion surfaces', () => {
     expect(screen.getByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'SIGN OUT' }));
     expect(signOut).toHaveBeenCalledOnce();
+  });
+
+  it('keeps claim instructions behind Help while leaving only the claim fields visible', () => {
+    render(<CompanionClaimScreen
+      accountEmail="owner@example.com"
+      onSignOut={vi.fn()}
+      onClaim={vi.fn()}
+    />);
+
+    expect(screen.getByLabelText('GM NAME')).toBeInTheDocument();
+    expect(screen.getByLabelText('ROOM CODE')).toBeInTheDocument();
+    expect(screen.queryByText(/ENTER THE GM NAME FROM THE MAIN SCREEN/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
+    expect(screen.getByText(/ENTER THE GM NAME FROM THE MAIN SCREEN/i)).toBeInTheDocument();
+    expect(screen.getByText(/USE THE SAME SIGNED-IN ACCOUNT/i)).toBeInTheDocument();
   });
 });

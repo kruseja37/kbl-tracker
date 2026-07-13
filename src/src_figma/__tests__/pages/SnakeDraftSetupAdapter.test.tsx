@@ -10,6 +10,7 @@ import {
   buildSnakeSetupProofInput,
   deriveSnakeVersionGroups,
   selectedSnakePoolIds,
+  validateSnakeCompanionSeats,
 } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
 import type { Player } from '../../hooks/useLeagueBuilderData';
 import { makeLegalRosterPlayerSet, makeLegalRosterPlayers, makePlayer, makeTeam } from './LeagueBuilderDraftSetup.testUtils';
@@ -125,5 +126,24 @@ describe('SnakeDraftSetupAdapter', () => {
     const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: pool(players) });
     expect(boards['team-a'].rankings.global?.[0]).toBe(handRanked.id);
     expect(boards['team-a'].rankings.frozenPlayerIds).toContain(handRanked.id);
+  });
+
+  test('blocks unclaimable companion setup before the room can be created', () => {
+    const teams = [makeTeam('team-a'), makeTeam('team-b'), makeTeam('team-c'), makeTeam('team-d')];
+    expect(validateSnakeCompanionSeats({
+      teams,
+      gmNames: { 'team-a': '', 'team-b': 'Alex', 'team-c': ' alex ', 'team-d': 'Dana' },
+      seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'companion' },
+    })).toEqual([
+      'Choose no more than 3 companion seats.',
+      `Add a GM name for ${teams[0].name}.`,
+      'Give every companion seat a unique GM name.',
+    ]);
+
+    expect(validateSnakeCompanionSeats({
+      teams,
+      gmNames: { 'team-a': 'Alex', 'team-b': 'Blair', 'team-c': 'Casey' },
+      seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'hotseat' },
+    })).toEqual([]);
   });
 });

@@ -289,6 +289,24 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('UNDO THE MOST RECENT ACTION?')).toBeInTheDocument();
   });
 
+  it('does not announce a correction when the durable write is rejected', async () => {
+    const onCorrectLatest = vi.fn().mockRejectedValue(new Error('stale correction'));
+    render(<SnakeDraftRoomView {...props({ correctionAvailable: true, onCorrectLatest })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' })); });
+    expect(onCorrectLatest).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('UNDO THE MOST RECENT ACTION?')).toBeInTheDocument();
+  });
+
+  it('keeps the prior pause state when the durable write is rejected', async () => {
+    const onPauseChange = vi.fn().mockRejectedValue(new Error('stale pause'));
+    render(<SnakeDraftRoomView {...props({ onPauseChange })} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'PAUSE' })); });
+    expect(onPauseChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByText('THE DRAFT IS PAUSED')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'PAUSE' })).toBeInTheDocument();
+  });
+
   it('records only after the full gavel hold and fires the thock', async () => {
     vi.useFakeTimers();
     const oscillator = { type: 'square', frequency: { setValueAtTime: vi.fn() }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() };

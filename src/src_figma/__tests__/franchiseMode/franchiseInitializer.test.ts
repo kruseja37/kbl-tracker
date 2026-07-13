@@ -363,6 +363,25 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     );
   });
 
+  test('keeps generic non-draft setup available when no draft rows exist', async () => {
+    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getMlbDraftSession.mockResolvedValue(null);
+
+    await expect(initializeFranchise(franchiseConfig)).resolves.toBe('franchise-1');
+  });
+
+  test('rejects a completed MLB auction when its farm auction row is missing', async () => {
+    mocks.getAuctionSession.mockResolvedValue({
+      session: auctionSession({}, []),
+    });
+    mocks.getAuctionSessionById.mockResolvedValue(null);
+
+    await expect(initializeFranchise(franchiseConfig)).rejects.toThrow(
+      /finish both the MLB and farm drafts/i,
+    );
+    expect(mocks.createFranchise).not.toHaveBeenCalled();
+  });
+
   test('passes the living-season creation choice only to franchise metadata creation', async () => {
     await initializeFranchise(franchiseConfig, { livingSeason: true });
 
@@ -581,7 +600,7 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
     });
     mocks.getAllFranchisePlayers.mockResolvedValueOnce([snakePlayer]);
     mocks.getFranchisePlayer.mockResolvedValue({ ...snakePlayer });
-    mocks.getMlbDraftSession.mockResolvedValue({
+    const mlbSnakeSession = {
       id: 'league-1::startup-mlb-draft::1',
       leagueId: 'league-1',
       seasonNumber: 1,
@@ -596,6 +615,12 @@ describe('franchiseInitializer Wave 1 persistence handoff', () => {
       currentPickIndex: 1,
       createdDate: '2026-01-01',
       lastModified: '2026-01-01',
+    };
+    mocks.getMlbDraftSession.mockImplementation(async (_leagueId: string, seasonNumber = 1) => (
+      seasonNumber === 1 ? mlbSnakeSession : null
+    ));
+    mocks.getAuctionSessionById.mockResolvedValue({
+      session: auctionSession({}, []),
     });
     mocks.getRegisteredPool.mockResolvedValue({
       leagueId: 'league-1',

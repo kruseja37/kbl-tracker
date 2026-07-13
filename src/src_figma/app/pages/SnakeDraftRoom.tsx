@@ -80,6 +80,9 @@ import { buildFarmAuctionPool, FARM_AUCTION_ROSTER_SLOTS_PER_TEAM, type FarmAuct
 import { computeFarmTierCap, computeMlbToFarmCarryover } from '../../../utils/farmAuctionWallet';
 import {
   getScoutProfilesForLeague,
+  freezeMlbDraftRoomSessionWithRegisteredPool,
+  patchMlbDraftSessionFarmSeatBoard,
+  patchMlbDraftSessionSeatBoard,
   saveMlbDraftRoomSession,
   resolveLeagueSalaryCap,
   type LeagueBuilderScoutProfile,
@@ -147,6 +150,7 @@ function FarmSnakeRoom() {
   const [deskTeamId, setDeskTeamId] = useState<string | null>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [writeNotice, setWriteNotice] = useState<string | null>(null);
   const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [farmAdvisorLogBySeat, setFarmAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [recapOpen, setRecapOpen] = useState(false);
@@ -154,10 +158,10 @@ function FarmSnakeRoom() {
   const [committingRecap, setCommittingRecap] = useState(false);
   const recapCommitInFlight = useRef(false);
   const persist = useCallback(async (next: NonNullable<typeof session>) => {
-    const saved = await saveMlbDraftRoomSession(next);
+    const saved = await saveMlbDraftRoomSession(next, session?.revision ?? 0);
     setSession(saved);
     return saved;
-  }, []);
+  }, [session?.revision]);
 
   const loadFarm = useCallback(async () => {
     if (!league || leagueTeams.length === 0) return;
@@ -296,7 +300,7 @@ function FarmSnakeRoom() {
       ...base,
       revision: (session.revision ?? 0) + 1,
     };
-    void persist(next).catch((cause) => setActionError(cause instanceof Error ? cause.message : String(cause)));
+    void persist(next).catch((cause) => setWriteNotice(cause instanceof Error ? cause.message : String(cause)));
   }, [allCardsByTeamId, farmPool, leagueTeams, persist, remainingTurnsByTeamId, session, unavailable]);
   const pressure = selected ? buildFarmScoutPressure({ card: selected, publicRosters: rostersByTeamId, farmTarget: FARM_AUCTION_ROSTER_SLOTS_PER_TEAM }) : null;
   useEffect(() => {
@@ -420,12 +424,15 @@ function FarmSnakeRoom() {
       remainingTurns: deskRemainingTurns,
       unavailableProspectIds: unavailable,
     });
-    await persist({
-      ...session,
-      farmSeatBoards: { ...session.farmSeatBoards, [deskTeam.id]: nextBoard },
-      revision: (session.revision ?? 0) + 1,
+    const saved = await patchMlbDraftSessionFarmSeatBoard({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      teamId: deskTeam.id,
+      board: nextBoard,
+      expectedBoardRevision: board.revision,
     });
-  }, [allCardsByTeamId, deskRemainingTurns, deskTeam, persist, session, unavailable]);
+    setSession(saved);
+  }, [allCardsByTeamId, deskRemainingTurns, deskTeam, session, unavailable]);
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><p>THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
@@ -477,15 +484,36 @@ function FarmSnakeRoom() {
       remainingTurns={deskRemainingTurns}
       moneyLedger={farmMoneyLedger}
       onChoose={(playerId) => deskTeam && setSelectedIdByTeam((current) => ({ ...current, [deskTeam.id]: playerId }))}
-      onReorder={(view, ids) => { void reorderDeskBoard(view, ids); }}
+      onReorder={(view, ids) => {
+        void reorderDeskBoard(view, ids).catch((cause) => {
+          setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+        });
+      }}
     />}
     tradeGuide={(showHelp) => <SnakeTradeGuide showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} pickValueChart={pickValueChart} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} />}
     commissionerTrade={(showHelp) => <SnakeCommissionerTrade showHelp={showHelp} teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))} ownedPicksByTeamId={ownedPicksByTeamId} sessionRevision={session.revision ?? 0} onAsk={askTradeGuide} onExecute={executeTrade} />}
     roomHelpNotes={['SLOT SALARIES STAY WITH THE PICKS.']}
-    onPauseChange={(paused) => { void persist({ ...session, paused, revision: (session.revision ?? 0) + 1 }); }}
+    writeNotice={writeNotice}
+    onReloadRoom={async () => { setWriteNotice(null); await loadFarm(); }}
+    onDismissWriteNotice={() => setWriteNotice(null)}
+    onPauseChange={async (paused) => {
+      try {
+        await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
+      } catch (cause) {
+        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+        throw cause;
+      }
+    }}
     onActiveSeatChange={setDeskTeamId}
     onRecordPick={recordPick}
-    onCorrectLatest={() => { void persist(restoreLatestSnakeCorrection(session)); }}
+    onCorrectLatest={async () => {
+      try {
+        await persist(restoreLatestSnakeCorrection(session));
+      } catch (cause) {
+        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+        throw cause;
+      }
+    }}
     onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
     onDraftComplete={finishFarm}
   />;
@@ -517,6 +545,7 @@ function MlbSnakeDraftRoom() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof getMlbDraftSession>>>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [writeNotice, setWriteNotice] = useState<string | null>(null);
   const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [advisorLogBySeat, setAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [backfillEventsBySeat, setBackfillEventsBySeat] = useState<Record<string, BoardBackfillEvent[]>>({});
@@ -788,10 +817,10 @@ function MlbSnakeDraftRoom() {
     : null;
 
   const persist = useCallback(async (next: NonNullable<typeof session>) => {
-    const saved = await saveMlbDraftRoomSession(next);
+    const saved = await saveMlbDraftRoomSession(next, session?.revision ?? 0);
     setSession(saved);
     return saved;
-  }, []);
+  }, [session?.revision]);
 
   const rememberBackfillEvents = useCallback((eventsByTeamId: Record<string, BoardBackfillEvent[]>) => {
     if (Object.keys(eventsByTeamId).length === 0) return;
@@ -826,7 +855,7 @@ function MlbSnakeDraftRoom() {
     rememberBackfillEvents(reconciled.eventsByTeamId);
     if (!reconciled.changed) return;
     void persist(reconciled.session).catch((cause) => {
-      setActionError(cause instanceof Error ? cause.message : String(cause));
+      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
     });
   }, [boardEligibilityCandidates.length, persist, reconcileAllExistingBoards, rememberBackfillEvents, session]);
 
@@ -1047,7 +1076,7 @@ function MlbSnakeDraftRoom() {
     const needsSeed = !currentBoard;
     if (!needsSeed) return;
     void persist(updateSessionSeatBoard(session, deskTeam.id, deskState.board)).catch((cause) => {
-      setActionError(cause instanceof Error ? cause.message : String(cause));
+      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
     });
   }, [currentBoard, deskTeam, deskState, persist, session]);
 
@@ -1102,8 +1131,15 @@ function MlbSnakeDraftRoom() {
       rankings,
       revision: deskState.board.revision + 1,
     };
-    await persist(updateSessionSeatBoard(session, deskTeam.id, board));
-  }, [deskTeam, deskState, persist, session, unavailable]);
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      teamId: deskTeam.id,
+      board,
+      expectedBoardRevision: deskState.board.revision,
+    });
+    setSession(saved);
+  }, [deskTeam, deskState, session, unavailable]);
 
   const startWhatIf = useCallback((slotId: SnakeBoardSlotId, playerId: string) => {
     if (!deskState?.board || !pool || !deskTeam || !session) return;
@@ -1142,10 +1178,17 @@ function MlbSnakeDraftRoom() {
   }, [deskRoomPlayers, deskState, deskTeam, leagueTeams.length, pool, session]);
 
   const keepWhatIf = useCallback(async () => {
-    if (!whatIf || !session || !deskTeam) return;
-    await persist(updateSessionSeatBoard(session, deskTeam.id, whatIf.board));
+    if (!whatIf || !session || !deskTeam || !deskState?.board) return;
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      teamId: deskTeam.id,
+      board: whatIf.board,
+      expectedBoardRevision: deskState.board.revision,
+    });
+    setSession(saved);
     setWhatIf(null);
-  }, [deskTeam, persist, session, whatIf]);
+  }, [deskState?.board, deskTeam, session, whatIf]);
 
   const recordPick = useCallback(async (playerId: string) => {
     if (!session) throw new Error('The MLB snake draft session is no longer available.');
@@ -1194,7 +1237,12 @@ function MlbSnakeDraftRoom() {
         salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
         frozenAt: new Date().toISOString(),
       });
-      const persisted = frozen === session ? session : await persist(frozen);
+      const persisted = frozen === session ? session : await freezeMlbDraftRoomSessionWithRegisteredPool({
+        session: frozen,
+        registeredPool: pool,
+        expectedRevision: session.revision ?? 0,
+      });
+      setSession(persisted);
       await commitCompletedSnakeSessionToLeagueRosters({ leagueId: league.id, session: persisted, pool });
       navigate(scoutHireRouteForLeague(league));
     } catch (cause) {
@@ -1207,7 +1255,12 @@ function MlbSnakeDraftRoom() {
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
-    await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
+    try {
+      await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
+    } catch (cause) {
+      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    }
   }, [persist, session]);
   const correctLatest = useCallback(async () => {
     if (!session?.correctionSnapshots?.[0]) return;
@@ -1215,7 +1268,12 @@ function MlbSnakeDraftRoom() {
     const restored = restoreLatestSnakeCorrection(session);
     const liveOwnerBefore = session.pickOrder[session.currentPickIndex]?.teamId ?? null;
     const liveOwnerAfter = restored.pickOrder[restored.currentPickIndex]?.teamId ?? null;
-    await persist(restored);
+    try {
+      await persist(restored);
+    } catch (cause) {
+      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    }
     if (correctedTradeId) {
       setTradeReceiptsBySeat((current) => Object.fromEntries(Object.entries(current).map(([teamId, entries]) => [
         teamId,
@@ -1242,7 +1300,7 @@ function MlbSnakeDraftRoom() {
       await persist(result.session);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
-      setActionError(message);
+      setWriteNotice(message);
       return { valid: false, message: 'THE TRADE WAS NOT SAVED. TRY AGAIN.', session: null, livePickMoved: false, receipts: [] };
     }
     const tradeId = result.session.trades?.at(-1)?.id ?? `revision-${result.session.revision ?? 0}`;
@@ -1353,10 +1411,22 @@ function MlbSnakeDraftRoom() {
           onSelectCandidate={selectCandidate}
           isCandidateSelectable={deskState.canSelectCandidate}
           resolveLegalFinishLine={deskState.legalFinishLineForCandidate}
-          onReorder={(position, orderedIds) => { void reorderRanking(position, orderedIds); }}
-          onReorderOverall={(orderedIds) => { void reorderRanking('OVERALL', orderedIds); }}
+          onReorder={(position, orderedIds) => {
+            void reorderRanking(position, orderedIds).catch((cause) => {
+              setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+            });
+          }}
+          onReorderOverall={(orderedIds) => {
+            void reorderRanking('OVERALL', orderedIds).catch((cause) => {
+              setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+            });
+          }}
           onStartWhatIf={startWhatIf}
-          onKeepWhatIf={() => { void keepWhatIf(); }}
+          onKeepWhatIf={() => {
+            void keepWhatIf().catch((cause) => {
+              setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+            });
+          }}
           onRevertWhatIf={() => setWhatIf(null)}
           tradeGuide={<SnakeTradeGuide
             showHelp={showHelp}
@@ -1384,12 +1454,15 @@ function MlbSnakeDraftRoom() {
         onExecute={executeTrade}
       />}
       roomHelpNotes={candidate ? ['THIS PLAYER IS SELECTED FROM YOUR PRIVATE DRAFT DESK.'] : []}
+      writeNotice={writeNotice}
+      onReloadRoom={async () => { setWriteNotice(null); await loadSession(); }}
+      onDismissWriteNotice={() => setWriteNotice(null)}
       companionApproval={<CompanionApprovalCard
         session={session}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
         onChange={acceptCompanionSession}
       />}
-      onPauseChange={(paused) => void setPaused(paused)}
+      onPauseChange={setPaused}
       onRecordPick={recordPick}
       onCorrectLatest={correctLatest}
       onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}

@@ -50,6 +50,7 @@ import {
   clearAllLeagueBuilderData,
   createEmptyTeamRoster,
   createMlbDraftSessionId,
+  freezeMlbDraftRoomSessionWithRegisteredPool,
   getLeagueTemplate,
   getMlbDraftSession,
   getPlayer,
@@ -443,14 +444,22 @@ describe('S7 snake draft to season closing gauntlet', () => {
     expect(mlbSession.versionState?.draftedPlayerIdByGroupId['source:ruthba01']).toBe(LEGEND_SELECTED_ID);
     expect(mlbSession.versionState?.retiredPlayerIdsByGroupId['source:ruthba01']).toEqual([LEGEND_SIBLING_ID]);
 
-    mlbSession = await saveMlbDraftSession(freezeSnakeDraftSession({
+    const selectedPoolIds = new Set(mlbSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id));
+    const exactPool = { ...pool, players: pool.players.filter((player) => selectedPoolIds.has(player.id)) };
+    await saveRegisteredPool(exactPool);
+    const frozenMlbSession = freezeSnakeDraftSession({
       session: mlbSession,
       expectedPhase: 'MLB',
-      poolPlayerIds: mlbSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
-      salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
+      poolPlayerIds: exactPool.players.map((player) => player.id),
+      salaryByPlayerId: new Map(exactPool.players.map((player) => [player.id, player.iv])),
       frozenAt: '2026-07-12T12:00:00.000Z',
-    }));
-    await commitCompletedSnakeSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: mlbSession, pool });
+    });
+    mlbSession = await freezeMlbDraftRoomSessionWithRegisteredPool({
+      session: frozenMlbSession,
+      registeredPool: exactPool,
+      expectedRevision: mlbSession.revision ?? 0,
+    });
+    await commitCompletedSnakeSessionToLeagueRosters({ leagueId: LEAGUE_ID, session: mlbSession, pool: exactPool });
     for (const teamId of TEAM_IDS) {
       const roster = await getTeamRoster(teamId);
       const storedPlayers = await Promise.all((roster?.mlbRoster ?? []).map((playerId) => getPlayer(playerId)));

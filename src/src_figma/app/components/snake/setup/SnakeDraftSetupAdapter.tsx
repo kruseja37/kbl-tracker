@@ -35,6 +35,8 @@ import { buildSeededSeatBoard, type DeskCandidate } from '../desk/deskModel';
 
 type ProofRunner = (input: SimultaneousSnakeSeatingInput) => SnakeSeatingProof | Promise<SnakeSeatingProof>;
 
+export const MAX_SNAKE_COMPANION_SEATS = 3;
+
 export interface SnakeVersionGroup {
   groupId: string;
   cards: Player[];
@@ -225,6 +227,31 @@ function samePlayerIds(left: readonly string[], right: readonly string[]): boole
     && sortedLeft.every((id, index) => id === sortedRight[index]);
 }
 
+export function validateSnakeCompanionSeats(input: {
+  teams: readonly Pick<Team, 'id' | 'name'>[];
+  gmNames: Readonly<Record<string, string>>;
+  seatModes: Readonly<Record<string, 'hotseat' | 'companion'>>;
+}): string[] {
+  const companionTeams = input.teams.filter((team) => input.seatModes[team.id] === 'companion');
+  const reasons: string[] = [];
+  if (companionTeams.length > MAX_SNAKE_COMPANION_SEATS) {
+    reasons.push(`Choose no more than ${MAX_SNAKE_COMPANION_SEATS} companion seats.`);
+  }
+  const unnamed = companionTeams.filter((team) => !input.gmNames[team.id]?.trim());
+  if (unnamed.length > 0) {
+    reasons.push(`Add a GM name for ${unnamed.map((team) => team.name).join(', ')}.`);
+  }
+  const nameCounts = new Map<string, number>();
+  for (const team of companionTeams) {
+    const name = input.gmNames[team.id]?.trim().toLocaleLowerCase();
+    if (name) nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
+  }
+  if ([...nameCounts.values()].some((count) => count > 1)) {
+    reasons.push('Give every companion seat a unique GM name.');
+  }
+  return reasons;
+}
+
 /** ROOMFIX wholesale adapter: exact picked membership is locked before the session can exist. */
 export async function registerPickedSnakePool(leagueId: string, pickedPlayerIds: readonly string[]): Promise<void> {
   const picked = [...new Set(pickedPlayerIds)];
@@ -271,6 +298,12 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     [groups, versionSelections],
   );
 
+  const companionSeatReasons = useMemo(() => validateSnakeCompanionSeats({
+    teams,
+    gmNames,
+    seatModes,
+  }), [gmNames, seatModes, teams]);
+
   const proofInput = useMemo(() => (
     pool?.locked ? buildSnakeSetupProofInput({ teams, players, pool }) : null
   ), [players, pool, teams]);
@@ -299,15 +332,20 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     if (!input.savedDraftChecked) return ['Checking for a saved draft.'];
     if (input.savedDraftLookupError) return [input.savedDraftLookupError];
     if (input.hasSavedDraft) return [];
+    if (companionSeatReasons.length > 0) return companionSeatReasons;
     if (!pool?.locked) return [];
     if (checking) return [];
     if (!proof) return ['The snake room check did not finish.'];
     if (!proof.feasible) return [proof.message];
     if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];
     return [];
-  }, [checking, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool?.locked, proof, teams.length]);
+  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool?.locked, proof, teams.length]);
 
-  const ready = Boolean(pool?.locked && proof?.feasible && !checking && order.length === teams.length);
+  const ready = Boolean(pool?.locked
+    && proof?.feasible
+    && !checking
+    && order.length === teams.length
+    && companionSeatReasons.length === 0);
 
   const shuffleOrder = () => {
     setOrder(seededSnakeShuffle(teams.map((team) => team.id), seed));
@@ -339,7 +377,7 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
       input.navigateToRoom(league.id);
       return;
     }
-    if (!pool?.locked || !proof?.feasible || checking) return;
+    if (!pool?.locked || !proof?.feasible || checking || companionSeatReasons.length > 0) return;
     const lockedIds = pool.players.map((row) => row.id);
     await registerPickedSnakePool(league.id, lockedIds);
     const rankedTeams = await input.flushBoardRankings();
@@ -395,6 +433,7 @@ export function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput) {
     proof,
     checking,
     readinessReasons,
+    companionSeatReasons,
     ready,
     shuffleOrder,
     tapOrder,
@@ -421,6 +460,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
   const turn = adapter.order.length > 1
     ? `${teamById.get(adapter.order.at(-1)!)?.name.toUpperCase()} picks twice at one turn. ${teamById.get(adapter.order[0])?.name.toUpperCase()} picks twice at the next.`
     : '';
+  const companionSeatCount = teams.filter((team) => adapter.seatModes[team.id] === 'companion').length;
   return (
     <div className="space-y-6" data-testid="snake-setup-adapter">
       <section className="ballpark-panel" aria-label="Snake versions">
@@ -458,7 +498,10 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, showHe
               <label className="text-xs font-bold">SEAT
                 <select aria-label={`${team.name} SEAT`} disabled={disabled} value={adapter.seatModes[team.id] ?? 'hotseat'} onChange={(event) => adapter.setSeatModes((current) => ({ ...current, [team.id]: event.target.value as 'hotseat' | 'companion' }))} className="mt-1 w-full border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2 disabled:opacity-45">
                   <option value="hotseat">HOTSEAT</option>
-                  <option value="companion">COMPANION</option>
+                  <option
+                    value="companion"
+                    disabled={adapter.seatModes[team.id] !== 'companion' && companionSeatCount >= MAX_SNAKE_COMPANION_SEATS}
+                  >COMPANION</option>
                 </select>
               </label>
             </div>

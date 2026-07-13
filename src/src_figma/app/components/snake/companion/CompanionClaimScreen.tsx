@@ -25,8 +25,8 @@ export function CompanionClaimScreen(props: {
         <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICE</p>
         <h1 className="ballpark-title mt-1 text-3xl">CLAIM YOUR PRIVATE DESK</h1>
         {accountLine}
-        <p className="mt-3">ENTER THE GM NAME FROM THE MAIN SCREEN AND ITS FOUR-DIGIT ROOM CODE.</p>
         <CompanionHelp>
+          <p>ENTER THE GM NAME FROM THE MAIN SCREEN AND ITS FOUR-DIGIT ROOM CODE.</p>
           <p>USE THE SAME SIGNED-IN ACCOUNT AS THE MAIN DEVICE.</p>
         </CompanionHelp>
         <label className="mt-4 block font-bold">GM NAME<input className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={gmName} onChange={(event) => setGmName(event.target.value)} /></label>

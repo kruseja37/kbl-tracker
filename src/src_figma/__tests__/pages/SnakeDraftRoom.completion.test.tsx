@@ -39,6 +39,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
     ...actual,
     getScoutProfilesForLeague: vi.fn(async () => []),
     saveMlbDraftRoomSession: mocks.saveRoom,
+    freezeMlbDraftRoomSessionWithRegisteredPool: ({ session }: { session: unknown }) => mocks.saveRoom(session),
   };
 });
 

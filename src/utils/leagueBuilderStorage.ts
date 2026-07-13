@@ -480,6 +480,10 @@ export interface LeagueBuilderMlbDraftSession {
   snakeCompanions?: {
     roomCode: string;
     claims: Array<{
+      /** Immutable identity for one claim attempt. Optional only for pre-identity legacy rows. */
+      claimId?: string;
+      /** Monotonic row version; every status transition increments it. Legacy rows read as 0. */
+      claimVersion?: number;
       deviceId: string;
       gmName: string;
       teamId: string;
@@ -1165,16 +1169,53 @@ export async function saveRegisteredPool(pool: RegisteredPool): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORES.REGISTERED_POOLS, 'readwrite');
+    // The completed MLB snake manifest and its RegisteredPool are one launch
+    // truth. Read them in the same transaction so a late setup tab cannot
+    // mutate the pool between a manifest check and the pool write.
+    const tx = db.transaction([STORES.REGISTERED_POOLS, STORES.MLB_DRAFT_SESSIONS], 'readwrite');
     const store = tx.objectStore(STORES.REGISTERED_POOLS);
-    const request = store.put(pool);
+    const currentPoolRequest = store.get(pool.leagueId);
+    const sessionRequest = tx.objectStore(STORES.MLB_DRAFT_SESSIONS)
+      .get(createMlbDraftSessionId(pool.leagueId, 1));
+    let currentPool: RegisteredPool | null = null;
+    let currentSession: LeagueBuilderMlbDraftSession | null = null;
+    let readsComplete = 0;
+    let writeStarted = false;
 
-    request.onerror = () => reject(request.error);
+    const writeWhenReady = () => {
+      readsComplete += 1;
+      if (readsComplete !== 2 || writeStarted) return;
+      writeStarted = true;
+      try {
+        if (currentSession?.draftManifest) {
+          readSnakeDraftTruth(currentSession, 'MLB');
+          if (!currentPool || JSON.stringify(currentPool) !== JSON.stringify(pool)) {
+            throw new Error('A completed snake draft has frozen this player pool. Run It Back before changing it.');
+          }
+        }
+        store.put(pool);
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+
+    currentPoolRequest.onsuccess = () => {
+      currentPool = currentPoolRequest.result ?? null;
+      writeWhenReady();
+    };
+    currentPoolRequest.onerror = () => reject(currentPoolRequest.error);
+    sessionRequest.onsuccess = () => {
+      currentSession = sessionRequest.result ?? null;
+      writeWhenReady();
+    };
+    sessionRequest.onerror = () => reject(sessionRequest.error);
     tx.oncomplete = () => {
       if (!syncEngine.isSuppressed()) syncEngine.upsert('kbl-league-builder', 'registeredPools', pool.leagueId, pool);
       resolve();
     };
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`Registered pool ${pool.leagueId} write was aborted.`));
   });
 }
 
@@ -2029,6 +2070,9 @@ export async function saveMlbDraftSession(
           createdDate: session.createdDate ?? existing?.createdDate ?? now,
           lastModified: now,
         };
+        if (!existing?.draftManifest && candidate.draftManifest?.phase === 'MLB') {
+          throw new Error('MLB draft confirmation must freeze the session and RegisteredPool together.');
+        }
         const draftManifest = preservePersistedSnakeDraftManifest(existing, candidate);
         fullSession = { ...candidate, ...(draftManifest ? { draftManifest } : {}) };
         store.put(fullSession);
@@ -2110,6 +2154,7 @@ async function updateMlbDraftSessionAtomically(
       resolve(saved);
     };
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} update was aborted.`));
   });
 }
 
@@ -2120,10 +2165,13 @@ async function updateMlbDraftSessionAtomically(
 export async function patchMlbDraftSessionSnakeCompanions(input: {
   leagueId: string;
   seasonNumber?: number;
-  patch: (current: SnakeCompanionState | undefined) => SnakeCompanionState;
+  patch: (
+    current: SnakeCompanionState | undefined,
+    session: LeagueBuilderMlbDraftSession,
+  ) => SnakeCompanionState;
 }): Promise<LeagueBuilderMlbDraftSession> {
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
-    const requested = input.patch(current.snakeCompanions);
+    const requested = input.patch(current.snakeCompanions, current);
     const currentCode = current.snakeCompanions?.roomCode;
     const snakeCompanions = currentCode && /^\d{4}$/.test(currentCode)
       ? { ...requested, roomCode: currentCode }
@@ -2132,9 +2180,49 @@ export async function patchMlbDraftSessionSnakeCompanions(input: {
     return {
       ...current,
       snakeCompanions,
-      revision: (current.revision ?? 0) + 1,
     };
   });
+}
+
+/**
+ * Companion-only board writer. Authorization, seat binding, completion state,
+ * and the seat-local optimistic lock are all checked against the same fresh
+ * session row inside one IndexedDB transaction.
+ */
+export async function patchApprovedCompanionSeatBoard(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  deviceId: string;
+  teamId: string;
+  board: SnakeSeatBoardRecord;
+  expectedBoardRevision: number;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  return updateMlbDraftSessionAtomically(
+    input.leagueId,
+    input.seasonNumber ?? 1,
+    (current) => {
+      const complete = Boolean(current.draftManifest)
+        || (current.pickOrder.length > 0 && current.currentPickIndex >= current.pickOrder.length);
+      if (complete) throw new Error('THIS DRAFT IS COMPLETE.');
+      const claim = current.snakeCompanions?.claims.find((candidate) => (
+        candidate.deviceId === input.deviceId && candidate.status === 'approved'
+      ));
+      if (!claim || claim.teamId !== input.teamId) {
+        throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
+      }
+      const currentBoard = current.seatBoards?.[claim.teamId];
+      if (!currentBoard || currentBoard.revision !== input.expectedBoardRevision) {
+        throw new Error(`Seat board ${claim.teamId} changed before it could be saved.`);
+      }
+      if (input.board.revision !== input.expectedBoardRevision + 1) {
+        throw new Error(`Seat board ${claim.teamId} submitted an invalid next revision.`);
+      }
+      return {
+        ...current,
+        seatBoards: { ...current.seatBoards, [claim.teamId]: input.board },
+      };
+    },
+  );
 }
 
 /**
@@ -2159,15 +2247,50 @@ export async function patchMlbDraftSessionSeatBoard(input: {
         revisionConflict = true;
         return current;
       }
+      if (input.board.revision !== input.expectedBoardRevision + 1) {
+        throw new Error(`Seat board ${input.teamId} submitted an invalid next revision.`);
+      }
       return {
         ...current,
         seatBoards: { ...current.seatBoards, [input.teamId]: input.board },
-        revision: (current.revision ?? 0) + 1,
       };
     },
   );
   if (revisionConflict) {
     throw new Error(`Seat board ${input.teamId} changed before it could be saved.`);
+  }
+  return saved;
+}
+
+/** FARM companion/main-desk writer with the same seat-local optimistic lock. */
+export async function patchMlbDraftSessionFarmSeatBoard(input: {
+  leagueId: string;
+  seasonNumber: number;
+  teamId: string;
+  board: FarmSeatBoardRecord;
+  expectedBoardRevision: number;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  let revisionConflict = false;
+  const saved = await updateMlbDraftSessionAtomically(
+    input.leagueId,
+    input.seasonNumber,
+    (current) => {
+      const currentBoard = current.farmSeatBoards?.[input.teamId];
+      if (!currentBoard || currentBoard.revision !== input.expectedBoardRevision) {
+        revisionConflict = true;
+        return current;
+      }
+      if (input.board.revision !== input.expectedBoardRevision + 1) {
+        throw new Error(`Farm seat board ${input.teamId} submitted an invalid next revision.`);
+      }
+      return {
+        ...current,
+        farmSeatBoards: { ...current.farmSeatBoards, [input.teamId]: input.board },
+      };
+    },
+  );
+  if (revisionConflict) {
+    throw new Error(`Farm seat board ${input.teamId} changed before it could be saved.`);
   }
   return saved;
 }
@@ -2186,12 +2309,127 @@ function mergeFreshSeatBoards(
   return merged;
 }
 
+function mergeFreshFarmSeatBoards(
+  fresh: LeagueBuilderMlbDraftSession['farmSeatBoards'],
+  incoming: LeagueBuilderMlbDraftSession['farmSeatBoards'],
+): LeagueBuilderMlbDraftSession['farmSeatBoards'] {
+  if (!fresh) return incoming;
+  if (!incoming) return fresh;
+  const merged = { ...fresh };
+  for (const [teamId, board] of Object.entries(incoming)) {
+    const current = fresh[teamId];
+    if (!current || board.revision > current.revision) merged[teamId] = board;
+  }
+  return merged;
+}
+
+function assertRegisteredPoolMatchesMlbManifest(
+  pool: RegisteredPool,
+  session: LeagueBuilderMlbDraftSession,
+): void {
+  const truth = readSnakeDraftTruth(session, 'MLB');
+  const manifest = truth.manifest;
+  if (!manifest) throw new Error('The MLB snake draft must have a manifest before its pool can freeze.');
+  if (pool.leagueId !== manifest.leagueId) throw new Error('The frozen RegisteredPool belongs to a different league.');
+  const poolRows = [...pool.players].sort((left, right) => left.id.localeCompare(right.id));
+  const manifestIds = [...manifest.pool.playerIds].sort((left, right) => left.localeCompare(right));
+  if (poolRows.length !== manifestIds.length || poolRows.some((row, index) => row.id !== manifestIds[index])) {
+    throw new Error('The completed snake manifest does not match the exact RegisteredPool membership.');
+  }
+  for (const row of poolRows) {
+    if (manifest.pool.mlbIvByPlayerId?.[row.id] !== row.iv) {
+      throw new Error(`The completed snake manifest does not match RegisteredPool IV for ${row.id}.`);
+    }
+  }
+}
+
+/**
+ * MLB confirmation boundary: validate and persist the immutable manifest and
+ * its exact RegisteredPool in one transaction. This closes the final pool-edit
+ * vs. confirmation race; neither row can land without the other.
+ */
+export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
+  session: LeagueBuilderMlbDraftSession;
+  registeredPool: RegisteredPool;
+  expectedRevision: number;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(input.session.leagueId, input.session.seasonNumber);
+  const now = nowISO();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.REGISTERED_POOLS], 'readwrite');
+    const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const poolStore = tx.objectStore(STORES.REGISTERED_POOLS);
+    const sessionRead = sessionStore.get(id);
+    const poolRead = poolStore.get(input.session.leagueId);
+    let currentSession: LeagueBuilderMlbDraftSession | null = null;
+    let currentPool: RegisteredPool | null = null;
+    let reads = 0;
+    let saved: LeagueBuilderMlbDraftSession | null = null;
+    let wrote = false;
+    const finishRead = () => {
+      reads += 1;
+      if (reads !== 2) return;
+      try {
+        if (!currentSession || !currentPool) throw new Error('The snake draft session or RegisteredPool is missing.');
+        if (currentSession.draftManifest) {
+          assertRegisteredPoolMatchesMlbManifest(currentPool, currentSession);
+          if (!input.session.draftManifest) throw new Error('A persisted snake draft manifest cannot be removed.');
+          readSnakeDraftTruth(input.session, 'MLB');
+          saved = currentSession;
+          return;
+        }
+        if ((currentSession.revision ?? 0) !== input.expectedRevision) {
+          throw new Error('The draft moved before confirmation could be saved. Refresh and try again.');
+        }
+        if (JSON.stringify(currentPool) !== JSON.stringify(input.registeredPool)) {
+          throw new Error('The player pool changed before confirmation. Refresh and review the final pool.');
+        }
+        assertRegisteredPoolMatchesMlbManifest(input.registeredPool, input.session);
+        saved = {
+          ...input.session,
+          id: currentSession.id,
+          leagueId: currentSession.leagueId,
+          seasonNumber: currentSession.seasonNumber,
+          createdDate: currentSession.createdDate,
+          lastModified: now,
+          snakeCompanions: currentSession.snakeCompanions ?? input.session.snakeCompanions,
+          seatBoards: mergeFreshSeatBoards(currentSession.seatBoards, input.session.seatBoards),
+          farmSeatBoards: mergeFreshFarmSeatBoards(currentSession.farmSeatBoards, input.session.farmSeatBoards),
+          revision: Math.max(input.session.revision ?? 0, (currentSession.revision ?? 0) + 1),
+        };
+        sessionStore.put(saved);
+        poolStore.put(input.registeredPool);
+        wrote = true;
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+    sessionRead.onsuccess = () => { currentSession = sessionRead.result ?? null; finishRead(); };
+    poolRead.onsuccess = () => { currentPool = poolRead.result ?? null; finishRead(); };
+    sessionRead.onerror = () => reject(sessionRead.error);
+    poolRead.onerror = () => reject(poolRead.error);
+    tx.oncomplete = () => {
+      if (!saved) return reject(new Error(`MLB draft session ${id} was not frozen.`));
+      if (wrote && !syncEngine.isSuppressed()) {
+        syncEngine.upsert('kbl-league-builder', 'registeredPools', input.registeredPool.leagueId, input.registeredPool);
+        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
+      }
+      resolve(saved);
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} freeze was aborted.`));
+  });
+}
+
 /**
  * Main-room writer: saves room-owned state while carrying forward the freshest
  * companion field and the newest revision of every seat board.
  */
 export async function saveMlbDraftRoomSession(
   incoming: LeagueBuilderMlbDraftSession,
+  expectedRevision: number,
 ): Promise<LeagueBuilderMlbDraftSession> {
   return updateMlbDraftSessionAtomically(incoming.leagueId, incoming.seasonNumber, (fresh) => {
     if (fresh.draftManifest && incoming.draftManifest) {
@@ -2201,12 +2439,22 @@ export async function saveMlbDraftRoomSession(
       readSnakeDraftTruth(incoming, fresh.draftManifest.phase);
       return fresh;
     }
+    if (fresh.draftManifest && !incoming.draftManifest) {
+      preservePersistedSnakeDraftManifest(fresh, incoming);
+    }
+    if ((fresh.revision ?? 0) !== expectedRevision) {
+      throw new Error('The draft moved before this action could be saved. Refresh and try again.');
+    }
+    if (incoming.draftManifest?.phase === 'MLB') {
+      throw new Error('MLB draft confirmation must freeze the session and RegisteredPool together.');
+    }
     const draftManifest = preservePersistedSnakeDraftManifest(fresh, incoming);
     return {
       ...incoming,
       ...(draftManifest ? { draftManifest } : {}),
       snakeCompanions: fresh.snakeCompanions ?? incoming.snakeCompanions,
       seatBoards: mergeFreshSeatBoards(fresh.seatBoards, incoming.seatBoards),
+      farmSeatBoards: mergeFreshFarmSeatBoards(fresh.farmSeatBoards, incoming.farmSeatBoards),
       revision: Math.max(incoming.revision ?? 0, (fresh.revision ?? 0) + 1),
     };
   });
@@ -2226,6 +2474,135 @@ export async function deleteMlbDraftSession(leagueId: string, seasonNumber = 1):
       resolve();
     };
     request.onerror = () => reject(request.error);
+  });
+}
+
+/** One-transaction Run It Back reset across every League Builder store it mutates. */
+export async function resetCompletedDraftArcAtomically(leagueId: string): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const mlbId = createMlbDraftSessionId(leagueId, 1);
+  const farmSnakeId = createMlbDraftSessionId(leagueId, 2);
+  const startupId = createStartupDraftSessionId(leagueId, 1);
+  const auctionId = createAuctionSessionId(leagueId, 1);
+  const farmAuctionId = createFarmAuctionSessionId(leagueId, 1);
+  const storeNames = [
+    STORES.LEAGUE_TEMPLATES,
+    STORES.GLOBAL_PLAYERS,
+    STORES.TEAM_ROSTERS,
+    STORES.SCOUT_PROFILES,
+    STORES.STARTUP_DRAFT_SESSIONS,
+    STORES.REGISTERED_POOLS,
+    STORES.MLB_DRAFT_SESSIONS,
+    STORES.AUCTION_SESSIONS,
+  ];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeNames, 'readwrite');
+    const leagueRead = tx.objectStore(STORES.LEAGUE_TEMPLATES).get(leagueId);
+    const playersRead = tx.objectStore(STORES.GLOBAL_PLAYERS).getAll();
+    const rostersRead = tx.objectStore(STORES.TEAM_ROSTERS).getAll();
+    const scoutsRead = tx.objectStore(STORES.SCOUT_PROFILES).getAll();
+    const poolRead = tx.objectStore(STORES.REGISTERED_POOLS).get(leagueId);
+    const mlbRead = tx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(mlbId);
+    const farmSnakeRead = tx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(farmSnakeId);
+    const farmAuctionRead = tx.objectStore(STORES.AUCTION_SESSIONS).get(farmAuctionId);
+    const requests = [leagueRead, playersRead, rostersRead, scoutsRead, poolRead, mlbRead, farmSnakeRead, farmAuctionRead];
+    let completedReads = 0;
+    const updatedPlayers: Player[] = [];
+    const deletedPlayerIds: string[] = [];
+    const updatedRosters: TeamRoster[] = [];
+    const deletedScoutIds: string[] = [];
+    const apply = () => {
+      completedReads += 1;
+      if (completedReads !== requests.length) return;
+      try {
+        const league = leagueRead.result as LeagueTemplate | undefined;
+        if (!league) throw new Error('Run It Back could not find the league.');
+        const pool = poolRead.result as RegisteredPool | undefined;
+        const askSalaryByPlayerId = new Map((pool?.players ?? []).map((row) => [row.id, row.salary]));
+        const farmSnake = farmSnakeRead.result as LeagueBuilderMlbDraftSession | undefined;
+        const farmAuction = farmAuctionRead.result as LeagueBuilderAuctionSession | undefined;
+        const generatedFarmIds = new Set<string>();
+        if (farmSnake) {
+          const picks = farmSnake.draftManifest
+            ? readSnakeDraftTruth(farmSnake, 'FARM').completedPicks
+            : farmSnake.draftPhase === 'FARM' ? farmSnake.completedPicks : [];
+          for (const pick of picks) generatedFarmIds.add(pick.playerId);
+        }
+        if (farmAuction?.session.state === 'AUCTION_COMPLETE') {
+          for (const result of farmAuction.session.results) {
+            if (result.disposition === 'SOLD') generatedFarmIds.add(result.playerId);
+          }
+        }
+        const playerStore = tx.objectStore(STORES.GLOBAL_PLAYERS);
+        for (const player of playersRead.result as Player[]) {
+          const assignment = player.leagueAssignments?.find((row) => row.leagueId === leagueId);
+          if (!assignment?.teamId) continue;
+          if (
+            assignment.rosterStatus === 'FARM'
+            && generatedFarmIds.has(player.id)
+            && player.draftedAsFarmProspect === true
+          ) {
+            playerStore.delete(player.id);
+            deletedPlayerIds.push(player.id);
+            continue;
+          }
+          const { settledSalary: _settledSalary, ...withoutSettlement } = player;
+          const next: Player = {
+            ...withoutSettlement,
+            ...(askSalaryByPlayerId.has(player.id) ? { salary: askSalaryByPlayerId.get(player.id)! } : {}),
+            leagueAssignments: (player.leagueAssignments ?? []).map((row) => row.leagueId === leagueId
+              ? { ...row, teamId: '', rosterStatus: 'FREE_AGENT' as const }
+              : row),
+          };
+          playerStore.put(next);
+          updatedPlayers.push(next);
+        }
+        const leagueTeamIds = new Set(league.teamIds);
+        const rosterStore = tx.objectStore(STORES.TEAM_ROSTERS);
+        for (const roster of rostersRead.result as TeamRoster[]) {
+          if (!leagueTeamIds.has(roster.teamId)) continue;
+          const next: TeamRoster = { ...roster, mlbRoster: [], farmRoster: [] };
+          rosterStore.put(next);
+          updatedRosters.push(next);
+        }
+        const scoutStore = tx.objectStore(STORES.SCOUT_PROFILES);
+        for (const scout of scoutsRead.result as LeagueBuilderScoutProfile[]) {
+          if (scout.leagueId !== leagueId) continue;
+          scoutStore.delete(scout.id);
+          deletedScoutIds.push(scout.id);
+        }
+        tx.objectStore(STORES.STARTUP_DRAFT_SESSIONS).delete(startupId);
+        const snakeStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+        snakeStore.delete(mlbId);
+        snakeStore.delete(farmSnakeId);
+        const auctionStore = tx.objectStore(STORES.AUCTION_SESSIONS);
+        auctionStore.delete(auctionId);
+        auctionStore.delete(farmAuctionId);
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+    for (const request of requests) {
+      request.onsuccess = apply;
+      request.onerror = () => reject(request.error);
+    }
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const player of updatedPlayers) syncEngine.upsert('kbl-league-builder', 'globalPlayers', player.id, player);
+        for (const id of deletedPlayerIds) syncEngine.remove('kbl-league-builder', 'globalPlayers', id);
+        for (const roster of updatedRosters) syncEngine.upsert('kbl-league-builder', 'teamRosters', roster.teamId, roster);
+        for (const id of deletedScoutIds) syncEngine.remove('kbl-league-builder', 'scoutProfiles', id);
+        syncEngine.remove('kbl-league-builder', 'startupDraftSessions', startupId);
+        syncEngine.remove('kbl-league-builder', 'mlbDraftSessions', mlbId);
+        syncEngine.remove('kbl-league-builder', 'mlbDraftSessions', farmSnakeId);
+        syncEngine.remove('kbl-league-builder', 'auctionSessions', auctionId);
+        syncEngine.remove('kbl-league-builder', 'auctionSessions', farmAuctionId);
+      }
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`Run It Back for ${leagueId} was aborted.`));
   });
 }
 

@@ -100,7 +100,7 @@ import {
   saveFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
-import { readMlbDraftCompletion } from './mlbDraftCompletion';
+import { isCompletedLegacySnakeDraftSession, readMlbDraftCompletion } from './mlbDraftCompletion';
 import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 interface FranchiseLeagueTeams {
@@ -109,7 +109,7 @@ interface FranchiseLeagueTeams {
 }
 
 const INCOMPLETE_DRAFT_FRANCHISE_MESSAGE =
-  "Your draft isn't finished yet - finish the MLB draft before starting the season.";
+  "Your draft isn't finished yet - finish both the MLB and farm drafts before starting the season.";
 
 function isAuctionComplete(session: { state?: string } | null | undefined): boolean {
   return session?.state === 'AUCTION_COMPLETE';
@@ -124,16 +124,25 @@ async function assertMlbDraftReadyForFranchise(leagueId: string): Promise<void> 
     throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
 
-  const farmSnakeSession = await getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER);
+  const [farmSnakeSession, farmSession] = await Promise.all([
+    getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER),
+    getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
+  ]);
   if (completion.snakeSession?.draftManifest) {
     readSnakeDraftTruth(completion.snakeSession, 'MLB');
     if (!farmSnakeSession?.draftManifest) throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
     readSnakeDraftTruth(farmSnakeSession, 'FARM');
-  } else if (farmSnakeSession && farmSnakeSession.currentPickIndex < farmSnakeSession.pickOrder.length) {
-    throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+  } else if (completion.snakeComplete) {
+    const legacyFarmSnakeComplete = isCompletedLegacySnakeDraftSession(farmSnakeSession, 'FARM');
+    const legacyFarmAuctionComplete = isAuctionComplete(farmSession?.session);
+    if (!legacyFarmSnakeComplete && !legacyFarmAuctionComplete) {
+      throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+    }
   }
 
-  const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
+  if (completion.auctionComplete && !isAuctionComplete(farmSession?.session)) {
+    throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+  }
   if (farmSession?.session && !isAuctionComplete(farmSession.session)) {
     throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }

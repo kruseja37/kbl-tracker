@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LeagueBuilderMlbDraftSession, LeagueTemplate } from '../../../../../../utils/leagueBuilderStorage';
-import { approveCompanionClaim } from '../companionModel';
+import { approveCompanionClaim, companionClaimIdentity } from '../companionModel';
 
 type TestUser = { id: string; email: string };
 type TestDeviceStore = {
@@ -40,14 +40,17 @@ const harness = vi.hoisted(() => ({
   patchMlbDraftSessionSnakeCompanions: vi.fn(async (input: {
     leagueId: string;
     seasonNumber?: number;
-    patch: (current: LeagueBuilderMlbDraftSession['snakeCompanions']) => NonNullable<LeagueBuilderMlbDraftSession['snakeCompanions']>;
+    patch: (
+      current: LeagueBuilderMlbDraftSession['snakeCompanions'],
+      session: LeagueBuilderMlbDraftSession,
+    ) => NonNullable<LeagueBuilderMlbDraftSession['snakeCompanions']>;
   }) => {
     const key = `${input.leagueId}:${input.seasonNumber ?? 1}`;
     const current = harness.device.sessions.get(key);
     if (!current) throw new Error('session missing');
     const saved = {
       ...current,
-      snakeCompanions: input.patch(current.snakeCompanions),
+      snakeCompanions: input.patch(current.snakeCompanions, current),
       revision: (current.revision ?? 0) + 1,
     };
     harness.device.sessions.set(key, structuredClone(saved));
@@ -58,7 +61,7 @@ const harness = vi.hoisted(() => ({
     }
     return saved;
   }),
-  patchMlbDraftSessionSeatBoard: vi.fn(),
+  patchApprovedCompanionSeatBoard: vi.fn(),
 }));
 
 vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) => {
@@ -66,7 +69,7 @@ vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) =
   return {
     ...actual,
     patchMlbDraftSessionSnakeCompanions: harness.patchMlbDraftSessionSnakeCompanions,
-    patchMlbDraftSessionSeatBoard: harness.patchMlbDraftSessionSeatBoard,
+    patchApprovedCompanionSeatBoard: harness.patchApprovedCompanionSeatBoard,
   };
 });
 
@@ -190,7 +193,7 @@ describe('COMPANIONAUTH two-origin flow', () => {
     harness.getMlbDraftSession.mockClear();
     harness.saveMlbDraftSession.mockClear();
     harness.patchMlbDraftSessionSnakeCompanions.mockClear();
-    harness.patchMlbDraftSessionSeatBoard.mockClear();
+    harness.patchApprovedCompanionSeatBoard.mockClear();
   });
 
   afterEach(() => {
@@ -233,10 +236,14 @@ describe('COMPANIONAUTH two-origin flow', () => {
     expect(harness.saveMlbDraftSession).not.toHaveBeenCalled();
 
     const mainCopy = harness.cloudByUser.get('user-owner')?.sessions.get('league-1:1');
-    const pendingDeviceId = mainCopy?.snakeCompanions?.claims[0]?.deviceId;
+    const pendingClaim = mainCopy?.snakeCompanions?.claims[0];
     expect(mainCopy).toBeTruthy();
-    expect(pendingDeviceId).toBeTruthy();
-    const approved = approveCompanionClaim(mainCopy as LeagueBuilderMlbDraftSession, pendingDeviceId as string, 'approved');
+    expect(pendingClaim).toBeTruthy();
+    const approved = approveCompanionClaim(
+      mainCopy as LeagueBuilderMlbDraftSession,
+      companionClaimIdentity(pendingClaim!),
+      'approved',
+    );
     harness.cloudByUser.get('user-owner')?.sessions.set('league-1:1', approved);
 
     await act(async () => {
@@ -252,5 +259,33 @@ describe('COMPANIONAUTH two-origin flow', () => {
     expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
     expect(await screen.findByText('NO OPEN SNAKE ROOM FOUND ON THIS ACCOUNT.')).toBeInTheDocument();
     expect(screen.queryByText('THAT ROOM CODE DOES NOT MATCH.')).not.toBeInTheDocument();
+  });
+
+  it('treats COVER as a device-global lock until the user explicitly returns', async () => {
+    localStorage.setItem('kbl-snake-companion-device-id', 'ipad-a');
+    localStorage.setItem('kbl-snake-companion-device-covered', 'true');
+    harness.authUser = { id: 'user-owner', email: 'owner@example.com' };
+    const claimed = {
+      ...session(),
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status: 'approved' as const }],
+      },
+    };
+    harness.cloudByUser.set('user-owner', {
+      leagues: [league()],
+      sessions: new Map([['league-1:1', claimed]]),
+    });
+
+    render(<SnakeCompanion />);
+    expect(await screen.findByRole('heading', { name: 'DEVICE COVERED' })).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).not.toBeInTheDocument();
+    expect(harness.freshness).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBeNull();
+    expect(screen.getByRole('button', { name: 'FORGET ROOM' })).toBeInTheDocument();
   });
 });

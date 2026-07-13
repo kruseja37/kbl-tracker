@@ -27,6 +27,7 @@ import {
   getTeamRoster,
   savePlayer,
   saveTeamRoster,
+  resetCompletedDraftArcAtomically,
   type Chemistry,
   type Grade,
   type PitchType,
@@ -37,7 +38,7 @@ import {
   type LeagueBuilderMlbDraftSession,
 } from './leagueBuilderStorage';
 import { leagueHasLinkedFranchise } from './franchiseManager';
-import { farmPickSalary } from '../engines/snakeFarmSlots';
+import { FARM_SNAKE_SESSION_NUMBER, farmPickSalary } from '../engines/snakeFarmSlots';
 import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 export const MLB_AUCTION_ROSTER_SLOTS = 22;
@@ -193,15 +194,16 @@ function completedSessionOrThrow(session: AuctionSession): void {
 }
 
 async function readCompletedDraftArc(leagueId: string) {
-  const [mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool] = await Promise.all([
+  const [mlbSession, snakeSession, farmSession, farmSnakeSession, startupDraftSession, registeredPool] = await Promise.all([
     getAuctionSession(leagueId, MLB_AUCTION_SEASON),
     getMlbDraftSession(leagueId, MLB_AUCTION_SEASON),
     getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
+    getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER),
     getStartupDraftSession(leagueId, 1),
     getRegisteredPool(leagueId),
   ]);
 
-  return { mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool };
+  return { mlbSession, snakeSession, farmSession, farmSnakeSession, startupDraftSession, registeredPool };
 }
 
 function committedSoldPlayerIds(session: AuctionSession | null | undefined): Set<string> {
@@ -211,6 +213,17 @@ function committedSoldPlayerIds(session: AuctionSession | null | undefined): Set
       .filter((result) => result.disposition === 'SOLD')
       .map((result) => result.playerId),
   );
+}
+
+function committedSnakeFarmPlayerIds(
+  session: LeagueBuilderMlbDraftSession | null | undefined,
+): Set<string> {
+  if (!session) return new Set();
+  if (session.draftManifest) {
+    return new Set(readSnakeDraftTruth(session, 'FARM').completedPicks.map((pick) => pick.playerId));
+  }
+  if (session.draftPhase !== 'FARM') return new Set();
+  return new Set(session.completedPicks.map((pick) => pick.playerId));
 }
 
 function assignmentForLeague(player: Player, leagueId: string): NonNullable<Player['leagueAssignments']>[number] | undefined {
@@ -573,25 +586,5 @@ export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
     throw new ResetCompletedDraftLinkedFranchiseError(leagueId);
   }
 
-  const draftArc = await readCompletedDraftArc(leagueId);
-  void draftArc.mlbSession;
-  void draftArc.snakeSession;
-  void draftArc.startupDraftSession;
-
-  const teamIds = await leagueTeamIds(leagueId);
-  const askSalaryByPlayerId = new Map(
-    (draftArc.registeredPool?.players ?? []).map((player) => [player.id, player.salary]),
-  );
-
-  await deleteCommittedFarmPlayers(leagueId, committedSoldPlayerIds(draftArc.farmSession?.session));
-  await clearLeagueTeamRosterField(teamIds, 'farmRoster');
-
-  await resetAssignedLeaguePlayersToPool(leagueId, askSalaryByPlayerId);
-  await clearLeagueTeamRosterField(teamIds, 'mlbRoster');
-
-  await deleteAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
-  await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
-  await deleteMlbDraftSession(leagueId, MLB_AUCTION_SEASON);
-  await deleteStartupDraftSession(leagueId, 1);
-  await deleteScoutProfilesForLeague(leagueId);
+  await resetCompletedDraftArcAtomically(leagueId);
 }

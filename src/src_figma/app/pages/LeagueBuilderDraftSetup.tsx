@@ -272,12 +272,16 @@ const PITCH_TYPES: PitchType[] = ["4F", "2F", "CB", "SL", "CH", "FK", "CF", "SB"
 const ARM_SLOTS: Array<NonNullable<Player["armSlot"]>> = ["High", "Mid", "Low", "Sub"];
 const SAVED_DRAFT_POOL_LOCK_MESSAGE =
   "A saved draft is in progress. Resume it before changing this player pool.";
+const COMPLETED_DRAFT_POOL_LOCK_MESSAGE =
+  "This draft is complete. Run It Back before changing its player pool.";
 const CHECKING_SAVED_DRAFT_MESSAGE = "Checking for a saved draft before allowing pool edits.";
 const SAVED_DRAFT_LOOKUP_ERROR_MESSAGE =
   "Could not confirm whether a saved draft exists. Refresh before changing this player pool.";
 const LOCKED_POOL_EDIT_MESSAGE = "Unlock the player pool before editing. Locked pools freeze the auction values.";
 const SAVED_DRAFT_SETUP_LOCK_MESSAGE =
   "A saved draft is in progress. Resume it before changing setup.";
+const COMPLETED_DRAFT_SETUP_LOCK_MESSAGE =
+  "This draft is complete. Run It Back before changing setup.";
 const DEFAULT_DRAFT_SEATS: DraftSetupSeat[] = [
   { id: "seat-you", name: "You" },
   { id: "seat-player-2", name: "Player 2" },
@@ -1682,15 +1686,19 @@ export function LeagueBuilderDraftSetup() {
   const effectivePoolSizeMultiplier = league?.poolSizeMultiplier
     ?? (locked ? league?.poolExtractedBasis?.poolSizeMultiplier : undefined)
     ?? DEFAULT_POOL_SIZE_MULTIPLIER;
-  const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft;
+  const savedDraftMutationBlocked = !savedDraftChecked || Boolean(savedDraftLookupError) || hasSavedDraft || hasCompletedDraft;
   const poolEditingBlocked = locked || savedDraftMutationBlocked;
   const poolEditingBlockMessage = hasSavedDraft
     ? SAVED_DRAFT_POOL_LOCK_MESSAGE
+    : hasCompletedDraft
+      ? COMPLETED_DRAFT_POOL_LOCK_MESSAGE
     : savedDraftLookupError ?? (savedDraftChecked
       ? LOCKED_POOL_EDIT_MESSAGE
       : CHECKING_SAVED_DRAFT_MESSAGE);
   const setupMutationBlockMessage = hasSavedDraft
     ? SAVED_DRAFT_SETUP_LOCK_MESSAGE
+    : hasCompletedDraft
+      ? COMPLETED_DRAFT_SETUP_LOCK_MESSAGE
     : savedDraftLookupError ?? (savedDraftChecked ? null : CHECKING_SAVED_DRAFT_MESSAGE);
   // Selection state (ids checked in each pane).
   const [inSelected, setInSelected] = useState<Set<string>>(new Set());
@@ -2734,6 +2742,7 @@ export function LeagueBuilderDraftSetup() {
     if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
     if (savedDraftLookupError) throw new Error(savedDraftLookupError);
     if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
+    if (hasCompletedDraft) throw new Error(COMPLETED_DRAFT_POOL_LOCK_MESSAGE);
   };
 
   const handlePoolModeChange = (nextMode: DraftPoolMode) =>

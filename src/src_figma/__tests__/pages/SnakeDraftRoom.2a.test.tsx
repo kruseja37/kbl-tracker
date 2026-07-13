@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   data: {} as Record<string, unknown>,
+  roomState: null as LeagueBuilderMlbDraftSession | null,
   saveRoom: vi.fn(),
   guideAsk: vi.fn(),
 }));
@@ -36,7 +37,16 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
-    saveMlbDraftRoomSession: (...args: unknown[]) => mocks.saveRoom(...args),
+    saveMlbDraftRoomSession: async (next: LeagueBuilderMlbDraftSession, ...args: unknown[]) => {
+      mocks.roomState = next;
+      return mocks.saveRoom(next, ...args);
+    },
+    patchMlbDraftSessionSeatBoard: async (input: { teamId: string; board: SnakeSeatBoardRecord }) => {
+      const current = mocks.roomState!;
+      const next = { ...current, seatBoards: { ...current.seatBoards, [input.teamId]: input.board } };
+      mocks.roomState = next;
+      return mocks.saveRoom(next);
+    },
     getScoutProfilesForLeague: vi.fn(async () => []),
   };
 });
@@ -134,6 +144,7 @@ function session(withCompletedPick: boolean): LeagueBuilderMlbDraftSession {
 }
 
 function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: Team[]; pool?: RegisteredPool; players?: Player[] } = {}) {
+  mocks.roomState = source;
   mocks.data = {
     leagues: [league], teams: overrides.teams ?? teams, players: overrides.players ?? players, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => overrides.pool ?? pool), getMlbDraftSession: vi.fn(async () => source),
@@ -177,6 +188,19 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const afterPosition = mocks.saveRoom.mock.calls[1][0] as LeagueBuilderMlbDraftSession;
     expect(afterPosition.seatBoards?.a.rankings.byPosition?.C?.slice(0, 2)).toEqual(['a-replacement', 'gone-c']);
     expect(afterPosition.seatBoards?.a.slots.C).toBe('a-replacement');
+  });
+
+  test('shows a recoverable room notice when a revision-safe write is rejected', async () => {
+    renderRoom(session(false));
+    await screen.findByTestId('snake-draft-room');
+    mocks.saveRoom.mockClear();
+    mocks.saveRoom.mockRejectedValueOnce(new Error('The draft moved before this action could be saved. Refresh and try again.'));
+    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
+    const notice = await screen.findByTestId('room-write-notice');
+    expect(notice).toHaveTextContent('THE DRAFT MOVED BEFORE THIS ACTION COULD BE SAVED');
+    expect(screen.getByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'DISMISS' }));
+    expect(screen.queryByTestId('room-write-notice')).not.toBeInTheDocument();
   });
 
   test('edits only an explicitly revealed off-clock board, fixes its trade-guide buyer, and restores the live draft path', async () => {

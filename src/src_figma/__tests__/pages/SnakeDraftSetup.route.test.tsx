@@ -29,4 +29,11 @@ describe('retired snake setup route', () => {
       '/league-builder/draft-setup?leagueId=league-42',
     );
   });
+
+  it('retires the superseded snake POC route into unified setup while preserving leagueId', async () => {
+    render(<MemoryRouter initialEntries={['/league-builder/snake-draft?leagueId=league-99']}><App /></MemoryRouter>);
+    expect(await screen.findByTestId('unified-setup-location')).toHaveTextContent(
+      '/league-builder/draft-setup?leagueId=league-99',
+    );
+  });
 });

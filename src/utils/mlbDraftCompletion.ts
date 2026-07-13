@@ -33,7 +33,30 @@ export function isCompletedSnakeMlbDraftSession(
       return false;
     }
   }
-  return session.currentPickIndex >= session.pickOrder.length;
+  return isCompletedLegacySnakeDraftSession(session, 'MLB');
+}
+
+export function isCompletedLegacySnakeDraftSession(
+  session: LeagueBuilderMlbDraftSession | null | undefined,
+  expectedPhase: 'MLB' | 'FARM',
+): boolean {
+  if (!session || session.draftManifest) return false;
+  const phase = session.draftPhase ?? 'MLB';
+  if (phase !== expectedPhase || session.pickOrder.length === 0) return false;
+  if (session.currentPickIndex !== session.pickOrder.length
+    || session.completedPicks.length !== session.pickOrder.length) return false;
+  const orderByPick = new Map(session.pickOrder.map((slot) => [slot.pick, slot]));
+  if (orderByPick.size !== session.pickOrder.length) return false;
+  const seenPlayerIds = new Set<string>();
+  const seenPicks = new Set<number>();
+  for (const pick of session.completedPicks) {
+    const slot = orderByPick.get(pick.pick);
+    if (!slot || seenPicks.has(pick.pick) || seenPlayerIds.has(pick.playerId)) return false;
+    if (slot.round !== pick.round || slot.teamId !== pick.teamId || !pick.playerId.trim()) return false;
+    seenPicks.add(pick.pick);
+    seenPlayerIds.add(pick.playerId);
+  }
+  return seenPicks.size === session.pickOrder.length;
 }
 
 export async function readMlbDraftCompletion(

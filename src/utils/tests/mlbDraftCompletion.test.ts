@@ -4,6 +4,7 @@ import type { RegisteredPool } from '../../engines/leagueConstruction';
 import type { LeagueBuilderMlbDraftSession } from '../leagueBuilderStorage';
 import {
   deriveSnakeMlbUnspentByTeamId,
+  isCompletedLegacySnakeDraftSession,
   isCompletedSnakeMlbDraftSession,
 } from '../mlbDraftCompletion';
 import { freezeSnakeDraftSession } from '../snakeDraftManifest';
@@ -54,7 +55,22 @@ describe('D1 MLB draft completion helpers', () => {
     expect(isCompletedSnakeMlbDraftSession(null)).toBe(false);
     expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 1 }))).toBe(false);
     expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 2 }))).toBe(true);
-    expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 3 }))).toBe(true);
+    expect(isCompletedSnakeMlbDraftSession(session({ currentPickIndex: 3 }))).toBe(false);
+  });
+
+  test('legacy completion rejects missing, duplicate, and order-incoherent persisted picks', () => {
+    expect(isCompletedSnakeMlbDraftSession(session({ completedPicks: [session().completedPicks[0]] }))).toBe(false);
+    expect(isCompletedSnakeMlbDraftSession(session({
+      completedPicks: [session().completedPicks[0], { ...session().completedPicks[1], playerId: 'player-a' }],
+    }))).toBe(false);
+    expect(isCompletedSnakeMlbDraftSession(session({
+      completedPicks: [session().completedPicks[0], { ...session().completedPicks[1], teamId: 'team-a' }],
+    }))).toBe(false);
+    expect(isCompletedLegacySnakeDraftSession(session({ draftPhase: 'FARM' }), 'FARM')).toBe(true);
+    expect(isCompletedLegacySnakeDraftSession(session({
+      draftPhase: 'FARM',
+      completedPicks: [session().completedPicks[0]],
+    }), 'FARM')).toBe(false);
   });
 
   test('manifest completion validates bound persisted truth and rejects corrupt or foreign objects', () => {

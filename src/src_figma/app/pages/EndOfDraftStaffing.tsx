@@ -8,7 +8,6 @@ import {
   farmDraftRouteForLeague,
   franchiseSetupRouteForLeague,
   leagueIdFromSearch,
-  resolveInitialLeagueId,
 } from "../utils/draftRouting";
 import {
   isHumanControlledTeam,
@@ -76,7 +75,7 @@ function reporterAvatarFromValue(value: string): ReporterAvatarEra {
 export function EndOfDraftStaffing() {
   const navigate = useNavigate();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
-  const { leagues, teams, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, refresh } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [formsByTeamId, setFormsByTeamId] = useState<Record<string, StaffForm | undefined>>({});
   const [saving, setSaving] = useState(false);
@@ -88,7 +87,12 @@ export function EndOfDraftStaffing() {
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
-      setActiveLeagueId(resolveInitialLeagueId(leagues, requestedLeagueId));
+      const nextLeagueId = requestedLeagueId === null
+        ? leagues[0]?.id ?? ""
+        : leagues.some((league) => league.id === requestedLeagueId)
+          ? requestedLeagueId
+          : "";
+      setActiveLeagueId(nextLeagueId);
     }
   }, [activeLeagueId, leagues, requestedLeagueId]);
 
@@ -186,7 +190,17 @@ export function EndOfDraftStaffing() {
   if (error) {
     return (
       <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
-        <div className="text-xl text-[var(--ballpark-sacrifice-red)] font-bold">Error: {error}</div>
+        <div className="max-w-lg border-4 border-[var(--ballpark-sacrifice-red)] bg-[var(--ballpark-panel)] p-6 text-center">
+          <div className="mb-5 text-xl text-[var(--ballpark-sacrifice-red)] font-bold">Error: {error}</div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <PressButton type="button" onClick={() => void refresh()}>
+              <RefreshCw className="h-4 w-4" /> TRY AGAIN
+            </PressButton>
+            <PressButton type="button" variant="default" onClick={() => navigate("/league-builder") }>
+              <ArrowLeft className="h-4 w-4" /> BACK TO LEAGUE BUILDER
+            </PressButton>
+          </div>
+        </div>
       </div>
     );
   }
@@ -194,7 +208,17 @@ export function EndOfDraftStaffing() {
   if (!activeLeague) {
     return (
       <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
-        <div className="text-xl font-bold">No league found for staff hire.</div>
+        <div className="max-w-lg border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-6 text-center">
+          <div className="mb-5 text-xl font-bold">No league found for staff hire.</div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <PressButton type="button" onClick={() => void refresh()}>
+              <RefreshCw className="h-4 w-4" /> TRY AGAIN
+            </PressButton>
+            <PressButton type="button" variant="default" onClick={() => navigate("/league-builder") }>
+              <ArrowLeft className="h-4 w-4" /> BACK TO LEAGUE BUILDER
+            </PressButton>
+          </div>
+        </div>
       </div>
     );
   }

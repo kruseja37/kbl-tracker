@@ -36,6 +36,13 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
       { id: 'scout-b', leagueId: 'league-farm', teamId: 'b', name: 'Bears Eyes', specialties: [], weaknesses: [], accuracyByPosition: {}, seed: 'b', createdDate: 'now', lastModified: 'now' },
     ]),
     saveMlbDraftRoomSession: saveSession,
+    patchMlbDraftSessionFarmSeatBoard: vi.fn(async (input) => {
+      const current = saveSession.mock.calls.at(-1)?.[0] ?? await getSession(input.leagueId, input.seasonNumber);
+      return saveSession({
+        ...current,
+        farmSeatBoards: { ...current.farmSeatBoards, [input.teamId]: input.board },
+      });
+    }),
   };
 });
 

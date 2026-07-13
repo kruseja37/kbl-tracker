@@ -75,7 +75,10 @@ export interface SnakeDraftRoomViewProps {
   commissionerTrade?: HelpAwareRoomContent;
   companionApproval?: ReactNode;
   roomHelpNotes?: readonly string[];
-  onPauseChange: (paused: boolean) => void;
+  writeNotice?: string | null;
+  onReloadRoom?: () => void | Promise<void>;
+  onDismissWriteNotice?: () => void;
+  onPauseChange: (paused: boolean) => void | Promise<void>;
   onRecordPick: (candidateId: string) => void | Promise<void>;
   onCorrectLatest: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
@@ -202,15 +205,18 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     soundPlayer.play('nav');
   };
 
-  const requestPauseChange = () => {
+  const requestPauseChange = async () => {
     if (!props.paused) {
       cancelHold();
       cancelAdvance();
-      dispatch({ type: 'PAUSE' });
-    } else {
-      dispatch({ type: 'RESUME' });
     }
-    props.onPauseChange(!props.paused);
+    try {
+      await props.onPauseChange(!props.paused);
+      dispatch({ type: props.paused ? 'RESUME' : 'PAUSE' });
+    } catch {
+      // Persistence owns the truth. Leave the reducer in its prior state when
+      // an optimistic-lock rejection says another device already moved it.
+    }
   };
 
   const startHold = () => {
@@ -250,9 +256,14 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   };
 
   const correctLatest = async () => {
-    await props.onCorrectLatest();
-    dispatch({ type: 'CORRECTION_DONE' });
-    soundPlayer.play('nav');
+    try {
+      await props.onCorrectLatest();
+      dispatch({ type: 'CORRECTION_DONE' });
+      soundPlayer.play('nav');
+    } catch {
+      // Keep the correction window open; the page surfaces the durable-write
+      // rejection and no success beat is allowed to fire.
+    }
   };
   const recordedTeam = state.recordedPick
     ? props.teams.find((team) => team.id === state.recordedPick?.teamId)
@@ -283,7 +294,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             {props.soundsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
             SOUND {props.soundsEnabled ? 'ON' : 'OFF'}
           </button>
-          <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={requestPauseChange}>
+          <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void requestPauseChange()}>
             {props.paused ? <Play size={15} /> : <Pause size={15} />}
             {props.paused ? 'RESUME' : 'PAUSE'}
           </button>
@@ -319,6 +330,15 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       )}
 
       {props.practiceMode && <p className="mb-3 border-2 border-[var(--ballpark-brass)] p-2 text-sm font-bold">PRACTICE MODE</p>}
+      {props.writeNotice ? (
+        <section className="mb-3 border-2 border-[var(--ballpark-status-warn)] bg-[var(--ballpark-warn-panel)] p-3" data-testid="room-write-notice">
+          <p className="font-bold text-[var(--ballpark-warn-text)]">{props.writeNotice.toUpperCase()}</p>
+          <div className="mt-2 flex gap-2">
+            {props.onReloadRoom ? <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void props.onReloadRoom?.()}>RELOAD ROOM</button> : null}
+            {props.onDismissWriteNotice ? <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={props.onDismissWriteNotice}>DISMISS</button> : null}
+          </div>
+        </section>
+      ) : null}
       {props.paused && <p className="mb-3 bg-[var(--ballpark-warn-panel)] p-3 font-bold text-[var(--ballpark-warn-text)]">THE DRAFT IS PAUSED</p>}
 
       <section className="mb-5 overflow-x-auto border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" aria-label="Draft order">
