@@ -212,7 +212,7 @@ export function LeagueBuilderLeagues() {
       name: league.name,
       description: league.description || "",
       teamIds: league.teamIds,
-      draftFormat: "auction",
+      draftFormat: league.draftFormat ?? "auction",
       tier,
       salaryCap: formatSalaryCapInput(salaryCap),
       balanceMode: league.balanceMode ?? BALANCE_MODE_DEFAULT,

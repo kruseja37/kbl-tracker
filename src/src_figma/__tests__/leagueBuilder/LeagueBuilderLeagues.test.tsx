@@ -424,6 +424,21 @@ describe('LeagueBuilderLeagues Component', () => {
       });
     });
 
+    test('hydrates and preserves a saved snake draft format when editing', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      const editButtons = screen.getAllByTitle('Edit league');
+      fireEvent.click(editButtons[1]);
+
+      expect(await screen.findByLabelText('Draft format')).toHaveValue('snake');
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'league-2', draftFormat: 'snake' }),
+        );
+      });
+    });
+
     test('modal shows league name label', async () => {
       await renderSettledLeagueBuilderLeagues();
       fireEvent.click(screen.getByText('CREATE NEW LEAGUE'));

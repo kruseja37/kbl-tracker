@@ -7146,3 +7146,9 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   the independent closing audit resumed. No source was guessed from memory.
 - Automated evidence can make the build ready, not accept it. JK's browser walk remains the sole
   product gate.
+- 2026-07-13 browser-walk repair: League Settings correctly wrote a selected Snake format, but the
+  Edit League modal always reopened with Auction and a later save overwrote the stored value.
+  Hydration now preserves `league.draftFormat` with Auction only as the legacy fallback. Live proof
+  on Super Mega League: save Snake, reopen still Snake, enter `Snake Draft — Super Mega League`.
+  Independent audit APPROVE; focused gate 4 files / 89 tests, TypeScript, scoped ESLint, and
+  `git diff --check` clean.
