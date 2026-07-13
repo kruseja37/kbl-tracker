@@ -1,21 +1,23 @@
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
-import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
 import { DeskCandidateRow } from './DeskCandidateRow';
 import { DraftTruthStrip } from './DraftTruthStrip';
-import { buildPlanLedger, type ChemistryStripRow } from './draftTruthModel';
+import { buildPlanLedger, type ChemistryStripRow, type DraftMoneyLedger } from './draftTruthModel';
 import type { DeskCandidate, TaxCoreRow } from './deskModel';
 
 export function BoardView(props: {
   candidates: readonly DeskCandidate[];
-  boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
-  brokenSlots: readonly SnakeBoardSlotId[];
+  boardSlots: Readonly<Record<string, string | undefined>>;
+  brokenSlots: readonly string[];
   planBill: SnakePlanBill | null;
+  planLedger?: DraftMoneyLedger | null;
+  planTitle?: string;
   planChemistry?: readonly ChemistryStripRow[];
   taxCoreRows: readonly TaxCoreRow[];
-  slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
+  slotDepth: Readonly<Record<string, number | undefined>>;
   selectedCandidateId?: string | null;
   onSelectCandidate?: (candidateId: string) => void;
   showHelp?: boolean;
+  readOnly?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   return (
@@ -26,24 +28,24 @@ export function BoardView(props: {
       >
         {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
           <div key={slotId}>
-            {byId.get(playerId)
+            {playerId && byId.get(playerId)
               ? <DeskCandidateRow
                   candidate={byId.get(playerId)!}
                   prefix={slotId}
                   selected={props.selectedCandidateId === playerId}
                   onSelect={props.onSelectCandidate}
-                  warning={props.brokenSlots.includes(slotId as SnakeBoardSlotId)
+                  warning={props.brokenSlots.includes(slotId)
                     ? 'PLAN BROKEN'
-                    : (props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2
-                      ? `${props.slotDepth[slotId as SnakeBoardSlotId]} LEFT`
+                    : (props.slotDepth[slotId] ?? 3) <= 2
+                      ? `${props.slotDepth[slotId]} LEFT`
                       : null}
                 />
-              : <p className="font-bold">{playerId}</p>}
+              : <p className="font-bold">{playerId ?? '—'}</p>}
           </div>
         ))}
       </div>
-      {props.planBill && props.planChemistry ? (
-        <div className="mt-4"><DraftTruthStrip title="22-PLAYER PLAN" ledger={buildPlanLedger(props.planBill)} chemistry={props.planChemistry} testId="plan-truth-strip" /></div>
+      {(props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null)) && props.planChemistry ? (
+        <div className="mt-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={props.planLedger ?? buildPlanLedger(props.planBill!)} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
       ) : props.planBill ? (
         <div className="mt-4 border-4 border-[var(--ballpark-brass)] p-3 text-center">
           <div className="grid grid-cols-3 gap-2">
@@ -54,13 +56,13 @@ export function BoardView(props: {
           {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p> : null}
         </div>
       ) : null}
-      <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
+      {!props.readOnly ? <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
         <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
         {props.showHelp ? <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p> : null}
         <div className="mt-3 space-y-2">
           {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
         </div>
-      </details>
+      </details> : null}
     </div>
   );
 }

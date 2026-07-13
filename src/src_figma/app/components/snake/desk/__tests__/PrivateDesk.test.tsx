@@ -24,6 +24,7 @@ const candidate: DeskCandidate = {
     pit: { VEL: 0, JNK: 0, ACC: 0 },
   },
 };
+const idleAssistant = { status: 'idle' as const, board: null };
 
 describe('PrivateDesk', () => {
   it('shows the distinct 22-player plan ledger, five chemistry families, and canonical Assistant GM status', () => {
@@ -47,10 +48,8 @@ describe('PrivateDesk', () => {
       advisorLog={[]}
       taxCoreRows={[]}
       slotDepth={{ SS: 1 }}
+      assistantBoard={idleAssistant}
       onReorder={() => undefined}
-      onStartWhatIf={() => undefined}
-      onKeepWhatIf={() => undefined}
-      onRevertWhatIf={() => undefined}
     />);
 
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('22-PLAYER PLAN');
@@ -75,8 +74,8 @@ describe('PrivateDesk', () => {
       brokenSlots: [], planBill: null, advisorLog: [],
       taxCoreRows: [{ key: 'core', label: 'TOP SALARY', playerNames: ['MURASKI'] }],
       slotDepth: { SS: 3 },
-      onReorder: () => undefined, onStartWhatIf: () => undefined,
-      onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
+      assistantBoard: idleAssistant,
+      onReorder: () => undefined,
     };
     const { rerender } = render(<PrivateDesk {...common} showHelp={false} />);
     expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'TOP SALARY: MURASKI')).toBeInTheDocument();
@@ -99,14 +98,12 @@ describe('PrivateDesk', () => {
       advisorLog={[]}
       taxCoreRows={[]}
       slotDepth={{ SS: 2 }}
+      assistantBoard={idleAssistant}
       onReorder={onReorder}
       onReorderOverall={onReorderOverall}
-      onStartWhatIf={() => undefined}
-      onKeepWhatIf={() => undefined}
-      onRevertWhatIf={() => undefined}
     />);
 
-    expect(screen.getByRole('button', { name: 'BOARD' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'MY BOARD' })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
     expect(screen.getByRole('button', { name: 'RANKINGS' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
@@ -132,12 +129,12 @@ describe('PrivateDesk', () => {
       overallRankings: ['muraski', 'available', 'drafted', 'blocked'] as const,
       boardSlots: { SS: 'available' } as const,
       brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 3 },
+      assistantBoard: idleAssistant,
       selectedCandidateId: 'muraski', onSelectCandidate,
-      onReorder: () => undefined, onStartWhatIf: () => undefined, onKeepWhatIf: () => undefined, onRevertWhatIf: () => undefined,
+      onReorder: () => undefined,
     };
     render(<PrivateDesk {...common} />);
-    expect(screen.queryByRole('option', { name: 'DRAFTED PLAYER' })).not.toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'BLOCKED PLAYER' })).toBeInTheDocument();
+    expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT AVAILABLE PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('available');
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
@@ -162,11 +159,9 @@ describe('PrivateDesk', () => {
       advisorLog={[]}
       taxCoreRows={[]}
       slotDepth={{ SS: 1 }}
+      assistantBoard={idleAssistant}
       onReorder={() => undefined}
       onReorderOverall={onReorderOverall}
-      onStartWhatIf={() => undefined}
-      onKeepWhatIf={() => undefined}
-      onRevertWhatIf={() => undefined}
     />);
 
     fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
@@ -176,9 +171,7 @@ describe('PrivateDesk', () => {
     expect(onReorderOverall).toHaveBeenCalledWith(['target', 'muraski']);
   });
 
-  it('renders distinct engine bills, verbatim risk, fallout, and keep/revert what-if controls', () => {
-    const onKeepWhatIf = vi.fn();
-    const onRevertWhatIf = vi.fn();
+  it('renders a separate read-only assistant board and never renders the retired what-if controls', () => {
     render(<PrivateDesk
       candidates={[candidate]}
       rankings={{ SS: ['muraski'] }}
@@ -189,28 +182,35 @@ describe('PrivateDesk', () => {
       advisorLog={[]}
       taxCoreRows={[]}
       slotDepth={{ SS: 1 }}
-      onReorder={() => undefined}
-      onStartWhatIf={() => undefined}
-      onKeepWhatIf={onKeepWhatIf}
-      onRevertWhatIf={onRevertWhatIf}
-      tradeGuide={<div>POSTED PRICE GUIDE</div>}
-      whatIf={{
-        slotId: 'SS', playerId: 'muraski', planCost: 80, planTax: 10, planCushion: 30,
-        legal: true, legalityLine: 'THE CHOSEN BOARD SLOTS STILL WORK.', legalFinishLine: candidate.legalFinishLine,
+      assistantBoard={{
+        status: 'ready',
+        board: {
+          kind: 'snake-assistant-board', teamId: 'team-a',
+          slots: [{ slotId: 'SS', playerId: 'muraski', pinned: false }],
+          playerIds: ['muraski'], recommendationOrder: ['muraski'],
+          ledger: { rosterCount: 22, salary: 80, tax: 10, allIn: 90, moneyLeft: 30 },
+          chemistry: [
+            { family: 'CMP', word: 'Competitive', count: 1, tier: 'L1' },
+            { family: 'SPI', word: 'Spirited', count: 0, tier: 'L1' },
+            { family: 'CRA', word: 'Crafty', count: 0, tier: 'L1' },
+            { family: 'SCH', word: 'Scholarly', count: 0, tier: 'L1' },
+            { family: 'DIS', word: 'Disciplined', count: 0, tier: 'L1' },
+          ],
+        },
       }}
+      onReorder={() => undefined}
+      tradeGuide={<div>POSTED PRICE GUIDE</div>}
     />);
 
     expect(screen.getByText('PLAN COST')).toBeInTheDocument();
     expect(screen.getByText('PLAN TAX')).toBeInTheDocument();
     expect(screen.getByText('PLAN CUSHION')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
-    expect(screen.getAllByText(candidate.legalFinishLine)).toHaveLength(1);
-    expect(screen.getByText('THE CHOSEN BOARD SLOTS STILL WORK.')).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'KEEP' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
-    expect(onKeepWhatIf).toHaveBeenCalledTimes(1);
-    expect(onRevertWhatIf).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
+    expect(screen.getByTestId('assistant-plan-truth-strip')).toHaveTextContent('$90');
+    expect(screen.queryByRole('button', { name: /KEEP/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
   });

@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -7,6 +8,10 @@ const mocks = vi.hoisted(() => ({
   patchBoard: vi.fn(),
   refresh: vi.fn(async () => undefined),
   pull: vi.fn(async () => undefined),
+  assistantRequests: [] as Array<{ key: string; input: Record<string, unknown> }>,
+  assistantResults: [] as Array<Record<string, unknown>>,
+  mainSave: vi.fn(),
+  omitContextPlayerId: null as string | null,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -20,14 +25,56 @@ vi.mock('../../../hooks/useAuth', () => ({
   }),
 }));
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
+vi.mock('../../../engines/rosterIntelligencePayload', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../engines/rosterIntelligencePayload')>();
+  return {
+    ...actual,
+    assembleBoard: (input: Parameters<typeof actual.assembleBoard>[0]) => actual.assembleBoard(input)
+      .filter((row) => row.playerId !== mocks.omitContextPlayerId),
+  };
+});
 vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
+vi.mock('../../utils/snakeSounds', () => ({
+  loadSnakeSoundsEnabled: () => false,
+  saveSnakeSoundsEnabled: vi.fn(),
+  createSnakeSoundPlayer: () => ({ play: vi.fn() }),
+}));
 vi.mock('../../app/components/snake/companion/companionFreshness', () => ({ startCompanionFreshness: () => () => undefined }));
+vi.mock('../../app/components/snake/desk/useSnakeAssistantBoard', async () => {
+  const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
+  return {
+    useSnakeAssistantBoard: (request: Parameters<typeof model.runSnakeAssistantBoardRequest>[0] | null) => {
+      if (!request) return { status: 'idle', board: null };
+      const snapshot = structuredClone(request);
+      const result = model.runSnakeAssistantBoardRequest(snapshot);
+      mocks.assistantRequests.push(snapshot as unknown as { key: string; input: Record<string, unknown> });
+      mocks.assistantResults.push(result as unknown as Record<string, unknown>);
+      return result.status === 'ready'
+        ? { status: 'ready', board: result.board }
+        : { status: 'unavailable', board: null };
+    },
+  };
+});
 vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
     patchApprovedCompanionSeatBoard: (...args: unknown[]) => mocks.patchBoard(...args),
     patchMlbDraftSessionSnakeCompanions: vi.fn(),
+    saveMlbDraftRoomSession: async (next: LeagueBuilderMlbDraftSession) => {
+      mocks.currentSession = next;
+      return mocks.mainSave(next);
+    },
+    updateMlbDraftSessionAtomically: async (
+      _leagueId: string,
+      _seasonNumber: number,
+      update: (current: LeagueBuilderMlbDraftSession) => LeagueBuilderMlbDraftSession,
+    ) => {
+      const next = update(mocks.currentSession as LeagueBuilderMlbDraftSession);
+      mocks.currentSession = next;
+      return next;
+    },
+    getScoutProfilesForLeague: vi.fn(async () => []),
   };
 });
 
@@ -40,7 +87,10 @@ import type {
   SnakeSeatBoardRecord,
   Team,
 } from '../../../utils/leagueBuilderStorage';
+import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
+import { runSnakeAssistantBoardRequest } from '../../app/components/snake/desk/snakeDeskIntelligenceModel';
 import SnakeCompanion from '../../app/pages/SnakeCompanion';
+import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -87,7 +137,7 @@ const players: Player[] = [
 const pool: RegisteredPool = {
   leagueId: league.id, tier: 'standard', balanceMode: 'taxed',
   players: players.map((row, index) => ({ id: row.id, iv: 10_000 + index * 100, salary: 10_000 + index * 100 })),
-  tierCap: 10_000_000, luxuryCaps: [], pickValueChart: [], totalSlots: players.length,
+  tierCap: 10_000_000, luxuryCaps: LUXURY_CAP_TABLES.standard, pickValueChart: [], totalSlots: players.length,
   poolSurplusWarning: false, locked: true, lockedAt: 1,
 };
 const slots: Record<SnakeBoardSlotId, string> = {
@@ -157,6 +207,10 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.patchBoard.mockReset();
     mocks.pull.mockClear();
     mocks.refresh.mockClear();
+    mocks.assistantRequests.length = 0;
+    mocks.assistantResults.length = 0;
+    mocks.omitContextPlayerId = null;
+    mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
   afterEach(() => cleanup());
@@ -199,6 +253,120 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(restored.revision).toBe(afterPosition.revision + 1);
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
+  });
+
+  test('assistant viewing, optimize, and Revert never write; stale companion Keep fails closed', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'KEEP ON MY BOARD' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
+    const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = { ...current, revision: (current.revision ?? 0) + 1 };
+    const pullCountBeforeKeep = mocks.pull.mock.calls.length;
+    fireEvent.click(keep);
+
+    expect(await screen.findByText('THE DRAFT MOVED ON — REFRESH')).toBeInTheDocument();
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.pull.mock.calls.length).toBeGreaterThan(pullCountBeforeKeep);
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+
+  test('successful guarded companion Keep persists the exact preview and reloads as already on My Board', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const original = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'KEEP ON MY BOARD' }));
+
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const write = mocks.patchBoard.mock.calls[0][0] as {
+      deviceId: string;
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(write).toMatchObject({ deviceId: 'ipad-a', teamId: 'a', expectedBoardRevision: original.revision });
+    expect(Object.values(write.board.slots)).toContain('dual');
+    expect(write.board.revision).toBe(original.revision + 1);
+    expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  test('actual main and companion page requests match, and Optimize pins the selected player through the derived board', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.assistantRequests.length).toBeGreaterThan(0));
+    const companionRequest = structuredClone(mocks.assistantRequests.at(-1)!);
+    expect(companionRequest.input.selectedPinPlayerId).toBeNull();
+    const invalidCapsRequest = structuredClone(companionRequest) as Parameters<typeof runSnakeAssistantBoardRequest>[0];
+    invalidCapsRequest.input.baseCaps = [];
+    expect(runSnakeAssistantBoardRequest(invalidCapsRequest)).toMatchObject({
+      status: 'unavailable',
+      reason: 'INVALID_NUMERIC_INPUT',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    await waitFor(() => expect(mocks.assistantRequests.at(-1)?.input.selectedPinPlayerId).toBe('dual'));
+    const optimized = mocks.assistantResults.at(-1) as {
+      status: string;
+      reason?: string;
+      board?: { playerIds: string[]; slots: Array<{ playerId: string; pinned: boolean }> };
+    };
+    expect(optimized.reason).toBeUndefined();
+    expect(optimized.status).toBe('ready');
+    expect(optimized.board?.playerIds).toContain('dual');
+    expect(optimized.board?.slots.find((slot) => slot.playerId === 'dual')?.pinned).toBe(true);
+
+    cleanup();
+    mocks.assistantRequests.length = 0;
+    mocks.assistantResults.length = 0;
+    localStorage.removeItem('kbl-snake-companion-device-covered');
+    prepare(session());
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await screen.findByTestId('private-draft-desk');
+    await waitFor(() => expect(mocks.assistantRequests.some((request) => request.input.teamId === 'a')).toBe(true));
+    const mainRequest = mocks.assistantRequests.filter((request) => request.input.teamId === 'a').at(-1)!;
+    expect(mainRequest.input).toEqual(companionRequest.input);
+  }, 10_000);
+
+  test('companion emits no assistant request, result, or board when one live player lacks contextual advisor worth', async () => {
+    mocks.omitContextPlayerId = 'dual';
+    prepare(session());
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+
+    expect(mocks.assistantRequests).toHaveLength(0);
+    expect(mocks.assistantResults).toHaveLength(0);
+    fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
+    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
+  });
+
+  test('main emits no assistant request, result, or board when one live player lacks contextual advisor worth', async () => {
+    mocks.omitContextPlayerId = 'dual';
+    prepare(session());
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    const assistantTab = await screen.findByRole('button', { name: 'ASST GM BOARD' });
+
+    expect(mocks.assistantRequests).toHaveLength(0);
+    expect(mocks.assistantResults).toHaveLength(0);
+    fireEvent.click(assistantTab);
+    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
   });
 
   test('a revoked approval fails closed inside the atomic companion board patch', async () => {

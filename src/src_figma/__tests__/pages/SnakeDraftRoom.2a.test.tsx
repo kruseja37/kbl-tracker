@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   saveRoom: vi.fn(),
   patchBoard: vi.fn(),
   guideAsk: vi.fn(),
+  pull: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -15,6 +16,7 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   return { ...actual, useLeagueBuilderData: () => mocks.data };
 });
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
+vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
 vi.mock('../../utils/snakeSounds', () => ({
   loadSnakeSoundsEnabled: () => false,
   saveSnakeSoundsEnabled: vi.fn(),
@@ -205,7 +207,7 @@ function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: T
   mocks.roomState = source;
   mocks.data = {
     leagues: [league], teams: overrides.teams ?? teams, players: overrides.players ?? players, isLoading: false, error: null,
-    getRegisteredPool: vi.fn(async () => overrides.pool ?? pool), getMlbDraftSession: vi.fn(async () => source),
+    getRegisteredPool: vi.fn(async () => overrides.pool ?? pool), getMlbDraftSession: vi.fn(async () => mocks.roomState),
     saveMlbDraftSession: vi.fn(async (next) => next),
   };
   return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
@@ -236,6 +238,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
       return mocks.saveRoom(next);
     });
     mocks.guideAsk.mockReset();
+    mocks.pull.mockClear();
   });
   afterEach(() => cleanup());
 
@@ -258,7 +261,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
-    fireEvent.click(screen.getByRole('button', { name: 'BOARD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     const initialPlanTruth = screen.getByTestId('plan-truth-strip').textContent;
     const initialTax = truthMoney('plan-truth-strip', 'TAX');
     expect(initialTax).toBe('$700');
@@ -289,7 +292,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(await screen.findByTestId('main-board-update-banner'))
       .toHaveTextContent(`MY BOARD UPDATED — ${firstChangedCount} SLOT${firstChangedCount === 1 ? '' : 'S'} CHANGED.`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'BOARD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     expect(screen.getByTestId('plan-truth-strip').textContent).not.toBe(initialPlanTruth);
     const frozenIv = new Map(pool.players.map((row) => [row.id, row.iv]));
     const expectedSalary = Object.values(afterOverall.seatBoards!.a.slots)
@@ -329,6 +332,56 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(restored.revision).toBe(afterPosition.seatBoards!.a.revision + 1);
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   }, 10_000);
+
+  test('assistant viewing, optimize, and Revert never write; stale Keep fails closed', async () => {
+    const source = session(false);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+
+    expect(await screen.findByRole('button', { name: 'KEEP ON MY BOARD' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.saveRoom).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
+    const current = mocks.roomState!;
+    mocks.roomState = { ...current, revision: (current.revision ?? 0) + 1 };
+    const pullCountBeforeKeep = mocks.pull.mock.calls.length;
+    fireEvent.click(keep);
+
+    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('THE DRAFT MOVED BEFORE THIS BOARD CHANGE COULD BE SAVED');
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.saveRoom).not.toHaveBeenCalled();
+    expect(mocks.pull.mock.calls.length).toBeGreaterThan(pullCountBeforeKeep);
+  });
+
+  test('successful guarded Keep persists the exact preview and reloads as already on My Board', async () => {
+    const source = session(false);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+
+    const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
+    fireEvent.click(keep);
+
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const write = mocks.patchBoard.mock.calls[0][0] as {
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(write.teamId).toBe('a');
+    expect(write.expectedBoardRevision).toBe(source.seatBoards!.a.revision);
+    expect(Object.values(write.board.slots)).toContain('a-replacement');
+    expect(write.board.revision).toBe(source.seatBoards!.a.revision + 1);
+    expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
 
   test('rapid double Undo produces exactly one revision-safe restore and no false stale error', async () => {
     const source = session(false);

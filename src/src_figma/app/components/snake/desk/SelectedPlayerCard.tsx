@@ -1,16 +1,16 @@
 import { buildDraftProfileModel, type DraftProfileFullRatings } from '../../../../../utils/draftProfileModel';
 import type { Player } from '../../../../../utils/leagueBuilderStorage';
 import type { DeskCandidate } from './deskModel';
-import { fitToneForWord, type SelectedChemistryDelta } from './draftTruthModel';
+import { fitToneForWord } from './draftTruthModel';
+import type { SelectedPlayerConsequence } from './snakeDeskIntelligenceModel';
 
 const RATINGS: readonly [keyof Omit<DraftProfileFullRatings, 'arsenal'>, string][] = [
   ['power', 'POW'], ['contact', 'CON'], ['speed', 'SPD'], ['fielding', 'FLD'], ['arm', 'ARM'],
   ['velocity', 'VEL'], ['junk', 'JNK'], ['accuracy', 'ACC'],
 ];
 
-function signedMoney(value: number): string {
-  const rounded = Math.round(value);
-  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}$${Math.abs(rounded).toLocaleString()}`;
+function money(value: number | null): string {
+  return value === null ? '—' : `$${Math.round(value).toLocaleString()}`;
 }
 
 const FIT_TONE_CLASS = {
@@ -23,10 +23,12 @@ const FIT_TONE_CLASS = {
 export function SelectedPlayerCard(props: {
   player: Player;
   candidate: DeskCandidate;
-  chemistryDelta: SelectedChemistryDelta | null;
-  moneyKnown?: boolean;
+  consequence: SelectedPlayerConsequence | null;
   teamLogoUrl?: string;
   teamName: string;
+  onOptimizeAround?: () => void;
+  onKeep?: () => void;
+  onRevert?: () => void;
 }) {
   const profile = buildDraftProfileModel(props.player, { revealFull: true });
   const fitTone = fitToneForWord(props.candidate.fitWord);
@@ -36,6 +38,7 @@ export function SelectedPlayerCard(props: {
   const ratings = profile.fullRatings
     ? RATINGS.flatMap(([key, label]) => profile.fullRatings![key] !== 0 ? [{ key, label, value: profile.fullRatings![key] }] : [])
     : [];
+  const consequence = props.consequence;
   return (
     <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
       <div className="flex items-start gap-3">
@@ -69,17 +72,33 @@ export function SelectedPlayerCard(props: {
         ))}
       </div>
       {profile.fullRatings?.arsenal.length ? <p className="mt-2 text-xs font-bold">ARSENAL · {profile.fullRatings.arsenal.join(' · ')}</p> : null}
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
         <p><span className="block text-[9px] font-bold">SALARY</span><strong>${Math.round(props.candidate.iv).toLocaleString()}</strong></p>
-        <p><span className="block text-[9px] font-bold">TAX CHANGE</span><strong>{props.moneyKnown === false ? '—' : signedMoney(props.candidate.marginalTax)}</strong></p>
-        <p><span className="block text-[9px] font-bold">TRUE COST</span><strong>{props.moneyKnown === false ? '—' : `$${Math.round(props.candidate.trueCost).toLocaleString()}`}</strong></p>
-        <p><span className="block text-[9px] font-bold">CHEM VALUE</span><strong>{props.chemistryDelta ? signedMoney(props.chemistryDelta.premium) : '—'}</strong></p>
+        <p><span className="block text-[9px] font-bold">MY BOARD</span><strong>{consequence?.status === 'already-on-board' ? 'ON BOARD' : consequence?.status === 'ready' ? `REPLACES ${consequence.displacedSlotId}` : '—'}</strong></p>
       </div>
-      <p className="mt-2 text-xs font-black">
-        {props.chemistryDelta
-          ? <>{props.chemistryDelta.word.toUpperCase()} {props.chemistryDelta.before}→{props.chemistryDelta.after}{props.chemistryDelta.crossing ? ` · ${props.chemistryDelta.crossing}` : ''}</>
-          : <>{profile.chemistry.toUpperCase()} —→—</>}
-      </p>
+      {consequence?.status === 'ready' ? <div className="mt-3 border-t-4 border-[var(--ballpark-panel-border)] pt-3" data-testid="selected-player-consequence">
+        <p className="font-black">OUT · {consequence.displacedPlayerName.toUpperCase()} · {consequence.before.fitWord}</p>
+        <p className="font-black">IN · {profile.name.toUpperCase()} · {consequence.after.fitWord}</p>
+        <div className="mt-2 grid grid-cols-[auto_repeat(2,minmax(0,1fr))] gap-x-2 gap-y-1 text-xs">
+          <span /> <strong>BEFORE</strong> <strong>AFTER</strong>
+          <span>SALARY</span><strong>{money(consequence.before.ledger.salary)}</strong><strong>{money(consequence.after.ledger.salary)}</strong>
+          <span>TAX</span><strong>{money(consequence.before.ledger.tax)}</strong><strong>{money(consequence.after.ledger.tax)}</strong>
+          <span>ALL-IN</span><strong>{money(consequence.before.ledger.allIn)}</strong><strong>{money(consequence.after.ledger.allIn)}</strong>
+          <span>LEFT</span><strong>{money(consequence.before.ledger.moneyLeft)}</strong><strong>{money(consequence.after.ledger.moneyLeft)}</strong>
+          <span>LEGAL FINISH</span><strong>{consequence.before.legalFinish.feasible ? money(consequence.before.legalFinish.moneyLeft) : 'NO'}</strong><strong>{consequence.after.legalFinish.feasible ? money(consequence.after.legalFinish.moneyLeft) : 'NO'}</strong>
+        </div>
+        <div className="mt-2 grid grid-cols-1 gap-1 text-[10px] sm:grid-cols-5" aria-label="Selected player chemistry consequences">
+          {consequence.before.chemistry.map((row, index) => {
+            const after = consequence.after.chemistry[index];
+            return <p key={row.family} className="border-2 border-[var(--ballpark-panel-border)] p-1 font-black">{row.word.toUpperCase()} {row.count ?? '—'} · {row.tier ?? '—'} → {after?.count ?? '—'} · {after?.tier ?? '—'}</p>;
+          })}
+        </div>
+      </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : <p className="mt-3 font-black">BOARD CONSEQUENCES —</p>}
+      <div className="mt-3 flex flex-wrap gap-2">
+        {props.onOptimizeAround ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-action" onClick={props.onOptimizeAround}>OPTIMIZE AROUND</button> : null}
+        {consequence?.status === 'ready' && props.onKeep ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={props.onKeep}>KEEP ON MY BOARD</button> : null}
+        {consequence?.status === 'ready' && props.onRevert ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={props.onRevert}>REVERT</button> : null}
+      </div>
     </section>
   );
 }

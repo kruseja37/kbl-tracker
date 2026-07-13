@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { Player } from '../../../../../../utils/leagueBuilderStorage';
 import { SelectedPlayerCard } from '../SelectedPlayerCard';
 import { DraftTruthStrip } from '../DraftTruthStrip';
 import { buildChemistryStrip } from '../draftTruthModel';
 import type { DeskCandidate } from '../deskModel';
+import type { SelectedPlayerConsequence } from '../snakeDeskIntelligenceModel';
 
 const player = {
   id: 'jovita', firstName: 'Jovita', lastName: 'Pulo', gender: 'F', age: 26, bats: 'R', throws: 'R',
@@ -23,14 +24,41 @@ const candidate = {
   construction: { id: 'jovita', isPitcher: true, role: 'SP', bat: { POW: 0, CON: 14, SPD: 21, FLD: 62, ARM: 71 }, pit: { VEL: 91, JNK: 84, ACC: 79 } },
 } as DeskCandidate;
 
+const chemistry = buildChemistryStrip([player]);
+const consequence = {
+  status: 'ready',
+  identity: {
+    sessionId: 'session', sessionRevision: 2, teamId: 'team-a', seatId: 'seat-a',
+    deviceId: 'device-a', privateEpoch: 3, boardRevision: 4,
+  },
+  selectedPlayerId: 'jovita', displacedPlayerId: 'incumbent', displacedPlayerName: 'Old Starter',
+  displacedSlotId: 'SP1', reassignedSlotIds: ['SP1'],
+  board: { slots: {} as never, rankings: {}, revision: 5 },
+  before: {
+    ledger: { rosterCount: 22, salary: 800_000, tax: 20_000, allIn: 820_000, moneyLeft: 180_000 },
+    chemistry, legalFinish: { feasible: true, moneyLeft: 75_000 }, fitWord: 'WEAK FIT',
+  },
+  after: {
+    ledger: { rosterCount: 22, salary: 790_000, tax: 5_000, allIn: 795_000, moneyLeft: 205_000 },
+    chemistry: chemistry.map((row) => row.family === 'SCH' ? { ...row, count: 2, tier: 'L1' as const } : row),
+    legalFinish: { feasible: true, moneyLeft: 90_000 }, fitWord: 'STRONG FIT',
+  },
+} as SelectedPlayerConsequence;
+
 describe('SelectedPlayerCard', () => {
   it('renders the complete compact profile and exact consequences without visible pronouns or zero ratings', () => {
+    const onOptimizeAround = vi.fn();
+    const onKeep = vi.fn();
+    const onRevert = vi.fn();
     render(<SelectedPlayerCard
       player={player}
       candidate={candidate}
-      chemistryDelta={{ family: 'SCH', word: 'Scholarly', before: 2, after: 3, crossing: 'L1->L2', premium: -4_000 }}
+      consequence={consequence}
       teamLogoUrl="data:image/png;base64,AA=="
       teamName="Beewolves"
+      onOptimizeAround={onOptimizeAround}
+      onKeep={onKeep}
+      onRevert={onRevert}
     />);
 
     expect(screen.getByText('Jovita Pulo')).toBeInTheDocument();
@@ -49,26 +77,46 @@ describe('SelectedPlayerCard', () => {
     expect(screen.getByText('Competitive')).toBeInTheDocument();
     expect(screen.getAllByText('Scholarly').length).toBeGreaterThan(0);
     expect(screen.getByText('FIT · STRONG FIT')).toHaveClass('text-[var(--ballpark-status-green)]');
-    expect(screen.getByText('+$12,500')).toBeInTheDocument();
-    expect(screen.getByText('$102,500')).toBeInTheDocument();
-    expect(screen.getByText('−$4,000')).toBeInTheDocument();
-    expect(screen.getByText('SCHOLARLY 2→3 · L1->L2')).toBeInTheDocument();
+    expect(screen.getByTestId('selected-player-consequence')).toHaveTextContent('OUT · OLD STARTER · WEAK FIT');
+    expect(screen.getByTestId('selected-player-consequence')).toHaveTextContent('IN · JOVITA PULO · STRONG FIT');
+    for (const amount of ['$800,000', '$20,000', '$820,000', '$180,000', '$790,000', '$5,000', '$795,000', '$205,000', '$75,000', '$90,000']) {
+      expect(screen.getByTestId('selected-player-consequence')).toHaveTextContent(amount);
+    }
+    for (const word of ['COMPETITIVE', 'SPIRITED', 'CRAFTY', 'SCHOLARLY', 'DISCIPLINED']) expect(screen.getByLabelText('Selected player chemistry consequences')).toHaveTextContent(word);
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(screen.getByRole('button', { name: 'KEEP ON MY BOARD' }));
+    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    expect(onOptimizeAround).toHaveBeenCalledOnce();
+    expect(onKeep).toHaveBeenCalledOnce();
+    expect(onRevert).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b|pronouns?/i);
   });
 
-  it('keeps the inline profile contract and renders unknown consequences when legacy roster truth is incomplete', () => {
+  it('keeps the inline profile contract and renders unknown consequences as dashes, never safe or zero', () => {
     render(<SelectedPlayerCard
       player={player}
       candidate={candidate}
-      chemistryDelta={null}
-      moneyKnown={false}
+      consequence={{ status: 'unavailable', selectedPlayerId: 'jovita' }}
       teamName="Beewolves"
     />);
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('Jovita Pulo');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TAX CHANGE—');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST—');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('CHEM VALUE—');
-    expect(screen.getByText('SCHOLARLY —→—')).toBeInTheDocument();
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('MY BOARD—');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('BOARD CONSEQUENCES —');
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('SAFE');
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('$0');
+  });
+
+  it('reports an already-boarded player and never offers Keep', () => {
+    render(<SelectedPlayerCard
+      player={player}
+      candidate={candidate}
+      consequence={{ status: 'already-on-board', selectedPlayerId: 'jovita' }}
+      teamName="Beewolves"
+      onKeep={vi.fn()}
+    />);
+    expect(screen.getByText('ON MY BOARD')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
   });
 });
 
