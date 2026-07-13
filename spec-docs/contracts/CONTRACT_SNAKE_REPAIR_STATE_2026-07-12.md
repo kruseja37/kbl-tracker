@@ -1,0 +1,3 @@
+# CONTRACT — SNAKE REPAIR: DURABLE STATE
+
+Fix only confirmed state/persistence defects from the final crawl: delete snake farm season 2 and generated farm prospects on Run It Back; prevent completed-manifest pool mutation; close stale whole-session race windows with explicit pending-action locking and/or revision-safe writes; preserve newer farm boards across correction; require durable farm completion for legacy MLB completion; surface rejected pause/correction/reorder writes. Add focused adversarial tests. Do not redesign UI, formulas, auction, or schema. Builder must not audit its own diff.

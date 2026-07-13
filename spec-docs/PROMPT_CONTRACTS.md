@@ -30796,3 +30796,24 @@ Confirmation freezes one validated manifest consumed by recap/commit/freeze/laun
 retry is idempotent; franchise launches with zero schedule rows and CSV/manual entry
 inside Living Season. No auction, formula, staffing, or auto-schedule change.
 <!-- ===== END CONTRACT: SNAKE-MOCK-2E ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-CRAWL ===== -->
+# SNAKE-FINAL-CRAWL — STATIC STATE/WIRING + UI/UX/ORPHAN AUDIT
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_FINAL_CRAWL_2026-07-12.md`. Two independent
+read-only lanes attack the complete production snake/farm/launch path: one for
+state, persistence, wiring, provenance, and dead routes; one for iPad UX,
+privacy, Help law, player selection, hierarchy, and orphaned design. No edits.
+<!-- ===== END CONTRACT: SNAKE-FINAL-CRAWL ===== -->
+
+<!-- ===== CONTRACTS: SNAKE-FINAL-REPAIR ===== -->
+# SNAKE-FINAL-REPAIR — STATE, ROOM, COMPANION, AND JOURNEY
+
+Binding repair contracts:
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_STATE_2026-07-12.md`,
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_ROOM_2026-07-12.md`,
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_COMPANION_2026-07-12.md`, and
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_JOURNEY_2026-07-12.md`.
+Each builder owns only its named files/findings and may not audit its own diff.
+<!-- ===== END CONTRACTS: SNAKE-FINAL-REPAIR ===== -->
