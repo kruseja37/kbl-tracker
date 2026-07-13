@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 
 import type {
   PlaySnakeRationalRoomInput,
+  SnakeRationalRoomStatus,
+  SnakeRationalScenario,
   SnakeRiskRow,
+  SnakeScarcityRow,
 } from '../../../../../engines/snakeRationalRoom';
 import type { LeagueBuilderMlbDraftSession } from '../../../../../utils/leagueBuilderStorage';
 import {
@@ -18,16 +21,19 @@ export interface SnakeRationalRiskRequest {
 
 export interface SnakeRationalRiskWorkerResponse {
   key: string;
+  status: SnakeRationalRoomStatus;
   risks: SnakeRiskRow[];
+  scarcity: SnakeScarcityRow[];
+  scenarios: SnakeRationalScenario[];
+  nextPick: number | null;
 }
 
 export interface SnakeRationalRiskState {
   risks: readonly SnakeRiskRow[] | null;
+  scarcity: readonly SnakeScarcityRow[] | null;
+  scenarios: readonly SnakeRationalScenario[] | null;
+  nextPick: number | null;
   status: 'idle' | 'pending' | 'ready' | 'unavailable';
-}
-
-interface SnakeRationalRiskSnapshot extends SnakeRationalRiskWorkerResponse {
-  unavailable?: boolean;
 }
 
 export function buildSnakeRationalRiskRequest(input: {
@@ -63,7 +69,7 @@ export function useSnakeRationalRisks(
 ): SnakeRationalRiskState {
   const requestRef = useRef(request);
   const requestKey = request?.key ?? null;
-  const [snapshot, setSnapshot] = useState<SnakeRationalRiskSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<SnakeRationalRiskWorkerResponse | null>(null);
 
   useEffect(() => {
     requestRef.current = request;
@@ -76,7 +82,14 @@ export function useSnakeRationalRisks(
     let active = true;
     let worker: Worker | null = null;
     const markUnavailable = () => {
-      if (active) setSnapshot({ key: requestKey, risks: [], unavailable: true });
+      if (active) setSnapshot({
+        key: requestKey,
+        status: 'unavailable',
+        risks: [],
+        scarcity: [],
+        scenarios: [],
+        nextPick: null,
+      });
     };
     try {
       worker = new Worker(
@@ -110,9 +123,21 @@ export function useSnakeRationalRisks(
     };
   }, [requestKey]);
 
-  if (!requestKey) return { risks: null, status: 'idle' };
-  if (typeof Worker === 'undefined') return { risks: null, status: 'unavailable' };
-  if (snapshot?.key !== requestKey) return { risks: null, status: 'pending' };
-  if (snapshot.unavailable) return { risks: null, status: 'unavailable' };
-  return { risks: snapshot.risks, status: 'ready' };
+  if (!requestKey) return { risks: null, scarcity: null, scenarios: null, nextPick: null, status: 'idle' };
+  if (typeof Worker === 'undefined') {
+    return { risks: null, scarcity: null, scenarios: null, nextPick: null, status: 'unavailable' };
+  }
+  if (snapshot?.key !== requestKey) {
+    return { risks: null, scarcity: null, scenarios: null, nextPick: null, status: 'pending' };
+  }
+  if (snapshot.status === 'unavailable') {
+    return { risks: null, scarcity: null, scenarios: null, nextPick: null, status: 'unavailable' };
+  }
+  return {
+    risks: snapshot.risks,
+    scarcity: snapshot.scarcity,
+    scenarios: snapshot.scenarios,
+    nextPick: snapshot.nextPick,
+    status: 'ready',
+  };
 }

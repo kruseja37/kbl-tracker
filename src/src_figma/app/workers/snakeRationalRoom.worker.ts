@@ -12,11 +12,27 @@ interface SnakeRationalRiskWorkerRequest {
 }
 
 self.onmessage = (event: MessageEvent<SnakeRationalRiskWorkerRequest>) => {
-  const result = playSnakeRationalRoom(event.data.input);
-  const response: SnakeRationalRiskWorkerResponse = {
-    key: event.data.key,
-    risks: result.risks,
-  };
+  let response: SnakeRationalRiskWorkerResponse;
+  try {
+    const result = playSnakeRationalRoom(event.data.input);
+    response = {
+      key: event.data.key,
+      status: result.status,
+      risks: result.risks,
+      scarcity: result.scarcity,
+      scenarios: result.scenarios,
+      nextPick: result.nextPick,
+    };
+  } catch {
+    response = {
+      key: event.data.key,
+      status: 'unavailable',
+      risks: [],
+      scarcity: [],
+      scenarios: [],
+      nextPick: null,
+    };
+  }
   self.postMessage(response);
 };
 

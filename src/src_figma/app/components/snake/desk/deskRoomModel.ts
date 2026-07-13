@@ -125,12 +125,15 @@ export function buildRationalSeats(input: {
   return input.teams.map((team) => {
     const locked = resolveLockedSeat({ team, session: input.session });
     const picks = input.session.completedPicks.filter((pick) => pick.teamId === team.id);
+    const settledRosterPrices = picks.map((pick) => ({
+      playerId: pick.playerId,
+      settledPrice: pick.settledSalary ?? input.playersById.get(pick.playerId)?.price ?? Number.NaN,
+    }));
     return {
       teamId: team.id,
       roster: picks.flatMap((pick) => input.playersById.get(pick.playerId) ?? []),
-      committedSpent: picks.reduce((sum, pick) => (
-        sum + (pick.settledSalary ?? input.playersById.get(pick.playerId)?.price ?? 0)
-      ), 0),
+      settledRosterPrices,
+      committedSpent: settledRosterPrices.reduce((sum, row) => sum + row.settledPrice, 0),
       budget: input.budget,
       lockedArchetype: locked.priorities,
       capIdentity: locked.capIdentity,
@@ -166,17 +169,20 @@ export function rationalRiskCacheKey(input: Parameters<typeof rationalRisksForRo
     player.playerId,
     player.sourceId ?? '',
     player.price,
-    player.worth ?? '',
+    player.worth,
     JSON.stringify(player.archetypeWeights ?? {}),
+    JSON.stringify(player.shape),
     JSON.stringify(player.construction),
   ].join(':')).join('|');
   const seatSignature = input.seats.map((seat) => (
-    `${seat.teamId}:${seat.committedSpent}:${seat.budget}:${JSON.stringify(seat.lockedArchetype)}:${JSON.stringify(seat.capIdentity ?? {})}:${seat.roster.map((player) => player.playerId).join(',')}`
+    `${seat.teamId}:${seat.committedSpent}:${seat.budget}:${JSON.stringify(seat.lockedArchetype)}:${JSON.stringify(seat.capIdentity ?? {})}:${seat.settledRosterPrices.map((row) => `${row.playerId}=${row.settledPrice}`).join(',')}:${seat.roster.map((player) => `${player.playerId}=${player.sourceId ?? ''}=${player.price}=${JSON.stringify(player.shape)}=${JSON.stringify(player.construction)}`).join(',')}`
   )).join('|');
   return [
     input.session.id,
+    input.session.revision ?? 0,
     input.session.currentPickIndex,
-    input.session.pickOrder.slice(input.session.currentPickIndex).map((slot) => `${slot.pick}:${slot.teamId}`).join(','),
+    input.session.pickOrder.map((slot) => `${slot.pick}:${slot.teamId}`).join(','),
+    input.session.completedPicks.map((pick) => `${pick.pick}:${pick.teamId}:${pick.playerId}:${pick.settledSalary ?? ''}`).join(','),
     input.askingTeamId,
     input.askedPlayerIds.join(','),
     poolSignature,

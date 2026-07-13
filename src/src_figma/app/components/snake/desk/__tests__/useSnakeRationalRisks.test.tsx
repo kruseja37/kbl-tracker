@@ -72,13 +72,21 @@ describe('shared snake rational-risk worker seam', () => {
     act(() => worker.onmessage?.({
       data: {
         key: 'state-a',
+        status: 'ready',
         risks: [{
           playerId: 'player-a',
           risk: 'AT_RISK',
           nextPick: 3,
+          earliestSelectingPick: 2,
+          latestSelectingPick: 3,
+          latestSelectingPickIsAskingTurn: true,
+          interestedClubCount: 1,
           draftedAtPick: 2,
           rationalBuyersBeforeTurn: 1,
         }],
+        scarcity: [],
+        scenarios: [],
+        nextPick: 3,
       },
     } as MessageEvent<SnakeRationalRiskWorkerResponse>));
 
@@ -94,20 +102,28 @@ describe('shared snake rational-risk worker seam', () => {
     expect(oldWorker.terminated).toBe(true);
 
     act(() => oldWorker.onmessage?.({
-      data: { key: 'state-a', risks: [] },
+      data: { key: 'state-a', status: 'ready', risks: [], scarcity: [], scenarios: [], nextPick: 3 },
     } as MessageEvent<SnakeRationalRiskWorkerResponse>));
     expect(screen.getByText('PENDING')).toBeInTheDocument();
 
     act(() => liveWorker.onmessage?.({
       data: {
         key: 'state-b',
+        status: 'ready',
         risks: [{
           playerId: 'player-a',
           risk: 'LIKELY_GONE',
           nextPick: 3,
+          earliestSelectingPick: 2,
+          latestSelectingPick: 2,
+          latestSelectingPickIsAskingTurn: false,
+          interestedClubCount: 1,
           draftedAtPick: 2,
           rationalBuyersBeforeTurn: 1,
         }],
+        scarcity: [],
+        scenarios: [],
+        nextPick: 3,
       },
     } as MessageEvent<SnakeRationalRiskWorkerResponse>));
     expect(screen.getByText('LIKELY_GONE')).toBeInTheDocument();
@@ -127,12 +143,13 @@ describe('shared snake rational-risk worker seam', () => {
     expect(screen.getByText('UNAVAILABLE')).toBeInTheDocument();
   });
 
-  test('keys only public draft state, not unrelated session revisions', () => {
+  test('binds the worker key to the exact public session revision', () => {
     const baseSession = {
       id: 'session',
       revision: 1,
       currentPickIndex: 0,
       pickOrder: [{ round: 1, pick: 1, teamId: 'a' }, { round: 1, pick: 2, teamId: 'b' }],
+      completedPicks: [],
     } as LeagueBuilderMlbDraftSession;
     const build = (session: LeagueBuilderMlbDraftSession) => buildSnakeRationalRiskRequest({
       session,
@@ -144,8 +161,72 @@ describe('shared snake rational-risk worker seam', () => {
       realTeamCount: 2,
     }).key;
 
-    expect(build({ ...baseSession, revision: 99 })).toBe(build(baseSession));
+    expect(build({ ...baseSession, revision: 99 })).not.toBe(build(baseSession));
     expect(build({ ...baseSession, currentPickIndex: 1 })).not.toBe(build(baseSession));
+  });
+
+  test('treats an engine-declared unavailable result as unavailable, never as a safe empty result', () => {
+    render(<Harness request={request('state-a')} />);
+    const worker = FakeWorker.instances[0];
+    act(() => worker.onmessage?.({
+      data: {
+        key: 'state-a',
+        status: 'unavailable',
+        risks: [],
+        scarcity: [],
+        scenarios: [],
+        nextPick: null,
+      },
+    } as MessageEvent<SnakeRationalRiskWorkerResponse>));
+    expect(screen.getByText('UNAVAILABLE')).toBeInTheDocument();
+  });
+
+  test('removes prior output and actions synchronously when privacy supplies no request', () => {
+    const view = render(<Harness request={request('state-a')} />);
+    const worker = FakeWorker.instances[0];
+    act(() => worker.onmessage?.({
+      data: {
+        key: 'state-a',
+        status: 'ready',
+        risks: [{
+          playerId: 'player-a', risk: 'AT_RISK', nextPick: 3,
+          earliestSelectingPick: 2, latestSelectingPick: 3,
+          latestSelectingPickIsAskingTurn: true, interestedClubCount: 1,
+          draftedAtPick: 2, rationalBuyersBeforeTurn: 1,
+        }],
+        scarcity: [], scenarios: [], nextPick: 3,
+      },
+    } as MessageEvent<SnakeRationalRiskWorkerResponse>));
+    expect(screen.getByText('AT_RISK')).toBeInTheDocument();
+    view.rerender(<Harness request={null} />);
+    expect(screen.getByText('IDLE')).toBeInTheDocument();
+  });
+
+  test('serializes public inputs only and omits every rival-private session surface', () => {
+    const privateSession = {
+      id: 'session', revision: 7, currentPickIndex: 0,
+      pickOrder: [{ round: 1, pick: 1, teamId: 'a' }, { round: 1, pick: 2, teamId: 'b' }],
+      completedPicks: [],
+      seatBoards: { b: { secret: 'board' } },
+      farmSeatBoards: { b: { secret: 'farm-board' } },
+      roomLogByTeamId: { b: [{ text: 'private-log' }] },
+      snakeCompanions: { roomCode: 'PRIVATE' },
+      correctionHistory: [{ secret: 'correction' }],
+    } as unknown as LeagueBuilderMlbDraftSession;
+    const built = buildSnakeRationalRiskRequest({
+      session: privateSession,
+      askingTeamId: 'a',
+      askedPlayerIds: [],
+      availablePlayers: [],
+      seats: [],
+      baseCaps: [],
+      realTeamCount: 2,
+    });
+    expect(Object.keys(built.input).sort()).toEqual([
+      'askedPlayerIds', 'askingTeamId', 'baseCaps', 'currentPickIndex',
+      'pickOrder', 'players', 'realTeamCount', 'seats',
+    ]);
+    expect(JSON.stringify(built.input)).not.toMatch(/seatBoards|farmSeatBoards|private-log|roomCode|correction/i);
   });
 
   test('labels an unfinished worker read as calculating rather than safe', () => {

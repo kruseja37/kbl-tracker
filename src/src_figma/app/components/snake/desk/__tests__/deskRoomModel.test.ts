@@ -10,8 +10,10 @@ import type {
 } from '../../../../../../utils/leagueBuilderStorage';
 import {
   buildDeskRoomPlayer,
+  buildRationalSeats,
   __resetRationalRiskCacheForTests,
   fitWord,
+  rationalRiskCacheKey,
   rationalRisksForRoom,
   rationalRisksForRoomUncached,
   reconcileExistingSeatBoards,
@@ -78,6 +80,21 @@ function legalTwentyOne(prefix: string): SnakeSeatingPlayer[] {
   }));
 }
 
+function rationalSeat(
+  teamId: string,
+  roster: SnakeSeatingPlayer[],
+  lockedArchetype = { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 },
+) {
+  return {
+    teamId,
+    roster,
+    settledRosterPrices: roster.map((player) => ({ playerId: player.playerId, settledPrice: player.price })),
+    committedSpent: roster.reduce((sum, player) => sum + player.price, 0),
+    budget: 1_000,
+    lockedArchetype,
+  };
+}
+
 function session(archetypeId = 'murderers-row'): LeagueBuilderMlbDraftSession {
   return {
     id: 'mlb:league:1', leagueId: 'league', seasonNumber: 1, seed: 'seed',
@@ -142,8 +159,10 @@ describe('private desk room assembly', () => {
   it('uses the canonical player bands so rival locked archetypes materially change the risk read', () => {
     const powerStored = storedPlayer('power', { power: 99, contact: 1, speed: 1, fielding: 1, arm: 1 });
     const speedStored = storedPlayer('speed', { power: 1, contact: 1, speed: 99, fielding: 1, arm: 1 });
+    const neutralStored = storedPlayer('neutral');
     const power = buildDeskRoomPlayer({ player: powerStored, price: 50, seating: seating(powerStored) })!;
     const speed = buildDeskRoomPlayer({ player: speedStored, price: 50, seating: seating(speedStored) })!;
+    const neutral = buildDeskRoomPlayer({ player: neutralStored, price: 50, seating: seating(neutralStored) })!;
     expect(power.archetypeWeights.Power).toBe(1);
     expect(power.archetypeWeights.Speed).toBeCloseTo(1 / 99);
 
@@ -151,14 +170,14 @@ describe('private desk room assembly', () => {
       session: { ...session(), pickOrder: [{ pick: 1, teamId: 'asker' }, { pick: 2, teamId: 'rival' }, { pick: 3, teamId: 'asker' }] },
       askingTeamId: 'asker',
       askedPlayerIds: ['power'],
-      availablePlayers: [power, speed],
+      availablePlayers: [power, speed, neutral],
       baseCaps: [],
       realTeamCount: 2,
     };
-    const asker = { teamId: 'asker', roster: legalTwentyOne('a'), committedSpent: 21, budget: 1_000, lockedArchetype: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 } };
-    const powerRoom = rationalRisksForRoom({ ...base, seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne('p'), lockedArchetype: { Power: 5, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 } }] });
-    const speedRoom = rationalRisksForRoom({ ...base, seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne('s'), lockedArchetype: { Power: 0, Contact: 0, Speed: 5, Defense: 0, Rotation: 0, Bullpen: 0 } }] });
-    expect(powerRoom[0].risk).toBe('LIKELY_GONE');
+    const asker = rationalSeat('asker', legalTwentyOne('a'));
+    const powerRoom = rationalRisksForRoom({ ...base, seats: [asker, rationalSeat('rival', legalTwentyOne('p'), { Power: 5, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 })] });
+    const speedRoom = rationalRisksForRoom({ ...base, seats: [asker, rationalSeat('rival', legalTwentyOne('s'), { Power: 0, Contact: 0, Speed: 5, Defense: 0, Rotation: 0, Bullpen: 0 })] });
+    expect(powerRoom[0].risk).toBe('AT_RISK');
     expect(speedRoom[0].risk).toBe('SAFE_TO_WAIT');
   });
 
@@ -192,6 +211,46 @@ describe('private desk room assembly', () => {
     expect(locked.priorities.Power).toBeGreaterThan(locked.priorities.Speed);
   });
 
+  it('keys exact settled public prices and uses them instead of frozen card prices', () => {
+    const drafted = storedPlayer('drafted');
+    const deskPlayer = buildDeskRoomPlayer({ player: drafted, price: 50, seating: seating(drafted, 50) })!;
+    const source = {
+      ...session(),
+      revision: 9,
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: drafted.id,
+        versionGroupId: `player:${drafted.id}`, settledSalary: 37, marginalTax: 0,
+      }],
+    } as LeagueBuilderMlbDraftSession;
+    const seats = buildRationalSeats({
+      teams: [{ id: 'a' } as Team],
+      session: source,
+      playersById: new Map([[drafted.id, deskPlayer]]),
+      budget: 1_000,
+    });
+    expect(seats[0].committedSpent).toBe(37);
+    expect(seats[0].settledRosterPrices).toEqual([{ playerId: drafted.id, settledPrice: 37 }]);
+
+    const keyInput = {
+      session: source,
+      askingTeamId: 'a',
+      askedPlayerIds: [drafted.id],
+      availablePlayers: [deskPlayer],
+      seats,
+      baseCaps: [],
+      realTeamCount: 1,
+    };
+    const original = rationalRiskCacheKey(keyInput);
+    expect(rationalRiskCacheKey({
+      ...keyInput,
+      seats: [{ ...seats[0], settledRosterPrices: [{ playerId: drafted.id, settledPrice: 38 }] }],
+    })).not.toBe(original);
+    expect(rationalRiskCacheKey({
+      ...keyInput,
+      session: { ...source, revision: 10 },
+    })).not.toBe(original);
+  });
+
   it('memoized risk reads are byte-identical to uncached reads across 30 deterministic fixtures', () => {
     let state = 0xc0ffee;
     const randomRating = () => {
@@ -216,13 +275,13 @@ describe('private desk room assembly', () => {
           { pick: 3, teamId: 'asker' },
         ],
       };
-      const asker = { teamId: 'asker', roster: legalTwentyOne(`pa-${fixtureIndex}`), committedSpent: 21, budget: 1_000, lockedArchetype: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 } };
+      const asker = rationalSeat('asker', legalTwentyOne(`pa-${fixtureIndex}`));
       const input = {
         session: baseSession,
         askingTeamId: 'asker',
         askedPlayerIds: availablePlayers.map((player) => player.playerId),
         availablePlayers,
-        seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne(`pr-${fixtureIndex}`) }],
+        seats: [asker, rationalSeat('rival', legalTwentyOne(`pr-${fixtureIndex}`))],
         baseCaps: [],
         realTeamCount: 2,
       };
