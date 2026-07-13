@@ -77,6 +77,40 @@ Allowed product files: `src/engines/snakeGuideTrade.ts`, the smallest canonical 
 surface required, snake trade adapter/components, and their owned tests. Map and verify every caller
 before changing a shared signature. No auction transaction or CPU auction behavior changes.
 
+Frozen Batch 2 implementation ruling:
+
+- Change `derivePickValueChart` to require explicit frozen IVs, `draftPickCount`, and `teamCount`.
+  Sort finite IVs descending. `expectedIV(p)` is the mean of ranks `p..p+teamCount-1`, padding past
+  the pool with the final IV. `replacementIV = expectedIV(draftPickCount + 1)`.
+  `lateFloor = max(1, round(expectedIV(draftPickCount) - replacementIV))`.
+  `value(p) = round(max(lateFloor, expectedIV(p) - replacementIV))` for exactly every drafted pick.
+  Flat and exact-floor pools must remain finite, positive, monotone, and deterministic.
+- Register-pool construction passes its explicit MLB slot count and club count; room and companion
+  pass `session.pickOrder.length` and the current league-team count. Map every direct test caller.
+- Do not change shared `validateTrade`; farm uses it. MLB adds a directional check requiring
+  `offerValue >= receiveValue` and retains the canonical 15% imbalance ceiling.
+- Search all equal-count one-, two-, and three-pick packages. Remove the first-count early exit.
+  Rank survivors by smallest raw seller premium (`offerValue - receiveValue`), then imbalance,
+  then fewer picks, then lexicographic offer/receive lists. Keep brute-force parity as the oracle.
+- Execution must prove distinct buyer/seller; unique picks on each side; disjoint sides; equal
+  unique counts; target pick present on the receive side and currently seller-owned; every pick
+  future-owned by the named club; current revision; current canonical posted totals; and both
+  constructive legal finishes. Reject tampered totals rather than persisting caller values.
+- Exact product files for this batch are `src/engines/leagueConstruction.ts`,
+  `src/engines/snakeGuideTrade.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, and
+  `src/src_figma/app/pages/SnakeCompanion.tsx`. Owned tests may change only in
+  `src/engines/__tests__/leagueConstruction.test.ts`,
+  `src/engines/__tests__/snakeEconomicsGuide.test.ts`,
+  `src/src_figma/app/components/snake/trade/__tests__/tradeGuideModel.test.ts`,
+  `src/src_figma/__tests__/pages/SnakeDraftRoom.performance.test.tsx`, and
+  `src/utils/tests/snakeSeasonGauntlet.integration.test.ts`.
+- Mutation-honest gates: monotone/flat/exact-floor chart; a real balancing-return package without
+  hand-pinned production values; underpay-within-15% rejection; all-size search beating the old
+  early exit; gap-before-complexity; insufficient capital; brute-force parity; duplicate/overlap/
+  self/target-mismatch rejection; stale ownership; and caller-tampered total rejection.
+- Verification-only gates include `snakeFarmSlots.test.ts`, `SnakeTradeGuide.test.tsx`, room and
+  companion integrations, auction register-pool tests, full build, and the full suite.
+
 ### Batch 3 — Separate Asst GM Board and direct consequences
 
 Allowed product files: snake desk models/components, `pages/SnakeDraftRoom.tsx`,

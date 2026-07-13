@@ -309,3 +309,35 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 - Main and companion surfaces share the same stale-board defect.
 
 **Approved repair:** Binding contract `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`. Build in verified batches: live My Board refit; fair balancing trade packages; separate live Asst GM Board; selected-player opportunity cost; availability/rival/scarcity intelligence; actionable TAKE/WAIT/TRADE recommendations; UI consolidation under the ratified Help-Button Law. Separate builder and auditor; JK's browser walk is the only acceptance gate.
+
+---
+
+### FINDING-153
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 2 pre-build trace
+**Status:** CONFIRMED-OPEN — build contract amended
+**File:** `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; MLB snake guide callers/tests
+
+**Evidence:**
+1. MLB package execution revalidation checks equal array lengths but not unique picks, disjoint sides,
+   distinct buyer/seller, or required target ownership. `swapOwnership` later converts those arrays to
+   sets. A tampered offer such as `[24, 24]` for `[19, 41]` can therefore value pick 24 twice, pass as
+   2-for-2, then execute as a real 1-for-2.
+2. Revalidation persists caller-supplied `offerValue` and `receiveValue` instead of recomputing current
+   posted totals. A stale or tampered proposal can therefore leave an inaccurate trade receipt even when
+   ownership/revision checks still pass.
+3. The shared `validateTrade` helper is also used by the frozen farm-draft path. Changing its symmetric
+   semantics would cross the Batch 2 boundary. MLB needs an additional directional rule: the buyer moving
+   up may not offer less posted value than the seller gives up.
+4. The current chart is raw nth-player IV. Current-pool opportunity value can instead be derived
+   deterministically as the one-round forward-cohort expected IV above the first undrafted cohort, with a
+   positive late-pick floor derived from the final drafted-to-replacement gap.
+
+**Impact:** A forged equal-length package can change actual turn counts, and the live guide can recommend
+strategically weak packages or record caller-controlled values. This is a transaction-integrity defect,
+not merely a presentation problem.
+
+**Required repair:** Reject duplicate/overlapping/self/target-mismatched packages; recompute canonical
+totals at execution; retain equal counts and the 15% imbalance ceiling; enforce seller protection; search
+all authorized 1–3 pick counts and minimize posted value gap before complexity. Keep shared farm validation
+unchanged. Exact math and test gates are frozen in Batch 2 of the Snake Intelligence contract.

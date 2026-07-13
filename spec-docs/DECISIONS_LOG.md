@@ -3843,3 +3843,18 @@ rule where they conflict.
    privacy, team branding, pronoun non-display, and the ratified Help-Button UI Law remain canon.
 
 Binding implementation contract: `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`.
+
+## 2026-07-13 — Snake posted pick value and guide execution rails
+
+For MLB snake, posted pick value is opportunity surplus from the current frozen player pool, not the
+raw IV of the player currently ranked at that pick. For pick `p`, use the mean IV of the forward
+one-round cohort beginning at `p`, subtract the first undrafted cohort after the complete MLB draft,
+and apply a positive late floor equal to the observed final-drafted-to-replacement gap (minimum 1).
+The chart must remain deterministic, monotone, and exactly as long as the MLB draft.
+
+Trade-up guidance searches every authorized equal-count 1–3 pick package. A buyer may not underpay
+the seller at current posted value; the existing 15% imbalance ceiling still applies. Choose the
+smallest nonnegative posted-value gap before fewer pieces. Balancing return picks are expected.
+Execution rejects duplicate or overlapping picks, self-trades, target mismatches, stale ownership,
+and caller-tampered totals, then recomputes the current canonical values before writing. The shared
+farm `validateTrade` behavior is unchanged.
