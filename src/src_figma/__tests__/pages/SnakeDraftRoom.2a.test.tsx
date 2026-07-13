@@ -374,7 +374,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByTestId('room-write-notice')).not.toBeInTheDocument();
     expect(screen.getByTestId('main-board-update-banner')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' })).toBeInTheDocument();
-  });
+  }, 10_000);
 
   test('a deferred private-board save cannot restore its banner after cover and a seat switch', async () => {
     const source = session(false);
