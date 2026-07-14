@@ -134,7 +134,7 @@ Rules:
 
 - `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`
 - `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`
-- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.testUtils.tsx`
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.testUtils.ts`
 - Existing focused tests that import a moved pure helper, import-update only
 - At most one new adjacent pure helper module for each affected production page
 
