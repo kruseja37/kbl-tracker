@@ -12,6 +12,11 @@ three adjacent modules and import-only consumer paths listed below are frozen as
 authorized. `FranchiseHomeContext.ts` may contain only the existing React
 context and hook; it may not add persistence, routing, state transitions, or UI.
 
+**Amendment 2:** Required import updates made two existing files part of the
+branch-changed lint set and exposed whole-file debt. Structural lint cleanup is
+authorized in `TeamHubContent.tsx` and `useAuctionDraft.test.ts` only. No feature,
+storage, routing, assertion, or rendered-output change is authorized.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -148,14 +153,16 @@ Frozen helper and importer paths:
 - `src/src_figma/app/pages/LeagueBuilderAuctionDraft.helpers.ts` (new; the five
   existing pure exported helpers only)
 - `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.computeBoardAutoAdvanceLine.test.ts`
-- `src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts`
+- `src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts` (import update and
+  structural lint cleanup only)
 - `src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx`
 - `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.helpers.ts` (new;
   `buildFarmBridgeHeadline` only)
 - `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx`
 - `src/src_figma/app/pages/FranchiseHomeContext.ts` (new; existing context and
   hook only)
-- `src/src_figma/app/components/TeamHubContent.tsx` (import update only)
+- `src/src_figma/app/components/TeamHubContent.tsx` (import update and structural
+  lint cleanup only)
 - `src/src_figma/app/components/LineupsTabContent.tsx` (import update only)
 - `src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx` (replace
   page re-export imports with direct canonical helper imports only)
