@@ -91,7 +91,7 @@ import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId, type SnakeOpenTradeOffer, 
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
 import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
-import { buildInitialSnakeSeatBoards } from '../components/snake/setup/SnakeDraftSetupAdapter';
+import { buildInitialSnakeSeatBoards } from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
 import {
   executeAskedPickTrade,
   guideForAskedPick,
@@ -182,6 +182,7 @@ function fullName(firstName: string, lastName: string): string {
 }
 
 const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
+const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 const RECAP_CONFIRMATION_ERROR = 'THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.';
 
 function hotseatPassName(
@@ -645,7 +646,7 @@ function FarmSnakeRoom() {
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     order={session.pickOrder.map((slot, index, all) => ({ pick: slot.pick, teamId: slot.teamId, endpoint: all[index - 1]?.teamId === slot.teamId || all[index + 1]?.teamId === slot.teamId }))}
     currentPickIndex={session.currentPickIndex}
-    ticker={session.completedPicks.slice(-8).reverse().map((pick) => ({ id: `${pick.pick}-${pick.playerId}`, teamId: pick.teamId, text: `${leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB'} SELECTED ${farmPool.prospects.find((row) => row.id === pick.playerId)?.firstName ?? UNKNOWN_PLAYER}` }))}
+    ticker={session.completedPicks.slice(-8).reverse().map((pick) => ({ id: `${pick.pick}-${pick.playerId}`, teamId: pick.teamId, text: `${leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM} SELECTED ${farmPool.prospects.find((row) => row.id === pick.playerId)?.firstName ?? UNKNOWN_PLAYER}` }))}
     rostersByTeamId={rostersByTeamId}
     ownedPicksByTeamId={ownedPicksByTeamId}
     activeSeatId={farmDraftComplete ? null : deskTeam?.id ?? null}
@@ -1196,7 +1197,7 @@ function MlbSnakeDraftRoom() {
     return {
       id: `${pick.round}-${pick.pick}-${pick.playerId}`,
       teamId: pick.teamId,
-      text: `${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB').toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`,
+      text: `${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`,
     };
   }), [leagueTeams, playerById, session]);
   const latestPick = session?.completedPicks.at(-1);
@@ -1446,7 +1447,7 @@ function MlbSnakeDraftRoom() {
     ].map((event) => [`${event.slotId}:${event.gonePlayerId}`, event])).values()];
     const activeLog: AdvisorLogEntry[] = [
       ...seatBackfillEvents.map((event) => {
-        const gone = candidateById.get(event.gonePlayerId)?.name ?? event.gonePlayerId;
+        const gone = candidateById.get(event.gonePlayerId)?.name ?? UNKNOWN_PLAYER;
         const promoted = event.promotedPlayerId ? candidateById.get(event.promotedPlayerId)?.name : undefined;
         return {
           key: `backfill:${event.slotId}:${event.gonePlayerId}`,

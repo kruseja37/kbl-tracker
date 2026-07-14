@@ -333,3 +333,175 @@ routes findings back until focused gates are green, then a separate auditor
 reviews each lane. Only the coordinator stages the exact verified paths after a
 fresh `origin/main` fetch. The original repo-crawl auditor then reruns the full
 cross-lane audit and must return zero major and zero minor findings.
+
+## Amendment 8 — combined-branch closing-audit repairs (2026-07-14)
+
+### Audit verdict
+
+The independent whole-branch re-audit of `c178be67` against `origin/main`
+`ea66830e` returned **NOT VERIFIED: three major findings, zero minor findings**.
+The full serial repository suite passed 681 files / 10,109 tests, the focused
+Snake matrix passed 48 files / 375 tests, TypeScript and production build
+passed, responsive Playwright passed 4/4, and diff/status checks were clean.
+Those green gates do not override the three deterministic contract breaches.
+
+### A8-1. Companion cover must synchronously clear rational-risk state
+
+- `SnakeCompanion` must pass a null request into `useSnakeRationalRisks` while
+  the device is covered, before the covered-screen return.
+- Returning to the same seat may not reuse a ready pre-cover risk snapshot.
+- Covering must clear private rational-risk output and actions synchronously;
+  a later worker response from the pre-cover epoch must remain stale.
+- Add a caller-level test that reaches a ready risk result, covers the device,
+  returns to the same seat without a new worker result, and proves the old
+  result/action cannot render. Also prove the caller request is null while
+  covered.
+
+### A8-2. Remove every branch-added lint suppression structurally
+
+- The branch-changed TypeScript/TSX file set must pass ESLint with
+  `--no-inline-config`, zero errors, and zero warnings.
+- Remove the two `react-hooks/set-state-in-effect` suppressions in
+  `useSnakeAssistantBoard.ts` and `useSnakeGuideRecommendation.ts`; derive or
+  reset state structurally without stale results, render loops, or behavior
+  drift.
+- Remove the file-wide fast-refresh suppressions from
+  `SnakeDraftSetupAdapter.tsx` and `LeagueBuilderDraftSetup.tsx`. Move pure
+  exported helpers/constants/types into adjacent helper modules where needed;
+  the modules may contain no component state, storage writes, routing, or UI
+  behavior.
+- Remove the branch-added/relocated hook-dependency suppressions in
+  `LeagueBuilderDraftSetup.tsx` by stabilizing dependencies or restructuring
+  the callbacks/effects. The pre-existing base suppression for
+  `positionGroups` must not be expanded; if the changed-file no-inline gate
+  reaches it, close it structurally too.
+- No new disable comment, `.skip`, `.only`, timeout increase, assertion
+  weakening, or generated lint ignore is allowed.
+
+### A8-3. Neutral identity copy is exact and fail-closed
+
+- No missing player or team lookup may render an internal ID/key in any Snake
+  surface, activity line, ticker, order row, alert, or DOM attribute.
+- Player fallback text is exactly `UNKNOWN PLAYER`.
+- Team fallback text is exactly `UNKNOWN TEAM`.
+- Replace the advisor-log `gonePlayerId` fallback, companion ticker `A PLAYER`
+  fallback, room-view unknown-team fallback, and setup-adapter unknown-team
+  fallback.
+- Add mutation-honest tests that inject absent player/team lookups and assert
+  the internal IDs are absent from visible text and `innerHTML`.
+
+### Amendment 8 allowed production paths
+
+- `src/src_figma/app/pages/SnakeCompanion.tsx`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx`
+- `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`
+- `src/src_figma/app/components/snake/desk/useSnakeAssistantBoard.ts`
+- `src/src_figma/app/components/snake/desk/useSnakeGuideRecommendation.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- Adjacent pure helper modules required only to relocate existing exported
+  helpers/constants/types from the two fast-refresh pages.
+
+### Amendment 8 allowed test/importer paths
+
+- Existing focused tests for the production modules above.
+- Existing tests/importers that directly import a relocated pure export;
+  import-path changes only outside the focused test files.
+- No auction, schedule, franchise-launch, storage-schema, economy-math, or
+  Legends behavior change is authorized.
+
+### Amendment 8 gates
+
+1. Red-first focused tests for cover clearing and neutral identity fallbacks.
+2. Focused hook/page/component suites.
+3. Exact changed-file ESLint with `--no-inline-config`, zero errors/warnings.
+4. Full Snake matrix.
+5. Responsive Playwright 4/4.
+6. TypeScript and production build.
+7. Full serial Vitest.
+8. `git diff --check origin/main...HEAD` and clean exact-scope status.
+9. Separate auditor returns VERIFIED with zero major and zero minor findings.
+
+Builder does not stage or commit. Builder does not audit its own work. Use high
+reasoning effort.
+
+## Amendment 9 — Amendment 8 audit rejection and repair 2 (2026-07-14)
+
+### Re-audit verdict
+
+The independent Amendment 8 audit returned **NOT VERIFIED: three major
+findings, zero minor findings**. Green focused, Snake, TypeScript, build, lint,
+and responsive gates did not cover the following deterministic failures.
+
+### A9-1. Cover is a real privacy epoch, not only a null render
+
+- `useSnakeRationalRisks` must not retain or reuse a settled snapshot across a
+  null-request cover boundary, even when the same semantic request key returns.
+- Cover must invalidate the prior worker generation and prior ready result.
+- Returning to the same seat before a new worker response must remain idle or
+  pending; it may not show the pre-cover recommendation/action.
+- Directly test the real hook without mocking it: settle `AT_RISK`, render null,
+  re-enter with the identical key, prove the old result is absent before the
+  fresh response, then prove a late pre-cover response remains stale.
+
+### A9-2. Hook state identity and worker identity must match
+
+- `useSnakeAssistantBoard` and `useSnakeGuideRecommendation` must key both
+  displayed snapshot state and worker lifecycle/response acceptance to the same
+  semantic request identity.
+- A freshly cloned request object with an unchanged semantic key must neither
+  clear a ready result nor strand the hook in pending.
+- A meaningfully changed key must still clear stale output, start a new worker,
+  and reject the old worker's response.
+- Add direct real-hook tests for same-key cloned request objects for both hooks;
+  mutation must fail if reference equality is restored.
+
+### A9-3. Complete the exact neutral-team fallback sweep
+
+The Amendment 8 allowlist is expanded to include:
+
+- `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
+- `src/src_figma/app/components/snake/trade/TradePackageCard.tsx`
+- `src/src_figma/app/components/snake/trade/SnakeCommissionerTrade.tsx`
+- Their existing focused tests only.
+
+Every live missing-team lookup in those surfaces must render exactly
+`UNKNOWN TEAM`, never `CLUB` or an internal ID. Add focused DOM tests and run a
+production Snake-surface sweep for missing-team/player fallback literals and
+ID fallbacks. Any additional live violation is in scope only after it is added
+to this contract before editing.
+
+### Amendment 9 gates
+
+1. Direct real-hook red-first mutations for A9-1 and both A9-2 hooks.
+2. All Amendment 8 focused tests plus the expanded identity tests.
+3. Exact branch-changed TypeScript/TSX ESLint with `--no-inline-config`, zero
+   errors and zero warnings; no disable comments.
+4. Full 48-file Snake matrix.
+5. Responsive Playwright 4/4.
+6. TypeScript and production build.
+7. Full serial Vitest after the independent audit is green on the deterministic
+   findings.
+8. Diff/status hygiene and separate auditor verdict of zero major/minor.
+
+Builder does not stage or commit and may not audit its own work. Use high
+reasoning effort.
+
+### Amendment 9 closing record (2026-07-14)
+
+**Independent verdict: VERIFIED — zero major, zero minor.** The auditor directly
+mutation-tested the real privacy epoch and both semantic request-identity hooks,
+then confirmed the exact neutral identity sweep. Independent focused proof was
+9 files / 131 tests. The builder's combined changed-test gate was 14 files / 266
+tests; the contract Snake matrix was 48 files / 383 tests. Exact changed-file
+ESLint with `--no-inline-config` returned zero errors and zero warnings;
+responsive Playwright passed 4/4; TypeScript, production build, and diff hygiene
+were green. No worker leak, cache resurrection, stranded pending lifecycle, or
+residual `CLUB` / `A PLAYER` fallback survived the attack.
+
+The captain then ran the required post-audit serial repository gate on the exact
+audited tree: 681 files passed with 8 skipped (689 total); 10,120 tests passed
+with 15 skipped (10,135 total); zero failed. Amendment 9 closes FINDING-157,
+FINDING-158, and FINDING-159. The next gate is the live Snake UI crawl; JK's
+browser walk remains the only product-acceptance gate.

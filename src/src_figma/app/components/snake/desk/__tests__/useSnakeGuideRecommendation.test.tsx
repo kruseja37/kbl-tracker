@@ -95,6 +95,25 @@ describe('snake guide recommendation worker hook', () => {
     expect(screen.queryByText('PICK 9')).not.toBeInTheDocument();
   });
 
+  it('keeps pending and ready state bound to the semantic keys across cloned request objects', () => {
+    const original = request('semantic-a');
+    const view = render(<Harness request={original} privateKey="private-seat-a" />);
+    const worker = FakeWorker.instances[0];
+
+    view.rerender(<Harness request={{ ...original }} privateKey="private-seat-a" />);
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(FakeWorker.instances).toHaveLength(1);
+
+    act(() => worker.onmessage?.({
+      data: ready('semantic-a'),
+    } as MessageEvent<SnakeGuideRecommendationWorkerResponse>));
+    expect(screen.getByText('PICK 9')).toBeInTheDocument();
+
+    view.rerender(<Harness request={{ ...original }} privateKey="private-seat-a" />);
+    expect(screen.getByText('PICK 9')).toBeInTheDocument();
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
   it.each([
     ['forged later target', { targetPick: 12 }],
     ['four picks per side', { offerPickNumbers: [12, 13, 14, 15], receivePickNumbers: [9, 8, 7, 6] }],

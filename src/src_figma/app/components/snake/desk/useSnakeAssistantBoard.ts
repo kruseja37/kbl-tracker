@@ -39,6 +39,13 @@ interface BaselineProof {
   ready: boolean;
 }
 
+interface HookState {
+  epoch: number;
+  requestKey: string | null;
+  snapshot: Snapshot | null;
+  baselineProof: BaselineProof | null;
+}
+
 const ASSISTANT_UNAVAILABLE_REASONS = new Set<SnakeAssistantUnavailableReason>([
   'MISSING_INPUT',
   'INVALID_POOL',
@@ -262,21 +269,25 @@ function validWorkerResponse(
 export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | null): SnakeAssistantBoardState {
   const requestRef = useRef(request);
   const requestKey = request?.key ?? null;
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [baselineProof, setBaselineProof] = useState<BaselineProof | null>(null);
+  const [hookState, setHookState] = useState<HookState>(() => ({
+    epoch: 0,
+    requestKey,
+    snapshot: null,
+    baselineProof: null,
+  }));
+  const requestEpoch = hookState.requestKey === requestKey
+    ? hookState.epoch
+    : hookState.epoch + 1;
+  if (hookState.requestKey !== requestKey) {
+    setHookState({ epoch: requestEpoch, requestKey, snapshot: null, baselineProof: null });
+  }
+  const currentIdentity = hookState.epoch === requestEpoch && hookState.requestKey === requestKey;
+  const snapshot = currentIdentity ? hookState.snapshot : null;
+  const baselineProof = currentIdentity ? hookState.baselineProof : null;
 
   useEffect(() => {
     requestRef.current = request;
   }, [request]);
-
-  useEffect(() => {
-    if (requestKey) return;
-    // Privacy exception: a covered desk must discard the prior private payload before the same
-    // request object can be revealed again. Deferring this reset can resurrect a same-key result.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSnapshot(null);
-    setBaselineProof(null);
-  }, [requestKey]);
 
   useEffect(() => {
     const current = requestRef.current;
@@ -297,19 +308,25 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       if (active) {
         pinnedSettled = true;
         baselineSettled = true;
-        setSnapshot({
-          key: requestKey,
-          result: { status: 'unavailable', reason: 'MISSING_INPUT' },
-          workerFailed: true,
-        });
-        setBaselineProof({ pinnedRequestKey: requestKey, ready: false });
+        setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey ? {
+          ...state,
+          snapshot: {
+            key: requestKey,
+            result: { status: 'unavailable', reason: 'MISSING_INPUT' },
+            workerFailed: true,
+          },
+          baselineProof: { pinnedRequestKey: requestKey, ready: false },
+        } : state);
       }
       worker?.terminate();
     };
     const settleBaseline = (ready: boolean) => {
       if (!active) return;
       baselineSettled = true;
-      setBaselineProof({ pinnedRequestKey: requestKey, ready });
+      setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey ? {
+        ...state,
+        baselineProof: { pinnedRequestKey: requestKey, ready },
+      } : state);
       terminateIfSettled();
     };
     try {
@@ -331,7 +348,9 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
         fail();
         return;
       }
-      setSnapshot(event.data);
+      setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey
+        ? { ...state, snapshot: event.data }
+        : state);
       if (baselineRequest && event.data.result.status === 'unavailable'
         && BASELINE_PROVEN_PIN_INFEASIBLE_REASONS.has(event.data.result.reason)) {
         try {
@@ -356,7 +375,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       active = false;
       worker?.terminate();
     };
-  }, [requestKey]);
+  }, [requestEpoch, requestKey]);
 
   if (!requestKey) return { status: 'idle', board: null, infeasibleReason: null };
   if (typeof Worker === 'undefined') return { status: 'unavailable', board: null, infeasibleReason: null };

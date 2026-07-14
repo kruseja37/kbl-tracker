@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
-  buildIdentityAutoAssignPlan,
 } from "../../app/pages/LeagueBuilderDraftSetup";
+import { buildIdentityAutoAssignPlan } from "../../app/pages/LeagueBuilderDraftSetup.helpers";
 import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { poolDemandModel } from "../../../engines/auctionPoolSizing";

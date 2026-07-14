@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { SnakeGuidePackage } from '../../../../../../engines/snakeGuideTrade';
 import { SnakeCommissionerTrade } from '../SnakeCommissionerTrade';
 import { SnakeTradeGuide } from '../SnakeTradeGuide';
+import { TradePackageCard } from '../TradePackageCard';
 import type { AskedPickGuideResult, ExecutedAskedPickTrade } from '../tradeGuideModel';
 
 function deferred<T>() {
@@ -42,6 +43,53 @@ const openOffer = {
 };
 
 describe('S4 guide surfaces', () => {
+  it('uses the exact unknown-team fallback throughout a trade package without exposing internal ids', () => {
+    const missingBuyerId = 'internal-package-buyer-key';
+    const missingSellerId = 'internal-package-seller-key';
+    const missingAnswer: AskedPickGuideResult = {
+      ...answer,
+      proposal: { ...proposal, buyerTeamId: missingBuyerId, sellerTeamId: missingSellerId },
+      nextPickMoves: [
+        { teamId: missingBuyerId, before: 14, after: 9 },
+        { teamId: missingSellerId, before: 9, after: 14 },
+      ],
+    };
+    const { container } = render(<TradePackageCard answer={missingAnswer} teams={[]} />);
+
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('WITH UNKNOWN TEAM');
+    expect(screen.getAllByText(/UNKNOWN TEAM NEXT PICK MOVES/)).toHaveLength(2);
+    expect(container).not.toHaveTextContent('CLUB');
+    expect(container).not.toHaveTextContent(missingBuyerId);
+    expect(container).not.toHaveTextContent(missingSellerId);
+  });
+
+  it('uses the exact unknown-team fallback for missing commissioner offer teams', () => {
+    const missingBuyerId = 'internal-commissioner-buyer-key';
+    const missingSellerId = 'internal-commissioner-seller-key';
+    const missingOffer = {
+      ...openOffer,
+      buyerTeamId: missingBuyerId,
+      sellerTeamId: missingSellerId,
+    };
+    const { container } = render(<SnakeCommissionerTrade
+      teams={[]}
+      ownedPicksByTeamId={{}}
+      sessionRevision={7}
+      openOffers={[missingOffer]}
+      onAsk={vi.fn()}
+      onPost={vi.fn()}
+      onNod={vi.fn()}
+      onClose={vi.fn()}
+      onExecute={vi.fn()}
+    />);
+
+    expect(screen.getByText('UNKNOWN TEAM ↔ UNKNOWN TEAM')).toBeInTheDocument();
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('WITH UNKNOWN TEAM');
+    expect(screen.getByLabelText('Open trade offers')).not.toHaveTextContent('CLUB');
+    expect(container).not.toHaveTextContent(missingBuyerId);
+    expect(container).not.toHaveTextContent(missingSellerId);
+  });
+
   it('keeps every guide and commissioner control at the 44px touch target', () => {
     const guide = render(<SnakeTradeGuide
       teams={teams}

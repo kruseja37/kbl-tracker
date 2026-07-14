@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   mainSave: vi.fn(),
   omitContextPlayerId: null as string | null,
   riskMode: 'NONE' as 'NONE' | 'SAFE' | 'URGENT',
+  riskRequests: [] as unknown[],
   guideMode: 'NONE' as 'NONE' | 'READY' | 'MALFORMED',
   assistantFailureReason: null as null | 'PIN_UNMATCHED' | 'INSOLVENT_BOARD',
   guideRequests: [] as unknown[],
@@ -90,6 +91,7 @@ vi.mock('../../app/components/snake/desk/useSnakeAssistantBoard', async () => {
 vi.mock('../../app/components/snake/desk/useSnakeRationalRisks', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app/components/snake/desk/useSnakeRationalRisks')>();
   return { ...actual, useSnakeRationalRisks: (request: unknown) => {
+    mocks.riskRequests.push(request ? structuredClone(request) : null);
     if (!request || mocks.riskMode === 'NONE') {
       return { status: request ? 'unavailable' : 'idle', risks: null, scarcity: null };
     }
@@ -300,6 +302,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.assistantResults.length = 0;
     mocks.omitContextPlayerId = null;
     mocks.riskMode = 'NONE';
+    mocks.riskRequests.length = 0;
     mocks.guideMode = 'NONE';
     mocks.assistantFailureReason = null;
     mocks.guideRequests.length = 0;
@@ -526,6 +529,47 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     companionPublicSession.revision = mainPublicSession.revision;
     expect(mainInput).toEqual(companionInput);
   }, 15_000);
+
+  test('cover nulls the companion rational-risk request and same-seat return cannot resurrect ready pre-cover advice', async () => {
+    mocks.riskMode = 'URGENT';
+    mocks.guideMode = 'READY';
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(await screen.findByRole('button', { name: 'TRADE TO #1' })).toBeInTheDocument();
+    expect(mocks.riskRequests.at(-1)).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(mocks.riskRequests.at(-1)).toBeNull();
+
+    mocks.riskMode = 'NONE';
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByTestId('selected-player-decision')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /TRADE TO/ })).not.toBeInTheDocument();
+  }, 15_000);
+
+  test('missing companion ticker identities use exact neutral copy and never expose internal ids', async () => {
+    const source = session();
+    const missingPlayerId = 'companion-internal-player-77';
+    source.completedPicks = [{
+      round: 1,
+      pick: 1,
+      teamId: 'a',
+      playerId: missingPlayerId,
+      settledSalary: 10_000,
+      marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    prepare(source);
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByText('CLUB A SELECTED UNKNOWN PLAYER')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+  });
 
   test('generic assistant failure and malformed guide state remain neutral on both pages', async () => {
     mocks.riskMode = 'URGENT';

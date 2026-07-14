@@ -106,6 +106,8 @@ const DEVICE_COVER_EVENT = 'kbl-snake-companion-device-cover-change';
 const LEFT_SESSIONS_KEY = 'kbl-snake-companion-left-session-ids';
 const FRESHNESS_MS = 5_000;
 const NO_OPEN_ROOM_COPY = 'NO OPEN SNAKE ROOM FOUND ON THIS ACCOUNT.';
+const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
+const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 
 interface CompanionPrivateIdentity {
   sessionId: string;
@@ -558,7 +560,7 @@ export default function SnakeCompanion() {
   const board = team ? session?.seatBoards?.[team.id] ?? null : null;
 
   const rationalRiskRequest = useMemo(() => {
-    if (!session || !pool || !team || !board) return null;
+    if (deviceCovered || !session || !pool || !team || !board) return null;
     const available = deskPlayers.filter((entry) => !unavailable.has(entry.playerId));
     const seats = buildRationalSeats({
       teams: leagueTeams,
@@ -575,7 +577,7 @@ export default function SnakeCompanion() {
       baseCaps: pool.luxuryCaps,
       realTeamCount: leagueTeams.length,
     });
-  }, [board, deskById, deskPlayers, leagueTeams, pool, session, team, unavailable]);
+  }, [board, deskById, deskPlayers, deviceCovered, leagueTeams, pool, session, team, unavailable]);
   const rationalRiskState = useSnakeRationalRisks(rationalRiskRequest);
 
   const deskState = useMemo(() => {
@@ -1198,12 +1200,12 @@ export default function SnakeCompanion() {
   const ticker = session.completedPicks.slice(-6).reverse().map((pick) => {
     const pickTeam = leagueTeams.find((entry) => entry.id === pick.teamId);
     const player = playerById.get(pick.playerId);
-    return `${(pickTeam?.name ?? 'CLUB').toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : 'A PLAYER').toUpperCase()}`;
+    return `${(pickTeam?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`;
   });
   return <SnakeCompanionFrame
     team={{ id: team.id, name: team.name, abbreviation: team.abbreviation, logoUrl: team.logoUrl, colors: team.colors }}
     currentPick={session.pickOrder[session.currentPickIndex]?.pick ?? session.currentPickIndex + 1}
-    order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({ pick: slot.pick, teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? 'CLUB' }))}
+    order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({ pick: slot.pick, teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? UNKNOWN_TEAM }))}
     ticker={ticker}
     message={message}
     onCover={coverDevice}

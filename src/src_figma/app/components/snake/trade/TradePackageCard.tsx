@@ -11,7 +11,7 @@ function pickLabel(pick: number | null): string {
 }
 
 function teamName(teams: readonly SnakeTradeGuideTeam[], teamId: string): string {
-  return (teams.find((team) => team.id === teamId)?.name ?? 'CLUB').toUpperCase();
+  return (teams.find((team) => team.id === teamId)?.name ?? 'UNKNOWN TEAM').toUpperCase();
 }
 
 function picks(pickNumbers: readonly number[]): string {
@@ -56,7 +56,7 @@ export function TradePackageCard(props: {
       {props.answer.proposal ? <TradeOfferValueCard offer={props.answer.proposal} teams={props.teams} viewerTeamId={props.viewerTeamId ?? props.answer.proposal.buyerTeamId} /> : null}
       {props.answer.nextPickMoves.map((move) => (
         <p key={move.teamId} className="mt-2 text-sm font-bold">
-          {(props.teams.find((team) => team.id === move.teamId)?.name ?? 'CLUB').toUpperCase()} NEXT PICK MOVES: {pickLabel(move.before)} → {pickLabel(move.after)}
+          {(props.teams.find((team) => team.id === move.teamId)?.name ?? 'UNKNOWN TEAM').toUpperCase()} NEXT PICK MOVES: {pickLabel(move.before)} → {pickLabel(move.after)}
         </p>
       ))}
     </div>

@@ -93,7 +93,7 @@ export interface SnakeDraftRoomViewProps {
 }
 
 function teamName(team: SnakeRoomTeam | undefined): string {
-  return team?.name ?? 'CLUB';
+  return team?.name ?? 'UNKNOWN TEAM';
 }
 
 export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
@@ -468,7 +468,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               <span className="block text-[10px]">PICK {slot.pick}{slot.endpoint ? ' · BACK-TO-BACK' : ''}</span>
               <span className="flex items-center gap-2">
                 {team?.logoUrl && <img className="h-7 w-7 object-contain" src={team.logoUrl} alt={`${team.name} logo in draft order`} />}
-                {team?.abbreviation ?? slot.teamId}
+                {team?.abbreviation ?? 'UNKNOWN TEAM'}
               </span>
             </>;
             return props.consolidatedMlb ? (

@@ -166,6 +166,25 @@ describe('snake assistant board worker hook', () => {
     expect(worker.terminated).toBe(true);
   });
 
+  it('keeps pending and ready state bound to the semantic key across cloned request objects', () => {
+    const original = request('semantic-a');
+    const view = render(<Harness value={original} />);
+    const worker = FakeWorker.instances[0];
+
+    view.rerender(<Harness value={{ ...original }} />);
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(FakeWorker.instances).toHaveLength(1);
+
+    act(() => worker.onmessage?.({
+      data: ready('semantic-a', 'team-a'),
+    } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+
+    view.rerender(<Harness value={{ ...original }} />);
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
+
   it('accepts a real canonical READY result whose recommendation includes unslotted available players', () => {
     const value = request('canonical-extra-candidates');
     value.input.activePool = [

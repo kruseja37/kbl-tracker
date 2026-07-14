@@ -158,5 +158,5 @@ export function SnakeCommissionerTrade(props: {
 }
 
 function teamName(teams: readonly SnakeTradeGuideTeam[], teamId: string): string {
-  return (teams.find((team) => team.id === teamId)?.name ?? 'CLUB').toUpperCase();
+  return (teams.find((team) => team.id === teamId)?.name ?? 'UNKNOWN TEAM').toUpperCase();
 }

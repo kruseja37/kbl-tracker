@@ -44,6 +44,22 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
 }
 
 describe('SnakeDraftRoomView', () => {
+  it('uses exact neutral team copy without exposing a missing order team id anywhere in the DOM', () => {
+    const missingTeamId = 'internal-team-key-42';
+    render(<SnakeDraftRoomView {...props({
+      order: [{ pick: 1, teamId: missingTeamId }],
+      currentPickIndex: 0,
+      activeSeatId: null,
+      candidate: null,
+      candidateProfile: null,
+      ticker: [],
+    })} />);
+
+    expect(screen.getByText('UNKNOWN TEAM')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingTeamId);
+    expect(document.body.innerHTML).not.toContain(missingTeamId);
+  });
+
   it('keeps room explainers behind the Help toggle', () => {
     render(<SnakeDraftRoomView {...props()} />);
     expect(screen.queryByText('THE SHARED ROOM STAYS COVERED UNTIL THE CLUB ARMS ITS PICK.')).not.toBeInTheDocument();

@@ -202,6 +202,58 @@ describe('shared snake rational-risk worker seam', () => {
     expect(screen.getByText('IDLE')).toBeInTheDocument();
   });
 
+  test('treats null cover as a privacy epoch before the same public key can reenter', () => {
+    const value = request('state-a');
+    const view = render(<Harness request={value} />);
+    const preCoverWorker = FakeWorker.instances[0];
+    act(() => preCoverWorker.onmessage?.({
+      data: {
+        key: 'state-a',
+        status: 'ready',
+        risks: [{
+          playerId: 'player-a', risk: 'AT_RISK', nextPick: 3,
+          earliestSelectingPick: 2, latestSelectingPick: 3,
+          latestSelectingPickIsAskingTurn: true, interestedClubCount: 1,
+          draftedAtPick: 2, rationalBuyersBeforeTurn: 1,
+        }],
+        scarcity: [], scenarios: [], nextPick: 3,
+      },
+    } as MessageEvent<SnakeRationalRiskWorkerResponse>));
+    expect(screen.getByText('AT_RISK')).toBeInTheDocument();
+
+    view.rerender(<Harness request={null} />);
+    expect(screen.getByText('IDLE')).toBeInTheDocument();
+    view.rerender(<Harness request={{ ...value }} />);
+
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+    expect(screen.queryByText('AT_RISK')).not.toBeInTheDocument();
+    expect(FakeWorker.instances).toHaveLength(2);
+
+    act(() => preCoverWorker.onmessage?.({
+      data: {
+        key: 'state-a', status: 'ready', risks: [{
+          playerId: 'player-a', risk: 'AT_RISK', nextPick: 3,
+          earliestSelectingPick: 2, latestSelectingPick: 3,
+          latestSelectingPickIsAskingTurn: true, interestedClubCount: 1,
+          draftedAtPick: 2, rationalBuyersBeforeTurn: 1,
+        }], scarcity: [], scenarios: [], nextPick: 3,
+      },
+    } as MessageEvent<SnakeRationalRiskWorkerResponse>));
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+
+    act(() => FakeWorker.instances[1].onmessage?.({
+      data: {
+        key: 'state-a', status: 'ready', risks: [{
+          playerId: 'player-a', risk: 'LIKELY_GONE', nextPick: 3,
+          earliestSelectingPick: 2, latestSelectingPick: 2,
+          latestSelectingPickIsAskingTurn: false, interestedClubCount: 1,
+          draftedAtPick: 2, rationalBuyersBeforeTurn: 1,
+        }], scarcity: [], scenarios: [], nextPick: 3,
+      },
+    } as MessageEvent<SnakeRationalRiskWorkerResponse>));
+    expect(screen.getByText('LIKELY_GONE')).toBeInTheDocument();
+  });
+
   test('serializes public inputs only and omits every rival-private session surface', () => {
     const privateSession = {
       id: 'session', revision: 7, currentPickIndex: 0,

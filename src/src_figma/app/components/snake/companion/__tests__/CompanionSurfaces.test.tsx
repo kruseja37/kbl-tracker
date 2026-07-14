@@ -102,6 +102,31 @@ describe('S5 companion surfaces', () => {
     expect(fresh.snakeCompanions.claims.find((claim) => claim.claimId === 'old-claim')?.status).toBe('revoked');
   });
 
+  it('uses the exact unknown-team fallback without exposing a missing companion team id', () => {
+    const missingTeamId = 'internal-companion-team-key';
+    const missingTeamSession = {
+      ...session,
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [{
+          deviceId: 'ipad-missing',
+          gmName: 'Alex',
+          teamId: missingTeamId,
+          status: 'pending' as const,
+        }],
+      },
+    };
+    const { container } = render(<CompanionApprovalCard
+      session={missingTeamSession}
+      teams={[]}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByText('LET ALEX SEE THE UNKNOWN TEAM DESK?')).toBeInTheDocument();
+    expect(container).not.toHaveTextContent('CLUB');
+    expect(container).not.toHaveTextContent(missingTeamId);
+  });
+
   it('renders only the supplied claimed-seat desk and public read surfaces, with no execute controls', () => {
     const { container } = render(<SnakeCompanionFrame
       team={{ id: 'team-a', name: 'Kodiaks', abbreviation: 'KOD' }}

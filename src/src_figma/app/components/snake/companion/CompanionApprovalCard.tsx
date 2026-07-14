@@ -46,7 +46,7 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
 
   const companions = props.session.snakeCompanions;
   if (!companions) return <section className="ballpark-panel"><p>OPENING THE COMPANION ROOM…</p></section>;
-  const teamName = (teamId: string) => props.teams.find((team) => team.id === teamId)?.name ?? 'CLUB';
+  const teamName = (teamId: string) => props.teams.find((team) => team.id === teamId)?.name ?? 'UNKNOWN TEAM';
   const update = async (claim: CompanionClaim, status: 'approved' | 'revoked') => {
     setError(null);
     const identity = companionClaimIdentity(claim);

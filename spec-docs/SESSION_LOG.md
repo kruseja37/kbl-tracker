@@ -7152,3 +7152,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   on Super Mega League: save Snake, reopen still Snake, enter `Snake Draft — Super Mega League`.
   Independent audit APPROVE; focused gate 4 files / 89 tests, TypeScript, scoped ESLint, and
   `git diff --check` clean.
+
+## 2026-07-14 (Codex, unattended continuation) — Snake combined-repo close green; live UI crawl next
+
+- Fresh-fetch state remained `origin/main` `ea66830e`; the isolated Snake branch is still not on
+  `main`, and no automated result was treated as JK acceptance.
+- The independent combined-branch auditor returned NOT VERIFIED with three majors: covered
+  companion advice survived as retained hook state, assistant/guide render identity disagreed with
+  worker identity, and missing player/team fallbacks could expose placeholders or internal keys.
+- Repair 1 was independently rejected. Amendment 9 established a real privacy epoch, aligned hook
+  state and workers on semantic request keys, and completed the exact `UNKNOWN PLAYER` / `UNKNOWN
+  TEAM` sweep. A replacement independent auditor then returned VERIFIED, zero major and zero minor,
+  after direct mutation attacks and 9 files / 131 focused tests.
+- Closing evidence on the exact audited tree: combined changed tests 266/266; Snake matrix 48 files
+  / 383 tests; responsive iPad Playwright 4/4; exact changed-file no-inline lint 0 errors / 0
+  warnings; TypeScript, production build, and diff hygiene green. The required post-audit serial
+  repository gate passed 681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped
+  (10,135 total), zero failed.
+- Next: commit the exact audited tree after a fresh fetch, obtain one final hostile whole-branch
+  verdict on the commit, then crawl the live production Snake, companion, farm, recap, and
+  zero-schedule handoff paths. Every live finding still requires a separate builder and auditor.
+  JK's browser walk remains the sole product-acceptance gate.

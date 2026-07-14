@@ -17,6 +17,12 @@ interface Snapshot extends SnakeGuideRecommendationWorkerResponse {
   failed?: boolean;
 }
 
+interface HookState {
+  epoch: number;
+  activeKey: string | null;
+  snapshot: Snapshot | null;
+}
+
 function hasExactKeys(value: object, expected: readonly string[]): boolean {
   const ownKeys = Reflect.ownKeys(value);
   if (ownKeys.some((key) => typeof key !== 'string')) return false;
@@ -50,17 +56,24 @@ export function useSnakeGuideRecommendation(
   const requestRef = useRef(request);
   const requestKey = request?.key ?? null;
   const activeKey = requestKey && privateKey ? `${privateKey}::${requestKey}` : null;
-  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [hookState, setHookState] = useState<HookState>(() => ({
+    epoch: 0,
+    activeKey,
+    snapshot: null,
+  }));
+  const requestEpoch = hookState.activeKey === activeKey
+    ? hookState.epoch
+    : hookState.epoch + 1;
+  if (hookState.activeKey !== activeKey) {
+    setHookState({ epoch: requestEpoch, activeKey, snapshot: null });
+  }
+  const snapshot = hookState.epoch === requestEpoch && hookState.activeKey === activeKey
+    ? hookState.snapshot
+    : null;
 
   useEffect(() => {
     requestRef.current = request;
   }, [request]);
-
-  useEffect(() => {
-    if (activeKey) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSnapshot(null);
-  }, [activeKey]);
 
   useEffect(() => {
     const current = requestRef.current;
@@ -68,12 +81,15 @@ export function useSnakeGuideRecommendation(
     let active = true;
     let worker: Worker | null = null;
     const fail = () => {
-      if (active) setSnapshot({
-        key: requestKey,
-        privateKey,
-        result: { status: 'unavailable' },
-        failed: true,
-      });
+      if (active) setHookState((state) => state.epoch === requestEpoch && state.activeKey === activeKey ? {
+        ...state,
+        snapshot: {
+          key: requestKey,
+          privateKey,
+          result: { status: 'unavailable' },
+          failed: true,
+        },
+      } : state);
     };
     try {
       worker = new Worker(
@@ -91,7 +107,9 @@ export function useSnakeGuideRecommendation(
         worker?.terminate();
         return;
       }
-      setSnapshot({ ...event.data, privateKey });
+      setHookState((state) => state.epoch === requestEpoch && state.activeKey === activeKey
+        ? { ...state, snapshot: { ...event.data, privateKey } }
+        : state);
       worker?.terminate();
     };
     worker.onerror = () => {
@@ -108,7 +126,7 @@ export function useSnakeGuideRecommendation(
       active = false;
       worker?.terminate();
     };
-  }, [activeKey, privateKey, requestKey]);
+  }, [activeKey, privateKey, requestEpoch, requestKey]);
 
   if (!activeKey || !requestKey || !privateKey) return { status: 'idle', proposal: null };
   if (typeof Worker === 'undefined') return { status: 'unavailable', proposal: null };

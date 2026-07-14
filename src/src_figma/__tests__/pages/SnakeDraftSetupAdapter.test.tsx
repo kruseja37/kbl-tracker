@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, test, vi } from 'vitest';
 
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
@@ -12,7 +13,8 @@ import {
   lockedSnakeVersionSelections,
   selectedSnakePoolIds,
   validateSnakeCompanionSeats,
-} from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
+} from '../../app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import { SnakeDraftSetupPanels } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
 import type { Player } from '../../hooks/useLeagueBuilderData';
 import { makeLegalRosterPlayerSet, makeLegalRosterPlayers, makePlayer, makeTeam } from './LeagueBuilderDraftSetup.testUtils';
 
@@ -32,6 +34,30 @@ function pool(players: Player[], iv = 1_000): RegisteredPool {
 }
 
 describe('SnakeDraftSetupAdapter', () => {
+  test('an absent order team uses exact neutral copy without exposing the internal id', () => {
+    const missingTeamId = 'setup-internal-team-key-51';
+    const adapter = {
+      groups: [],
+      versionSelections: {},
+      setVersionSelections: vi.fn(),
+      gmNames: {},
+      setGmNames: vi.fn(),
+      seatModes: {},
+      setSeatModes: vi.fn(),
+      seed: 'test',
+      setSeed: vi.fn(),
+      order: [missingTeamId],
+      swapFirst: null,
+      shuffleOrder: vi.fn(),
+      tapOrder: vi.fn(),
+    } as unknown as Parameters<typeof SnakeDraftSetupPanels>[0]['adapter'];
+    render(<SnakeDraftSetupPanels adapter={adapter} teams={[]} locked={false} disabled={false} />);
+
+    expect(screen.getByText('1. UNKNOWN TEAM')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingTeamId);
+    expect(document.body.innerHTML).not.toContain(missingTeamId);
+  });
+
   test('chooses exactly one historical version before lock', () => {
     const ruthA = makePlayer(1, { id: 'ruth-a', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);
     const ruthB = makePlayer(2, { id: 'ruth-b', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);

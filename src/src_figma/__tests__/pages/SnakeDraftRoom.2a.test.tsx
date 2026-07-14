@@ -226,6 +226,29 @@ function selectTeam(teamId: string): void {
 }
 
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
+  test('an advisor backfill for an absent player uses neutral copy without exposing the internal id', async () => {
+    const missingPlayerId = 'internal-gone-player-42';
+    const source = session(true);
+    source.completedPicks = [{ ...source.completedPicks[0], playerId: missingPlayerId }];
+    source.seatBoards = Object.fromEntries(TEAM_IDS.map((teamId) => [teamId, {
+      ...board(teamId),
+      slots: { ...board(teamId).slots, C: missingPlayerId },
+      rankings: {
+        ...board(teamId).rankings,
+        global: [missingPlayerId, ...(board(teamId).rankings.global ?? [])],
+        byPosition: { ...board(teamId).rankings.byPosition, C: [missingPlayerId, `${teamId}-replacement`, 'backup-c'] },
+      },
+    }]));
+    renderRoom(source);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    await revealSeatAndSettle('Club B');
+    fireEvent.click(await screen.findByRole('button', { name: 'ACTIVITY' }));
+
+    expect(screen.getByText(/UNKNOWN PLAYER GONE/)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+  });
+
   beforeEach(() => {
     mocks.saveRoom.mockReset().mockImplementation(async (next) => next);
     mocks.patchBoard.mockReset().mockImplementation(async (input: {

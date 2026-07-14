@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- this legacy shared page exposes tested pure setup helpers */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import {
@@ -63,7 +62,13 @@ import {
   shillCountFromSearch,
 } from "../utils/draftRouting";
 import { recommendedShillCount } from "../../../engines/auctionPoolSizing";
-import { registerPool, type RegisteredPool } from "../../../engines/leagueConstruction";
+import { buildSnakeOrder, registerPool, type RegisteredPool } from "../../../engines/leagueConstruction";
+import { seededSnakeShuffle } from "../../../engines/snakeShuffle";
+import {
+  proveSimultaneousSnakeSeating,
+  type SimultaneousSnakeSeatingInput,
+  type SnakeSeatingProof,
+} from "../../../engines/snakeSeatingProof";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
 import {
   historicalToSimArchetype,
@@ -98,6 +103,10 @@ import {
   resolveLeagueSalaryCap,
   saveLeagueTemplate,
   saveTeam,
+  createMlbDraftSessionId,
+  getRegisteredPool,
+  saveMlbDraftSession,
+  type LeagueBuilderMlbDraftSession,
   type PitchType,
   type Player,
   type Position,
@@ -141,7 +150,6 @@ import {
   buildDefaultDesignSlots,
   evaluateRosterDesign,
   seatAllClubs,
-  type DesignPoolPlayer,
   type DesignFeasibilityResult,
 } from "../../../engines/rosterDesignFeasibility";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
@@ -163,8 +171,29 @@ import { RankReorderList, materializeRankOrder } from "../components/shared/Rank
 import { PlayerProfilePopover } from "../components/shared/PlayerProfilePopover";
 import {
   SnakeDraftSetupPanels,
-  useSnakeDraftSetupAdapter,
+  type SnakeDraftSetupAdapterState,
 } from "../components/snake/setup/SnakeDraftSetupAdapter";
+import {
+  buildInitialSnakeSeatBoards,
+  buildSnakeSetupProofInput,
+  deriveSnakeVersionGroups,
+  lockedSnakeVersionSelections,
+  selectedSnakePoolIds,
+  validateSnakeCompanionSeats,
+  type ProofRunner,
+  type SnakeSetupAdapterInput,
+} from "../components/snake/setup/SnakeDraftSetupAdapter.helpers";
+import {
+  BOARD_POSITION_DEPTH,
+  BOARD_RANK_SAVE_DEBOUNCE_MS,
+  buildIdentityAutoAssignPlan,
+  comparePlayersByIvDesc,
+  draftSetupSolvencyBannerText,
+  formatMoney,
+  identityAutoFilledSlotKey,
+  type IdentityAutoAssignment,
+  type IdentityAutoFilledSlotKey,
+} from "./LeagueBuilderDraftSetup.helpers";
 import {
   formatSalaryCapInput,
   formatSalaryCapMoney,
@@ -173,16 +202,10 @@ import {
   salaryCapHardError as getSalaryCapHardError,
 } from "../utils/salaryCapInput";
 
-export { demandPlayerFromLeaguePlayer, demandUniverseFromPlayers } from "../engines/leaguePlayerAdapter";
-
 const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))].sort();
 const INITIAL_VISIBLE_POOL_ROWS = 100;
 const VISIBLE_POOL_ROW_STEP = 100;
-
-function formatMoney(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
-  return `$${Math.round(value).toLocaleString()}`;
-}
+const BOARD_POSITION_GROUPS = boardPositionGroups();
 
 function draftabilityRecordFromRows(rows: readonly ArchetypeDraftability[]) {
   const next: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> = {};
@@ -190,17 +213,6 @@ function draftabilityRecordFromRows(rows: readonly ArchetypeDraftability[]) {
     next[row.archetypeId] = { band: row.band, reason: row.reasons[0] };
   }
   return next;
-}
-
-export function draftSetupSolvencyBannerText(
-  pool: readonly DesignPoolPlayer[],
-  cap: number,
-): string | null {
-  if (pool.length === 0) return null;
-  const cheapest = evaluateRosterDesign(buildDefaultDesignSlots(), pool, Number.POSITIVE_INFINITY);
-  return cheapest.totalCost > cap
-    ? `This pool can't seat a legal roster under your ${formatMoney(cap)} cap — raise the cap or add cheaper players.`
-    : null;
 }
 
 function playerName(player: Player): string {
@@ -291,31 +303,6 @@ type TeamConfig = {
 type LeaguePoolRecord = RegisteredPool;
 
 type ClubEditorMode = "identity" | "design" | "board" | null;
-type IdentityAutoFillSlot = "mlb" | "farm";
-type IdentityAutoFillMode = "fill-empty" | "reroll-team";
-type IdentityAutoFilledSlotKey = `${string}:${IdentityAutoFillSlot}`;
-
-export interface IdentityAutoAssignment {
-  teamId: string;
-  mlbKey?: string;
-  farmKey?: string;
-  slots: IdentityAutoFillSlot[];
-}
-
-interface IdentityAutoAssignInput {
-  leagueId: string;
-  nonce: number;
-  teams: readonly Team[];
-  seats: readonly DraftSetupSeat[];
-  draftability?: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }>;
-  includeHumanTeams: boolean;
-  autoFilledSlots?: ReadonlySet<IdentityAutoFilledSlotKey>;
-  mode: IdentityAutoFillMode;
-  rerollTeamId?: string;
-  poolSourceMode: PoolSourceMode;
-  activeLeagueId: string;
-  players: readonly Player[];
-}
 type ModeAPoolState = "waiting" | "ready" | "review" | "locked";
 type ModeAReport = Pick<PoolFromDemandResult, "cells" | "shortfalls" | "designVerdicts" | "sizing" | "g1" | "numericShape"> & {
   playerIds: string[];
@@ -432,187 +419,6 @@ function teamOwnerId(team: Team, seats: readonly DraftSetupSeat[]): string {
 
 function sortedIds(ids: readonly string[]): string[] {
   return [...new Set(ids)].sort((a, b) => a.localeCompare(b));
-}
-
-function identityAutoFilledSlotKey(teamId: string, slot: IdentityAutoFillSlot): IdentityAutoFilledSlotKey {
-  return `${teamId}:${slot}`;
-}
-
-function hashStringToUint32(value: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function seededUnit(seed: string): number {
-  return hashStringToUint32(seed) / 0x100000000;
-}
-
-function teamRosterPlayers(players: readonly Player[], activeLeagueId: string, teamId: string): Player[] {
-  if (!activeLeagueId || !teamId) return [];
-  return players.filter((player) =>
-    player.leagueAssignments?.some((assignment) =>
-      assignment.leagueId === activeLeagueId &&
-      assignment.teamId === teamId &&
-      assignment.rosterStatus !== "FREE_AGENT"
-    )
-  );
-}
-
-function playerStatForArchetypeStat(player: Player, stat: (typeof HISTORICAL_ARCHETYPES)[number]["boosts"][number]): number {
-  switch (stat) {
-    case "POW":
-      return player.power;
-    case "CON":
-      return player.contact;
-    case "SPD":
-      return player.speed;
-    case "FLD":
-      return player.fielding;
-    case "ARM":
-      return player.arm;
-    case "ROT_VEL":
-    case "PEN_VEL":
-      return player.velocity ?? 0;
-    case "ROT_JNK":
-    case "PEN_JNK":
-      return player.junk ?? 0;
-    case "ROT_ACC":
-    case "PEN_ACC":
-      return player.accuracy ?? 0;
-    default:
-      return 0;
-  }
-}
-
-function rosterFitForArchetype(teamPlayers: readonly Player[], archetype: (typeof HISTORICAL_ARCHETYPES)[number]): number {
-  if (teamPlayers.length === 0 || archetype.boosts.length === 0) return 0;
-  const relevantPlayers = teamPlayers.filter((player) => {
-    const boostsPitching = archetype.boosts.some((stat) => stat.startsWith("ROT_") || stat.startsWith("PEN_"));
-    if (!boostsPitching) return true;
-    const pitcherRole = player.primaryPosition;
-    if (archetype.boosts.some((stat) => stat.startsWith("ROT_"))) {
-      return pitcherRole === "SP" || pitcherRole === "SP/RP";
-    }
-    return pitcherRole === "RP" || pitcherRole === "CP" || pitcherRole === "SP/RP";
-  });
-  const sample = relevantPlayers.length > 0 ? relevantPlayers : teamPlayers;
-  const total = sample.reduce((sum, player) =>
-    sum + archetype.boosts.reduce((inner, stat) => inner + playerStatForArchetypeStat(player, stat), 0),
-    0,
-  );
-  return total / (sample.length * archetype.boosts.length);
-}
-
-function chooseAutoFillArchetype(input: {
-  leagueId: string;
-  nonce: number;
-  teamId: string;
-  slot: IdentityAutoFillSlot;
-  candidates: readonly (typeof HISTORICAL_ARCHETYPES)[number][];
-  assignmentCounts: ReadonlyMap<string, number>;
-  poolSourceMode: PoolSourceMode;
-  rosterPlayers: readonly Player[];
-}): string | null {
-  const ranked = input.candidates
-    .map((archetype) => ({
-      archetype,
-      diversityCount: input.assignmentCounts.get(archetype.id) ?? 0,
-      rosterFit: input.poolSourceMode === "team-roster-priority"
-        ? rosterFitForArchetype(input.rosterPlayers, archetype)
-        : 0,
-      tie: seededUnit(`${input.leagueId}:${input.nonce}:${input.teamId}:${input.slot}:${archetype.id}`),
-    }))
-    .sort((a, b) =>
-      a.diversityCount - b.diversityCount ||
-      b.rosterFit - a.rosterFit ||
-      a.tie - b.tie ||
-      a.archetype.id.localeCompare(b.archetype.id)
-    );
-  return ranked[0]?.archetype.id ?? null;
-}
-
-export function buildIdentityAutoAssignPlan(input: IdentityAutoAssignInput): IdentityAutoAssignment[] {
-  const lockedArchetypeIds = new Set(
-    Object.entries(input.draftability ?? {})
-      .filter(([, verdict]) => verdict.band === "LOCKED")
-      .map(([archetypeId]) => archetypeId),
-  );
-  const candidates = HISTORICAL_ARCHETYPES.filter((archetype) => !lockedArchetypeIds.has(archetype.id));
-  if (candidates.length === 0) return [];
-
-  const autoSlots = input.autoFilledSlots ?? new Set<IdentityAutoFilledSlotKey>();
-  const mutableSlot = (team: Team, slot: IdentityAutoFillSlot): boolean => {
-    if (input.mode === "fill-empty") {
-      return slot === "mlb" ? !team.mlbArchetypeKey : !team.farmArchetypeKey;
-    }
-    if (team.id !== input.rerollTeamId) return false;
-    const current = slot === "mlb" ? team.mlbArchetypeKey : team.farmArchetypeKey;
-    return !current || autoSlots.has(identityAutoFilledSlotKey(team.id, slot));
-  };
-  const scopedTeam = (team: Team): boolean =>
-    input.includeHumanTeams || teamOwnerId(team, input.seats) === "cpu";
-
-  const counts = new Map<string, number>();
-  for (const team of input.teams) {
-    const keys: Array<[IdentityAutoFillSlot, string | undefined | null]> = [
-      ["mlb", team.mlbArchetypeKey],
-      ["farm", team.farmArchetypeKey],
-    ];
-    for (const [slot, key] of keys) {
-      if (!key || mutableSlot(team, slot)) continue;
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-  }
-
-  const nextTeams = new Map(input.teams.map((team) => [team.id, { ...team }]));
-  const assignments: IdentityAutoAssignment[] = [];
-  for (const team of [...input.teams].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (!scopedTeam(team)) continue;
-    const slots: IdentityAutoFillSlot[] = [];
-    if (mutableSlot(team, "mlb")) slots.push("mlb");
-    if (mutableSlot(team, "farm")) slots.push("farm");
-    if (slots.length === 0) continue;
-
-    const nextTeam = nextTeams.get(team.id) ?? { ...team };
-    const assignment: IdentityAutoAssignment = { teamId: team.id, slots: [] };
-    const rosterPlayers = teamRosterPlayers(input.players, input.activeLeagueId, team.id);
-
-    for (const slot of slots) {
-      const currentKey = slot === "mlb" ? team.mlbArchetypeKey : team.farmArchetypeKey;
-      const slotCandidates = currentKey && candidates.length > 1
-        ? candidates.filter((archetype) => archetype.id !== currentKey)
-        : candidates;
-      const selected = chooseAutoFillArchetype({
-        leagueId: input.leagueId,
-        nonce: input.nonce,
-        teamId: team.id,
-        slot,
-        candidates: slotCandidates,
-        assignmentCounts: counts,
-        poolSourceMode: input.poolSourceMode,
-        rosterPlayers,
-      });
-      if (!selected) continue;
-      counts.set(selected, (counts.get(selected) ?? 0) + 1);
-      assignment.slots.push(slot);
-      if (slot === "mlb") {
-        assignment.mlbKey = selected;
-        nextTeam.mlbArchetypeKey = selected;
-      } else {
-        assignment.farmKey = selected;
-        nextTeam.farmArchetypeKey = selected;
-      }
-    }
-
-    nextTeams.set(team.id, nextTeam);
-    if (assignment.slots.length > 0) assignments.push(assignment);
-  }
-
-  return assignments;
 }
 
 function identityAutoFillNonceSessionKey(leagueId: string): string {
@@ -848,23 +654,6 @@ function playerBelongsToSelectedTeamRoster(
   ) ?? false;
 }
 
-function stablePlayerNameOrIdCompare(a: Player, b: Player): number {
-  return playerName(a).localeCompare(playerName(b)) || a.id.localeCompare(b.id);
-}
-
-export function comparePlayersByIvDesc(ivById: ReadonlyMap<string, number>): (a: Player, b: Player) => number {
-  return (a, b) => {
-    const av = ivById.get(a.id);
-    const bv = ivById.get(b.id);
-    const aValid = Number.isFinite(av);
-    const bValid = Number.isFinite(bv);
-    if (aValid && bValid && av !== bv) return (bv as number) - (av as number);
-    if (aValid && !bValid) return -1;
-    if (!aValid && bValid) return 1;
-    return stablePlayerNameOrIdCompare(a, b);
-  };
-}
-
 function setUnion(...sets: ReadonlySet<string>[]): Set<string> {
   const result = new Set<string>();
   for (const set of sets) {
@@ -1048,11 +837,6 @@ function universeFloorShortBlockedLine(
   return `The source universe itself is short on ${parts.join(", ")} — regenerating can't create them; check more source leagues or add players who cover those spots.`;
 }
 
-export const BOARD_POSITION_DEPTH = 5;
-// BOARDFIX2 (Item C): trailing debounce for boardRankOverrides persistence -- see
-// pendingBoardRankOverrides in LeagueBuilderDraftSetup for the full rationale.
-export const BOARD_RANK_SAVE_DEBOUNCE_MS = 500;
-
 /**
  * COCKPIT WAVE 2 (B3 + Correction 5/7) -- "RANK YOUR BOARD" setup zone. Born on the
  * DRAFT_SKIN_STANDARD_2026-07-08.md hard-edge treatments (border-2/4, no radius, brass/chalk).
@@ -1079,7 +863,7 @@ export function RankYourBoardZone({
   onReorderPosition: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
 }) {
   const [viewMode, setViewMode] = useState<"global" | "position">("global");
-  const positionGroups = boardPositionGroups();
+  const positionGroups = BOARD_POSITION_GROUPS;
   const positionCounts = useMemo(() => {
     const counts = new Map<TaxonomyPosition, number>();
     for (const entry of boardEntries) {
@@ -1089,9 +873,7 @@ export function RankYourBoardZone({
       counts.set(position, (counts.get(position) ?? 0) + 1);
     }
     return counts;
-    // positionGroups is a fixed 12-value constant (boardPositionGroups()) -- stable across renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [boardEntries]);
+  }, [boardEntries, positionGroups]);
   const firstPopulatedPosition = positionGroups.find((position) => (positionCounts.get(position) ?? 0) > 0) ?? positionGroups[0];
   const [selectedPosition, setSelectedPosition] = useState<TaxonomyPosition>(firstPopulatedPosition);
   const [positionExpanded, setPositionExpanded] = useState(false);
@@ -1471,6 +1253,251 @@ function positionLabel(player: Player): string {
     ? `${player.primaryPosition} / ${player.secondaryPosition}`
     : player.primaryPosition;
 }
+
+function samePlayerIds(left: readonly string[], right: readonly string[]): boolean {
+  const sortedLeft = [...new Set(left)].sort((a, b) => a.localeCompare(b));
+  const sortedRight = [...new Set(right)].sort((a, b) => a.localeCompare(b));
+  return sortedLeft.length === sortedRight.length
+    && sortedLeft.every((id, index) => id === sortedRight[index]);
+}
+
+
+/** ROOMFIX wholesale adapter: exact picked membership is locked before the session can exist. */
+async function registerPickedSnakePool(leagueId: string, pickedPlayerIds: readonly string[]): Promise<void> {
+  const picked = [...new Set(pickedPlayerIds)];
+  const existing = await getRegisteredPool(leagueId);
+  if (existing?.locked && samePlayerIds(existing.players.map((row) => row.id), picked)) return;
+  if (existing?.locked) await unlockLeaguePool(leagueId);
+
+  const defaultPool = await registerLeaguePoolForLeague(leagueId);
+  const defaultIds = new Set(defaultPool.players.map((row) => row.id));
+  const pickedIds = new Set(picked);
+  const toAdd = picked.filter((id) => !defaultIds.has(id));
+  const toRemove = [...defaultIds].filter((id) => !pickedIds.has(id));
+  if (toAdd.length > 0) await addPlayersToLeaguePool(toAdd, leagueId);
+  if (toRemove.length > 0) await removePlayersFromLeaguePool(toRemove, leagueId);
+  await lockLeaguePool(leagueId, { expectedPlayerIds: picked });
+}
+
+function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSetupAdapterState {
+  const { league, teams, players, poolPlayers, pool, runProof = proveSimultaneousSnakeSeating } = input;
+  const groups = useMemo(() => deriveSnakeVersionGroups(poolPlayers), [poolPlayers]);
+  const versionLedgerGroups = useMemo(() => {
+    const sourceIds = new Set(league?.snakeVersionSourcePlayerIds ?? []);
+    if (sourceIds.size === 0) return groups;
+    return deriveSnakeVersionGroups(players.filter((player) => sourceIds.has(player.id)));
+  }, [groups, league?.snakeVersionSourcePlayerIds, players]);
+  const [versionSelections, setVersionSelections] = useState<Record<string, string>>({});
+  const [gmNameEdits, setGmNames] = useState<Record<string, string>>({});
+  const [seatModeEdits, setSeatModes] = useState<Record<string, 'hotseat' | 'companion'>>({});
+  const [seed, setSeed] = useState('OPENING-DAY');
+  const [orderEdits, setOrder] = useState<string[]>([]);
+  const [swapFirst, setSwapFirst] = useState<string | null>(null);
+  const proofRevision = useRef(0);
+
+  const teamIds = useMemo(() => teams.map((team) => team.id), [teams]);
+  const order = useMemo(() => (
+    orderEdits.length === teamIds.length && orderEdits.every((id) => teamIds.includes(id))
+      ? orderEdits
+      : teamIds
+  ), [orderEdits, teamIds]);
+  const gmNames = useMemo(
+    () => Object.fromEntries(teams.map((team) => [team.id, gmNameEdits[team.id] ?? team.gmSeatName ?? team.managerName ?? ''])),
+    [gmNameEdits, teams],
+  );
+  const seatModes = useMemo<Record<string, 'hotseat' | 'companion'>>(
+    () => Object.fromEntries(teams.map((team) => [team.id, seatModeEdits[team.id] ?? 'hotseat'])),
+    [seatModeEdits, teams],
+  );
+
+  const selectedPoolIds = useMemo(
+    () => selectedSnakePoolIds(groups, versionSelections),
+    [groups, versionSelections],
+  );
+  const proofPool = useMemo(() => {
+    if (!pool) return null;
+    const selected = new Set(selectedPoolIds);
+    const selectedPlayers = pool.players.filter((player) => selected.has(player.id));
+    return selectedPlayers.length === selected.size
+      ? { ...pool, players: selectedPlayers }
+      : null;
+  }, [pool, selectedPoolIds]);
+
+  const companionSeatReasons = useMemo(() => validateSnakeCompanionSeats({
+    teams,
+    gmNames,
+    seatModes,
+  }), [gmNames, seatModes, teams]);
+
+  const proofInput = useMemo(() => (
+    proofPool ? buildSnakeSetupProofInput({ teams, players, pool: proofPool }) : null
+  ), [players, proofPool, teams]);
+  const [proofResult, setProofResult] = useState<{
+    input: SimultaneousSnakeSeatingInput;
+    runner: ProofRunner;
+    proof: SnakeSeatingProof | null;
+  } | null>(null);
+  const proofMatches = proofResult?.input === proofInput && proofResult.runner === runProof;
+  const proof = proofMatches ? proofResult.proof : null;
+  const checking = Boolean(proofInput) && !proofMatches;
+
+  useEffect(() => {
+    const revision = ++proofRevision.current;
+    if (!proofInput || teams.length === 0) return;
+    void Promise.resolve(runProof(proofInput)).then((next) => {
+      if (proofRevision.current !== revision) return;
+      setProofResult({ input: proofInput, runner: runProof, proof: next });
+    }).catch(() => {
+      if (proofRevision.current !== revision) return;
+      setProofResult({ input: proofInput, runner: runProof, proof: null });
+    });
+  }, [proofInput, runProof, teams.length]);
+
+  const readinessReasons = useMemo(() => {
+    if (!input.savedDraftChecked) return ['Checking for a saved draft.'];
+    if (input.savedDraftLookupError) return [input.savedDraftLookupError];
+    if (input.hasSavedDraft) return [];
+    if (companionSeatReasons.length > 0) return companionSeatReasons;
+    if (!pool) return [];
+    if (pool && !proofPool) return ['The selected player versions do not match the priced pool.'];
+    if (checking) return ['Checking every club\'s legal, affordable 22.'];
+    if (!proof) return ['The snake room check did not finish.'];
+    if (!proof.feasible) return [proof.message];
+    if (!pool?.locked) return [];
+    if (!seed.trim()) return ['Enter a draft seed.'];
+    if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];
+    return [];
+  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool, proof, proofPool, seed, teams.length]);
+
+  const lockProofBlocked = Boolean(pool && !pool.locked && (
+    !proofPool || checking || !proof?.feasible
+  ));
+
+  const ready = Boolean(pool?.locked
+    && proof?.feasible
+    && !checking
+    && Boolean(seed.trim())
+    && order.length === teams.length
+    && companionSeatReasons.length === 0);
+
+  const shuffleOrder = () => {
+    setOrder(seededSnakeShuffle(teams.map((team) => team.id), seed));
+    setSwapFirst(null);
+  };
+
+  const tapOrder = (teamId: string) => {
+    if (!swapFirst) {
+      setSwapFirst(teamId);
+      return;
+    }
+    if (swapFirst === teamId) {
+      setSwapFirst(null);
+      return;
+    }
+    const next = [...order];
+    const firstIndex = next.indexOf(swapFirst);
+    const secondIndex = next.indexOf(teamId);
+    [next[firstIndex], next[secondIndex]] = [next[secondIndex], next[firstIndex]];
+    setOrder(next);
+    setSwapFirst(null);
+  };
+
+  const createRoomSession = async (options: {
+    seasonNumber: number;
+    workflowVersion: string;
+    navigate: (leagueId: string) => void;
+  }) => {
+    if (!league) return;
+    if (!pool?.locked || !proof?.feasible || checking || companionSeatReasons.length > 0 || !seed.trim()) return;
+    const draftSeed = seed.trim();
+    const lockedIds = pool.players.map((row) => row.id);
+    await registerPickedSnakePool(league.id, lockedIds);
+    const rankedTeams = await input.flushBoardRankings();
+    const now = new Date().toISOString();
+    const session: LeagueBuilderMlbDraftSession = {
+      id: createMlbDraftSessionId(league.id, options.seasonNumber),
+      leagueId: league.id,
+      seasonNumber: options.seasonNumber,
+      seed: draftSeed,
+      workflowVersion: options.workflowVersion,
+      engineMethodVersion: 'snake-s1a',
+      tier: league.tier ?? 'juiced',
+      balanceMode: league.balanceMode ?? 'taxed',
+      rounds: 22,
+      pickOrder: buildSnakeOrder(order, 22),
+      completedPicks: [],
+      seatBoards: buildInitialSnakeSeatBoards({ teams: rankedTeams, players, pool, certificate: proof }),
+      snakeSetup: {
+        poolPlayerIds: lockedIds,
+        versionSelections: lockedSnakeVersionSelections(versionLedgerGroups, lockedIds),
+        clubs: rankedTeams.map((team) => ({
+          teamId: team.id,
+          ...(gmNames[team.id]?.trim() ? { gmName: gmNames[team.id].trim() } : {}),
+          hotseat: options.workflowVersion.includes('practice')
+            ? team.id === order[0]
+            : (seatModes[team.id] ?? 'hotseat') === 'hotseat',
+          ...(team.mlbArchetypeKey ? { archetypeId: team.mlbArchetypeKey } : {}),
+        })),
+        orderSeed: draftSeed,
+        seatingCertificate: {
+          feasible: true,
+          assignments: proof.assignments,
+          shortfall: null,
+          message: proof.message,
+        },
+      },
+      currentPickIndex: 0,
+      revision: 0,
+      createdDate: now,
+      lastModified: now,
+    };
+    await saveMlbDraftSession(session);
+    options.navigate(league.id);
+  };
+
+  const enterDraft = async () => {
+    if (!league) return;
+    if (input.hasSavedDraft) {
+      input.navigateToRoom(league.id);
+      return;
+    }
+    await createRoomSession({ seasonNumber: 1, workflowVersion: 'snake-v1', navigate: input.navigateToRoom });
+  };
+
+  const enterPractice = async () => {
+    await createRoomSession({
+      seasonNumber: 99,
+      workflowVersion: 'snake-practice-v1',
+      navigate: input.navigateToPracticeRoom ?? input.navigateToRoom,
+    });
+  };
+
+  return {
+    groups,
+    versionSelections,
+    setVersionSelections,
+    selectedPoolIds,
+    gmNames,
+    setGmNames,
+    seatModes,
+    setSeatModes,
+    seed,
+    setSeed,
+    order,
+    swapFirst,
+    proof,
+    checking,
+    readinessReasons,
+    companionSeatReasons,
+    lockProofBlocked,
+    ready,
+    shuffleOrder,
+    tapOrder,
+    enterDraft,
+    enterPractice,
+  };
+}
+
 
 export function LeagueBuilderDraftSetup() {
   const navigate = useNavigate();
@@ -2248,23 +2275,24 @@ export function LeagueBuilderDraftSetup() {
   // roster-design feasibility had changed. Switched to `clubTargetDesignKey` -- the SAME content-
   // based signature the auto-fit effect just below already keys on -- which captures every field
   // `evaluateRosterDesign` (via `team.rosterDesign.slots`) or this effect's caller actually reads,
-  // and stays byte-identical across a boardRankOverrides-only change. `humanTeams` is still read
-  // inside the closure (this render's current value) -- it just no longer RETRIGGERS the effect.
+  // and stays byte-identical across a boardRankOverrides-only change. The effect reads that exact
+  // serialized snapshot, so its dependency list and the data it consumes stay structurally aligned.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const next = new Map<string, DesignFeasibilityResult>();
       if (inPoolDesignPool.length > 0) {
-        for (const team of humanTeams) {
-          if (!team.rosterDesign) continue;
-          next.set(team.id, evaluateRosterDesign(seedRosterDesignSlots(team.rosterDesign.slots), inPoolDesignPool, tierBudget));
+        const targetTeams = JSON.parse(clubTargetDesignKey) as Array<{
+          id: string;
+          slots: NonNullable<Team['rosterDesign']>['slots'] | null;
+        }>;
+        for (const team of targetTeams) {
+          if (!team.slots) continue;
+          next.set(team.id, evaluateRosterDesign(seedRosterDesignSlots(team.slots), inPoolDesignPool, tierBudget));
         }
       }
       setLiveClubVerdicts(next);
     }, 200);
     return () => window.clearTimeout(timer);
-  // `clubTargetDesignKey` is the content signature for the intentionally omitted
-  // `humanTeams` reference; depending on the array would undo the board-reorder perf fix.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubTargetDesignKey, inPoolDesignPool, tierBudget]);
   useEffect(() => {
     let cancelled = false;
@@ -2274,8 +2302,15 @@ export function LeagueBuilderDraftSetup() {
         if (inPoolPlayers.length > 0) {
           const simPool = demandUniverseFromPlayers(inPoolPlayers);
           const classifiedById = new Map(simPool.map((player) => [player.id, classifyPlayerArchetype(player.profile)]));
-          for (const team of humanTeams) {
-            if (!team.rosterDesign) continue;
+          const targetTeams = JSON.parse(clubTargetDesignKey) as Array<{
+            id: string;
+            mlbArchetypeKey: string | null;
+            slots: NonNullable<Team['rosterDesign']>['slots'] | null;
+            pins: NonNullable<Team['rosterDesign']>['pins'] | null;
+            rankOverrides: NonNullable<Team['rosterDesign']>['rankOverrides'] | null;
+          }>;
+          for (const team of targetTeams) {
+            if (!team.slots) continue;
             const historical = HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey);
             const archetype = historical ? historicalToSimArchetype(historical) : null;
             if (!archetype) {
@@ -2285,15 +2320,15 @@ export function LeagueBuilderDraftSetup() {
             next.set(
               team.id,
               buildBest22Target(
-                seedRosterDesignSlots(team.rosterDesign.slots),
+                seedRosterDesignSlots(team.slots),
                 simPool,
                 classifiedById,
                 archetype,
                 league?.tier ?? "juiced",
                 tierBudget,
                 leagueTeams.length,
-                new Map(Object.entries(team.rosterDesign.pins ?? {})),
-                new Map(Object.entries(team.rosterDesign.rankOverrides ?? {})),
+                new Map(Object.entries(team.pins ?? {})),
+                new Map(Object.entries(team.rankOverrides ?? {})),
               ),
             );
           }
@@ -2305,8 +2340,6 @@ export function LeagueBuilderDraftSetup() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  // `clubTargetDesignKey` covers every human-team field consumed above.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubTargetDesignKey, inPoolDesignPool, inPoolPlayerIdsKey, inPoolPlayers, league?.tier, leagueTeams.length, tierBudget]);
   const identitiesReady = leagueTeams.length > 0 && leagueTeams.every((team) => Boolean(team.mlbArchetypeKey) && Boolean(team.farmArchetypeKey));
   const draftabilityRequestKey = rosterDesignerPlayers.length > 0
@@ -2737,12 +2770,12 @@ export function LeagueBuilderDraftSetup() {
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [lockConfirm, reExtractConfirm, runItBackConfirm]);
 
-  const assertPoolCanMutate = () => {
+  const assertPoolCanMutate = useCallback(() => {
     if (!savedDraftChecked) throw new Error(CHECKING_SAVED_DRAFT_MESSAGE);
     if (savedDraftLookupError) throw new Error(savedDraftLookupError);
     if (hasSavedDraft) throw new Error(SAVED_DRAFT_POOL_LOCK_MESSAGE);
     if (hasCompletedDraft) throw new Error(COMPLETED_DRAFT_POOL_LOCK_MESSAGE);
-  };
+  }, [hasCompletedDraft, hasSavedDraft, savedDraftChecked, savedDraftLookupError]);
 
   const handlePoolModeChange = (nextMode: DraftPoolMode) =>
     runAction(async () => {
@@ -3106,7 +3139,7 @@ export function LeagueBuilderDraftSetup() {
       setPoolFirstShapeReport(null);
     });
 
-  const regenerateProductionPool = async (baseProvenance: PoolProvenanceState) => {
+  const regenerateProductionPool = useCallback(async (baseProvenance: PoolProvenanceState) => {
     if (!league) return;
     assertPoolCanMutate();
     const currentIds = new Set(players.filter((player) => isPlayerInLeaguePool(player, activeLeagueId)).map((player) => player.id));
@@ -3151,12 +3184,12 @@ export function LeagueBuilderDraftSetup() {
     setPoolProvenance(nextProvenance);
     const report = modeAReportFromResult(result, 0);
     setPoolFirstShapeReport(report);
-  };
+  }, [activeLeagueId, assertPoolCanMutate, buildPoolFirstShapeResult, league, players, rosterDesignPinPlayerIds]);
 
-  const handleRegenerateProductionPool = () =>
+  const handleRegenerateProductionPool = useCallback(() =>
     runAction(async () => {
       await regenerateProductionPool(poolProvenance);
-    });
+    }), [poolProvenance, regenerateProductionPool, runAction]);
 
   const handleRerollProductionPool = () =>
     runAction(async () => {
@@ -3450,14 +3483,12 @@ export function LeagueBuilderDraftSetup() {
     if (autoSnakePoolBuildRef.current === trigger) return;
     autoSnakePoolBuildRef.current = trigger;
     void handleRegenerateProductionPool();
-  // The one-shot trigger ref owns invocation identity; including the render-local
-  // handler would restart this effect on every render before the trigger guard.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeLeagueId,
     busy,
     hasCompletedDraft,
     hasSavedDraft,
+    handleRegenerateProductionPool,
     inPoolPlayers,
     isSnakeFormat,
     locked,

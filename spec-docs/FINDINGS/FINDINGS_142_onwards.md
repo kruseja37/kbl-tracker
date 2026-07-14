@@ -458,3 +458,55 @@ identity/consequences/action; make every trade package two-sided and valued; col
 give the active companion a Help control. Preserve the KBL/team palette, touch/keyboard sizing, farm behavior,
 privacy teardown, and Help-only explanations. Full Batch 5 allowlist and UI gates are frozen in the Snake
 Intelligence contract.
+
+### FINDING-157
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Files:** `SnakeCompanion.tsx`, `useSnakeRationalRisks.ts`
+**Evidence:** The companion rational-risk request is built without `deviceCovered`; the covered-screen return occurs later. The hook retains its prior ready snapshot for the same request key. Covering and returning to the same seat can therefore reuse private pre-cover advice instead of clearing synchronously.
+**Impact:** A privacy cover can hide the DOM without invalidating private derived state, violating the team-first fail-closed cover contract.
+**Action:** Amendment 8 A8-1 in `CONTRACT_SNAKE_REPO_CRAWL_REPAIRS_2026-07-13.md`; caller-level red-first cover/reveal test, separate audit required.
+
+### FINDING-158
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Files:** `useSnakeAssistantBoard.ts`, `useSnakeGuideRecommendation.ts`, `SnakeDraftSetupAdapter.tsx`, `LeagueBuilderDraftSetup.tsx`
+**Evidence:** Normal changed-file lint is green only with inline configuration active. `--no-inline-config` exposes 20 findings: 16 errors and four warnings, including set-state-in-effect, fast-refresh export, and hook dependency failures. The repair contract explicitly forbids suppressions.
+**Impact:** The branch does not satisfy its acceptance gate, and hidden hook/state defects remain structurally unresolved.
+**Action:** Amendment 8 A8-2; remove suppressions, relocate pure exports where necessary, prove no behavior drift, separate audit required.
+
+### FINDING-159
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Files:** `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `SnakeDraftRoomView.tsx`, `SnakeDraftSetupAdapter.tsx`
+**Evidence:** Missing player lookup in the advisor activity log falls back to `gonePlayerId`; companion ticker uses `A PLAYER`; two missing-team paths fall back to internal team keys. The contract requires exact neutral `UNKNOWN PLAYER` / `UNKNOWN TEAM` copy and no internal identifier exposure.
+**Impact:** Corrupt, migrated, or incomplete identity data can leak internal keys into user-visible Snake surfaces and produce inconsistent recovery language.
+**Action:** Amendment 8 A8-3; neutralize every fallback and add DOM-level absence tests, separate audit required.
+
+**Repair-1 audit addendum (2026-07-14): NOT VERIFIED.** The caller now passes
+null while covered, but the real rational-risk hook retains and reuses its
+settled snapshot when the same semantic key returns. Direct mutation produced
+`AT_RISK -> IDLE -> AT_RISK` before the fresh worker result. Amendment 9 A9-1
+requires a true privacy epoch and a direct unmocked hook test.
+
+**FINDING-158 repair-1 audit addendum (2026-07-14): NOT VERIFIED.** Suppressions
+and no-inline lint debt are cleared, but the two refactored hooks compare request
+objects for state reset while their worker effects use semantic keys. A fresh
+same-key clone can clear the UI without restarting the worker and strand it in
+pending. Amendment 9 A9-2 aligns state and worker identity and adds direct
+same-key-clone tests.
+
+**FINDING-159 repair-1 audit addendum (2026-07-14): NOT VERIFIED.** The four
+contracted fallbacks are fixed, but CompanionApprovalCard, TradePackageCard, and
+SnakeCommissionerTrade still render `CLUB` for missing teams. Amendment 9 A9-3
+expands the allowlist and requires exact `UNKNOWN TEAM` across those live
+surfaces.
+
+**Amendment 9 closing addendum (2026-07-14): FIXED-AND-VERIFIED.** A replacement
+independent auditor returned VERIFIED with zero major and zero minor findings.
+Direct mutations killed the stale-result privacy path and both same-key-clone
+worker-lifecycle defects. Exact changed-file ESLint with `--no-inline-config`
+finished with zero errors and zero warnings; the live Snake fallback sweep found
+no residual `CLUB`, `A PLAYER`, or internal-ID recovery copy. Focused proof was
+131/131, the combined changed-test gate was 266/266, the 48-file Snake matrix was
+383/383, responsive Playwright was 4/4, and TypeScript plus production build were
+green. After that independent verdict, the final serial repository run passed
+681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped (10,135
+total), zero failed. FINDING-157, FINDING-158, and FINDING-159 are closed.

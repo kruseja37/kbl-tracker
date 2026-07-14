@@ -27,7 +27,7 @@ import {
 import { buildDefaultDesignSlots } from '../rosterDesignFeasibility';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import { classifyPlayerArchetype } from '../playerArchetypeClassifier';
-import { demandPlayerFromLeaguePlayer } from '../../src_figma/app/pages/LeagueBuilderDraftSetup';
+import { demandPlayerFromLeaguePlayer } from '../../src_figma/app/engines/leaguePlayerAdapter';
 import { canRelieve, canStart, isCloser, isLegalRoster } from '../../data/rosterConstruction';
 import { toRosterSlotPlayer } from '../rosterNeed';
 import type { Player } from '../../utils/leagueBuilderStorage';

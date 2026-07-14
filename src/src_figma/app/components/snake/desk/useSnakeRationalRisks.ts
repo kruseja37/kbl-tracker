@@ -36,6 +36,12 @@ export interface SnakeRationalRiskState {
   status: 'idle' | 'pending' | 'ready' | 'unavailable';
 }
 
+interface RationalRiskHookState {
+  epoch: number;
+  requestKey: string | null;
+  snapshot: SnakeRationalRiskWorkerResponse | null;
+}
+
 export function buildSnakeRationalRiskRequest(input: {
   session: LeagueBuilderMlbDraftSession;
   askingTeamId: string;
@@ -69,7 +75,20 @@ export function useSnakeRationalRisks(
 ): SnakeRationalRiskState {
   const requestRef = useRef(request);
   const requestKey = request?.key ?? null;
-  const [snapshot, setSnapshot] = useState<SnakeRationalRiskWorkerResponse | null>(null);
+  const [hookState, setHookState] = useState<RationalRiskHookState>(() => ({
+    epoch: 0,
+    requestKey,
+    snapshot: null,
+  }));
+  const requestEpoch = hookState.requestKey === requestKey
+    ? hookState.epoch
+    : hookState.epoch + 1;
+  if (hookState.requestKey !== requestKey) {
+    setHookState({ epoch: requestEpoch, requestKey, snapshot: null });
+  }
+  const snapshot = hookState.epoch === requestEpoch && hookState.requestKey === requestKey
+    ? hookState.snapshot
+    : null;
 
   useEffect(() => {
     requestRef.current = request;
@@ -82,14 +101,18 @@ export function useSnakeRationalRisks(
     let active = true;
     let worker: Worker | null = null;
     const markUnavailable = () => {
-      if (active) setSnapshot({
-        key: requestKey,
-        status: 'unavailable',
-        risks: [],
-        scarcity: [],
-        scenarios: [],
-        nextPick: null,
-      });
+      if (active) setHookState((state) => state.epoch === requestEpoch
+        && state.requestKey === requestKey ? {
+          ...state,
+          snapshot: {
+            key: requestKey,
+            status: 'unavailable',
+            risks: [],
+            scarcity: [],
+            scenarios: [],
+            nextPick: null,
+          },
+        } : state);
     };
     try {
       worker = new Worker(
@@ -104,7 +127,10 @@ export function useSnakeRationalRisks(
     }
     worker.onmessage = (event: MessageEvent<SnakeRationalRiskWorkerResponse>) => {
       if (!active || event.data.key !== requestKey) return;
-      setSnapshot(event.data);
+      setHookState((state) => state.epoch === requestEpoch
+        && state.requestKey === requestKey
+        ? { ...state, snapshot: event.data }
+        : state);
       worker?.terminate();
     };
     worker.onerror = () => {
@@ -121,7 +147,7 @@ export function useSnakeRationalRisks(
       active = false;
       worker?.terminate();
     };
-  }, [requestKey]);
+  }, [requestEpoch, requestKey]);
 
   if (!requestKey) return { risks: null, scarcity: null, scenarios: null, nextPick: null, status: 'idle' };
   if (typeof Worker === 'undefined') {
