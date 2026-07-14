@@ -407,6 +407,8 @@ export interface SnakeOpenTradeOffer {
   receivePickNumbers: number[];
   offerValue: number;
   receiveValue: number;
+  /** Stored canonical guide value. Legacy offers may not have it. */
+  sellerPremium?: number;
   /** Revision at guide creation; execution always rebuilds this against live state. */
   postedSessionRevision: number;
   buyerNod: boolean;
@@ -2623,6 +2625,7 @@ export async function postApprovedCompanionTradeOffer(input: {
     receivePickNumbers: number[];
     offerValue: number;
     receiveValue: number;
+    sellerPremium: number;
     sessionRevision: number;
   };
   postedAt: string;
@@ -2631,6 +2634,7 @@ export async function postApprovedCompanionTradeOffer(input: {
     approvedCompanionClaimForSeat(current, input.deviceId, input.teamId);
     if (input.teamId !== input.proposal.buyerTeamId) throw new Error('YOU CAN ONLY POST FOR YOUR OWN CLUB.');
     if ((current.revision ?? 0) !== input.proposal.sessionRevision) throw new Error('THE DRAFT MOVED ON — REFRESH.');
+    if (!Number.isFinite(input.proposal.sellerPremium)) throw new Error('THIS PACKAGE NO LONGER MATCHES THE POSTED GUIDE.');
     const offer: SnakeOpenTradeOffer = {
       id: `snake-offer-mlb-${current.id}-${(current.revision ?? 0) + 1}`,
       phase: 'MLB',
@@ -2641,6 +2645,7 @@ export async function postApprovedCompanionTradeOffer(input: {
       receivePickNumbers: [...input.proposal.receivePickNumbers],
       offerValue: input.proposal.offerValue,
       receiveValue: input.proposal.receiveValue,
+      sellerPremium: input.proposal.sellerPremium,
       postedSessionRevision: input.proposal.sessionRevision,
       buyerNod: true,
       sellerNod: false,

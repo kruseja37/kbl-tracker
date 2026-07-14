@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { SnakeGuidePackage } from '../../../../../engines/snakeGuideTrade';
 import type { SnakeOpenTradeOffer } from '../../../../../utils/leagueBuilderStorage';
-import { TradePackageCard, type SnakeTradeGuideTeam } from './TradePackageCard';
+import { TradeOfferValueCard, TradePackageCard, type SnakeTradeGuideTeam } from './TradePackageCard';
 import type { AskedPickGuideResult, ExecutedAskedPickTrade } from './tradeGuideModel';
 
 export function SnakeCommissionerTrade(props: {
@@ -112,43 +112,43 @@ export function SnakeCommissionerTrade(props: {
       {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">BOTH GMS AGREE IN THE ROOM. THE COMMISSIONER CHECKS THE GUIDE, THEN MAKES THE TRADE OR SAYS NO.</p> : null}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-bold">BUYING CLUB
-          <select aria-label="BUYING CLUB" className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={buyerTeamId} onChange={(event) => { setBuyerTeamId(event.target.value); resetPackage(); }}>
+          <select aria-label="BUYING CLUB" className="mt-1 block min-h-11 w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={buyerTeamId} onChange={(event) => { setBuyerTeamId(event.target.value); resetPackage(); }}>
             <option value="">CHOOSE A CLUB</option>
             {props.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
           </select>
         </label>
         <label className="text-sm font-bold">SELLING CLUB
-          <select aria-label="SELLING CLUB" className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={sellerTeamId} onChange={(event) => { setSellerTeamId(event.target.value); setTargetPick(''); resetPackage(); }}>
+          <select aria-label="SELLING CLUB" className="mt-1 block min-h-11 w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={sellerTeamId} onChange={(event) => { setSellerTeamId(event.target.value); setTargetPick(''); resetPackage(); }}>
             <option value="">CHOOSE A CLUB</option>
             {props.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
           </select>
         </label>
       </div>
       <label className="mt-3 block text-sm font-bold">TARGET PICK
-        <select aria-label="TARGET PICK" className="mt-1 block w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={targetPick} onChange={(event) => { setTargetPick(event.target.value); resetPackage(); }}>
+        <select aria-label="TARGET PICK" className="mt-1 block min-h-11 w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2" value={targetPick} onChange={(event) => { setTargetPick(event.target.value); resetPackage(); }}>
           <option value="">CHOOSE A PICK</option>
           {sellerPicks.map((pick) => <option key={pick} value={pick}>PICK {pick}</option>)}
         </select>
       </label>
-      <button className="ballpark-press-button ballpark-press-md ballpark-press-gold mt-3" disabled={!canCheck || working} onClick={() => void check()}>CHECK THE GUIDE</button>
+      <button className="ballpark-press-button ballpark-press-md ballpark-press-gold mt-3 min-h-11" disabled={!canCheck || working} onClick={() => void check()}>CHECK THE GUIDE</button>
 
       {answer && <>
-        <TradePackageCard answer={answer} teams={props.teams} />
+        <TradePackageCard answer={answer} teams={props.teams} viewerTeamId={buyerTeamId} />
         {answer.proposal && <div className="mt-3 flex flex-wrap gap-2">
-          <button className="ballpark-press-button ballpark-press-md ballpark-press-gold" disabled={working} onClick={() => void post()}>POST OFFER</button>
-          <button className="ballpark-press-button ballpark-press-md ballpark-press-default" disabled={working} onClick={resetPackage}>CANCEL</button>
+          <button className="ballpark-press-button ballpark-press-md ballpark-press-gold min-h-11" disabled={working} onClick={() => void post()}>POST OFFER</button>
+          <button className="ballpark-press-button ballpark-press-md ballpark-press-default min-h-11" disabled={working} onClick={resetPackage}>CANCEL</button>
         </div>}
       </>}
       {openOffers.length > 0 && <div className="mt-5 grid gap-3" aria-label="Open trade offers">
         {openOffers.map((offer) => <article key={offer.id} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-3">
-          <p className="font-black">{teamName(props.teams, offer.buyerTeamId)} GETS {offer.receivePickNumbers.map((pick) => `#${pick}`).join(' + ')}</p>
-          <p className="text-sm font-bold">{teamName(props.teams, offer.sellerTeamId)} GETS {offer.offerPickNumbers.map((pick) => `#${pick}`).join(' + ')}</p>
+          <p className="font-black">{teamName(props.teams, offer.buyerTeamId)} ↔ {teamName(props.teams, offer.sellerTeamId)}</p>
+          <TradeOfferValueCard offer={offer} teams={props.teams} viewerTeamId={offer.buyerTeamId} />
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || offer.buyerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.buyerTeamId), 'THE BUYER NOD IS RECORDED.')}>{offer.buyerNod ? 'BUYER NODDED' : 'BUYER NOD'}</button>
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || offer.sellerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.sellerTeamId), 'THE SELLER NOD IS RECORDED.')}>{offer.sellerNod ? 'SELLER NODDED' : 'SELLER NOD'}</button>
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" disabled={working || !offer.buyerNod || !offer.sellerNod} onClick={() => void execute(offer)}>EXECUTE TRADE</button>
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'WITHDRAWN'), 'THE OFFER IS WITHDRAWN.')}>WITHDRAW</button>
-            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'DECLINED'), 'THE OFFER IS DECLINED.')}>DECLINE</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={working || offer.buyerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.buyerTeamId), 'THE BUYER NOD IS RECORDED.')}>{offer.buyerNod ? 'BUYER NODDED' : 'BUYER NOD'}</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={working || offer.sellerNod} onClick={() => void actOnOffer(() => props.onNod(offer.id, offer.sellerTeamId), 'THE SELLER NOD IS RECORDED.')}>{offer.sellerNod ? 'SELLER NODDED' : 'SELLER NOD'}</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={working || !offer.buyerNod || !offer.sellerNod} onClick={() => void execute(offer)}>EXECUTE TRADE</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'WITHDRAWN'), 'THE OFFER IS WITHDRAWN.')}>WITHDRAW</button>
+            <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={working} onClick={() => void actOnOffer(() => props.onClose(offer.id, 'DECLINED'), 'THE OFFER IS DECLINED.')}>DECLINE</button>
           </div>
         </article>)}
       </div>}

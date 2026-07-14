@@ -272,13 +272,16 @@ describe('PERFROOM production-scale call profile', () => {
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${LEAGUE_ID}`]}><SnakeDraftRoom /></MemoryRouter>);
     await screen.findByTestId('snake-draft-room', {}, { timeout: 30_000 });
     await waitFor(() => expect(engineProfile.seatingProof).toBe(1), { timeout: 30_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL PERFORMANCE CLUB 1 SEAT' }));
+    await screen.findByTestId('private-draft-desk', {}, { timeout: 30_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'I HAVE THE ROOM' }));
     resetCallCounts();
 
-    fireEvent.click(screen.getByRole('button', { name: 'THE GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '2' } });
     const start = performance.now();
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 2' }));
-    await waitFor(() => expect(screen.getByLabelText('Shared trade guide').textContent).toMatch(/OFFER|NO LEGAL GUIDE TRADE/i), { timeout: 60_000 });
+    await waitFor(() => expect(screen.getByLabelText('The trade guide').textContent).toMatch(/OFFER|NO LEGAL GUIDE TRADE/i), { timeout: 60_000 });
     const guideMs = performance.now() - start;
     console.info('PERFROOM_PROFILE guide', JSON.stringify({
       directSearchMs: Math.round(directSearchMs),

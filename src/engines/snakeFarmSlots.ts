@@ -300,14 +300,17 @@ export function searchFarmGuidePackage(input: {
         if (!validateTrade(offers.map((pick) => ({ pick })), receives.map((pick) => ({ pick })), chart).balanced) continue;
         const verdict = validateFarmPickTrade({ ...input, offerPickNumbers: offers, receivePickNumbers: receives, sellerTeamId: target.teamId });
         if (!verdict.valid) continue;
+        const offerValue = offers.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0);
+        const receiveValue = receives.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0);
         packages.push({
           buyerTeamId: input.buyerTeamId,
           sellerTeamId: target.teamId,
           targetPick: target.pick,
           offerPickNumbers: offers,
           receivePickNumbers: receives,
-          offerValue: offers.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0),
-          receiveValue: receives.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0),
+          offerValue,
+          receiveValue,
+          sellerPremium: offerValue - receiveValue,
           sessionRevision: input.session.revision ?? 0,
         });
       }

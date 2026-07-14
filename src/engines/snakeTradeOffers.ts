@@ -19,6 +19,9 @@ export function postSnakeTradeOffer(input: {
   proposal: SnakeGuidePackage;
   postedAt: string;
 }): LeagueBuilderMlbDraftSession {
+  if (!Number.isFinite(input.proposal.sellerPremium)) {
+    throw new Error('THIS PACKAGE NO LONGER MATCHES THE POSTED GUIDE.');
+  }
   const offer: SnakeOpenTradeOffer = {
     id: `snake-offer-${input.phase.toLowerCase()}-${input.session.id}-${nextRevision(input.session)}`,
     phase: input.phase,
@@ -29,6 +32,7 @@ export function postSnakeTradeOffer(input: {
     receivePickNumbers: [...input.proposal.receivePickNumbers],
     offerValue: input.proposal.offerValue,
     receiveValue: input.proposal.receiveValue,
+    sellerPremium: input.proposal.sellerPremium,
     postedSessionRevision: input.session.revision ?? 0,
     buyerNod: false,
     sellerNod: false,
@@ -84,6 +88,7 @@ export function proposalFromOpenSnakeOffer(
   offer: SnakeOpenTradeOffer,
 ): SnakeGuidePackage {
   if (!offer.buyerNod || !offer.sellerNod) throw new Error('BOTH CLUBS MUST NOD BEFORE THE COMMISSIONER CAN EXECUTE.');
+  if (!Number.isFinite(offer.sellerPremium)) throw new Error('THIS OFFER HAS NO AUTHORITATIVE SELLER PREMIUM.');
   return {
     buyerTeamId: offer.buyerTeamId,
     sellerTeamId: offer.sellerTeamId,
@@ -92,6 +97,7 @@ export function proposalFromOpenSnakeOffer(
     receivePickNumbers: [...offer.receivePickNumbers],
     offerValue: offer.offerValue,
     receiveValue: offer.receiveValue,
+    sellerPremium: offer.sellerPremium!,
     sessionRevision: session.revision ?? 0,
   };
 }

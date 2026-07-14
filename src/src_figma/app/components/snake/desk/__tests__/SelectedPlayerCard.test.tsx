@@ -50,7 +50,8 @@ describe('SelectedPlayerCard', () => {
     const onOptimizeAround = vi.fn();
     const onKeep = vi.fn();
     const onRevert = vi.fn();
-    render(<SelectedPlayerCard
+    const onTradeDecision = vi.fn();
+    const { container } = render(<SelectedPlayerCard
       player={player}
       candidate={candidate}
       consequence={consequence}
@@ -59,6 +60,13 @@ describe('SelectedPlayerCard', () => {
       onOptimizeAround={onOptimizeAround}
       onKeep={onKeep}
       onRevert={onRevert}
+      decision={{
+        kind: 'TRADE_TO_PICK', playerId: 'jovita', targetPick: 19,
+        proposal: { buyerTeamId: 'bew', sellerTeamId: 'buz', targetPick: 19, offerPickNumbers: [24, 36], receivePickNumbers: [19, 41], offerValue: 100, receiveValue: 95, sessionRevision: 7 },
+      }}
+      onTradeDecision={onTradeDecision}
+      actionConsequence="AFTER THIS PICK AND A LEGAL FINISH: $90,000 LEFT."
+      draftAction={<button type="button" className="min-h-11">DRAFT PLAYER</button>}
     />);
 
     expect(screen.getByText('Jovita Pulo')).toBeInTheDocument();
@@ -77,6 +85,9 @@ describe('SelectedPlayerCard', () => {
     expect(screen.getByText('Competitive')).toBeInTheDocument();
     expect(screen.getAllByText('Scholarly').length).toBeGreaterThan(0);
     expect(screen.getByText('FIT · STRONG FIT')).toHaveClass('text-[var(--ballpark-status-green)]');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST$102,500');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TAX IMPACT+$12,500');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('AFTER THIS PICK AND A LEGAL FINISH: $90,000 LEFT.');
     expect(screen.getByTestId('selected-player-consequence')).toHaveTextContent('OUT · OLD STARTER · WEAK FIT');
     expect(screen.getByTestId('selected-player-consequence')).toHaveTextContent('IN · JOVITA PULO · STRONG FIT');
     for (const amount of ['$800,000', '$20,000', '$820,000', '$180,000', '$790,000', '$5,000', '$795,000', '$205,000', '$75,000', '$90,000']) {
@@ -86,10 +97,16 @@ describe('SelectedPlayerCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
     fireEvent.click(screen.getByRole('button', { name: 'KEEP ON MY BOARD' }));
     fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE TO #19' }));
+    expect(screen.getByTestId('selected-player-card')).toContainElement(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     expect(onOptimizeAround).toHaveBeenCalledOnce();
     expect(onKeep).toHaveBeenCalledOnce();
     expect(onRevert).toHaveBeenCalledOnce();
+    expect(onTradeDecision).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b|pronouns?/i);
+    for (const control of container.querySelectorAll('button')) {
+      expect(control).toHaveClass('min-h-11');
+    }
   });
 
   it('keeps the inline profile contract and renders unknown consequences as dashes, never safe or zero', () => {
@@ -117,6 +134,12 @@ describe('SelectedPlayerCard', () => {
     />);
     expect(screen.getByText('ON MY BOARD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  it('uses a pixel portrait when the club has no logo without displaying gender or pronouns', () => {
+    render(<SelectedPlayerCard player={player} candidate={candidate} consequence={null} teamName="Beewolves" />);
+    expect(screen.getByRole('img', { name: 'Jovita Pulo pixel portrait' })).toBeInTheDocument();
+    expect(screen.getByTestId('selected-player-card').textContent).not.toMatch(/female|woman|she|her|pronouns?/i);
   });
 });
 

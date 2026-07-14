@@ -1,4 +1,5 @@
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
+import { SNAKE_BOARD_SLOT_IDS } from '../../../../../utils/leagueBuilderStorage';
 import { DeskCandidateRow } from './DeskCandidateRow';
 import { DraftTruthStrip } from './DraftTruthStrip';
 import { buildPlanLedger, type ChemistryStripRow, type DraftMoneyLedger } from './draftTruthModel';
@@ -20,44 +21,50 @@ export function BoardView(props: {
   readOnly?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
+  const ledger = props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null);
   return (
-    <div>
+    <div data-testid={props.readOnly ? 'assistant-board-view' : 'my-board-view'}>
+      {ledger && props.planChemistry ? (
+        <div className="mb-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={ledger} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
+      ) : (
+        <section className="mb-4 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" data-testid={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'}>
+          <h3 className="text-xs font-black tracking-[0.14em] text-[var(--ballpark-brass)]">{props.planTitle ?? '22-PLAYER PLAN'}</h3>
+          <p className="mt-2 font-black">PLAN TRUTH UNAVAILABLE</p>
+        </section>
+      )}
       <div
         className="grid grid-cols-1 gap-1"
         data-testid="board-slot-grid"
       >
-        {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
-          <div key={slotId}>
-            {playerId && byId.get(playerId)
+        {SNAKE_BOARD_SLOT_IDS.map((slotId) => {
+          const playerId = props.boardSlots[slotId];
+          const candidate = playerId ? byId.get(playerId) : undefined;
+          const state = props.brokenSlots.includes(slotId)
+            ? 'PLAN BROKEN'
+            : !playerId
+              ? 'MISSING'
+              : !candidate
+                ? 'UNKNOWN PLAYER'
+                : candidate.drafted
+                  ? 'UNAVAILABLE'
+                  : (props.slotDepth[slotId] ?? 3) <= 2
+                    ? `${props.slotDepth[slotId]} LEFT`
+                    : null;
+          return <div key={slotId} data-board-slot={slotId} data-board-state={state ?? 'READY'}>
+            {candidate
               ? <DeskCandidateRow
-                  candidate={byId.get(playerId)!}
+                  candidate={candidate}
                   prefix={slotId}
                   selected={props.selectedCandidateId === playerId}
                   onSelect={props.onSelectCandidate}
-                  warning={props.brokenSlots.includes(slotId)
-                    ? 'PLAN BROKEN'
-                    : (props.slotDepth[slotId] ?? 3) <= 2
-                      ? `${props.slotDepth[slotId]} LEFT`
-                      : null}
+                  warning={state}
                 />
-              : <p className="font-bold">{playerId ?? '—'}</p>}
+              : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotId}</span>{state}</p>}
           </div>
-        ))}
+        })}
       </div>
-      {(props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null)) && props.planChemistry ? (
-        <div className="mt-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={props.planLedger ?? buildPlanLedger(props.planBill!)} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
-      ) : props.planBill ? (
-        <div className="mt-4 border-4 border-[var(--ballpark-brass)] p-3 text-center">
-          <div className="grid grid-cols-3 gap-2">
-            <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
-            <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
-            <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
-          </div>
-          {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p> : null}
-        </div>
-      ) : null}
       {!props.readOnly ? <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
-        <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
+        <summary className="flex min-h-11 cursor-pointer items-center font-black">YOUR TAX CORE</summary>
         {props.showHelp ? <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p> : null}
         <div className="mt-3 space-y-2">
           {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}

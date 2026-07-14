@@ -20,10 +20,10 @@ const teams = [
   { id: 'buyer', name: 'Kodiaks' },
   { id: 'seller', name: 'Comets' },
 ];
-const proposal: SnakeGuidePackage = {
+const proposal: SnakeGuidePackage & { sellerPremium: number } = {
   buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 9,
   offerPickNumbers: [14, 41], receivePickNumbers: [9, 62],
-  offerValue: 180, receiveValue: 180, sessionRevision: 7,
+  offerValue: 180, receiveValue: 180, sellerPremium: 777, sessionRevision: 7,
 };
 const answer: AskedPickGuideResult = {
   message: 'OFFER 14+41; RECEIVE 9+62 — guide-matched and legal now.',
@@ -37,11 +37,45 @@ const openOffer = {
   id: 'offer-1', phase: 'MLB' as const,
   buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 9,
   offerPickNumbers: [14, 41], receivePickNumbers: [9, 62],
-  offerValue: 180, receiveValue: 180, postedSessionRevision: 7,
+  offerValue: 180, receiveValue: 180, sellerPremium: 777, postedSessionRevision: 7,
   buyerNod: true, sellerNod: true, postedAt: '2026-07-12T12:00:00.000Z',
 };
 
 describe('S4 guide surfaces', () => {
+  it('keeps every guide and commissioner control at the 44px touch target', () => {
+    const guide = render(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="buyer"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      prefill={{ key: 'touch-prefill', result: answer }}
+      openOffers={[{ ...openOffer, buyerNod: false }]}
+      onAsk={vi.fn()}
+      onPost={vi.fn()}
+      onNod={vi.fn()}
+      onClose={vi.fn()}
+    />);
+    for (const control of guide.container.querySelectorAll('button, input, select, summary')) {
+      expect(control).toHaveClass('min-h-11');
+    }
+    guide.unmount();
+
+    const commissioner = render(<SnakeCommissionerTrade
+      teams={teams}
+      ownedPicksByTeamId={{ buyer: [14, 41], seller: [9, 62] }}
+      sessionRevision={7}
+      openOffers={[{ ...openOffer, buyerNod: false, sellerNod: false }]}
+      onAsk={vi.fn()}
+      onPost={vi.fn()}
+      onNod={vi.fn()}
+      onClose={vi.fn()}
+      onExecute={vi.fn()}
+    />);
+    for (const control of commissioner.container.querySelectorAll('button, input, select, summary')) {
+      expect(control).toHaveClass('min-h-11');
+    }
+  });
+
   it('shows the full posted chart but asks the engine about only the typed pick', async () => {
     const onAsk = vi.fn().mockResolvedValue(answer);
     const { container } = render(<SnakeTradeGuide
@@ -58,7 +92,43 @@ describe('S4 guide surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 9' }));
     await waitFor(() => expect(onAsk).toHaveBeenCalledWith('buyer', 9));
     expect(screen.getByText(answer.message)).toBeInTheDocument();
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('WITH COMETS');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GIVE#14 + #41');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GET#9 + #62');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('OFFER TOTAL$180');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('RECEIVE TOTAL$180');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('SELLER PREMIUM$777');
     expect(container.textContent).not.toMatch(/suggested target|best target|recommended target|%/i);
+  });
+
+  it('renders a legacy missing premium as unavailable and preserves buyer/seller orientation', () => {
+    const { sellerPremium: _legacyMissing, ...legacyOffer } = openOffer;
+    expect(_legacyMissing).toBe(777);
+    const view = render(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="buyer"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      onAsk={vi.fn()}
+      openOffers={[legacyOffer]}
+    />);
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('WITH COMETS');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GIVE#14 + #41');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GET#9 + #62');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('SELLER PREMIUMUNAVAILABLE');
+
+    view.rerender(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="seller"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      onAsk={vi.fn()}
+      openOffers={[legacyOffer]}
+    />);
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('WITH KODIAKS');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GIVE#9 + #62');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GET#14 + #41');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('SELLER PREMIUMUNAVAILABLE');
   });
 
   it('posts a checked package, then executes only the durable offer after both clubs nod', async () => {
@@ -105,6 +175,11 @@ describe('S4 guide surfaces', () => {
       onClose={onClose}
       onExecute={onExecute}
     />);
+    expect(screen.getByText('KODIAKS ↔ COMETS')).toBeInTheDocument();
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GIVE#14 + #41');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('YOU GET#9 + #62');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('OFFER TOTAL$180');
+    expect(screen.getByTestId('trade-value-card')).toHaveTextContent('RECEIVE TOTAL$180');
     fireEvent.click(screen.getByRole('button', { name: 'EXECUTE TRADE' }));
     await waitFor(() => expect(onExecute).toHaveBeenCalledWith(openOffer));
   });

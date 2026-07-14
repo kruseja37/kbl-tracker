@@ -330,11 +330,12 @@ describe('ROOMFIX setup to playable snake room', () => {
     expect(planTruth).toMatch(/\$-?[\d,]+/);
     expect(planTruth).not.toMatch(/NaN|Infinity/);
 
-    fireEvent.click(screen.getByRole('button', { name: 'THE GUIDE' }));
+    expect(screen.queryByRole('button', { name: 'THE GUIDE' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
-    await waitFor(() => expect(screen.getByLabelText('Shared trade guide').textContent).toMatch(/PICK|NO LEGAL GUIDE TRADE/i));
-    fireEvent.click(screen.getByRole('button', { name: 'CLOSE' }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'TRADE PICKS' }).textContent).toMatch(/PICK|NO LEGAL GUIDE TRADE/i));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
 
     const defaultName = screen.getByTestId('selected-player-card').querySelector('h2')?.textContent;
     expect(defaultName).toBeTruthy();

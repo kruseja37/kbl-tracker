@@ -285,6 +285,10 @@ function prepare(source = session()) {
   });
 }
 
+function selectMainTeam(teamId: string): void {
+  fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: teamId } });
+}
+
 describe('SNAKE-MOCK-2B companion board parity', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -313,7 +317,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     const originalB = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.b);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
@@ -425,7 +429,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(session());
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
     await waitFor(() => expect(mocks.assistantRequests.some((request) => request.input.teamId === 'a')).toBe(true));
@@ -451,8 +455,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     if (decision === 'PASS') fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
-    expect(await screen.findByTestId('snake-decision-label')).toHaveTextContent(label);
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(await screen.findByTestId('selected-player-decision')).toHaveTextContent(label);
     expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
 
     cleanup();
@@ -461,12 +465,12 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(structuredClone(source));
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
     if (decision === 'PASS') fireEvent.click(await screen.findByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
-    expect(await screen.findByTestId('snake-decision-label')).toHaveTextContent(label);
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
+    expect(await screen.findByTestId('selected-player-decision')).toHaveTextContent(label);
     expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
   }, 15_000);
 
@@ -477,7 +481,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(source);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     const companionTrade = await screen.findByRole('button', { name: 'TRADE TO #1' });
     const companionRequest = structuredClone(mocks.guideRequests.at(-1)!);
     mocks.patchBoard.mockClear();
@@ -499,10 +503,10 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(structuredClone(source));
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
     const mainTrade = await screen.findByRole('button', { name: 'TRADE TO #1' });
     const mainRequest = structuredClone(mocks.guideRequests.at(-1)!);
     mocks.patchBoard.mockClear();
@@ -532,20 +536,20 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
-    expect(screen.queryByTestId('snake-decision-label')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByTestId('selected-player-decision')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /TRADE TO/ })).not.toBeInTheDocument();
 
     cleanup();
     prepare(structuredClone(source));
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
     fireEvent.click(await screen.findByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
-    expect(screen.queryByTestId('snake-decision-label')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByTestId('selected-player-decision')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /TRADE TO/ })).not.toBeInTheDocument();
   }, 15_000);
 
@@ -560,7 +564,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.manualGuidePromise = covered.promise;
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
@@ -572,7 +576,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await screen.findByTestId('snake-companion-frame');
     const revoked = deferred<unknown>();
     mocks.manualGuidePromise = revoked.promise;
-    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
@@ -595,10 +599,10 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.manualGuidePromise = revised.promise;
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
-    fireEvent.click(await screen.findByRole('button', { name: 'GUIDE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
     const mainCurrent = mocks.currentSession as LeagueBuilderMlbDraftSession;
@@ -612,7 +616,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.manualGuidePromise = switched.promise;
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    selectMainTeam('b');
     await act(async () => { switched.resolve(answer); await switched.promise; });
     expect(screen.queryByText('OLD GUIDE ANSWER')).not.toBeInTheDocument();
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
@@ -637,7 +641,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+      selectMainTeam('a');
     });
     const reveal = await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' });
     await act(async () => {
@@ -662,7 +666,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
       ...current,
       snakeCompanions: { ...current.snakeCompanions!, claims: current.snakeCompanions!.claims.map((claim) => ({ ...claim, status: 'revoked' as const })) },
     };
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument());
@@ -675,7 +679,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.patchBoard.mockRejectedValueOnce(new Error('board revision changed'));
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(screen.getByText('THE DRAFT MOVED ON — REFRESH')).toBeInTheDocument());
     expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
@@ -687,7 +691,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<><SnakeCompanion /><SnakeCompanion /></>);
     await waitFor(() => expect(screen.getAllByTestId('snake-companion-frame')).toHaveLength(2));
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'RANKINGS' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'PLAYER POOL' })[0]);
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
     expect(screen.getAllByTestId('companion-board-update-banner')).toHaveLength(1);
@@ -711,7 +715,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.patchBoard.mockImplementationOnce(() => pending.promise);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
 
@@ -739,11 +743,16 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.patchBoard.mockImplementationOnce(() => pending.promise);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
 
+    fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'FORGET ROOM' }));
+    expect(screen.getByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'FORGET ROOM' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
     expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
     expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
 
@@ -768,7 +777,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.patchBoard.mockImplementationOnce(() => pending.promise);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
 

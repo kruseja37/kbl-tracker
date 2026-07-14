@@ -172,6 +172,8 @@ describe('snake two-bills economics and guide packages', () => {
     expect(proveSimultaneousSnakeSeating(seatingProofInput).shortfall).toBeNull();
     expect(found.package).toMatchObject({ offerPickNumbers: [4, 12], receivePickNumbers: [2, 20] });
     expect(found.package!.offerValue).toBeGreaterThanOrEqual(found.package!.receiveValue);
+    expect((found.package as SnakeGuidePackage & { sellerPremium?: number }).sellerPremium)
+      .toBe(found.package!.offerValue - found.package!.receiveValue);
     const executed = executeSnakeGuidePackage({
       session,
       proposal: found.package!,
@@ -194,6 +196,37 @@ describe('snake two-bills economics and guide packages', () => {
       pickValueChart,
       seatingProofInput: { ...seatingProofInput, pool: [] },
     })).toEqual({ package: null, message: 'No legal guide trade reaches pick 2.' });
+  });
+
+  test('carries a nonzero authoritative seller premium and rejects missing, malformed, or tampered premium snapshots', () => {
+    const pickValueChart = chart([100, 105]);
+    const session = sessionWithOwners({ id: 'premium-integrity', pickCount: 2, owners: { 1: 'seller', 2: 'buyer' } });
+    const input = {
+      session,
+      buyerTeamId: 'buyer',
+      targetPick: 1,
+      pickValueChart,
+      seatingProofInput: legalSeating(),
+    };
+    const found = searchSnakeGuidePackage(input);
+    expect(found.package).not.toBeNull();
+    const proposal = found.package as SnakeGuidePackage & { sellerPremium?: number };
+    expect(proposal.sellerPremium).toBe(5);
+    expect(revalidateSnakeGuidePackage({ ...input, proposal })).toMatchObject({ valid: true });
+
+    const { sellerPremium: _removed, ...missingPremium } = proposal;
+    expect(_removed).toBe(5);
+    for (const mutation of [
+      missingPremium,
+      { ...proposal, sellerPremium: Number.NaN },
+      { ...proposal, sellerPremium: Number.POSITIVE_INFINITY },
+      { ...proposal, sellerPremium: 4 },
+    ]) {
+      expect(revalidateSnakeGuidePackage({ ...input, proposal: mutation as SnakeGuidePackage }))
+        .toMatchObject({ valid: false, guideMatched: false, proposedSession: null });
+      expect(executeSnakeGuidePackage({ ...input, proposal: mutation as SnakeGuidePackage }))
+        .toMatchObject({ valid: false, guideMatched: false, proposedSession: null });
+    }
   });
 
   test('searches every package size and chooses value gap before complexity', () => {
@@ -226,7 +259,7 @@ describe('snake two-bills economics and guide packages', () => {
       session,
       proposal: {
         buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 1,
-        offerPickNumbers: [2], receivePickNumbers: [1], offerValue: 90, receiveValue: 100,
+        offerPickNumbers: [2], receivePickNumbers: [1], offerValue: 90, receiveValue: 100, sellerPremium: -10,
         sessionRevision: session.revision ?? 0,
       },
       pickValueChart,
@@ -270,6 +303,7 @@ describe('snake two-bills economics and guide packages', () => {
       receivePickNumbers: [1],
       offerValue: 100,
       receiveValue: 100,
+      sellerPremium: 0,
       sessionRevision: 7,
     } as SnakeGuidePackage;
 

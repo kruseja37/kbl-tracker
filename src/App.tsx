@@ -256,6 +256,11 @@ const LivingSeasonTestDrive = lazy(() =>
     default: module.LivingSeasonTestDrive,
   })),
 );
+const SnakeResponsivePreview = lazy(() =>
+  import("./src_figma/app/pages/SnakeResponsivePreview").then((module) => ({
+    default: module.SnakeResponsivePreview,
+  })),
+);
 const enablePreviewRoutes = import.meta.env.DEV || import.meta.env.MODE === "test";
 const enableFranchiseVisualSmokePreviewRoute =
   import.meta.env.DEV || import.meta.env.MODE === "test";
@@ -488,6 +493,10 @@ function App() {
             <Route
               path="/__preview/living-season-test-drive"
               element={<LivingSeasonTestDrive />}
+            />
+            <Route
+              path="/__preview/snake-responsive"
+              element={<SnakeResponsivePreview />}
             />
           </>
         ) : null}

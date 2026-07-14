@@ -373,6 +373,7 @@ export function validateSnakeGuideRecommendationPackage(
     'receivePickNumbers',
     'offerValue',
     'receiveValue',
+    'sellerPremium',
     'sessionRevision',
   ])) return false;
   const destinations = expectedSnakeGuideDestinations(request.input);
@@ -396,6 +397,7 @@ export function validateSnakeGuideRecommendationPackage(
   const receiveValue = chartValue(request.input.pickValueChart, value.receivePickNumbers);
   if (offerValue === null || receiveValue === null
     || value.offerValue !== offerValue || value.receiveValue !== receiveValue
+    || !finite(value.sellerPremium) || value.sellerPremium !== offerValue - receiveValue
     || offerValue < receiveValue) return false;
   try {
     return validateTrade(

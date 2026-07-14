@@ -104,8 +104,8 @@ describe('PrivateDesk', () => {
     />);
 
     expect(screen.getByRole('button', { name: 'MY BOARD' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
-    expect(screen.getByRole('button', { name: 'RANKINGS' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.getByRole('button', { name: 'PLAYER POOL' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'SS RANKINGS' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Move AVAILABLE PLAYER up' }));
@@ -137,7 +137,7 @@ describe('PrivateDesk', () => {
     expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT AVAILABLE PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('available');
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' }));
@@ -164,7 +164,7 @@ describe('PrivateDesk', () => {
       onReorderOverall={onReorderOverall}
     />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'jovita' } });
     expect(screen.getByRole('button', { name: 'SELECT JOVITA PULO' })).toHaveTextContent('#2');
     fireEvent.click(screen.getByRole('button', { name: 'Send JOVITA PULO to top' }));
@@ -203,54 +203,40 @@ describe('PrivateDesk', () => {
       tradeGuide={<div>POSTED PRICE GUIDE</div>}
     />);
 
-    expect(screen.getByText('PLAN COST')).toBeInTheDocument();
-    expect(screen.getByText('PLAN TAX')).toBeInTheDocument();
-    expect(screen.getByText('PLAN CUSHION')).toBeInTheDocument();
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
     expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
     expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
     expect(screen.getByTestId('assistant-plan-truth-strip')).toHaveTextContent('$90');
     expect(screen.queryByRole('button', { name: /KEEP/ })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
   });
 
-  it('shows sparse decision labels and lets only a trade call open the existing guide', () => {
-    const onTradeDecision = vi.fn();
-    const tradeDecision = {
-      kind: 'TRADE_TO_PICK' as const,
-      playerId: 'muraski',
-      targetPick: 19,
-      proposal: {
-        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 19,
-        offerPickNumbers: [24, 36], receivePickNumbers: [19, 41],
-        offerValue: 100, receiveValue: 95, sessionRevision: 7,
-      },
-    };
+  it('renders only the frozen tabs, adds Activity only for consequential history, and opens a verified trade prefill', () => {
     const common = {
       candidates: [candidate], rankings: { SS: ['muraski'] }, overallRankings: ['muraski'],
       boardSlots: { SS: 'muraski' }, brokenSlots: [], planBill: null, advisorLog: [],
       taxCoreRows: [], slotDepth: { SS: 1 }, assistantBoard: idleAssistant,
       onReorder: () => undefined, tradeGuide: <div>EXISTING MANUAL GUIDE</div>,
     };
-    const { rerender } = render(<PrivateDesk
-      {...common}
-      decision={{ kind: 'SAFE_TO_WAIT', playerId: 'muraski', nextPick: 24 }}
-    />);
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
-    expect(screen.getByTestId('snake-decision-label')).toHaveTextContent('SAFE TO WAIT');
-    expect(screen.queryByRole('button', { name: 'SAFE TO WAIT' })).not.toBeInTheDocument();
+    const { rerender } = render(<PrivateDesk {...common} />);
+    expect(screen.getAllByRole('button', { name: /MY BOARD|ASST GM BOARD|PLAYER POOL|TRADE PICKS|ACTIVITY/ }).map((button) => button.getAttribute('aria-label'))).toEqual([
+      'MY BOARD', 'ASST GM BOARD', 'PLAYER POOL', 'TRADE PICKS',
+    ]);
+    expect(screen.queryByRole('button', { name: 'ACTIVITY' })).not.toBeInTheDocument();
+    for (const retired of ['BOARD', 'RANKINGS', 'LOG', 'GUIDE']) {
+      expect(screen.queryByRole('button', { name: retired })).not.toBeInTheDocument();
+    }
 
-    rerender(<PrivateDesk
-      {...common}
-      decision={tradeDecision}
-      onTradeDecision={onTradeDecision}
-    />);
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
-    fireEvent.click(screen.getByRole('button', { name: 'TRADE TO #19' }));
-    expect(onTradeDecision).toHaveBeenCalledWith(tradeDecision);
+    rerender(<PrivateDesk {...common} tradePrefillKey="verified-19" />);
     expect(screen.getByText('EXISTING MANUAL GUIDE')).toBeInTheDocument();
+
+    rerender(<PrivateDesk {...common} advisorLog={[{ key: 'trade-1', text: 'YOU TRADED PICKS 24+36 FOR 19+41.', actionable: true }]} />);
+    expect(screen.getByRole('button', { name: 'ACTIVITY' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'ACTIVITY' }));
+    expect(screen.getByText('YOU TRADED PICKS 24+36 FOR 19+41.')).toBeInTheDocument();
   });
 });
 
@@ -268,12 +254,4 @@ describe('downward tax consequence copy (TAXSWING seam)', () => {
     expect(screen.getByRole('button', { name: 'SELECT YOINK SAX · 2024 · BEW' })).toBeInTheDocument();
   });
 
-  it.each([
-    [{ kind: 'TAKE_NOW' as const, playerId: 'muraski' }, 'TAKE NOW'],
-    [{ kind: 'PASS' as const, playerId: 'muraski' }, 'PASS'],
-  ])('renders %s as a status, not an assistant action button', (decision, label) => {
-    render(<DeskCandidateRow candidate={candidate} decision={decision} />);
-    expect(screen.getByTestId('snake-decision-label')).toHaveTextContent(label);
-    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
-  });
 });

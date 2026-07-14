@@ -221,6 +221,10 @@ async function revealSeatAndSettle(teamName: string): Promise<void> {
   mocks.saveRoom.mockClear();
 }
 
+function selectTeam(teamId: string): void {
+  fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: teamId } });
+}
+
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
   beforeEach(() => {
     mocks.saveRoom.mockReset().mockImplementation(async (next) => next);
@@ -267,7 +271,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(initialTax).toBe('$700');
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Competitive22 · L3');
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Spirited0 · L1');
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
@@ -310,7 +314,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Crafty0 · L1');
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Disciplined0 · L1');
     expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('Scholarly0 · L1');
-    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'C' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
@@ -389,7 +393,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
 
@@ -412,7 +416,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId('main-board-update-banner')).toBeInTheDocument();
@@ -436,13 +440,13 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByRole('button', { name: 'COVER' }));
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    selectTeam('b');
     const passButton = screen.queryByRole('button', { name: 'I HAVE THE ROOM' });
     if (passButton) fireEvent.click(passButton);
 
@@ -496,7 +500,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
 
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    selectTeam('b');
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
     await revealSeatAndSettle('Club B');
@@ -506,7 +510,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
     fireEvent.click(alternate);
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
-    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
     expect(screen.queryByRole('button', { name: 'DRAFT PLAYER' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
@@ -516,17 +520,17 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(saved.seatBoards?.b.rankings.global).not.toEqual(source.seatBoards?.b.rankings.global);
     expect(new Set(Object.values(saved.seatBoards!.b.slots))).toHaveLength(22);
 
-    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '2' } });
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 2' }));
     await waitFor(() => expect(mocks.guideAsk).toHaveBeenCalledWith(expect.objectContaining({ buyerTeamId: 'b', targetPick: 2 })));
 
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectTeam('a');
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     await revealSeatAndSettle('Club A');
     expect(await screen.findByRole('button', { name: 'DRAFT PLAYER' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    selectTeam('b');
     await revealSeatAndSettle('Club B');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
   });
@@ -557,7 +561,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
 
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    selectTeam('a');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('1/22');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('$10,100');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('Competitive0 · L1');

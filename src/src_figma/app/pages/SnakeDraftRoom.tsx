@@ -613,7 +613,7 @@ function FarmSnakeRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><p>THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5" onClick={() => void loadFarm()}>RETRY</button></main>;
+  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadFarm()}>RETRY</button></main>;
   if (!league || !session || !farmPool) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
   const farmRecapPicks = session.draftManifest
     ? readSnakeDraftTruth(session, 'FARM').completedPicks
@@ -2194,7 +2194,7 @@ function MlbSnakeDraftRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5" onClick={() => void loadSession()}>RETRY</button></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadSession()}>RETRY</button></div></main>;
   if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
 
   const mlbRecapPicks = session.draftManifest
@@ -2237,13 +2237,14 @@ function MlbSnakeDraftRoom() {
       ownedPicksByTeamId={ownedPicksByTeamId}
       publicTruthByTeamId={publicTruthByTeamId}
       activeSeatId={deskTeam?.id ?? null}
+      consolidatedMlb
       canDraftFromActiveSeat={Boolean(deskTeam && draftingTeam && deskTeam.id === draftingTeam.id)}
       candidate={candidate}
       candidateProfile={candidateId ? playerById.get(candidateId) ?? null : null}
-      selectedPlayerCard={deskState?.selectedCandidate && deskTeam && candidateId && playerById.get(candidateId) ? (
+      selectedPlayerCard={deskState?.selectedCandidate && deskTeam && candidateId && playerById.get(candidateId) ? ((draftAction) => (
         <SelectedPlayerCard
           player={playerById.get(candidateId)!}
-          candidate={deskState.selectedCandidate}
+          candidate={deskState.selectedCandidate!}
           consequence={selectedConsequence}
           teamLogoUrl={deskTeam.logoUrl}
           teamName={deskTeam.name}
@@ -2253,14 +2254,20 @@ function MlbSnakeDraftRoom() {
           }}
           onKeep={() => { void keepSelectedConsequence(); }}
           onRevert={() => setDismissedConsequencePlayerId(candidateId)}
+          decision={draftDecision}
+          onTradeDecision={prefillTradeDecision}
+          actionConsequence={candidate?.consequence}
+          blockReason={candidate?.blockReason}
+          draftAction={draftAction}
         />
-      ) : candidate && deskTeam ? (
+      )) : candidate && deskTeam ? ((draftAction) => (
         <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
           <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED PLAYER</p>
           <h2 className="text-xl font-black uppercase">{candidate.name}</h2>
           <p className="text-xs font-bold">{candidate.position}</p>
+          <div className="mt-3">{draftAction}</div>
         </section>
-      ) : undefined}
+      )) : undefined}
       selectedFitLabel={deskState?.selectedCandidate ? `FIT · ${deskState.selectedCandidate.fitWord}` : null}
       draftActionLabel="DRAFT PLAYER"
       paused={Boolean(session.paused)}
@@ -2282,7 +2289,7 @@ function MlbSnakeDraftRoom() {
             <p className="font-bold" role="status">MY BOARD UPDATED — {boardUndo.changedSlotCount} SLOT{boardUndo.changedSlotCount === 1 ? '' : 'S'} CHANGED.</p>
             <button
               type="button"
-              className="ballpark-press-button ballpark-press-sm ballpark-press-action"
+              className="ballpark-press-button ballpark-press-sm ballpark-press-action min-h-11"
               disabled={undoWorking}
               onClick={() => void undoBoardUpdate()}
             >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
@@ -2313,8 +2320,7 @@ function MlbSnakeDraftRoom() {
           slotDepth={deskState.slotDepth}
           assistantBoard={assistantBoardState}
           privateScopeKey={currentPrivateScopeKey ?? undefined}
-          decision={draftDecision}
-          onTradeDecision={prefillTradeDecision}
+          tradePrefillKey={activeGuidePrefill?.key ?? null}
           showHelp={showHelp}
           selectedCandidateId={candidateId}
           onSelectCandidate={selectCandidate}
@@ -2341,18 +2347,6 @@ function MlbSnakeDraftRoom() {
           />}
         />
       </>)) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}
-      tradeGuide={(showHelp) => <SnakeTradeGuide
-        showHelp={showHelp}
-        teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
-        pickValueChart={pickValueChart}
-        sessionRevision={session.revision ?? 0}
-        onAsk={askTradeGuide}
-        onPost={postTradeOffer}
-        openOffers={(session.openTradeOffers ?? []).filter((offer) => offer.phase === 'MLB')}
-        onNod={nodTradeOffer}
-        onClose={closeTradeOffer}
-        onFailure={refreshRoomTruth}
-      />}
       commissionerTrade={(showHelp) => <SnakeCommissionerTrade
         showHelp={showHelp}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}

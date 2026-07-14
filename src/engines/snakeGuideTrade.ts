@@ -19,6 +19,7 @@ export interface SnakeGuidePackage {
   receivePickNumbers: number[];
   offerValue: number;
   receiveValue: number;
+  sellerPremium: number;
   sessionRevision: number;
 }
 
@@ -86,10 +87,7 @@ function packageValue(picks: readonly number[], values: ReadonlyMap<number, numb
   }, 0);
 }
 
-type SnakeGuideCandidate = SnakeGuidePackage & {
-  imbalance: number;
-  sellerPremium: number;
-};
+type SnakeGuideCandidate = SnakeGuidePackage & { imbalance: number };
 
 function toGuidePackage(candidate: SnakeGuideCandidate): SnakeGuidePackage {
   return {
@@ -100,6 +98,7 @@ function toGuidePackage(candidate: SnakeGuideCandidate): SnakeGuidePackage {
     receivePickNumbers: candidate.receivePickNumbers,
     offerValue: candidate.offerValue,
     receiveValue: candidate.receiveValue,
+    sellerPremium: candidate.sellerPremium,
     sessionRevision: candidate.sessionRevision,
   };
 }
@@ -314,8 +313,10 @@ function snapshotSnakeGuidePackage(proposal: SnakeGuidePackage): SnakeGuidePacka
     const receiveSource = proposal.receivePickNumbers;
     const offerValue = proposal.offerValue;
     const receiveValue = proposal.receiveValue;
+    const sellerPremium = proposal.sellerPremium;
     const sessionRevision = proposal.sessionRevision;
-    if (!Array.isArray(offerSource) || !Array.isArray(receiveSource)) return null;
+    if (!Array.isArray(offerSource) || !Array.isArray(receiveSource)
+      || !Number.isFinite(sellerPremium)) return null;
     const offerPickNumbers = Object.freeze([...offerSource]) as unknown as number[];
     const receivePickNumbers = Object.freeze([...receiveSource]) as unknown as number[];
     return Object.freeze({
@@ -326,6 +327,7 @@ function snapshotSnakeGuidePackage(proposal: SnakeGuidePackage): SnakeGuidePacka
       receivePickNumbers,
       offerValue,
       receiveValue,
+      sellerPremium,
       sessionRevision,
     });
   } catch {
@@ -394,7 +396,10 @@ function revalidateSnakeGuidePackageSnapshot(input: RevalidateSnakeGuideInput): 
   } catch {
     return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
   }
-  if (offerValue !== proposal.offerValue || receiveValue !== proposal.receiveValue) {
+  const sellerPremium = offerValue - receiveValue;
+  if (offerValue !== proposal.offerValue
+    || receiveValue !== proposal.receiveValue
+    || sellerPremium !== proposal.sellerPremium) {
     return { valid: false, message: 'This package no longer matches the posted guide.', guideMatched: false, proposedSession: null };
   }
   const verdict = validateTrade(

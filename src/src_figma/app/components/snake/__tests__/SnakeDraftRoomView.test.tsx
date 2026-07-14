@@ -157,6 +157,73 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByText('PUBLIC POSTED PRICE CHART')).not.toBeInTheDocument();
     expect(screen.getByText('COMMISSIONER EXECUTE OR DECLINE')).toBeInTheDocument();
   });
+
+  it('uses one private TEAM selector in MLB, removes old private DOM before switching, and keeps pick-window cards public-only', () => {
+    const onActiveSeatChange = vi.fn(() => {
+      expect(screen.queryByText('KODIAKS SECRET BOARD')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'DRAFT PLAYER' })).not.toBeInTheDocument();
+    });
+    const view = render(<SnakeDraftRoomView {...props({
+      consolidatedMlb: true,
+      privateDesk: <div>KODIAKS SECRET BOARD</div>,
+      selectedPlayerCard: (draftAction) => <section data-testid="one-selected-card"><h2>Sam Slugger</h2>{draftAction}</section>,
+      tradeGuide: <div>SHARED MLB GUIDE MUST NOT RENDER</div>,
+      commissionerTrade: <div>COMMISSIONER TRADE STAYS</div>,
+      onActiveSeatChange,
+    })} />);
+    expect(screen.getAllByRole('combobox', { name: 'TEAM' })).toHaveLength(1);
+    expect(screen.queryByRole('region', { name: 'Club lens' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Kodiaks pick 1' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Kodiaks pick 1')).toHaveAttribute('aria-current', 'step');
+    expect(screen.queryByRole('button', { name: 'THE GUIDE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'CORRECT LAST ACTION' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'TRADE' })).toBeInTheDocument();
+    expect(screen.getByText('RECENT PICKS').closest('details')).not.toHaveAttribute('open');
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    expect(screen.getByText('KODIAKS SECRET BOARD')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: 'Sam Slugger' })).toHaveLength(1);
+    expect(screen.getByTestId('one-selected-card')).toContainElement(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: 'b' } });
+    expect(onActiveSeatChange).toHaveBeenCalledWith('b');
+    expect(screen.queryByText('KODIAKS SECRET BOARD')).not.toBeInTheDocument();
+
+    view.rerender(<SnakeDraftRoomView {...props({
+      consolidatedMlb: true,
+      activeSeatId: 'b',
+      privateDesk: <div>COMETS SECRET BOARD</div>,
+      onActiveSeatChange,
+    })} />);
+    expect(screen.queryByText('COMETS SECRET BOARD')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'REVEAL COMETS SEAT' })).toBeInTheDocument();
+  });
+
+  it('contains iPad-width overflow and keeps every persistent MLB control at the 44px target', () => {
+    const view = render(<SnakeDraftRoomView {...props({
+      consolidatedMlb: true,
+      commissionerTrade: <div>COMMISSIONER TRADE</div>,
+      companionApproval: <div>COMPANION APPROVAL</div>,
+      correctionAvailable: true,
+    })} />);
+    const expectEveryPersistentControlToBeTouchSafe = () => {
+      for (const control of view.container.querySelectorAll('button, select, summary')) {
+        expect(control).toHaveClass('min-h-11');
+      }
+    };
+    expect(screen.getByTestId('snake-draft-room')).toHaveClass('min-w-0', 'overflow-x-hidden');
+    expect(screen.getByTestId('room-layout')).toHaveClass('min-w-0');
+    expect(screen.getByRole('combobox', { name: 'TEAM' })).toHaveClass('min-h-11');
+    expectEveryPersistentControlToBeTouchSafe();
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    expect(screen.getByRole('button', { name: 'DRAFT PLAYER' })).toHaveClass('min-h-11');
+    expect(screen.getByRole('button', { name: 'COVER' })).toHaveClass('min-h-11');
+    expect(screen.getByLabelText('Commissioner controls').querySelectorAll('button')).not.toHaveLength(0);
+    expectEveryPersistentControlToBeTouchSafe();
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    expectEveryPersistentControlToBeTouchSafe();
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANIONS' }));
+    expectEveryPersistentControlToBeTouchSafe();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();

@@ -20,6 +20,7 @@ import {
   patchMlbDraftSessionFarmSeatBoard,
   patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
+  postApprovedCompanionTradeOffer,
   resetCompletedDraftArcAtomically,
   saveLeagueTemplate,
   saveRegisteredPool,
@@ -35,6 +36,11 @@ import {
 } from '../../src_figma/app/components/snake/companion/companionModel';
 import { freezeSnakeDraftSession } from '../snakeDraftManifest';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../engines/snakeSession';
+import {
+  nodSnakeTradeOffer,
+  postSnakeTradeOffer,
+  proposalFromOpenSnakeOffer,
+} from '../../engines/snakeTradeOffers';
 
 function session(): LeagueBuilderMlbDraftSession {
   return {
@@ -89,6 +95,54 @@ async function resetStorage(): Promise<void> {
 describe('PERFROOM room-session persistence', () => {
   beforeEach(resetStorage);
   afterEach(resetStorage);
+
+  test('main posting preserves the authoritative premium through persistence, reload, nods, and proposal reconstruction', async () => {
+    const source = {
+      ...session(),
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-b' },
+        { round: 1, pick: 2, teamId: 'team-a' },
+      ],
+    };
+    const proposal = {
+      buyerTeamId: 'team-a', sellerTeamId: 'team-b', targetPick: 1,
+      offerPickNumbers: [2], receivePickNumbers: [1],
+      offerValue: 117, receiveValue: 100, sellerPremium: 17, sessionRevision: 0,
+    };
+    const posted = postSnakeTradeOffer({ session: source, phase: 'MLB', proposal, postedAt: '2026-07-13T10:00:00.000Z' });
+    expect(posted.openTradeOffers?.[0].sellerPremium).toBe(17);
+    await saveMlbDraftSession(posted);
+    const loaded = (await getMlbDraftSession(source.leagueId, source.seasonNumber))!;
+    expect(loaded.openTradeOffers?.[0].sellerPremium).toBe(17);
+    const buyerNod = nodSnakeTradeOffer(loaded, loaded.openTradeOffers![0].id, 'team-a');
+    const bothNod = nodSnakeTradeOffer(buyerNod, buyerNod.openTradeOffers![0].id, 'team-b');
+    expect(proposalFromOpenSnakeOffer(bothNod, bothNod.openTradeOffers![0]).sellerPremium).toBe(17);
+  });
+
+  test('approved companion posting preserves the exact authoritative premium through persistence and reload', async () => {
+    await saveMlbDraftSession({
+      ...session(),
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-b' },
+        { round: 1, pick: 2, teamId: 'team-a' },
+      ],
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status: 'approved' }],
+      },
+    });
+    const proposal = {
+      buyerTeamId: 'team-a', sellerTeamId: 'team-b', targetPick: 1,
+      offerPickNumbers: [2], receivePickNumbers: [1],
+      offerValue: 117, receiveValue: 100, sellerPremium: 17, sessionRevision: 0,
+    };
+    const posted = await postApprovedCompanionTradeOffer({
+      leagueId: 'perfroom-league', seasonNumber: 1, deviceId: 'ipad-a', teamId: 'team-a',
+      proposal, postedAt: '2026-07-13T10:00:00.000Z',
+    });
+    expect(posted.openTradeOffers?.[0].sellerPremium).toBe(17);
+    expect((await getMlbDraftSession('perfroom-league', 1))?.openTradeOffers?.[0].sellerPremium).toBe(17);
+  });
 
   test('a stale room pick-save cannot replace an existing room code or erase a companion claim', async () => {
     const staleRoomCopy = await saveMlbDraftSession(session());

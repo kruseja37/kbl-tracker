@@ -51,7 +51,7 @@ function ready(key = 'public-a', overrides: Record<string, unknown> = {}): Snake
       proposal: {
         buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 9,
         offerPickNumbers: [12], receivePickNumbers: [9],
-        offerValue: 100, receiveValue: 100, sessionRevision: 3,
+        offerValue: 100, receiveValue: 100, sellerPremium: 0, sessionRevision: 3,
         ...overrides,
       },
     },

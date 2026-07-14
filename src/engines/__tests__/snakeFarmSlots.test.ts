@@ -6,6 +6,7 @@ import {
   executeFarmGuidePackage,
   buildFarmMoneyLedger,
   farmPickSalary,
+  searchFarmGuidePackage,
   validateFarmPickTrade,
 } from '../snakeFarmSlots';
 import type { LeagueBuilderMlbDraftSession } from '../../utils/leagueBuilderStorage';
@@ -141,10 +142,18 @@ describe('S6 farm slot salaries', () => {
 
   test('executes a guide trade only when the frozen-slot farm money gate still fits', () => {
     const session = { ...farmSession(), farmSlotSalaries: [10_000, 10_000, 10_000, 10_000] };
+    const found = searchFarmGuidePackage({
+      session,
+      buyerTeamId: 'a',
+      targetPick: 3,
+      farmBudgetsByTeamId: { a: 30_000, b: 30_000 },
+      remainingUniqueProspects: 10,
+    });
+    expect(found.package?.sellerPremium).toBe(0);
     const proposal = {
       buyerTeamId: 'a', sellerTeamId: 'b', targetPick: 3,
       offerPickNumbers: [4], receivePickNumbers: [3],
-      offerValue: 10_000, receiveValue: 10_000, sessionRevision: 0,
+      offerValue: 10_000, receiveValue: 10_000, sellerPremium: 0, sessionRevision: 0,
     };
     const result = executeFarmGuidePackage({
       session,

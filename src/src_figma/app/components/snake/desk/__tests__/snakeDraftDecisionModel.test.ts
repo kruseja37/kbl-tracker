@@ -273,6 +273,8 @@ describe('Batch 4B sanitized current guide bridge', () => {
     const result = runSnakeGuideRecommendationRequest(request);
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') throw new Error('Expected guide package.');
+    const premiumProposal = result.proposal as typeof result.proposal & { sellerPremium?: number };
+    expect(premiumProposal.sellerPremium).toBe(result.proposal.offerValue - result.proposal.receiveValue);
     expect(validateSnakeGuideRecommendationPackage(request, { ...result.proposal, targetPick: 10 })).toBe(false);
     expect(validateSnakeGuideRecommendationPackage(request, {
       ...result.proposal,
@@ -281,6 +283,12 @@ describe('Batch 4B sanitized current guide bridge', () => {
     })).toBe(false);
     expect(validateSnakeGuideRecommendationPackage(request, { ...result.proposal, sessionRevision: 4 })).toBe(false);
     expect(validateSnakeGuideRecommendationPackage(request, { ...result.proposal, offerValue: result.proposal.offerValue + 1 })).toBe(false);
+    const { sellerPremium: _removed, ...missingPremium } = premiumProposal;
+    expect(_removed).toBe(premiumProposal.offerValue - premiumProposal.receiveValue);
+    expect(validateSnakeGuideRecommendationPackage(request, missingPremium)).toBe(false);
+    expect(validateSnakeGuideRecommendationPackage(request, { ...premiumProposal, sellerPremium: Number.NaN })).toBe(false);
+    expect(validateSnakeGuideRecommendationPackage(request, { ...premiumProposal, sellerPremium: Number.POSITIVE_INFINITY })).toBe(false);
+    expect(validateSnakeGuideRecommendationPackage(request, { ...premiumProposal, sellerPremium: (premiumProposal.sellerPremium ?? 0) + 1 })).toBe(false);
     const unfairRequest = {
       ...request,
       input: {

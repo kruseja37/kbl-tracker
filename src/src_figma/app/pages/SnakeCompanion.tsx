@@ -1169,7 +1169,7 @@ export default function SnakeCompanion() {
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
   if (!auth.isAuthenticated) return <CompanionSignInScreen error={auth.error} onSignIn={auth.signIn} />;
   if (initialPull === 'idle') return <main className="ballpark-page"><p>PULLING YOUR LEAGUES…</p></main>;
-  if (initialPull === 'error') return <main className="ballpark-page"><section className="ballpark-panel"><p role="alert">{message ?? 'COULD NOT PULL YOUR LEAGUES.'}</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-3" onClick={() => { pulledUserId.current = null; setPullState(null); setPullAttempt((attempt) => attempt + 1); }}>TRY AGAIN</button></section></main>;
+  if (initialPull === 'error') return <main className="ballpark-page"><section className="ballpark-panel"><p role="alert">{message ?? 'COULD NOT PULL YOUR LEAGUES.'}</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-3 min-h-11" onClick={() => { pulledUserId.current = null; setPullState(null); setPullAttempt((attempt) => attempt + 1); }}>TRY AGAIN</button></section></main>;
   if (isLoading) return <main className="ballpark-page"><p>OPENING THE COMPANION…</p></main>;
   if (error) return <main className="ballpark-page"><p className="uppercase">{error}</p></main>;
   if (deviceCovered) {
@@ -1184,7 +1184,7 @@ export default function SnakeCompanion() {
         onSignOut={signOut}
         onClaim={claimDesk}
       />
-      {activeClaim && session ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default fixed bottom-4 right-4" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button> : null}
+      {activeClaim && session ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default fixed bottom-4 right-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button> : null}
     </>;
   }
   if (isCompanionDraftComplete(session)) {
@@ -1193,7 +1193,7 @@ export default function SnakeCompanion() {
   if (isCompanionPicksComplete(session)) {
     return <CompanionAwaitingCommissionerScreen teamName={team.name} onCover={coverDevice} onSignOut={signOut} />;
   }
-  if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">OPEN THIS CLUB'S DESK ON THE MAIN DEVICE FIRST.</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button></section></main>;
+  if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">OPEN THIS CLUB'S DESK ON THE MAIN DEVICE FIRST.</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button></section></main>;
 
   const ticker = session.completedPicks.slice(-6).reverse().map((pick) => {
     const pickTeam = leagueTeams.find((entry) => entry.id === pick.teamId);
@@ -1207,7 +1207,7 @@ export default function SnakeCompanion() {
     ticker={ticker}
     message={message}
     onCover={coverDevice}
-    onForgetRoom={forgetCurrentRoom}
+    helpNotes={['TRADE PICKS OPENS ONLY THIS CLUB\'S PRIVATE GUIDE.']}
     selectedPlayer={selectedCandidate && selectedStoredPlayer ? <SelectedPlayerCard
       player={selectedStoredPlayer}
       candidate={selectedCandidate}
@@ -1220,6 +1220,8 @@ export default function SnakeCompanion() {
       }}
       onKeep={() => { void keepSelectedConsequence(); }}
       onRevert={() => setDismissedConsequencePlayerId(selectedCandidateId)}
+      decision={draftDecision}
+      onTradeDecision={prefillTradeDecision}
     /> : undefined}
     draftedTruth={<DraftTruthStrip
       title="DRAFTED ROSTER"
@@ -1227,7 +1229,7 @@ export default function SnakeCompanion() {
       chemistry={deskState.draftedChemistry}
       testId="companion-drafted-truth"
     />}
-    privateDesk={<>
+    privateDesk={(showHelp) => <>
       {boardUndo
         && sameCompanionPrivateIdentity(boardUndo.identity, currentPrivateIdentity)
         && boardUndo.expectedBoardRevision === board.revision ? (
@@ -1235,7 +1237,7 @@ export default function SnakeCompanion() {
           <p className="font-bold" role="status">MY BOARD UPDATED — {boardUndo.changedSlotCount} SLOT{boardUndo.changedSlotCount === 1 ? '' : 'S'} CHANGED.</p>
           <button
             type="button"
-            className="ballpark-press-button ballpark-press-sm ballpark-press-action"
+            className="ballpark-press-button ballpark-press-sm ballpark-press-action min-h-11"
             disabled={undoWorking}
             onClick={() => void undoBoardUpdate()}
           >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
@@ -1260,8 +1262,8 @@ export default function SnakeCompanion() {
       slotDepth={deskState.slotDepth}
       assistantBoard={assistantBoardState}
       privateScopeKey={currentPrivateScopeKey ?? undefined}
-      decision={draftDecision}
-      onTradeDecision={prefillTradeDecision}
+      tradePrefillKey={activeGuidePrefill?.key ?? null}
+      showHelp={showHelp}
       selectedCandidateId={selectedCandidateId}
       onSelectCandidate={selectCandidate}
       onReorder={(position, orderedIds) => { void reorder(position, orderedIds); }}
