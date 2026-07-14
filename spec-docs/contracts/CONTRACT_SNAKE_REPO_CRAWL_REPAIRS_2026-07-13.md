@@ -17,6 +17,10 @@ branch-changed lint set and exposed whole-file debt. Structural lint cleanup is
 authorized in `TeamHubContent.tsx` and `useAuctionDraft.test.ts` only. No feature,
 storage, routing, assertion, or rendered-output change is authorized.
 
+**Amendment 3:** `TeamHubContent.franchiseReads.test.tsx` mocks the former page
+context export. Its mock path may be repointed to the extracted canonical
+`FranchiseHomeContext` module only. No mock behavior or assertion may change.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -163,6 +167,8 @@ Frozen helper and importer paths:
   hook only)
 - `src/src_figma/app/components/TeamHubContent.tsx` (import update and structural
   lint cleanup only)
+- `src/src_figma/__tests__/franchiseMode/TeamHubContent.franchiseReads.test.tsx`
+  (mock import path update only)
 - `src/src_figma/app/components/LineupsTabContent.tsx` (import update only)
 - `src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx` (replace
   page re-export imports with direct canonical helper imports only)
