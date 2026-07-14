@@ -33,6 +33,12 @@ test-isolation repair. All six must be repaired without restoring lint debt or
 weakening readiness assertions. The existing product paths are already allowed;
 the focused test paths listed below are added for mutation-honest coverage.
 
+**Amendment 6:** Lane A's second re-audit found two remaining authorization
+bypasses. Atomic updater callbacks must receive an isolated working copy while
+authorization retains an untouched authoritative pre-action snapshot. Runtime
+standalone and embedded board keys must be validated against primitive key
+types, the active session phase, and frozen clubs before hydration or carryover.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -66,6 +72,13 @@ builder audits its own work. The audit-of-record agent must re-audit both lanes.
 - Missing or malformed standalone board records, including a phase/payload shape
   mismatch, must fail closed or use a validated authoritative copy. Runtime
   validation is required at the storage boundary; TypeScript shape is not proof.
+- Atomic updater callbacks may mutate their input in place, but that working copy
+  must never alias the authoritative pre-action session used for authorization.
+  Deep-clone or equivalently isolate all nested board maps and frozen setup data.
+- Hydration must reject empty/non-string team keys, phase mismatches, nonmember
+  teams, and self-consistent record IDs derived from invalid runtime metadata.
+- Every carried-forward resolved board key is validated against the session
+  phase and frozen clubs even when the caller does not change that key.
 
 ### A2. Authorize main-device board writes in the transaction
 
@@ -132,6 +145,11 @@ and a committed contract amendment.
 12. Missing/malformed board records and phase/payload mismatch fail closed.
 13. MLB and FARM missing-player recap tests press Confirm and prove no raw ID is
     present in the alert, visible text, or `innerHTML`.
+14. An in-place atomic callback cannot rewrite completion, phase, frozen clubs,
+    or the pre-action board snapshot to bypass authorization.
+15. Raw standalone rows with wrong session phase, nonmember teams, empty keys, or
+    non-string keys fail hydration and leave all stores byte-unchanged after
+    rejected save/update/room/freeze attempts.
 
 ## Lane B: branch acceptance gates
 
