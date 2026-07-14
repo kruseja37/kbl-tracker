@@ -54,6 +54,7 @@ vi.mock('../../../utils/franchiseManager', () => ({
 }));
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
+  FARM_SNAKE_SESSION_NUMBER: 2,
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
   getAuctionSession: mocks.getAuctionSession,

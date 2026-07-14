@@ -1,39 +1,60 @@
 /// <reference lib="webworker" />
 
 import {
-  playSnakeRationalRoom,
-  type PlaySnakeRationalRoomInput,
+  playSnakeRationalRoomProgressively,
 } from '../../../engines/snakeRationalRoom';
-import type { SnakeRationalRiskWorkerResponse } from '../components/snake/desk/useSnakeRationalRisks';
+import type {
+  SnakeRationalRiskWorkerRequest,
+  SnakeRationalRiskWorkerResponse,
+} from '../components/snake/desk/useSnakeRationalRisks';
 
-interface SnakeRationalRiskWorkerRequest {
-  key: string;
-  input: PlaySnakeRationalRoomInput;
-}
-
-self.onmessage = (event: MessageEvent<SnakeRationalRiskWorkerRequest>) => {
+export function runSnakeRationalRiskWorkerRequest(
+  request: SnakeRationalRiskWorkerRequest,
+  postMessage: (response: SnakeRationalRiskWorkerResponse) => void,
+): void {
   let response: SnakeRationalRiskWorkerResponse;
   try {
-    const result = playSnakeRationalRoom(event.data.input);
+    const complete = playSnakeRationalRoomProgressively(
+      { ...request.input, includeScarcity: true },
+      (decision) => postMessage({
+        key: request.key,
+        phase: 'decision',
+        status: 'ready',
+        risks: decision.risks,
+        scarcity: null,
+        scarcityWitness: null,
+        scenarios: decision.scenarios,
+        nextPick: decision.nextPick,
+      } satisfies SnakeRationalRiskWorkerResponse),
+      { requestKey: request.key, witnessSecret: request.witnessSecret },
+    );
     response = {
-      key: event.data.key,
-      status: result.status,
-      risks: result.risks,
-      scarcity: result.scarcity,
-      scenarios: result.scenarios,
-      nextPick: result.nextPick,
+      key: request.key,
+      phase: 'complete',
+      status: complete.status,
+      risks: complete.risks,
+      scarcity: complete.scarcity,
+      scarcityWitness: complete.scarcityWitness,
+      scenarios: complete.scenarios,
+      nextPick: complete.nextPick,
     };
   } catch {
     response = {
-      key: event.data.key,
+      key: request.key,
+      phase: 'complete',
       status: 'unavailable',
       risks: [],
       scarcity: [],
+      scarcityWitness: null,
       scenarios: [],
       nextPick: null,
     };
   }
-  self.postMessage(response);
+  postMessage(response);
+}
+
+self.onmessage = (event: MessageEvent<SnakeRationalRiskWorkerRequest>) => {
+  runSnakeRationalRiskWorkerRequest(event.data, (response) => self.postMessage(response));
 };
 
 export {};

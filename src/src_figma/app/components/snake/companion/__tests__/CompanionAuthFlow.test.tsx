@@ -27,6 +27,7 @@ const harness = vi.hoisted(() => ({
   getMlbDraftSession: vi.fn(async (leagueId: string, seasonNumber = 1) => (
     harness.device.sessions.get(`${leagueId}:${seasonNumber}`) ?? null
   )),
+  getAllLeagueTemplates: vi.fn(async () => structuredClone(harness.device.leagues)),
   getRegisteredPool: vi.fn(async () => null),
   saveMlbDraftSession: vi.fn(async (session: LeagueBuilderMlbDraftSession) => {
     const saved = structuredClone(session);
@@ -69,6 +70,9 @@ vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) =
   const actual = await importOriginal<typeof import('../../../../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
+    getAllLeagueTemplates: harness.getAllLeagueTemplates,
+    getMlbDraftSession: harness.getMlbDraftSession,
+    getRegisteredPool: harness.getRegisteredPool,
     patchMlbDraftSessionSnakeCompanions: harness.patchMlbDraftSessionSnakeCompanions,
     patchApprovedCompanionSeatBoard: harness.patchApprovedCompanionSeatBoard,
   };
@@ -191,6 +195,7 @@ describe('COMPANIONAUTH two-origin flow', () => {
     harness.freshness = null;
     harness.pullGate = null;
     harness.pull.mockClear();
+    harness.getAllLeagueTemplates.mockClear();
     harness.getMlbDraftSession.mockClear();
     harness.getRegisteredPool.mockClear();
     harness.saveMlbDraftSession.mockClear();

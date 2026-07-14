@@ -1,5 +1,9 @@
 import {
   LEGAL_ROSTER,
+  canCover,
+  canRelieve,
+  canStart,
+  isCloser,
   isLegalRoster,
   type FieldPosition,
   type RosterSlotPlayer,
@@ -19,6 +23,7 @@ import {
 } from './leagueConstruction';
 import { poolDemandModel } from './auctionPoolSizing';
 import {
+  deriveHardPositionSupplyFloorTargets,
   derivePositionSupplyFloorTargets,
   matchesPositionSupplyFloor,
   type PositionSupplyFloorKind,
@@ -91,6 +96,109 @@ export interface SimultaneousSnakeSeatingInput {
   versionState?: SnakeVersionState;
 }
 
+/**
+ * Opaque, immutable certificate owned by one semantic seating request. Callers
+ * can inspect the constructive truth, but only this module can mint or advance
+ * the trust token behind it.
+ */
+export interface TrustedSnakeSeatingCertificate {
+  readonly input: SimultaneousSnakeSeatingInput;
+  readonly proof: SnakeSeatingProof;
+}
+
+const TRUSTED_SNAKE_CERTIFICATES = new WeakSet<TrustedSnakeSeatingCertificate>();
+
+interface TrustedSnakeAssignmentOwner {
+  teamId: string;
+  playerId: string;
+}
+
+interface TrustedSnakeOwnerIndex {
+  parent: TrustedSnakeOwnerIndex | null;
+  changes: ReadonlyMap<string, TrustedSnakeAssignmentOwner | null>;
+}
+
+interface TrustedSnakeCertificateIndex {
+  /** Stable source-card index. Committed groups are excluded separately. */
+  playerById: ReadonlyMap<string, SnakeSeatingPlayer>;
+  committedGroups: ReadonlySet<string>;
+  owners: TrustedSnakeOwnerIndex;
+}
+
+const TRUSTED_SNAKE_CERTIFICATE_INDEX = new WeakMap<
+  TrustedSnakeSeatingCertificate,
+  TrustedSnakeCertificateIndex
+>();
+
+function trustedAssignmentOwner(
+  index: TrustedSnakeOwnerIndex,
+  groupId: string,
+): TrustedSnakeAssignmentOwner | null {
+  for (let cursor: TrustedSnakeOwnerIndex | null = index; cursor; cursor = cursor.parent) {
+    if (cursor.changes.has(groupId)) return cursor.changes.get(groupId) ?? null;
+  }
+  return null;
+}
+
+function buildRootTrustedIndex(certificate: TrustedSnakeSeatingCertificate): TrustedSnakeCertificateIndex {
+  const players = availableCards(certificate.input);
+  const playerById = new Map(players.map((player) => [player.playerId, player]));
+  const owners = new Map<string, TrustedSnakeAssignmentOwner | null>();
+  for (const assignment of certificate.proof.assignments) {
+    for (const playerId of assignment.playerIds) {
+      const player = playerById.get(playerId);
+      if (player) owners.set(deriveVersionGroupId(player), { teamId: assignment.teamId, playerId });
+    }
+  }
+  return {
+    playerById,
+    committedGroups: new Set(certificate.input.clubs.flatMap((club) => (
+      club.roster.map(deriveVersionGroupId)
+    ))),
+    owners: { parent: null, changes: owners },
+  };
+}
+
+function trustedCertificateIndex(certificate: TrustedSnakeSeatingCertificate): TrustedSnakeCertificateIndex {
+  const cached = TRUSTED_SNAKE_CERTIFICATE_INDEX.get(certificate);
+  if (cached) return cached;
+  const built = buildRootTrustedIndex(certificate);
+  TRUSTED_SNAKE_CERTIFICATE_INDEX.set(certificate, built);
+  return built;
+}
+
+function buildChildTrustedIndex(input: {
+  parent: TrustedSnakeSeatingCertificate;
+  childProof: SnakeSeatingProof;
+  committedGroupId: string;
+}): TrustedSnakeCertificateIndex {
+  const parentIndex = trustedCertificateIndex(input.parent);
+  const parentByTeamId = new Map(input.parent.proof.assignments.map((assignment) => [
+    assignment.teamId,
+    assignment,
+  ]));
+  const changes = new Map<string, TrustedSnakeAssignmentOwner | null>();
+  for (const assignment of input.childProof.assignments) {
+    const parent = parentByTeamId.get(assignment.teamId);
+    if (parent === assignment) continue;
+    for (const playerId of parent?.playerIds ?? []) {
+      const player = parentIndex.playerById.get(playerId);
+      if (player) changes.set(deriveVersionGroupId(player), null);
+    }
+    for (const playerId of assignment.playerIds) {
+      const player = parentIndex.playerById.get(playerId);
+      if (player) changes.set(deriveVersionGroupId(player), { teamId: assignment.teamId, playerId });
+    }
+  }
+  const committedGroups = new Set(parentIndex.committedGroups);
+  committedGroups.add(input.committedGroupId);
+  return {
+    playerById: parentIndex.playerById,
+    committedGroups,
+    owners: { parent: parentIndex.owners, changes },
+  };
+}
+
 export function proveSnakePickKeepsAllClubsSeated(input: {
   current: SimultaneousSnakeSeatingInput;
   teamId: string;
@@ -101,7 +209,7 @@ export function proveSnakePickKeepsAllClubsSeated(input: {
 }): SnakeSeatingProof {
   const groupId = deriveVersionGroupId(input.player);
   const clubExists = input.current.clubs.some((club) => club.teamId === input.teamId);
-  if (!clubExists || !Number.isFinite(input.allInCost) || input.allInCost < 0) {
+  if (!clubExists || !Number.isFinite(input.allInCost)) {
     throw new Error('The proposed snake pick has invalid seating-proof inputs.');
   }
   const postPickInput: SimultaneousSnakeSeatingInput = {
@@ -168,6 +276,630 @@ export function validateSnakeSeatingProof(
       && Math.abs(assignment.addedTax - expected!.addedTax) <= 1e-6
       && Math.abs(assignment.allInCost - expected!.allInCost) <= 1e-6;
   });
+}
+
+/**
+ * Independently verify an already-constructed legal-finish certificate without searching for a
+ * different seating. This is the worker-to-UI proof seam: it checks exact player availability,
+ * version disjointness, canonical 22-player roster law, settlement tax, and every club budget in
+ * one linear pass over the supplied assignments. It never calls the seating solver or any repair
+ * search, so a UI can cheaply validate many candidate deltas against one root certificate.
+ */
+export function validateConstructiveSnakeSeatingProof(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+): boolean {
+  try {
+    if (!proof || proof.feasible !== true || proof.shortfall !== null
+      || proof.assignments.length !== input.clubs.length) return false;
+    const assignmentByTeamId = new Map(proof.assignments.map((assignment) => [
+      assignment.teamId,
+      assignment,
+    ]));
+    if (assignmentByTeamId.size !== input.clubs.length) return false;
+
+    const availableById = new Map(availableCards(input).map((player) => [player.playerId, player]));
+    const fixedPlayers = input.clubs.flatMap((club) => club.roster);
+    const fixedIds = new Set(fixedPlayers.map((player) => player.playerId));
+    const fixedGroups = new Set(fixedPlayers.map(deriveVersionGroupId));
+    if (fixedIds.size !== fixedPlayers.length || fixedGroups.size !== fixedPlayers.length) return false;
+    const usedIds = new Set<string>();
+    const usedGroups = new Set<string>();
+    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+      [...input.baseCaps],
+      input.realTeamCount,
+    );
+
+    for (const club of input.clubs) {
+      const assignment = assignmentByTeamId.get(club.teamId);
+      if (!assignment || assignment.teamId !== club.teamId
+        || !Array.isArray(assignment.playerIds)
+        || assignment.playerIds.length !== LEGAL_ROSTER.size - club.roster.length
+        || !Number.isFinite(assignment.salaryCost)
+        || !Number.isFinite(assignment.addedTax)
+        || !Number.isFinite(assignment.allInCost)) return false;
+      const future = assignment.playerIds.map((playerId) => (
+        typeof playerId === 'string' ? availableById.get(playerId) : undefined
+      ));
+      if (future.some((player) => !player)) return false;
+      for (const player of future as SnakeSeatingPlayer[]) {
+        const groupId = deriveVersionGroupId(player);
+        if (fixedIds.has(player.playerId) || fixedGroups.has(groupId)
+          || usedIds.has(player.playerId) || usedGroups.has(groupId)) return false;
+        usedIds.add(player.playerId);
+        usedGroups.add(groupId);
+      }
+      const players = future as SnakeSeatingPlayer[];
+      if (!isLegalRoster([...club.roster, ...players].map((player) => player.shape))) return false;
+
+      const shiftedCaps = club.capIdentity
+        ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
+        : [...normalizedCaps];
+      const committed = club.committedConstruction
+        ? [...club.committedConstruction]
+        : club.roster.map((player) => player.construction);
+      const currentTax = luxuryTax(committed, shiftedCaps, 'taxed').charged;
+      const finalTax = luxuryTax(
+        [...committed, ...players.map((player) => player.construction)],
+        shiftedCaps,
+        'taxed',
+      ).charged;
+      const salaryCost = players.reduce((sum, player) => sum + player.price, 0);
+      const addedTax = Math.max(0, finalTax - currentTax);
+      const allInCost = salaryCost + addedTax;
+      if (!Number.isFinite(allInCost)
+        || Math.abs(assignment.salaryCost - salaryCost) > 1e-6
+        || Math.abs(assignment.addedTax - addedTax) > 1e-6
+        || Math.abs(assignment.allInCost - allInCost) > 1e-6
+        || allInCost > club.budgetRemaining + 1e-9) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deepFreezeTrusted<T>(value: T, seen = new WeakSet<object>()): T {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  const object = value as object;
+  if (seen.has(object)) return value;
+  seen.add(object);
+  for (const child of Object.values(object)) deepFreezeTrusted(child, seen);
+  return Object.freeze(value);
+}
+
+function mintTrustedSnakeSeatingCertificate(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+  clone: boolean,
+): TrustedSnakeSeatingCertificate {
+  const owned = clone
+    ? structuredClone({ input, proof })
+    : { input, proof };
+  const certificate = deepFreezeTrusted({
+    input: owned.input,
+    proof: owned.proof,
+  });
+  TRUSTED_SNAKE_CERTIFICATES.add(certificate);
+  return certificate;
+}
+
+/** Validate an untrusted root exactly once, then detach it from caller mutation. */
+export function createTrustedSnakeSeatingCertificate(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+): TrustedSnakeSeatingCertificate | null {
+  if (!validateSnakeSeatingProof(input, proof)) return null;
+  const certificate = mintTrustedSnakeSeatingCertificate(input, proof, true);
+  TRUSTED_SNAKE_CERTIFICATE_INDEX.set(certificate, buildRootTrustedIndex(certificate));
+  return certificate;
+}
+
+function exactTrustedPickCost(input: {
+  seatingInput: SimultaneousSnakeSeatingInput;
+  clubIndex: number;
+  player: SnakeSeatingPlayer;
+  normalizedCaps?: readonly LuxuryCapRow[];
+}): number {
+  const club = input.seatingInput.clubs[input.clubIndex];
+  const normalizedCaps = input.normalizedCaps ?? normalizeAuctionLuxuryCapsForLeagueSize(
+    [...input.seatingInput.baseCaps],
+    input.seatingInput.realTeamCount,
+  );
+  const shiftedCaps = club.capIdentity
+    ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
+    : [...normalizedCaps];
+  const committed = club.committedConstruction
+    ? [...club.committedConstruction]
+    : club.roster.map((row) => row.construction);
+  const currentTax = luxuryTax(committed, shiftedCaps, 'taxed').charged;
+  const nextTax = luxuryTax([...committed, input.player.construction], shiftedCaps, 'taxed').charged;
+  return input.player.price + (nextTax - currentTax);
+}
+
+function directTrustedAdvance(input: {
+  certificate: TrustedSnakeSeatingCertificate;
+  teamId: string;
+  playerId: string;
+  allInCost: number;
+}): { input: SimultaneousSnakeSeatingInput; proof: SnakeSeatingProof } | null {
+  const current = input.certificate.input;
+  const clubIndex = current.clubs.findIndex((club) => club.teamId === input.teamId);
+  if (clubIndex < 0) return null;
+  const trustedIndex = trustedCertificateIndex(input.certificate);
+  const selected = trustedIndex.playerById.get(input.playerId);
+  if (!selected) return null;
+  const selectedGroup = deriveVersionGroupId(selected);
+  if (trustedIndex.committedGroups.has(selectedGroup)) return null;
+  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
+    [...current.baseCaps],
+    current.realTeamCount,
+  );
+  const exactCost = exactTrustedPickCost({
+    seatingInput: current,
+    clubIndex,
+    player: selected,
+    normalizedCaps,
+  });
+  if (!Number.isFinite(exactCost) || !Number.isFinite(input.allInCost)
+    || Math.abs(input.allInCost - exactCost) > 1e-6) return null;
+
+  const targetClub = current.clubs[clubIndex];
+  if (targetClub.roster.length >= LEGAL_ROSTER.size) return null;
+  const postPick: SimultaneousSnakeSeatingInput = {
+    ...current,
+    clubs: current.clubs.map((club, index) => index === clubIndex ? {
+      ...club,
+      roster: [...club.roster, selected],
+      budgetRemaining: club.budgetRemaining - exactCost,
+      committedConstruction: [
+        ...(club.committedConstruction ?? club.roster.map((player) => player.construction)),
+        selected.construction,
+      ],
+    } : club),
+    // Keep the immutable source pool shared across trusted children. availableCards removes every
+    // committed version group from club rosters, so copying/filtering 500+ cards per simulated
+    // pick would change no semantic result.
+    pool: current.pool,
+  };
+  const assignmentByTeamId = new Map(input.certificate.proof.assignments.map((assignment) => [
+    assignment.teamId,
+    assignment.playerIds,
+  ]));
+  const parentAssignmentByTeamId = new Map(input.certificate.proof.assignments.map((assignment) => [
+    assignment.teamId,
+    assignment,
+  ]));
+  if (assignmentByTeamId.size !== current.clubs.length) return null;
+  const targetIds = assignmentByTeamId.get(input.teamId);
+  if (!targetIds || targetIds.length !== LEGAL_ROSTER.size - targetClub.roster.length) return null;
+  const currentById = trustedIndex.playerById;
+
+  const owner = trustedAssignmentOwner(trustedIndex.owners, selectedGroup);
+  const ownerTeamId = owner?.teamId ?? null;
+  const ownerPlayerId = owner?.playerId ?? null;
+  let unusedCache: SnakeSeatingPlayer[] | null = null;
+  const unusedPlayers = () => {
+    if (unusedCache) return unusedCache;
+    unusedCache = [...currentById.values()]
+      .filter((player) => {
+        const groupId = deriveVersionGroupId(player);
+        return !trustedIndex.committedGroups.has(groupId)
+          && trustedAssignmentOwner(trustedIndex.owners, groupId) === null;
+      })
+      .sort((left, right) => left.price - right.price || left.playerId.localeCompare(right.playerId));
+    return unusedCache;
+  };
+  const billingContextByClubIndex = new Map<number, {
+    committed: ConstructionPlayer[];
+    shiftedCaps: LuxuryCapRow[];
+    currentTax: number;
+  }>();
+  const directAssignmentBill = (billClubIndex: number, future: readonly SnakeSeatingPlayer[]) => {
+    const billClub = postPick.clubs[billClubIndex];
+    let context = billingContextByClubIndex.get(billClubIndex);
+    if (!context) {
+      const shiftedCaps = billClub.capIdentity
+        ? shiftLuxuryCaps([...normalizedCaps], billClub.capIdentity)
+        : [...normalizedCaps];
+      const committed = billClub.committedConstruction
+        ? [...billClub.committedConstruction]
+        : billClub.roster.map((player) => player.construction);
+      context = {
+        committed,
+        shiftedCaps,
+        currentTax: luxuryTax(committed, shiftedCaps, 'taxed').charged,
+      };
+      billingContextByClubIndex.set(billClubIndex, context);
+    }
+    const finalTax = luxuryTax(
+      [...context.committed, ...future.map((player) => player.construction)],
+      context.shiftedCaps,
+      'taxed',
+    ).charged;
+    const salaryCost = future.reduce((sum, player) => sum + player.price, 0);
+    const addedTax = Math.max(0, finalTax - context.currentTax);
+    return { salaryCost, addedTax, allInCost: salaryCost + addedTax };
+  };
+
+  const certify = (idsByTeamId: ReadonlyMap<string, readonly string[]>): SnakeSeatingProof | null => {
+    // currentById still contains the selected card, but fixedGroups below rejects every committed
+    // version. Reusing it avoids rebuilding a 500+ card index for each constructive child.
+    const postAvailable = currentById;
+    const fixedGroups = new Set(postPick.clubs.flatMap((club) => club.roster.map(deriveVersionGroupId)));
+    const workingIds = new Map(idsByTeamId);
+    const changedTeamIds = () => new Set(postPick.clubs.flatMap((club) => {
+      const parentIds = assignmentByTeamId.get(club.teamId);
+      const nextIds = workingIds.get(club.teamId);
+      return parentIds === nextIds
+        ? []
+        : [club.teamId];
+    }));
+    const constructionExposure = (player: SnakeSeatingPlayer) => {
+      const bat = player.construction.bat;
+      const pit = player.construction.pit;
+      return bat.POW + bat.CON + bat.SPD + bat.FLD + bat.ARM
+        + (pit?.VEL ?? 0) + (pit?.JNK ?? 0) + (pit?.ACC ?? 0);
+    };
+    const futureFor = (clubIndex: number) => {
+      const ids = workingIds.get(postPick.clubs[clubIndex].teamId);
+      if (!ids) return null;
+      const players = ids.map((playerId) => postAvailable.get(playerId));
+      return players.some((player) => !player) ? null : players as SnakeSeatingPlayer[];
+    };
+    const billCache = new Map<string, {
+      playerIds: readonly string[];
+      bill: Omit<SnakeSeatingAssignment, 'teamId' | 'playerIds'>;
+    }>();
+    const billFor = (billClubIndex: number, future: readonly SnakeSeatingPlayer[]) => {
+      const club = postPick.clubs[billClubIndex];
+      const playerIds = workingIds.get(club.teamId);
+      const cached = billCache.get(club.teamId);
+      if (playerIds && cached?.playerIds === playerIds) return cached.bill;
+      const bill = directAssignmentBill(billClubIndex, future);
+      if (playerIds) billCache.set(club.teamId, { playerIds, bill });
+      return bill;
+    };
+
+    // Repair the normal early-draft overage against unused slack without rescanning every club
+    // for every trial. Each accepted substitution is exact-bill improving and law preserving;
+    // changed reservations are checked below and the full rebuild remains the fail-closed tail.
+    for (let round = 0; round < LEGAL_ROSTER.size; round += 1) {
+      const changed = changedTeamIds();
+      const over = postPick.clubs
+        .map((club, clubIndex) => {
+          if (!changed.has(club.teamId)) return null;
+          const future = futureFor(clubIndex);
+          if (!future) return null;
+          const bill = billFor(clubIndex, future);
+          return { club, clubIndex, future, bill };
+        })
+        .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        .filter((row) => row.bill.allInCost > row.club.budgetRemaining + 1e-9)
+        .sort((left, right) => (
+          (right.bill.allInCost - right.club.budgetRemaining)
+          - (left.bill.allInCost - left.club.budgetRemaining)
+          || left.clubIndex - right.clubIndex
+        ))[0];
+      if (!over) break;
+      const assignedGroups = new Set(
+        [...workingIds.values()].flatMap((ids) => ids.map((playerId) => {
+          const player = postAvailable.get(playerId);
+          return player ? deriveVersionGroupId(player) : '';
+        })),
+      );
+      const incoming = [...postAvailable.values()]
+        .filter((player) => {
+          const groupId = deriveVersionGroupId(player);
+          return !fixedGroups.has(groupId) && !assignedGroups.has(groupId);
+        })
+        .sort((left, right) => (
+          (left.price + constructionExposure(left) * 0.1)
+          - (right.price + constructionExposure(right) * 0.1)
+          || left.playerId.localeCompare(right.playerId)
+        ));
+      const outgoing = over.future
+        .map((player, index) => ({ player, index }))
+        .sort((left, right) => (
+          (right.player.price + constructionExposure(right.player) * 0.1)
+          - (left.player.price + constructionExposure(left.player) * 0.1)
+          || left.player.playerId.localeCompare(right.player.playerId)
+        ));
+      const fullShapes = [...over.club.roster, ...over.future].map((player) => player.shape);
+      const hitterCount = fullShapes.filter((shape) => !shape.isPitcher).length;
+      const pitcherCount = fullShapes.length - hitterCount;
+      const primaryCounts = new Map(LEGAL_ROSTER.fieldPositions.map((position) => [
+        position,
+        fullShapes.filter((shape) => !shape.isPitcher && shape.position === position).length,
+      ]));
+      const catcherCount = fullShapes.filter((shape) => canCover(shape, 'C')).length;
+      const starterCount = fullShapes.filter(canStart).length;
+      const relieverCount = fullShapes.filter(canRelieve).length;
+      const closerCount = fullShapes.filter(isCloser).length;
+      const preservesRosterLaw = (removed: SnakeSeatingPlayer, replacement: SnakeSeatingPlayer) => {
+        const removedShape = removed.shape;
+        const replacementShape = replacement.shape;
+        const nextHitterCount = hitterCount
+          - (removedShape.isPitcher ? 0 : 1)
+          + (replacementShape.isPitcher ? 0 : 1);
+        const nextPitcherCount = pitcherCount
+          - (removedShape.isPitcher ? 1 : 0)
+          + (replacementShape.isPitcher ? 1 : 0);
+        if (nextHitterCount < LEGAL_ROSTER.minPositionPlayers
+          || nextHitterCount > LEGAL_ROSTER.maxPositionPlayers
+          || nextPitcherCount < LEGAL_ROSTER.minPitchers
+          || nextPitcherCount > LEGAL_ROSTER.maxPitchers) return false;
+        if (!removedShape.isPitcher
+          && LEGAL_ROSTER.fieldPositions.includes(removedShape.position as FieldPosition)
+          && (primaryCounts.get(removedShape.position as FieldPosition) ?? 0) <= 1
+          && (replacementShape.isPitcher || replacementShape.position !== removedShape.position)) return false;
+        if (catcherCount - (canCover(removedShape, 'C') ? 1 : 0)
+          + (canCover(replacementShape, 'C') ? 1 : 0) < LEGAL_ROSTER.minCatchers) return false;
+        if (starterCount - (canStart(removedShape) ? 1 : 0)
+          + (canStart(replacementShape) ? 1 : 0) < LEGAL_ROSTER.startingPitchers) return false;
+        if (relieverCount - (canRelieve(removedShape) ? 1 : 0)
+          + (canRelieve(replacementShape) ? 1 : 0) < LEGAL_ROSTER.minRelievers) return false;
+        return closerCount - (isCloser(removedShape) ? 1 : 0)
+          + (isCloser(replacementShape) ? 1 : 0) >= LEGAL_ROSTER.minClosers;
+      };
+      let applied = false;
+      for (const replacement of incoming) {
+        for (const removed of outgoing) {
+          if (!preservesRosterLaw(removed.player, replacement)) continue;
+          const nextSalaryCost = over.bill.salaryCost - removed.player.price + replacement.price;
+          if (nextSalaryCost >= over.bill.allInCost - 1e-9) continue;
+          const trial = [...over.future];
+          trial[removed.index] = replacement;
+          const nextBill = directAssignmentBill(over.clubIndex, trial);
+          if (!Number.isFinite(nextBill.allInCost)
+            || nextBill.allInCost >= over.bill.allInCost - 1e-9) continue;
+          workingIds.set(over.club.teamId, trial.map((player) => player.playerId));
+          applied = true;
+          break;
+        }
+        if (applied) break;
+      }
+      if (!applied) break;
+    }
+
+    // The parent certificate is trusted and the pick only mutates the drafting club plus any
+    // club whose reservation exchanges the selected card. Reuse untouched assignments exactly;
+    // rebuild law, disjointness and the settlement bill only for the changed reservations. This
+    // is the hot path used for every simulated intervening pick. Any unexpected shape falls
+    // through to the full all-club reconstruction below.
+    const changed = changedTeamIds();
+    const fastChangedIds = new Set<string>();
+    const fastChangedGroups = new Set<string>();
+    const fastAssignments = new Map<string, SnakeSeatingAssignment>();
+    let fastValid = true;
+    for (const club of postPick.clubs) {
+      if (changed.has(club.teamId)) continue;
+      const parent = parentAssignmentByTeamId.get(club.teamId);
+      const playerIds = workingIds.get(club.teamId);
+      if (!parent || playerIds !== parent.playerIds) {
+        fastValid = false;
+        break;
+      }
+      fastAssignments.set(club.teamId, parent);
+    }
+    if (fastValid) {
+      for (let index = 0; index < postPick.clubs.length; index += 1) {
+        const club = postPick.clubs[index];
+        if (!changed.has(club.teamId)) continue;
+        const playerIds = workingIds.get(club.teamId);
+        if (!playerIds || playerIds.length !== LEGAL_ROSTER.size - club.roster.length) {
+          fastValid = false;
+          break;
+        }
+        const future = playerIds.map((playerId) => postAvailable.get(playerId));
+        if (future.some((player) => !player)) {
+          fastValid = false;
+          break;
+        }
+        const players = future as SnakeSeatingPlayer[];
+        for (const player of players) {
+          const groupId = deriveVersionGroupId(player);
+          const parentOwner = trustedAssignmentOwner(trustedIndex.owners, groupId);
+          if (fastChangedIds.has(player.playerId)
+            || fastChangedGroups.has(groupId)
+            || (parentOwner !== null && !changed.has(parentOwner.teamId))
+            || fixedGroups.has(groupId)) {
+            fastValid = false;
+            break;
+          }
+          fastChangedIds.add(player.playerId);
+          fastChangedGroups.add(groupId);
+        }
+        if (!fastValid || !isLegalRoster([...club.roster, ...players].map((player) => player.shape))) {
+          fastValid = false;
+          break;
+        }
+        const bill = billFor(index, players);
+        if (!Number.isFinite(bill.allInCost) || bill.allInCost > club.budgetRemaining + 1e-9) {
+          fastValid = false;
+          break;
+        }
+        fastAssignments.set(club.teamId, { teamId: club.teamId, playerIds: [...playerIds], ...bill });
+      }
+    }
+    if (fastValid && fastAssignments.size === postPick.clubs.length) {
+      return {
+        feasible: true,
+        assignments: postPick.clubs.map((club) => fastAssignments.get(club.teamId)!),
+        shortfall: null,
+        message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+      };
+    }
+
+    const assignedIds = new Set<string>();
+    const assignedGroups = new Set<string>();
+    const assignments: SnakeSeatingAssignment[] = [];
+    const rosterSeeds: SnakeSeatingPlayer[][] = [];
+    let requiresBudgetRepair = false;
+    for (let index = 0; index < postPick.clubs.length; index += 1) {
+      const club = postPick.clubs[index];
+      const playerIds = workingIds.get(club.teamId);
+      if (!playerIds || playerIds.length !== LEGAL_ROSTER.size - club.roster.length) return null;
+      const future = playerIds.map((playerId) => postAvailable.get(playerId));
+      if (future.some((player) => !player)) return null;
+      const players = future as SnakeSeatingPlayer[];
+      for (const player of players) {
+        const groupId = deriveVersionGroupId(player);
+        if (assignedIds.has(player.playerId) || assignedGroups.has(groupId) || fixedGroups.has(groupId)) return null;
+        assignedIds.add(player.playerId);
+        assignedGroups.add(groupId);
+      }
+      const fullRoster = [...club.roster, ...players];
+      if (!isLegalRoster(fullRoster.map((player) => player.shape))) return null;
+      rosterSeeds.push(fullRoster);
+      const bill = billFor(index, players);
+      if (!Number.isFinite(bill.allInCost)) return null;
+      if (bill.allInCost > club.budgetRemaining + 1e-9) requiresBudgetRepair = true;
+      assignments.push({ teamId: club.teamId, playerIds: [...playerIds], ...bill });
+    }
+    if (requiresBudgetRepair) {
+      const repaired = repairMatchedRosters(
+        postPick,
+        representativeCards([...postAvailable.values()]),
+        rosterSeeds,
+      );
+      if (!repaired) return null;
+      return {
+        feasible: true,
+        assignments: repaired,
+        shortfall: null,
+        message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+      };
+    }
+    return {
+      feasible: true,
+      assignments,
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    };
+  };
+
+  if (ownerTeamId === input.teamId && ownerPlayerId) {
+    const next = new Map(assignmentByTeamId);
+    next.set(input.teamId, targetIds.filter((playerId) => playerId !== ownerPlayerId));
+    const proof = certify(next);
+    return proof ? { input: postPick, proof } : null;
+  }
+
+  for (const outgoingId of targetIds) {
+    const outgoing = currentById.get(outgoingId);
+    if (!outgoing || deriveVersionGroupId(outgoing) === selectedGroup) continue;
+    const targetFuture = targetIds
+      .filter((playerId) => playerId !== outgoingId)
+      .map((playerId) => currentById.get(playerId));
+    if (targetFuture.some((player) => !player)
+      || !isLegalRoster([
+        ...targetClub.roster,
+        selected,
+        ...(targetFuture as SnakeSeatingPlayer[]),
+      ].map((player) => player.shape))) continue;
+    const next = new Map(assignmentByTeamId);
+    next.set(input.teamId, targetIds.filter((playerId) => playerId !== outgoingId));
+    if (ownerTeamId && ownerPlayerId) {
+      const ownerIds = assignmentByTeamId.get(ownerTeamId);
+      if (!ownerIds) return null;
+      const ownerClub = current.clubs.find((club) => club.teamId === ownerTeamId);
+      const ownerFuture = ownerIds.map((playerId) => currentById.get(
+        playerId === ownerPlayerId ? outgoingId : playerId,
+      ));
+      if (!ownerClub || ownerFuture.some((player) => !player)
+        || !isLegalRoster([
+          ...ownerClub.roster,
+          ...(ownerFuture as SnakeSeatingPlayer[]),
+        ].map((player) => player.shape))) continue;
+      next.set(ownerTeamId, ownerIds.map((playerId) => (
+        playerId === ownerPlayerId ? outgoingId : playerId
+      )));
+      const proof = certify(next);
+      if (proof) return { input: postPick, proof };
+
+      for (const replacement of unusedPlayers()) {
+        const replacementGroup = deriveVersionGroupId(replacement);
+        if (replacementGroup === selectedGroup || replacementGroup === deriveVersionGroupId(outgoing)) continue;
+        const replacementFuture = ownerIds.map((playerId) => currentById.get(
+          playerId === ownerPlayerId ? replacement.playerId : playerId,
+        ));
+        if (replacementFuture.some((player) => !player)
+          || !ownerClub
+          || !isLegalRoster([
+            ...ownerClub.roster,
+            ...(replacementFuture as SnakeSeatingPlayer[]),
+          ].map((player) => player.shape))) continue;
+        const withUnused = new Map(next);
+        withUnused.set(ownerTeamId, ownerIds.map((playerId) => (
+          playerId === ownerPlayerId ? replacement.playerId : playerId
+        )));
+        const replacementProof = certify(withUnused);
+        if (replacementProof) return { input: postPick, proof: replacementProof };
+      }
+      continue;
+    }
+    const proof = certify(next);
+    if (proof) return { input: postPick, proof };
+  }
+  return null;
+}
+
+/**
+ * Advance only a certificate minted by this module. The fast path rewrites the
+ * constructive reservations directly, preserves trusted unchanged assignments,
+ * and rechecks exact law, disjointness and settlement for each changed club.
+ * Canonical reproving remains the fail-closed tail.
+ */
+export function advanceTrustedSnakeSeatingCertificate(input: {
+  certificate: TrustedSnakeSeatingCertificate;
+  teamId: string;
+  playerId: string;
+  allInCost: number;
+}): TrustedSnakeSeatingCertificate | null {
+  if (!TRUSTED_SNAKE_CERTIFICATES.has(input.certificate)) return null;
+  const direct = directTrustedAdvance(input);
+  if (direct) {
+    const selected = trustedCertificateIndex(input.certificate).playerById.get(input.playerId);
+    if (!selected) return null;
+    const certificate = mintTrustedSnakeSeatingCertificate(direct.input, direct.proof, false);
+    TRUSTED_SNAKE_CERTIFICATE_INDEX.set(certificate, buildChildTrustedIndex({
+      parent: input.certificate,
+      childProof: direct.proof,
+      committedGroupId: deriveVersionGroupId(selected),
+    }));
+    return certificate;
+  }
+
+  const current = input.certificate.input;
+  const selected = availableCards(current).find((player) => player.playerId === input.playerId);
+  const clubIndex = current.clubs.findIndex((club) => club.teamId === input.teamId);
+  if (!selected || clubIndex < 0) return null;
+  const exactCost = exactTrustedPickCost({ seatingInput: current, clubIndex, player: selected });
+  if (!Number.isFinite(input.allInCost) || Math.abs(input.allInCost - exactCost) > 1e-6) return null;
+  const groupId = deriveVersionGroupId(selected);
+  const postPick: SimultaneousSnakeSeatingInput = {
+    ...current,
+    clubs: current.clubs.map((club, index) => index === clubIndex ? {
+      ...club,
+      roster: [...club.roster, selected],
+      budgetRemaining: club.budgetRemaining - exactCost,
+      committedConstruction: [
+        ...(club.committedConstruction ?? club.roster.map((player) => player.construction)),
+        selected.construction,
+      ],
+    } : club),
+    pool: current.pool.filter((player) => deriveVersionGroupId(player) !== groupId),
+  };
+  const proof = proveSimultaneousSnakeSeating(postPick);
+  if (!proof.feasible) return null;
+  const certificate = mintTrustedSnakeSeatingCertificate(postPick, proof, false);
+  TRUSTED_SNAKE_CERTIFICATE_INDEX.set(certificate, buildChildTrustedIndex({
+    parent: input.certificate,
+    childProof: proof,
+    committedGroupId: groupId,
+  }));
+  return certificate;
 }
 
 function advanceSnakeSeatingCertificate(input: {
@@ -320,7 +1052,7 @@ function versionDedupePositionFloors(
   players: readonly SnakeSeatingPlayer[],
   teamCount: number,
 ): PositionSupplyFloorResult[] {
-  return derivePositionSupplyFloorTargets(teamCount).map((target) => {
+  return deriveHardPositionSupplyFloorTargets(teamCount).map((target) => {
     const available = new Set(
       players
         .filter((player) => matchesPositionSupplyFloor(player.shape, target))
@@ -448,6 +1180,66 @@ function repairMatchedRosters(
   };
   const usedIds = new Set(rosters.flatMap((roster) => roster.filter(isFuture).map((player) => player.playerId)));
   const unused = representatives.filter((player) => isFuture(player) && !usedIds.has(player.playerId));
+
+  // Most early-draft advances have one newly expensive fixed card and ample pool slack. Repair
+  // that common case constructively before the exhaustive cross-club search below: cheapest,
+  // lowest-exposure slack is tried against the costliest future cards, and every accepted move
+  // must preserve the canonical roster law and strictly lower the exact settlement bill. If the
+  // greedy trial cannot finish every over-budget club, discard it and retain the complete search.
+  const fastRosters = rosters.map((roster) => [...roster]);
+  const fastUnused = [...unused];
+  let fastFinished = false;
+  for (let round = 0; round < Math.max(1, input.clubs.length * LEGAL_ROSTER.size); round += 1) {
+    const bills = fastRosters.map((roster, clubIndex) => bill(clubIndex, roster).allInCost);
+    const overClubIndex = bills
+      .map((amount, clubIndex) => ({ amount, clubIndex }))
+      .filter(({ amount, clubIndex }) => amount > input.clubs[clubIndex].budgetRemaining + 1e-9)
+      .sort((left, right) => (
+        (right.amount - input.clubs[right.clubIndex].budgetRemaining)
+        - (left.amount - input.clubs[left.clubIndex].budgetRemaining)
+        || left.clubIndex - right.clubIndex
+      ))[0]?.clubIndex;
+    if (overClubIndex === undefined) {
+      fastFinished = true;
+      break;
+    }
+    const oldBill = bills[overClubIndex];
+    const outgoingIndices = fastRosters[overClubIndex]
+      .map((player, index) => ({ player, index }))
+      .filter(({ player }) => isFuture(player))
+      .sort((left, right) => (
+        right.player.price - left.player.price
+        || taxExposure(right.player) - taxExposure(left.player)
+        || left.player.playerId.localeCompare(right.player.playerId)
+      ));
+    const incomingIndices = fastUnused
+      .map((player, index) => ({ player, index }))
+      .sort((left, right) => (
+        left.player.price - right.player.price
+        || taxExposure(left.player) - taxExposure(right.player)
+        || left.player.playerId.localeCompare(right.player.playerId)
+      ));
+    let applied = false;
+    for (const incoming of incomingIndices) {
+      for (const outgoing of outgoingIndices) {
+        const trial = [...fastRosters[overClubIndex]];
+        trial[outgoing.index] = incoming.player;
+        if (!isLegalRoster(trial.map((player) => player.shape))) continue;
+        const nextBill = bill(overClubIndex, trial).allInCost;
+        if (!Number.isFinite(nextBill) || nextBill >= oldBill - 1e-9) continue;
+        fastRosters[overClubIndex] = trial;
+        fastUnused[incoming.index] = outgoing.player;
+        applied = true;
+        break;
+      }
+      if (applied) break;
+    }
+    if (!applied) break;
+  }
+  if (fastFinished) {
+    for (let index = 0; index < rosters.length; index += 1) rosters[index] = fastRosters[index];
+    unused.splice(0, unused.length, ...fastUnused);
+  }
 
   // Exact-tax repair. Pool-slack replacements can cross top-N tax plateaus one lower-exposure
   // card at a time. Cross-club swaps must immediately reduce total league overage. Every move

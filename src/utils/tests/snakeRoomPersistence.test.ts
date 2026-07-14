@@ -2,11 +2,17 @@ import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+const syncMockState = vi.hoisted(() => ({
+  suppressed: true,
+  upsert: vi.fn(),
+  remove: vi.fn(),
+}));
+
 vi.mock('../syncEngine', () => ({
   syncEngine: {
-    isSuppressed: () => true,
-    upsert: vi.fn(),
-    remove: vi.fn(),
+    isSuppressed: () => syncMockState.suppressed,
+    upsert: syncMockState.upsert,
+    remove: syncMockState.remove,
   },
 }));
 
@@ -17,6 +23,7 @@ import {
   freezeMlbDraftRoomSessionWithRegisteredPool,
   getMlbDraftSession,
   getRegisteredPool,
+  markSnakeRosterHandoff,
   patchMlbDraftSessionFarmSeatBoard,
   patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
@@ -36,8 +43,10 @@ import {
   ensureCompanionRoom,
   submitCompanionClaim,
 } from '../../src_figma/app/components/snake/companion/companionModel';
-import { freezeSnakeDraftSession } from '../snakeDraftManifest';
+import { buildSnakeOrder } from '../../engines/leagueConstruction';
+import { buildSnakeRosterHandoff, freezeSnakeDraftSession } from '../snakeDraftManifest';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../engines/snakeSession';
+import { createFarmSnakeSession, FARM_SNAKE_SESSION_NUMBER } from '../../engines/snakeFarmSlots';
 import {
   nodSnakeTradeOffer,
   postSnakeTradeOffer,
@@ -164,9 +173,153 @@ async function resetStorage(): Promise<void> {
   __resetLeagueBuilderDatabaseForTests();
 }
 
+function canonicalCompletedMlbSession(input?: {
+  seatBoards?: LeagueBuilderMlbDraftSession['seatBoards'];
+}): LeagueBuilderMlbDraftSession {
+  const pickOrder = buildSnakeOrder(['team-a'], 22);
+  const playerIds = pickOrder.map((slot) => `player-${slot.pick}`);
+  return {
+    ...session(),
+    pickOrder,
+    completedPicks: pickOrder.map((slot, index) => ({
+      ...slot,
+      playerId: playerIds[index],
+      settledSalary: 100,
+    })),
+    snakeSetup: {
+      ...session().snakeSetup!,
+      poolPlayerIds: playerIds,
+    },
+    trades: [],
+    currentPickIndex: pickOrder.length,
+    ...(input?.seatBoards ? { seatBoards: input.seatBoards } : {}),
+  };
+}
+
+function completedMlbAuthorityFixture(): LeagueBuilderMlbDraftSession {
+  const completed = canonicalCompletedMlbSession();
+  const frozen = freezeSnakeDraftSession({
+    session: completed,
+    expectedPhase: 'MLB',
+    poolPlayerIds: completed.snakeSetup!.poolPlayerIds,
+    salaryByPlayerId: new Map(completed.snakeSetup!.poolPlayerIds.map((playerId) => [playerId, 100])),
+    frozenAt: '2026-07-14T11:00:00.000Z',
+  });
+  return {
+    ...frozen,
+    rosterHandoff: buildSnakeRosterHandoff(frozen, 'MLB', '2026-07-14T11:01:00.000Z'),
+  };
+}
+
+async function persistCompletedMlbAuthority(input?: {
+  seatBoards?: LeagueBuilderMlbDraftSession['seatBoards'];
+  handoff?: boolean;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  const completed = canonicalCompletedMlbSession(input);
+  const pool = {
+    leagueId: 'perfroom-league', tier: 'standard' as const, balanceMode: 'taxed' as const,
+    players: completed.snakeSetup!.poolPlayerIds.map((id) => ({ id, iv: 100, salary: 100 })),
+    tierCap: 10_000,
+    luxuryCaps: [], pickValueChart: [], totalSlots: 22, poolSurplusWarning: false, locked: true,
+  };
+  await saveRegisteredPool(pool);
+  await saveMlbDraftSession(completed);
+  const frozen = freezeSnakeDraftSession({
+    session: completed,
+    expectedPhase: 'MLB',
+    poolPlayerIds: completed.snakeSetup!.poolPlayerIds,
+    salaryByPlayerId: new Map(completed.snakeSetup!.poolPlayerIds.map((playerId) => [playerId, 100])),
+    frozenAt: '2026-07-14T11:00:00.000Z',
+  });
+  const persisted = await freezeMlbDraftRoomSessionWithRegisteredPool({
+    session: frozen,
+    registeredPool: pool,
+    expectedRevision: 0,
+  });
+  if (input?.handoff === false) return persisted;
+  return markSnakeRosterHandoff({
+    leagueId: persisted.leagueId,
+    seasonNumber: persisted.seasonNumber,
+    phase: 'MLB',
+    sourceSessionId: persisted.draftManifest!.source.sessionId,
+    manifestPoolIdentity: persisted.draftManifest!.pool.identity,
+    committedAt: '2026-07-14T11:01:00.000Z',
+  });
+}
+
+function farmCandidateFrom(mlbSession: LeagueBuilderMlbDraftSession): LeagueBuilderMlbDraftSession {
+  return createFarmSnakeSession({
+    mlbSession,
+    teamOrder: ['team-a'],
+    existingFarmRosterCountsByTeamId: { 'team-a': 8 },
+    farmBudgetsByTeamId: { 'team-a': 96_000 },
+    farmArchetypeIdByTeamId: { 'team-a': 'farm-balanced' },
+    prospectIds: ['prospect-a', 'prospect-b'],
+    prospects: [{ id: 'prospect-a' }, { id: 'prospect-b' }] as never,
+    now: '2026-07-14T12:00:00.000Z',
+  });
+}
+
+async function seedRawFarmAuthority(input?: {
+  pickOrder?: LeagueBuilderMlbDraftSession['pickOrder'];
+  farmSeatBoard?: FarmSeatBoardRecord;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  const pickOrder = input?.pickOrder ?? [
+    { round: 1, pick: 1, teamId: 'team-a' },
+    { round: 2, pick: 2, teamId: 'team-a' },
+  ];
+  const value: LeagueBuilderMlbDraftSession = {
+    ...session(),
+    id: createMlbDraftSessionId('perfroom-league', FARM_SNAKE_SESSION_NUMBER),
+    seasonNumber: FARM_SNAKE_SESSION_NUMBER,
+    draftPhase: 'FARM',
+    workflowVersion: 'snake-v1-farm',
+    engineMethodVersion: 'snake-s6',
+    rounds: 10,
+    pickOrder,
+    farmSlotSalaries: pickOrder.map((_, index) => (pickOrder.length - index) * 1_000),
+    farmProspectSnapshot: pickOrder.map((slot) => ({ id: `player-${slot.pick}` } as never)),
+    snakeSetup: {
+      poolPlayerIds: pickOrder.map((slot) => `player-${slot.pick}`),
+      versionSelections: {},
+      orderSeed: 'perfroom-farm-order',
+      clubs: [{ teamId: 'team-a', gmName: 'Alex', hotseat: false }],
+    },
+    trades: [],
+    correctionSnapshots: [],
+    completedPicks: [],
+    currentPickIndex: 0,
+    revision: 0,
+    ...(input?.farmSeatBoard ? { farmSeatBoards: { 'team-a': input.farmSeatBoard } } : {}),
+  };
+  await putRawRecord('mlbDraftSessions', value);
+  if (input?.farmSeatBoard) {
+    await putRawRecord('snakeSeatBoards', {
+      id: seatBoardStoreId(value.id, 'FARM', 'team-a'),
+      sessionId: value.id,
+      leagueId: value.leagueId,
+      seasonNumber: value.seasonNumber,
+      teamId: 'team-a',
+      phase: 'FARM',
+      board: input.farmSeatBoard,
+      revision: input.farmSeatBoard.revision,
+      lastModified: value.lastModified,
+    } satisfies SnakeSeatBoardStoreRecord);
+  }
+  return (await getMlbDraftSession(value.leagueId, value.seasonNumber))!;
+}
+
 describe('PERFROOM room-session persistence', () => {
-  beforeEach(resetStorage);
-  afterEach(resetStorage);
+  beforeEach(async () => {
+    syncMockState.suppressed = true;
+    syncMockState.upsert.mockClear();
+    syncMockState.remove.mockClear();
+    await resetStorage();
+  });
+  afterEach(async () => {
+    syncMockState.suppressed = true;
+    await resetStorage();
+  });
 
   test('main posting preserves the authoritative premium through persistence, reload, nods, and proposal reconstruction', async () => {
     const source = {
@@ -744,7 +897,7 @@ describe('PERFROOM room-session persistence', () => {
         working.draftPhase = 'FARM';
         working.farmSeatBoards = { 'team-a': farmBoard(1, 'phase-bypass') };
       },
-      error: /MLB phase/,
+      error: /MLB phase|session phase/,
     },
     {
       label: 'nonmember board key',
@@ -884,19 +1037,7 @@ describe('PERFROOM room-session persistence', () => {
   });
 
   test('FARM boards use the same authoritative revision and corruption rules as MLB boards', async () => {
-    const stored = await saveMlbDraftSession({
-      ...session(),
-      id: createMlbDraftSessionId('perfroom-league', 2),
-      seasonNumber: 2,
-      draftPhase: 'FARM',
-      workflowVersion: 'snake-v1-farm',
-      pickOrder: [
-        { round: 1, pick: 1, teamId: 'team-a' },
-        { round: 2, pick: 2, teamId: 'team-a' },
-      ],
-      farmSlotSalaries: [10, 10],
-      farmSeatBoards: { 'team-a': farmBoard(1, 'embedded-old') },
-    });
+    const stored = await seedRawFarmAuthority({ farmSeatBoard: farmBoard(1, 'embedded-old') });
     const rowId = seatBoardStoreId(stored.id, 'FARM', 'team-a');
     const rawBoard = await getRawRecord<Record<string, unknown>>('snakeSeatBoards', rowId);
     await putRawRecord('snakeSeatBoards', {
@@ -927,16 +1068,412 @@ describe('PERFROOM room-session persistence', () => {
     await expect(getMlbDraftSession(stored.leagueId, 2)).rejects.toThrow(/corrupt/i);
   });
 
-  test('a generic FARM session save also converges a newer standalone board', async () => {
-    const stale = await saveMlbDraftSession({
-      ...session(),
-      id: createMlbDraftSessionId('perfroom-league', 2),
-      seasonNumber: 2,
-      draftPhase: 'FARM',
-      workflowVersion: 'snake-v1-farm',
-      farmSlotSalaries: [10],
-      farmSeatBoards: { 'team-a': farmBoard(1, 'embedded-old') },
+  test('a FARM transition rejects a valid-looking candidate when no completed MLB authority is persisted', async () => {
+    const farmCandidate = farmCandidateFrom(completedMlbAuthorityFixture());
+
+    await expect(saveMlbDraftSession(
+      farmCandidate,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/completed MLB authority/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test('a FARM transition rejects a persisted MLB manifest without its roster handoff', async () => {
+    const frozenMlb = await persistCompletedMlbAuthority({ handoff: false });
+    const farmCandidate = farmCandidateFrom({
+      ...frozenMlb,
+      rosterHandoff: buildSnakeRosterHandoff(frozenMlb, 'MLB', '2026-07-14T11:01:00.000Z'),
     });
+
+    await expect(saveMlbDraftSession(
+      farmCandidate,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/completed MLB authority/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test('a one-pick FARM transition persists its deterministic single-slot salary', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const candidate = createFarmSnakeSession({
+      mlbSession: completedMlb,
+      teamOrder: ['team-a'],
+      existingFarmRosterCountsByTeamId: { 'team-a': 9 },
+      farmBudgetsByTeamId: { 'team-a': 96_000 },
+      farmArchetypeIdByTeamId: { 'team-a': 'farm-balanced' },
+      prospectIds: ['prospect-only'],
+      prospects: [{ id: 'prospect-only' }] as never,
+      now: '2026-07-14T12:00:00.000Z',
+    });
+
+    expect(candidate.pickOrder).toEqual([{ round: 1, pick: 1, teamId: 'team-a' }]);
+    expect(candidate.farmSlotSalaries).toEqual([72_000]);
+    const stored = await saveMlbDraftSession(candidate, { phaseTransition: 'MLB_TO_FARM' });
+    expect(stored.farmSlotSalaries).toEqual([72_000]);
+    expect((await getMlbDraftSession(stored.leagueId, FARM_SNAKE_SESSION_NUMBER))?.pickOrder).toHaveLength(1);
+  });
+
+  test('a zero-pick FARM transition persists and freezes a completed authority for every full club', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const candidate = createFarmSnakeSession({
+      mlbSession: completedMlb,
+      teamOrder: ['team-a'],
+      existingFarmRosterCountsByTeamId: { 'team-a': 10 },
+      farmBudgetsByTeamId: { 'team-a': 96_000 },
+      farmArchetypeIdByTeamId: { 'team-a': 'farm-balanced' },
+      prospectIds: ['unused-reserve'],
+      prospects: [{ id: 'unused-reserve' }] as never,
+      now: '2026-07-14T12:00:00.000Z',
+    });
+
+    expect(candidate.pickOrder).toEqual([]);
+    expect(candidate.farmSlotSalaries).toEqual([]);
+    const stored = await saveMlbDraftSession(candidate, { phaseTransition: 'MLB_TO_FARM' });
+    const frozen = freezeSnakeDraftSession({
+      session: stored,
+      expectedPhase: 'FARM',
+      poolPlayerIds: ['unused-reserve'],
+      frozenAt: '2026-07-14T12:01:00.000Z',
+    });
+    const persisted = await saveMlbDraftSession(frozen);
+
+    expect(persisted.draftManifest?.lockedClubs.map((club) => club.teamId)).toEqual(['team-a']);
+    expect(persisted.draftManifest?.pickOrder).toEqual([]);
+    expect(persisted.draftManifest?.completedPicks).toEqual([]);
+    expect((await getMlbDraftSession(stored.leagueId, FARM_SNAKE_SESSION_NUMBER))?.draftManifest)
+      .toEqual(persisted.draftManifest);
+  });
+
+  test('all local writers reject FARM pick trades and companion trade access', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const stored = await saveMlbDraftSession(farmCandidateFrom(completedMlb), { phaseTransition: 'MLB_TO_FARM' });
+    const trade = {
+      id: 'forged-farm-trade', atPickIndex: 0, humanTeamId: 'team-a', cpuTeamId: 'team-b',
+      humanPickNumbers: [1], cpuPickNumbers: [2], humanValue: 10, cpuValue: 10, greedMargin: 0,
+    };
+
+    await expect(saveMlbDraftSession({ ...stored, trades: [trade] }))
+      .rejects.toThrow(/FARM.*cannot contain.*trades/i);
+    await expect(updateMlbDraftSessionAtomically(stored.leagueId, stored.seasonNumber, (current) => ({
+      ...current,
+      openTradeOffers: [{ id: 'forged-farm-offer' }] as never,
+    }))).rejects.toThrow(/FARM.*cannot contain.*trade offers/i);
+    await expect(postApprovedCompanionTradeOffer({
+      leagueId: stored.leagueId,
+      seasonNumber: FARM_SNAKE_SESSION_NUMBER,
+      deviceId: 'farm-companion',
+      teamId: 'team-a',
+      proposal: {
+        buyerTeamId: 'team-a', sellerTeamId: 'team-b', targetPick: 1,
+        offerPickNumbers: [2], receivePickNumbers: [1], offerValue: 10, receiveValue: 10,
+        sellerPremium: 0, sessionRevision: stored.revision ?? 0,
+      },
+      postedAt: '2026-07-14T12:02:00.000Z',
+    })).rejects.toThrow(/FARM.*do not allow pick trades/i);
+    const unchanged = await getMlbDraftSession(stored.leagueId, stored.seasonNumber);
+    expect(unchanged?.trades).toEqual([]);
+    expect(unchanged?.openTradeOffers).toBeUndefined();
+  });
+
+  test('generic, atomic, and room writers reject FARM phase erasure and creation-envelope mutation byte-unchanged', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const stored = await saveMlbDraftSession(
+      farmCandidateFrom(completedMlb),
+      { phaseTransition: 'MLB_TO_FARM' },
+    );
+    const originalBytes = await getRawSessionAndBoards(stored.id);
+
+    const phaseErased = {
+      ...stored,
+      trades: [{
+        id: 'phase-erasure-trade', atPickIndex: 0,
+        humanTeamId: 'team-a', cpuTeamId: 'team-b',
+        humanPickNumbers: [1], cpuPickNumbers: [2],
+        humanValue: 1, cpuValue: 1, greedMargin: 0,
+      }],
+    };
+    delete phaseErased.draftPhase;
+    await expect(saveMlbDraftSession(phaseErased)).rejects.toThrow(/phase cannot be removed|FARM.*trades/i);
+    expect(await getRawSessionAndBoards(stored.id)).toBe(originalBytes);
+
+    const envelopeMutations: Array<[string, LeagueBuilderMlbDraftSession]> = [
+      ['seed', { ...stored, seed: `${stored.seed}:changed` }],
+      ['workflow', { ...stored, workflowVersion: 'snake-v1-farm-changed' }],
+      ['engine', { ...stored, engineMethodVersion: 'snake-s6-changed' }],
+      ['rounds', { ...stored, rounds: 9 }],
+      ['tier', { ...stored, tier: 'juiced' }],
+      ['balance', { ...stored, balanceMode: 'off' }],
+      ['pick order', { ...stored, pickOrder: [...stored.pickOrder].reverse() }],
+      ['slot salaries', { ...stored, farmSlotSalaries: stored.farmSlotSalaries?.map((value) => value + 1_000) }],
+      ['prospect snapshot', {
+        ...stored,
+        farmProspectSnapshot: stored.farmProspectSnapshot?.map((prospect) => ({ ...prospect, firstName: 'Changed' })),
+      }],
+      ['pool', { ...stored, snakeSetup: { ...stored.snakeSetup!, poolPlayerIds: ['replacement'] } }],
+      ['clubs', {
+        ...stored,
+        snakeSetup: {
+          ...stored.snakeSetup!,
+          clubs: stored.snakeSetup!.clubs.map((club) => ({ ...club, gmName: 'Changed' })),
+        },
+      }],
+    ];
+    for (const [label, candidate] of envelopeMutations) {
+      await expect(saveMlbDraftSession(candidate), label)
+        .rejects.toThrow(/frozen FARM creation envelope|frozen farm prospect snapshot/i);
+      expect(await getRawSessionAndBoards(stored.id), label).toBe(originalBytes);
+    }
+
+    await expect(updateMlbDraftSessionAtomically(stored.leagueId, stored.seasonNumber, (current) => ({
+      ...current,
+      farmSlotSalaries: current.farmSlotSalaries?.map((value) => value + 1_000),
+    }))).rejects.toThrow(/frozen FARM creation envelope/i);
+    expect(await getRawSessionAndBoards(stored.id)).toBe(originalBytes);
+
+    await expect(saveMlbDraftRoomSession({
+      ...stored,
+      snakeSetup: { ...stored.snakeSetup!, orderSeed: 'changed-order-seed' },
+      revision: (stored.revision ?? 0) + 1,
+    }, stored.revision ?? 0)).rejects.toThrow(/frozen FARM creation envelope/i);
+    expect(await getRawSessionAndBoards(stored.id)).toBe(originalBytes);
+
+    const live = await updateMlbDraftSessionAtomically(stored.leagueId, stored.seasonNumber, (current) => ({
+      ...current,
+      paused: true,
+      roomLogByTeamId: {
+        'team-a': [{ id: 'live-log', kind: 'PICK', text: 'LIVE PROGRESS', createdAt: '2026-07-14T12:10:00.000Z' }],
+      },
+      revision: (current.revision ?? 0) + 1,
+    }));
+    expect(live.paused).toBe(true);
+    expect(live.roomLogByTeamId?.['team-a']?.[0]?.id).toBe('live-log');
+  });
+
+  test('generic save cannot create a FARM authority outside the sanctioned transition', async () => {
+    const candidate = farmCandidateFrom(completedMlbAuthorityFixture());
+    await expect(saveMlbDraftSession(candidate)).rejects.toThrow(/sanctioned MLB-to-FARM transition/i);
+    expect(await getRawRecord('mlbDraftSessions', candidate.id)).toBeUndefined();
+  });
+
+  test('a FARM transition rejects candidate clubs and order fabricated outside the persisted MLB authority', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+    const fabricated = {
+      ...farmCandidate,
+      pickOrder: farmCandidate.pickOrder.map((slot) => ({ ...slot, teamId: 'team-fake' })),
+      snakeSetup: {
+        ...farmCandidate.snakeSetup!,
+        clubs: [{ teamId: 'team-fake', hotseat: false }],
+      },
+    };
+
+    await expect(saveMlbDraftSession(
+      fabricated,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test('a FARM transition rejects seed provenance fabricated outside the persisted MLB authority', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+
+    await expect(saveMlbDraftSession(
+      {
+        ...farmCandidate,
+        seed: 'fabricated-seed:farm',
+        snakeSetup: { ...farmCandidate.snakeSetup!, orderSeed: 'fabricated-seed' },
+      },
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test.each([
+    ['round', (candidate: LeagueBuilderMlbDraftSession) => ({
+      ...candidate,
+      pickOrder: candidate.pickOrder.map((slot) => ({ ...slot, round: 11 })),
+    })],
+    ['slot-salary', (candidate: LeagueBuilderMlbDraftSession) => ({
+      ...candidate,
+      farmSlotSalaries: candidate.pickOrder.map(() => 1),
+    })],
+  ])('a FARM transition rejects malformed %s geometry', async (_label, mutate) => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+
+    await expect(saveMlbDraftSession(
+      mutate(farmCandidate),
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test.each([
+    ['revision zero', (candidate: LeagueBuilderMlbDraftSession) => ({ ...candidate, revision: 1 })],
+    ['the pause property to be absent', (candidate: LeagueBuilderMlbDraftSession) => ({ ...candidate, paused: false })],
+  ])('a FARM transition requires %s', async (_label, mutate) => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+
+    await expect(saveMlbDraftSession(
+      mutate(farmCandidate),
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+  });
+
+  test.each(['trades', 'correctionSnapshots'] as const)(
+    'a FARM transition requires an explicit empty %s array',
+    async (field) => {
+      const completedMlb = await persistCompletedMlbAuthority();
+      const farmCandidate = farmCandidateFrom(completedMlb);
+      const malformed = { ...farmCandidate };
+      delete malformed[field];
+
+      await expect(saveMlbDraftSession(
+        malformed,
+        { phaseTransition: 'MLB_TO_FARM' },
+      )).rejects.toThrow(/transition is malformed/i);
+      expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+    },
+  );
+
+  test.each([
+    ['row key', { id: 'alien-board-key' }],
+    ['league', { leagueId: 'other-league' }],
+    ['season', { seasonNumber: 3 }],
+    ['phase', { phase: 'BROKEN' }],
+    ['frozen team', { id: 'TEAM_ID', teamId: 'team-fake' }],
+  ])('a FARM transition preserves an orphan row with mismatched %s metadata', async (_label, override) => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+    const defaultId = seatBoardStoreId(farmCandidate.id, 'MLB', 'team-a');
+    const row = {
+      id: defaultId,
+      sessionId: farmCandidate.id,
+      leagueId: farmCandidate.leagueId,
+      seasonNumber: farmCandidate.seasonNumber,
+      teamId: 'team-a',
+      phase: 'MLB',
+      board: board(9, 'mismatched-orphan'),
+      revision: 9,
+      lastModified: '2026-07-14T11:59:00.000Z',
+      ...override,
+    } as SnakeSeatBoardStoreRecord;
+    if (row.id === 'TEAM_ID') row.id = seatBoardStoreId(farmCandidate.id, 'MLB', row.teamId);
+    await putRawRecord('snakeSeatBoards', row);
+
+    syncMockState.suppressed = false;
+    await expect(saveMlbDraftSession(
+      farmCandidate,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/standalone.*metadata/i);
+
+    expect(await getRawRecord('snakeSeatBoards', row.id)).toBeDefined();
+    expect(await getRawRecord('mlbDraftSessions', farmCandidate.id)).toBeUndefined();
+    expect(syncMockState.remove).not.toHaveBeenCalled();
+  });
+
+  test('a fresh FARM transition removes validated orphaned MLB board authority, emits its tombstone, and preserves season-1 bytes', async () => {
+    const completedMlb = await persistCompletedMlbAuthority({
+      seatBoards: { 'team-a': board(3, 'mlb-private-plan') },
+    });
+    const farmCandidate = farmCandidateFrom(completedMlb);
+    const mlbBytesBefore = await getRawSessionAndBoards(completedMlb.id);
+    const staleMlbRowId = seatBoardStoreId(farmCandidate.id, 'MLB', 'team-a');
+    await putRawRecord('snakeSeatBoards', {
+      id: staleMlbRowId,
+      sessionId: farmCandidate.id,
+      leagueId: farmCandidate.leagueId,
+      seasonNumber: farmCandidate.seasonNumber,
+      teamId: 'team-a',
+      phase: 'MLB',
+      board: board(9, 'orphaned-mlb-plan'),
+      revision: 9,
+      lastModified: '2026-07-14T11:59:00.000Z',
+    } satisfies SnakeSeatBoardStoreRecord);
+
+    const wrongSeasonCandidate = {
+      ...farmCandidate,
+      id: createMlbDraftSessionId(farmCandidate.leagueId, 3),
+      seasonNumber: 3,
+    };
+    const wrongSeasonRowId = seatBoardStoreId(wrongSeasonCandidate.id, 'MLB', 'team-a');
+    await putRawRecord('snakeSeatBoards', {
+      id: wrongSeasonRowId,
+      sessionId: wrongSeasonCandidate.id,
+      leagueId: wrongSeasonCandidate.leagueId,
+      seasonNumber: wrongSeasonCandidate.seasonNumber,
+      teamId: 'team-a',
+      phase: 'MLB',
+      board: board(7, 'wrong-season-orphan'),
+      revision: 7,
+      lastModified: '2026-07-14T11:58:00.000Z',
+    } satisfies SnakeSeatBoardStoreRecord);
+    await expect(saveMlbDraftSession(
+      wrongSeasonCandidate,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('snakeSeatBoards', wrongSeasonRowId)).toBeDefined();
+    expect(await getRawRecord('mlbDraftSessions', wrongSeasonCandidate.id)).toBeUndefined();
+
+    await expect(saveMlbDraftSession(
+      { ...farmCandidate, workflowVersion: 'snake-practice' },
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('snakeSeatBoards', staleMlbRowId)).toBeDefined();
+
+    await expect(saveMlbDraftSession(
+      { ...farmCandidate, paused: true },
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/transition is malformed/i);
+    expect(await getRawRecord('snakeSeatBoards', staleMlbRowId)).toBeDefined();
+
+    syncMockState.remove.mockClear();
+    syncMockState.suppressed = false;
+    const storedFarm = await saveMlbDraftSession(farmCandidate, { phaseTransition: 'MLB_TO_FARM' });
+    const reloadedFarm = await getMlbDraftSession(farmCandidate.leagueId, 2);
+    const reloadedMlb = await getMlbDraftSession(completedMlb.leagueId, 1);
+
+    expect(storedFarm.draftPhase).toBe('FARM');
+    expect(storedFarm).not.toHaveProperty('seatBoards');
+    expect(storedFarm).not.toHaveProperty('farmSeatBoards');
+    expect(reloadedFarm).not.toHaveProperty('seatBoards');
+    expect(reloadedFarm).not.toHaveProperty('farmSeatBoards');
+    expect(reloadedFarm).not.toHaveProperty('openTradeOffers');
+    expect(reloadedFarm).not.toHaveProperty('roomLogByTeamId');
+    expect(reloadedFarm).not.toHaveProperty('snakeCompanions');
+    expect(reloadedFarm).not.toHaveProperty('paused');
+    expect(reloadedFarm?.snakeSetup).not.toHaveProperty('seatingCertificate');
+    expect(reloadedFarm?.trades).toEqual([]);
+    expect(reloadedFarm?.correctionSnapshots).toEqual([]);
+    expect(await getRawRecord('snakeSeatBoards', staleMlbRowId)).toBeUndefined();
+    expect(syncMockState.remove).toHaveBeenCalledWith(
+      'kbl-league-builder',
+      'snakeSeatBoards',
+      staleMlbRowId,
+    );
+    expect(await getRawSessionAndBoards(completedMlb.id)).toBe(mlbBytesBefore);
+    expect(reloadedMlb?.completedPicks).toEqual(completedMlb.completedPicks);
+    expect(reloadedMlb?.pickOrder).toEqual(completedMlb.pickOrder);
+    expect(reloadedMlb?.seatBoards).toEqual(completedMlb.seatBoards);
+  });
+
+  test('a second FARM transition cannot replace an existing season-2 authority', async () => {
+    const completedMlb = await persistCompletedMlbAuthority();
+    const farmCandidate = farmCandidateFrom(completedMlb);
+    await saveMlbDraftSession(farmCandidate, { phaseTransition: 'MLB_TO_FARM' });
+    const bytesBefore = await getRawSessionAndBoards(farmCandidate.id);
+
+    await expect(saveMlbDraftSession(
+      farmCandidate,
+      { phaseTransition: 'MLB_TO_FARM' },
+    )).rejects.toThrow(/already exists/i);
+    expect(await getRawSessionAndBoards(farmCandidate.id)).toBe(bytesBefore);
+  });
+
+  test('a generic FARM session save also converges a newer standalone board', async () => {
+    const stale = await seedRawFarmAuthority({ farmSeatBoard: farmBoard(1, 'embedded-old') });
     const rowId = seatBoardStoreId(stale.id, 'FARM', 'team-a');
     const rawBoard = await getRawRecord<SnakeSeatBoardStoreRecord>('snakeSeatBoards', rowId);
     await putRawRecord('snakeSeatBoards', {
@@ -988,14 +1525,9 @@ describe('PERFROOM room-session persistence', () => {
       expectedBoardRevision: 1, board: board(2, 'after-manifest'),
     })).rejects.toThrow('THIS DRAFT IS COMPLETE.');
 
-    const farm = await saveMlbDraftSession({
-      ...session(),
-      id: createMlbDraftSessionId('perfroom-league', 2),
-      seasonNumber: 2,
-      draftPhase: 'FARM',
-      workflowVersion: 'snake-v1-farm',
-      farmSlotSalaries: [10],
-      farmSeatBoards: { 'team-a': farmBoard(1, 'farm') },
+    const farm = await seedRawFarmAuthority({
+      pickOrder: [{ round: 1, pick: 1, teamId: 'team-a' }],
+      farmSeatBoard: farmBoard(1, 'farm'),
     });
     await expect(patchMlbDraftSessionSeatBoard({
       leagueId: farm.leagueId, seasonNumber: 2, teamId: 'team-a',
@@ -1175,22 +1707,11 @@ describe('PERFROOM room-session persistence', () => {
   });
 
   test('a correction preserves a newer off-clock farm board revision', async () => {
-    const base = await saveMlbDraftSession({
-      ...session(),
-      id: createMlbDraftSessionId('perfroom-league', 2),
-      seasonNumber: 2,
-      draftPhase: 'FARM',
-      pickOrder: [
-        { round: 1, pick: 1, teamId: 'team-a' },
-        { round: 2, pick: 2, teamId: 'team-a' },
-      ],
-      farmSlotSalaries: [10, 10],
-      farmSeatBoards: { 'team-a': farmBoard(1, 'old-order') },
-    });
+    const base = await seedRawFarmAuthority({ farmSeatBoard: farmBoard(1, 'old-order') });
     const picked = applySnakePickWithCorrection({
       session: base,
       player: { playerId: 'player-a' },
-      settledSalary: 10,
+      settledSalary: base.farmSlotSalaries![0],
       marginalTax: 0,
       versionPool: [{ playerId: 'player-a' }],
     });

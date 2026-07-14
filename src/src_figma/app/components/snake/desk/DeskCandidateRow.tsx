@@ -16,7 +16,9 @@ export function DeskCandidateRow(props: {
     : tone === 'red'
       ? 'text-[var(--ballpark-warn-text)]'
       : 'text-[var(--ballpark-brass)]';
-  const risk = props.candidate.risk !== 'SAFE_TO_WAIT'
+  const risk = props.candidate.drafted
+    ? 'DRAFTED'
+    : props.candidate.risk !== 'SAFE_TO_WAIT'
     ? props.candidate.risk.replaceAll('_', ' ')
     : props.candidate.riskPending
       ? 'CALCULATING'

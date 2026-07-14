@@ -27,6 +27,11 @@ import {
   serializeKey,
 } from './syncConfig';
 import { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } from './backupRestore';
+import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
+import {
+  assertCanonicalFarmSyncBootstrap,
+  FARM_SNAKE_SESSION_NUMBER,
+} from './snakeFarmTransitionContract';
 
 // ============================================================
 // Types
@@ -173,20 +178,38 @@ interface SnakeProtectedApplyResult {
 }
 
 type SnakeSyncPool = { leagueId?: string; players?: Array<{ id?: string; iv?: number }> } | null;
-type SnakeSyncSession = { leagueId?: string; draftManifest?: {
-  formatVersion?: string;
-  phase?: string;
+type SnakeSyncSession = {
   leagueId?: string;
-  source?: { sessionId?: string };
-  pool?: { identity?: string; playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
-}; farmProspectSnapshot?: unknown[]; rosterHandoff?: {
-  formatVersion?: string;
-  phase?: string;
-  sourceSessionId?: string;
-  manifestPoolIdentity?: string;
-  manifestIdentity?: string;
-  committedAt?: string;
-} } | null;
+  seasonNumber?: number;
+  draftPhase?: string;
+  seed?: unknown;
+  workflowVersion?: unknown;
+  engineMethodVersion?: unknown;
+  tier?: unknown;
+  balanceMode?: unknown;
+  rounds?: unknown;
+  pickOrder?: unknown;
+  farmSlotSalaries?: unknown;
+  trades?: unknown;
+  openTradeOffers?: unknown;
+  snakeSetup?: unknown;
+  draftManifest?: {
+    formatVersion?: string;
+    phase?: string;
+    leagueId?: string;
+    source?: { sessionId?: string };
+    pool?: { identity?: string; playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
+  };
+  farmProspectSnapshot?: unknown[];
+  rosterHandoff?: {
+    formatVersion?: string;
+    phase?: string;
+    sourceSessionId?: string;
+    manifestPoolIdentity?: string;
+    manifestIdentity?: string;
+    committedAt?: string;
+  };
+} | null;
 
 type SnakeResetReceipt = {
   formatVersion?: string;
@@ -218,11 +241,54 @@ function snakeSyncManifestIdentity(manifest: NonNullable<SnakeSyncSession>['draf
   return `snake-manifest-v1:${hash.toString(16).padStart(8, '0')}:${source.length}`;
 }
 
+function snakeSyncPhase(session: SnakeSyncSession): string | undefined {
+  return session?.draftManifest?.phase ?? session?.draftPhase;
+}
+
+const FARM_SYNC_ENVELOPE_KEYS = [
+  'seed',
+  'workflowVersion',
+  'engineMethodVersion',
+  'tier',
+  'balanceMode',
+  'rounds',
+  'pickOrder',
+  'farmSlotSalaries',
+  'farmProspectSnapshot',
+  'snakeSetup',
+] as const satisfies readonly (keyof NonNullable<SnakeSyncSession>)[];
+
+function assertFarmSyncEnvelopeUnchanged(
+  current: NonNullable<SnakeSyncSession>,
+  proposed: NonNullable<SnakeSyncSession>,
+): void {
+  for (const key of FARM_SYNC_ENVELOPE_KEYS) {
+    if (canonicalJson(current[key]) !== canonicalJson(proposed[key])) {
+      throw new Error(`Inbound sync cannot change the frozen FARM creation envelope (${key}).`);
+    }
+  }
+}
+
 function isProtectedSnakeMlbRecord(record: CloudStoreRow): boolean {
   if (record.store_name === 'registeredPools') return true;
   if (record.store_name !== 'mlbDraftSessions') return false;
   const recordKey = JSON.parse(record.record_key);
-  return typeof recordKey === 'string' && recordKey.endsWith('::startup-mlb-draft::1');
+  return typeof recordKey === 'string'
+    && /::startup-mlb-draft::(?:1|2)$/.test(recordKey);
+}
+
+function protectedSnakeRecordIdentity(record: CloudStoreRow): {
+  leagueId: string;
+  kind: 'pool' | 'mlb' | 'farm';
+} | null {
+  const recordKey = JSON.parse(record.record_key);
+  if (record.store_name === 'registeredPools' && typeof recordKey === 'string') {
+    return { leagueId: recordKey, kind: 'pool' };
+  }
+  if (record.store_name !== 'mlbDraftSessions' || typeof recordKey !== 'string') return null;
+  const match = recordKey.match(/^(.*)::startup-mlb-draft::(1|2)$/);
+  if (!match?.[1]) return null;
+  return { leagueId: match[1], kind: match[2] === '1' ? 'mlb' : 'farm' };
 }
 
 /** Exported for adversarial tests; the pull path calls this before any IDB write. */
@@ -278,6 +344,19 @@ export function assertSnakeDraftSessionInboundInvariant(input: {
   const proposed = input.proposedSession;
   const currentManifest = current?.draftManifest;
   const proposedManifest = proposed?.draftManifest;
+  const currentPhase = snakeSyncPhase(current);
+  const proposedPhase = snakeSyncPhase(proposed);
+  const farmAuthority = currentPhase === 'FARM'
+    || proposedPhase === 'FARM'
+    || current?.seasonNumber === 2
+    || proposed?.seasonNumber === 2;
+  if (farmAuthority && (
+    (proposed?.trades !== undefined && (!Array.isArray(proposed.trades) || proposed.trades.length > 0))
+    || (proposed?.openTradeOffers !== undefined
+      && (!Array.isArray(proposed.openTradeOffers) || proposed.openTradeOffers.length > 0))
+  )) {
+    throw new Error('Inbound sync cannot add pick trades or open trade offers to a FARM snake session.');
+  }
   if (input.sessionDeleted && currentManifest) {
     const receipt = (input.tombstoneData && typeof input.tombstoneData === 'object'
       ? input.tombstoneData
@@ -305,6 +384,15 @@ export function assertSnakeDraftSessionInboundInvariant(input: {
   }
   if (currentManifest && (!proposedManifest || canonicalJson(proposedManifest) !== canonicalJson(currentManifest))) {
     throw new Error('Inbound sync cannot remove or replace a frozen snake draft manifest.');
+  }
+  if (current && proposed && (
+    currentPhase !== proposedPhase
+    || (Object.prototype.hasOwnProperty.call(current, 'draftPhase') && proposed.draftPhase !== current.draftPhase)
+  )) {
+    throw new Error('Inbound sync cannot remove or change the snake session phase.');
+  }
+  if (current && proposed && (currentPhase === 'FARM' || current.seasonNumber === 2)) {
+    assertFarmSyncEnvelopeUnchanged(current, proposed);
   }
   if (current?.farmProspectSnapshot && canonicalJson(proposed?.farmProspectSnapshot) !== canonicalJson(current.farmProspectSnapshot)) {
     throw new Error('Inbound sync cannot remove or replace a frozen farm prospect snapshot.');
@@ -1796,99 +1884,119 @@ class SyncEngine {
     mutationBaseline: number,
     markSkippedConflict: (record: CloudStoreRow) => void,
   ): Promise<SnakeProtectedApplyResult> {
-    const affectedLeagueIds = new Set<string>();
-    const sessionIds = new Map<string, string>();
+    type LeagueRows = {
+      pool?: CloudStoreRow;
+      mlb?: CloudStoreRow;
+      farm?: CloudStoreRow;
+    };
+    const rowsByLeagueId = new Map<string, LeagueRows>();
     for (const record of relevant) {
-      const data = record.data as { leagueId?: string } | null;
-      const recordKey = JSON.parse(record.record_key);
-      if (data?.leagueId) {
-        affectedLeagueIds.add(data.leagueId);
-        if (record.store_name === 'mlbDraftSessions') {
-          sessionIds.set(data.leagueId, recordKey);
-        }
-      }
-      else if (record.store_name === 'registeredPools') {
-        if (typeof recordKey === 'string') affectedLeagueIds.add(recordKey);
-      }
-      else if (record.store_name === 'mlbDraftSessions' && typeof recordKey === 'string') {
-        const delimiter = recordKey.indexOf('::startup-mlb-draft::');
-        if (delimiter > 0) {
-          const leagueId = recordKey.slice(0, delimiter);
-          affectedLeagueIds.add(leagueId);
-          sessionIds.set(leagueId, recordKey);
-        }
-      }
+      const identity = protectedSnakeRecordIdentity(record);
+      if (!identity) continue;
+      const rows = rowsByLeagueId.get(identity.leagueId) ?? {};
+      rows[identity.kind] = record;
+      rowsByLeagueId.set(identity.leagueId, rows);
     }
-    if (affectedLeagueIds.size === 0) {
+    if (rowsByLeagueId.size === 0) {
       return { writeBasesChanged: false, deferredRows: [] };
     }
+
     return new Promise<SnakeProtectedApplyResult>((resolve, reject) => {
       const tx = db.transaction(['registeredPools', 'mlbDraftSessions'], 'readwrite');
       const poolStore = tx.objectStore('registeredPools');
       const sessionStore = tx.objectStore('mlbDraftSessions');
       const currentPools = new Map<string, SnakeSyncPool>();
-      const currentSessions = new Map<string, SnakeSyncSession>();
+      const currentMlbSessions = new Map<string, SnakeSyncSession>();
+      const currentFarmSessions = new Map<string, SnakeSyncSession>();
       const requests: IDBRequest[] = [];
-      for (const leagueId of affectedLeagueIds) {
+      for (const leagueId of rowsByLeagueId.keys()) {
         const poolRead = poolStore.get(leagueId);
         poolRead.onsuccess = () => currentPools.set(leagueId, poolRead.result ?? null);
-        const sessionRead = sessionStore.get(sessionIds.get(leagueId) ?? `${leagueId}::startup-mlb-draft::1`);
-        sessionRead.onsuccess = () => currentSessions.set(leagueId, sessionRead.result ?? null);
-        requests.push(poolRead, sessionRead);
+        const mlbRead = sessionStore.get(leagueId + '::startup-mlb-draft::1');
+        mlbRead.onsuccess = () => currentMlbSessions.set(leagueId, mlbRead.result ?? null);
+        const farmRead = sessionStore.get(leagueId + '::startup-mlb-draft::2');
+        farmRead.onsuccess = () => currentFarmSessions.set(leagueId, farmRead.result ?? null);
+        requests.push(poolRead, mlbRead, farmRead);
       }
+
       let completed = 0;
       const appliedBases = new Map<string, { receivedAt: string; id: string }>();
-      const deferredLeagueIds = new Set<string>();
+      const deferredIdentities = new Set<string>();
+      const defer = (record: CloudStoreRow | undefined) => {
+        if (!record) return;
+        deferredIdentities.add(
+          this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+        );
+      };
       const apply = () => {
         completed += 1;
         if (completed !== requests.length) return;
         try {
-          for (const leagueId of affectedLeagueIds) {
-            const sessionId = sessionIds.get(leagueId) ?? `${leagueId}::startup-mlb-draft::1`;
-            const poolRecord = [...relevant].reverse().find((record) => (
-              record.store_name === 'registeredPools'
-              && ((record.data as { leagueId?: string } | null)?.leagueId === leagueId
-                || JSON.parse(record.record_key) === leagueId)
-            ));
-            const sessionRecord = [...relevant].reverse().find((record) => (
-              record.store_name === 'mlbDraftSessions'
-              && ((record.data as { leagueId?: string } | null)?.leagueId === leagueId
-                || JSON.parse(record.record_key) === sessionId)
-            ));
+          for (const [leagueId, rows] of rowsByLeagueId) {
             const currentPool = currentPools.get(leagueId) ?? null;
-            const currentSession = currentSessions.get(leagueId) ?? null;
-            const proposedPool = poolRecord
-              ? (poolRecord.deleted ? null : poolRecord.data as SnakeSyncPool)
+            const currentMlb = currentMlbSessions.get(leagueId) ?? null;
+            const currentFarm = currentFarmSessions.get(leagueId) ?? null;
+            const proposedPool = rows.pool
+              ? (rows.pool.deleted ? null : rows.pool.data as SnakeSyncPool)
               : currentPool;
-            const proposedSession = sessionRecord
-              ? (sessionRecord.deleted ? null : sessionRecord.data as SnakeSyncSession)
-              : currentSession;
-            if (
-              proposedSession?.draftManifest
-              && !currentPool
-              && !poolRecord
-            ) {
-              deferredLeagueIds.add(leagueId);
+            const proposedMlb = rows.mlb
+              ? (rows.mlb.deleted ? null : rows.mlb.data as SnakeSyncSession)
+              : currentMlb;
+            const proposedFarm = rows.farm
+              ? (rows.farm.deleted ? null : rows.farm.data as SnakeSyncSession)
+              : currentFarm;
+
+            const mlbWaitsForPool = Boolean(
+              rows.mlb
+              && !rows.mlb.deleted
+              && proposedMlb?.draftManifest
+              && !proposedPool,
+            );
+            if (mlbWaitsForPool) {
+              defer(rows.mlb);
+              defer(rows.farm);
+            } else {
+              assertSnakeManifestPoolInboundInvariant({
+                currentPool,
+                currentSession: currentMlb,
+                proposedPool,
+                proposedSession: proposedMlb,
+                sessionDeleted: Boolean(rows.mlb?.deleted),
+                sessionTombstoneData: rows.mlb?.deleted ? rows.mlb.data : undefined,
+              });
+            }
+
+            if (!rows.farm) continue;
+            assertSnakeDraftSessionInboundInvariant({
+              currentSession: currentFarm,
+              proposedSession: proposedFarm,
+              sessionDeleted: rows.farm.deleted,
+              tombstoneData: rows.farm.deleted ? rows.farm.data : undefined,
+            });
+            if (rows.farm.deleted) continue;
+
+            const mlbReady = !mlbWaitsForPool
+              && Boolean(proposedPool)
+              && proposedMlb?.draftManifest?.phase === 'MLB'
+              && proposedMlb.rosterHandoff?.phase === 'MLB';
+            if (!mlbReady) {
+              defer(rows.farm);
               continue;
             }
-            assertSnakeManifestPoolInboundInvariant({
-              currentPool,
-              currentSession,
-              proposedPool,
-              proposedSession,
-              sessionDeleted: Boolean(sessionRecord?.deleted),
-              sessionTombstoneData: sessionRecord?.deleted ? sessionRecord.data : undefined,
-            });
+            assertCanonicalFarmSyncBootstrap(
+              proposedFarm as unknown as LeagueBuilderMlbDraftSession,
+              leagueId + '::startup-mlb-draft::' + FARM_SNAKE_SESSION_NUMBER,
+              proposedMlb as unknown as LeagueBuilderMlbDraftSession,
+            );
           }
+
           for (const record of relevant) {
-            const dataLeagueId = (record.data as { leagueId?: string } | null)?.leagueId;
-            const recordKey = JSON.parse(record.record_key);
-            const keyLeagueId = record.store_name === 'registeredPools'
-              ? recordKey
-              : typeof recordKey === 'string'
-                ? recordKey.split('::startup-mlb-draft::')[0]
-                : null;
-            if (deferredLeagueIds.has(dataLeagueId ?? keyLeagueId)) continue;
+            const identityKey = this.storeIdentityKey(
+              record.db_name,
+              record.store_name,
+              record.record_key,
+            );
+            if (deferredIdentities.has(identityKey)) continue;
             if (this.hasQueuedStoreWrite(record, mutationBaseline)) {
               markSkippedConflict(record);
               continue;
@@ -1897,10 +2005,7 @@ class SyncEngine {
             if (record.deleted) store.delete(JSON.parse(record.record_key));
             else store.put(record.data);
             if (record.received_at) {
-              appliedBases.set(
-                this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
-                { receivedAt: record.received_at, id: record.id },
-              );
+              appliedBases.set(identityKey, { receivedAt: record.received_at, id: record.id });
             }
           }
         } catch (error) {
@@ -1916,20 +2021,15 @@ class SyncEngine {
         if (appliedBases.size > 0) this.rememberStoreWriteBaseOverrides(appliedBases);
         resolve({
           writeBasesChanged: appliedBases.size > 0,
-          deferredRows: relevant.filter((record) => {
-            const dataLeagueId = (record.data as { leagueId?: string } | null)?.leagueId;
-            const recordKey = JSON.parse(record.record_key);
-            const keyLeagueId = record.store_name === 'registeredPools'
-              ? recordKey
-              : typeof recordKey === 'string'
-                ? recordKey.split('::startup-mlb-draft::')[0]
-                : null;
-            return deferredLeagueIds.has(dataLeagueId ?? keyLeagueId);
-          }),
+          deferredRows: relevant.filter((record) => deferredIdentities.has(
+            this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+          )),
         });
       };
       tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error ?? new Error('Inbound snake manifest/pool sync transaction aborted.'));
+      tx.onabort = () => reject(
+        tx.error ?? new Error('Inbound snake manifest/pool/FARM sync transaction aborted.'),
+      );
     });
   }
 

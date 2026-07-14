@@ -7,27 +7,41 @@ vi.mock('../syncEngine', () => ({
     isSuppressed: () => true,
     upsert: vi.fn(),
     remove: vi.fn(),
+    batchMutations: <T>(work: () => T) => work(),
   },
 }));
 
 import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
+import { computePlayerIv } from '../leagueBuilderPoolBuilder';
 import {
   __resetLeagueBuilderDatabaseForTests,
   createMlbDraftSessionId,
   deleteRegisteredPool,
+  getAllPlayers,
   getMlbDraftSession,
+  getTeamRoster,
   getTeam,
   getLeagueTemplate,
   getRegisteredPool,
   initLeagueBuilderDatabase,
+  seedFromSMB4Database,
   saveMlbDraftSession,
   saveTeam,
   saveRegisteredPool,
 } from '../leagueBuilderStorage';
 import type { RegisteredPool } from '../../engines/leagueConstruction';
-import type { LeagueBuilderMlbDraftSession } from '../leagueBuilderStorage';
+import type { LeagueBuilderMlbDraftSession, Player } from '../leagueBuilderStorage';
 
 const DB_NAME = 'kbl-league-builder';
+
+const CORRECTED_STOCK_CLOSERS = {
+  'wpg-ospeciallo': 'wild-pigs',
+  'sct-vainer': 'sand-cats',
+  'ply-huckster': 'platypi',
+  'grp-meggles': 'grapplers',
+  'htr-enduck': 'heaters',
+  'ovd-nerdwerd': 'overdogs',
+} as const;
 
 const expectedStores = [
   'auctionSessions',
@@ -284,7 +298,132 @@ async function seedV8LeagueBuilderDatabase(): Promise<void> {
   });
 }
 
-describe('leagueBuilderStorage v9 snake seat-board migration', () => {
+async function seedV9StockCloserDatabase(options?: {
+  customCollision?: boolean;
+  stockPlayers?: Player[];
+}): Promise<{
+  registeredPool: Record<string, unknown>;
+  draftSession: Record<string, unknown>;
+}> {
+  await seedV8LeagueBuilderDatabase();
+
+  const registeredPool = {
+    leagueId: 'sml',
+    locked: true,
+    players: Object.keys(CORRECTED_STOCK_CLOSERS).map((id, index) => ({
+      id,
+      iv: 90_000 + index,
+      salary: 80_000 + index,
+    })),
+  };
+  const draftSession = {
+    id: 'sml::startup-mlb-draft::1',
+    leagueId: 'sml',
+    seasonNumber: 1,
+    draftManifest: {
+      formatVersion: 'snake-draft-manifest-v1',
+      frozenAt: '2026-07-13T00:00:00.000Z',
+      pickedSalaryByPlayerId: Object.fromEntries(
+        Object.keys(CORRECTED_STOCK_CLOSERS).map((id, index) => [id, 70_000 + index]),
+      ),
+    },
+  };
+
+  await new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, 9);
+
+    request.onupgradeneeded = () => {
+      const store = request.result.createObjectStore('snakeSeatBoards', { keyPath: 'id' });
+      store.createIndex('sessionId', 'sessionId', { unique: false });
+      store.createIndex('leagueId', 'leagueId', { unique: false });
+    };
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(
+        ['globalPlayers', 'globalTeams', 'leagueTemplates', 'registeredPools', 'mlbDraftSessions'],
+        'readwrite',
+      );
+      const players = tx.objectStore('globalPlayers');
+      const stockTeamIds = new Set(
+        (options?.stockPlayers ?? [])
+          .flatMap((player) => player.leagueAssignments ?? [])
+          .filter((assignment) => assignment.leagueId === 'sml' && assignment.teamId)
+          .map((assignment) => assignment.teamId),
+      );
+      if (stockTeamIds.size > 0) {
+        tx.objectStore('leagueTemplates').put({
+          id: 'sml',
+          name: 'Super Mega League',
+          teamIds: [...stockTeamIds],
+          conferences: [],
+          divisions: [],
+          defaultRulesPreset: 'standard',
+        });
+        for (const teamId of stockTeamIds) {
+          tx.objectStore('globalTeams').put({
+            id: teamId,
+            name: teamId,
+            abbreviation: teamId.slice(0, 4).toUpperCase(),
+            leagueIds: ['sml'],
+          });
+        }
+      }
+      for (const stockPlayer of options?.stockPlayers ?? []) {
+        players.put(
+          stockPlayer.id in CORRECTED_STOCK_CLOSERS
+            ? { ...stockPlayer, primaryPosition: 'RP', salary: 123 }
+            : stockPlayer,
+        );
+      }
+      for (const [id, teamId] of Object.entries(CORRECTED_STOCK_CLOSERS)) {
+        if (options?.stockPlayers?.some((player) => player.id === id)) continue;
+        players.put({
+          id,
+          firstName: id,
+          lastName: 'Legacy',
+          primaryPosition: 'RP',
+          salary: 123,
+          isCustom: options?.customCollision && id === 'wpg-ospeciallo',
+          sourceDatabase: options?.customCollision && id === 'wpg-ospeciallo' ? 'Historical' : 'SMB4',
+          leagueAssignments: [{ leagueId: 'sml', teamId, rosterStatus: 'MLB' }],
+        });
+      }
+      players.put({
+        id: 'historical-hander-ospeciallo',
+        firstName: 'Historical',
+        lastName: "O'Speciallo",
+        primaryPosition: 'RP',
+        salary: 456,
+        isCustom: false,
+        sourceDatabase: 'Historical',
+        leagueAssignments: [],
+      });
+      players.put({
+        id: 'custom-hander-ospeciallo',
+        firstName: 'Custom',
+        lastName: "O'Speciallo",
+        primaryPosition: 'RP',
+        salary: 789,
+        isCustom: true,
+        sourceDatabase: 'SMB4',
+        leagueAssignments: [],
+      });
+      tx.objectStore('registeredPools').put(registeredPool);
+      tx.objectStore('mlbDraftSessions').put(draftSession);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    };
+    request.onerror = () => reject(request.error);
+  });
+
+  return { registeredPool, draftSession };
+}
+
+describe('leagueBuilderStorage v10 stock closer migration', () => {
   beforeEach(async () => {
     __resetLeagueBuilderDatabaseForTests();
     await deleteDatabase(DB_NAME).catch(() => undefined);
@@ -295,11 +434,11 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
     await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
-  test('fresh v9 database creates snakeSeatBoards and preserves all prior stores', async () => {
+  test('fresh v10 database creates snakeSeatBoards and preserves all prior stores', async () => {
     const db = await initLeagueBuilderDatabase();
 
     expect(db.name).toBe(DB_NAME);
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
   });
 
@@ -307,7 +446,7 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
     await seedV5LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const template = await getLeagueTemplate('league-v5');
@@ -337,11 +476,11 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
     rawDb.close();
   });
 
-  test('raw v6 database upgrades additively to v9 and preserves all nine prior stores with data', async () => {
+  test('raw v6 database upgrades additively to v10 and preserves all nine prior stores with data', async () => {
     await seedV6LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const priorStoreAssertions: Array<[string, string, string]> = [
@@ -371,11 +510,11 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
     expect(snakeSeatBoards).toEqual([]);
   });
 
-  test('raw v7 database upgrades additively to v9 and preserves all prior stores + creates draft stores', async () => {
+  test('raw v7 database upgrades additively to v10 and preserves all prior stores + creates draft stores', async () => {
     await seedV7LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const priorStoreAssertions: Array<[string, string, string]> = [
@@ -403,11 +542,11 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
     expect(snakeSeatBoards).toEqual([]);
   });
 
-  test('raw v8 database upgrades additively to v9 without rewriting durable draft sessions', async () => {
+  test('raw v8 database upgrades additively to v10 without rewriting durable draft sessions', async () => {
     await seedV8LeagueBuilderDatabase();
 
     const db = await initLeagueBuilderDatabase();
-    expect(db.version).toBe(9);
+    expect(db.version).toBe(10);
     expect(Array.from(db.objectStoreNames).sort()).toEqual(expectedStores);
 
     const mlbDraftSessions = await getAllFromStore(db, 'mlbDraftSessions');
@@ -422,6 +561,107 @@ describe('leagueBuilderStorage v9 snake seat-board migration', () => {
 
     const snakeSeatBoards = await getAllFromStore(db, 'snakeSeatBoards');
     expect(snakeSeatBoards).toEqual([]);
+  });
+
+  test('fresh SMB4 seed exposes one club-assigned CP and a closing-pitcher roster slot for all twenty clubs', async () => {
+    const result = await seedFromSMB4Database(true);
+    expect(result.teams).toBeGreaterThanOrEqual(20);
+
+    const players = await getAllPlayers();
+    for (const [playerId, teamId] of Object.entries(CORRECTED_STOCK_CLOSERS)) {
+      expect(players).toContainEqual(expect.objectContaining({
+        id: playerId,
+        primaryPosition: 'CP',
+        sourceDatabase: 'SMB4',
+        leagueAssignments: expect.arrayContaining([
+          expect.objectContaining({ leagueId: 'sml', teamId, rosterStatus: 'MLB' }),
+        ]),
+      }));
+    }
+
+    const smlTeamIds = new Set(
+      players.flatMap((player) => player.leagueAssignments ?? [])
+        .filter((assignment) => assignment.leagueId === 'sml' && assignment.teamId)
+        .map((assignment) => assignment.teamId),
+    );
+    expect(smlTeamIds).toHaveLength(20);
+    for (const teamId of smlTeamIds) {
+      const roster = await getTeamRoster(teamId);
+      expect(roster?.closingPitcher, `${teamId} needs a seeded closer slot`).toBeTruthy();
+      expect(players.find((player) => player.id === roster?.closingPitcher)?.primaryPosition).toBe('CP');
+    }
+  });
+
+  test('v9 migration corrects only the six exact stock SMB4 cards, reprices them, and preserves locked draft truth byte-for-byte', async () => {
+    await seedFromSMB4Database(true);
+    const freshPlayers = await getAllPlayers();
+    const freshSalaryById = Object.fromEntries(
+      freshPlayers
+        .filter((player) => player.id in CORRECTED_STOCK_CLOSERS)
+        .map((player) => [player.id, player.salary]),
+    );
+    const freshIvById = Object.fromEntries(
+      freshPlayers
+        .filter((player) => player.id in CORRECTED_STOCK_CLOSERS)
+        .map((player) => [player.id, computePlayerIv(player)]),
+    );
+    __resetLeagueBuilderDatabaseForTests();
+    await deleteDatabase(DB_NAME);
+
+    const frozen = await seedV9StockCloserDatabase({ stockPlayers: freshPlayers });
+    const db = await initLeagueBuilderDatabase();
+    expect(db.version).toBe(10);
+
+    const migrated = await getAllPlayers();
+    for (const playerId of Object.keys(CORRECTED_STOCK_CLOSERS)) {
+      const player = migrated.find((candidate) => candidate.id === playerId);
+      expect(player).toEqual(expect.objectContaining({
+        id: playerId,
+        primaryPosition: 'CP',
+        salary: freshSalaryById[playerId],
+      }));
+      expect(computePlayerIv(player!)).toBe(freshIvById[playerId]);
+    }
+    const migratedCloserTeamIds = new Set(
+      migrated
+        .filter((player) => player.primaryPosition === 'CP')
+        .flatMap((player) => player.leagueAssignments ?? [])
+        .filter((assignment) => assignment.leagueId === 'sml' && assignment.teamId)
+        .map((assignment) => assignment.teamId),
+    );
+    expect(migratedCloserTeamIds).toHaveLength(20);
+    for (const teamId of migratedCloserTeamIds) {
+      expect(migrated.some((player) => (
+        player.primaryPosition === 'CP'
+        && player.leagueAssignments?.some((assignment) => assignment.teamId === teamId)
+      ))).toBe(true);
+    }
+    expect(migrated).toContainEqual(expect.objectContaining({
+      id: 'historical-hander-ospeciallo',
+      primaryPosition: 'RP',
+      salary: 456,
+    }));
+    expect(migrated).toContainEqual(expect.objectContaining({
+      id: 'custom-hander-ospeciallo',
+      primaryPosition: 'RP',
+      salary: 789,
+    }));
+
+    expect(await getAllFromStore(db, 'registeredPools')).toContainEqual(frozen.registeredPool);
+    expect(await getAllFromStore(db, 'mlbDraftSessions')).toContainEqual(frozen.draftSession);
+  });
+
+  test('v9 migration refuses an exact-ID custom or historical collision', async () => {
+    await seedV9StockCloserDatabase({ customCollision: true });
+    const db = await initLeagueBuilderDatabase();
+    expect(db.version).toBe(10);
+    expect(await getAllFromStore(db, 'globalPlayers')).toContainEqual(expect.objectContaining({
+      id: 'wpg-ospeciallo',
+      primaryPosition: 'RP',
+      salary: 123,
+      isCustom: true,
+      sourceDatabase: 'Historical',
+    }));
   });
 
   test('saveRegisteredPool, getRegisteredPool, and deleteRegisteredPool round-trip', async () => {

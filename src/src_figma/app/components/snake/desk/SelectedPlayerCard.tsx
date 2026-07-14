@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { buildDraftProfileModel, type DraftProfileFullRatings } from '../../../../../utils/draftProfileModel';
 import type { Player } from '../../../../../utils/leagueBuilderStorage';
 import type { DeskCandidate } from './deskModel';
@@ -30,6 +30,7 @@ export function SelectedPlayerCard(props: {
   teamName: string;
   onOptimizeAround?: () => void;
   onKeep?: () => void;
+  /** Legacy preview seam only. Production undo is owned by the revision-safe board transaction banner. */
   onRevert?: () => void;
   decision?: SnakeDraftDecision | null;
   onTradeDecision?: (decision: Extract<SnakeDraftDecision, { kind: 'TRADE_TO_PICK' }>) => void;
@@ -37,6 +38,7 @@ export function SelectedPlayerCard(props: {
   blockReason?: string | null;
   draftAction?: ReactNode;
 }) {
+  const [profileOpen, setProfileOpen] = useState(false);
   const profile = buildDraftProfileModel(props.player, { revealFull: true });
   const fitTone = fitToneForWord(props.candidate.fitWord);
   const positions = profile.secondaryPosition
@@ -54,10 +56,15 @@ export function SelectedPlayerCard(props: {
       : decision?.kind === 'PASS'
         ? 'PASS'
         : null;
+  const profileBodyId = `selected-player-profile-${props.candidate.id}`;
   return (
-    <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
-      <div className="flex items-start gap-3">
-        {props.teamLogoUrl ? <img className="h-14 w-14 object-contain" src={props.teamLogoUrl} alt={`${props.teamName} logo`} /> : (
+    <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)]" data-testid="selected-player-card">
+      <div
+        className="sticky top-0 z-10 border-b-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3"
+        data-testid="selected-player-action-strip"
+      >
+        <div className="flex items-start gap-3">
+        {props.teamLogoUrl ? <img className="h-14 w-14 shrink-0 object-contain" src={props.teamLogoUrl} alt={`${props.teamName} logo`} /> : (
           <svg className="h-14 w-14 shrink-0 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-page-bg)]" viewBox="0 0 16 16" role="img" aria-label={`${profile.name} pixel portrait`} shapeRendering="crispEdges">
             <rect x="5" y="2" width="6" height="2" fill="var(--ballpark-brass)" />
             <rect x="4" y="4" width="8" height="6" fill={props.player.gender === 'F' ? 'var(--ballpark-status-green)' : 'var(--ballpark-chalk)'} />
@@ -74,9 +81,29 @@ export function SelectedPlayerCard(props: {
           <p className="text-xs font-bold">{positions}</p>
           <p className="text-[10px] font-bold">AGE {profile.age} · B/T {profile.bats}/{profile.throws}{profile.armSlot ? ` · ${profile.armSlot} SLOT` : ''}</p>
         </div>
-        <span className={`border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>FIT · {props.candidate.fitWord}</span>
+        </div>
+        <span className={`mt-2 inline-block max-w-full border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>FIT · {props.candidate.fitWord}</span>
+        {props.actionConsequence ? <p className={`mt-2 border-2 p-2 text-xs font-black ${props.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>{props.actionConsequence}</p> : null}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {props.draftAction}
+          <div className="lg:hidden">
+            <button
+              type="button"
+              className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+              aria-expanded={profileOpen}
+              aria-controls={profileBodyId}
+              aria-label={profileOpen ? 'CLOSE PLAYER CARD' : 'OPEN PLAYER CARD'}
+              onClick={() => setProfileOpen((open) => !open)}
+            >{profileOpen ? 'CLOSE CARD' : 'PLAYER CARD'}</button>
+          </div>
+        </div>
       </div>
-      <div className="mt-3 flex flex-wrap gap-1 text-[10px] font-black">
+      <div
+        id={profileBodyId}
+        className={`${profileOpen ? 'block' : 'hidden'} p-3 lg:block`}
+        data-testid="selected-player-profile-body"
+      >
+      <div className="flex flex-wrap gap-1 text-[10px] font-black">
         {profile.archetype ? <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1">PLAYER ARCHETYPE · {profile.archetype}</span> : null}
         <span className="border-2 border-[var(--ballpark-brass)] px-2 py-1">TEAM ARCHETYPE · {props.candidate.archetypeChip}</span>
         <span className="border-2 border-[var(--ballpark-panel-border)] px-2 py-1">{profile.personality}</span>
@@ -120,14 +147,12 @@ export function SelectedPlayerCard(props: {
           })}
         </div>
       </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : <p className="mt-3 font-black">BOARD CONSEQUENCES —</p>}
-      {props.actionConsequence ? <p className={`mt-3 border-2 p-2 font-black ${props.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>{props.actionConsequence}</p> : null}
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="sticky bottom-0 -mx-3 -mb-3 mt-3 flex flex-wrap gap-2 border-t-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3">
         {decision?.kind === 'TRADE_TO_PICK' ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" onClick={() => props.onTradeDecision?.(decision)}>TRADE TO #{decision.targetPick}</button> : null}
         {decisionLabel ? <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="selected-player-decision">{decisionLabel}</span> : null}
         {props.onOptimizeAround ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-action min-h-11" onClick={props.onOptimizeAround}>OPTIMIZE AROUND</button> : null}
         {consequence?.status === 'ready' && props.onKeep ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" onClick={props.onKeep}>KEEP ON MY BOARD</button> : null}
-        {consequence?.status === 'ready' && props.onRevert ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={props.onRevert}>REVERT</button> : null}
-        {props.draftAction}
+      </div>
       </div>
     </section>
   );

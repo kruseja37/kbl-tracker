@@ -2,6 +2,11 @@ import "fake-indexeddb/auto";
 
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { Player, Team } from "../leagueBuilderStorage";
+import {
+  buildSnakeDraftResetReceipt,
+  buildSnakeRosterHandoff,
+  freezeSnakeDraftSession,
+} from "../snakeDraftManifest";
 
 interface StoreRow {
   id?: string;
@@ -1116,6 +1121,176 @@ function snakeRestoreRows(input: {
   };
 }
 
+async function canonicalFarmRestoreRows(input: {
+  leagueId: string;
+  receivedAt: { pool: string; mlb: string; farm: string };
+  farmState?: "created" | "in-progress" | "handed-off";
+}): Promise<{
+  pool: StoreRow;
+  mlb: StoreRow;
+  farm: StoreRow;
+  resetReceipt: ReturnType<typeof buildSnakeDraftResetReceipt> | null;
+}> {
+  const teamId = `${input.leagueId}-team`;
+  const seed = `${input.leagueId}-seed`;
+  const mlbSessionId = `${input.leagueId}::startup-mlb-draft::1`;
+  const farmSessionId = `${input.leagueId}::startup-mlb-draft::2`;
+  const mlbPickOrder = Array.from({ length: 22 }, (_, index) => ({
+    round: index + 1,
+    pick: index + 1,
+    teamId,
+  }));
+  const mlbPlayers = mlbPickOrder.map((slot) => ({
+    id: `${input.leagueId}-mlb-${slot.pick}`,
+    iv: 100_000 + slot.pick,
+  }));
+  const mutableMlb = {
+    id: mlbSessionId,
+    leagueId: input.leagueId,
+    seasonNumber: 1,
+    seed,
+    workflowVersion: "snake-v1",
+    engineMethodVersion: "snake-s1a",
+    tier: "standard" as const,
+    balanceMode: "taxed" as const,
+    rounds: 22,
+    pickOrder: mlbPickOrder,
+    completedPicks: mlbPickOrder.map((slot, index) => ({
+      ...slot,
+      playerId: mlbPlayers[index].id,
+      settledSalary: mlbPlayers[index].iv,
+    })),
+    trades: [],
+    correctionSnapshots: [],
+    currentPickIndex: mlbPickOrder.length,
+    revision: 0,
+    snakeSetup: {
+      poolPlayerIds: mlbPlayers.map((player) => player.id),
+      versionSelections: {},
+      clubs: [{ teamId, gmName: "GM", hotseat: true }],
+      orderSeed: seed,
+    },
+    createdDate: "2026-07-14T12:00:00.000Z",
+    lastModified: "2026-07-14T12:00:00.000Z",
+  };
+  const frozenMlb = freezeSnakeDraftSession({
+    session: mutableMlb,
+    expectedPhase: "MLB",
+    poolPlayerIds: mlbPlayers.map((player) => player.id),
+    salaryByPlayerId: new Map(mlbPlayers.map((player) => [player.id, player.iv])),
+    frozenAt: "2026-07-14T12:01:00.000Z",
+  });
+  const handedOffMlb = {
+    ...frozenMlb,
+    rosterHandoff: buildSnakeRosterHandoff(frozenMlb, "MLB", "2026-07-14T12:02:00.000Z"),
+  };
+  const prospect = { id: `${input.leagueId}-prospect`, firstName: "Farm", lastName: "Prospect" };
+  const createdFarm = {
+    id: farmSessionId,
+    leagueId: input.leagueId,
+    seasonNumber: 2,
+    seed: `${seed}:farm`,
+    workflowVersion: "snake-v1-farm",
+    engineMethodVersion: "snake-s6",
+    tier: "standard" as const,
+    balanceMode: "taxed" as const,
+    rounds: 10,
+    draftPhase: "FARM" as const,
+    farmSlotSalaries: [75_000],
+    farmProspectSnapshot: [prospect] as never,
+    pickOrder: [{ round: 1, pick: 1, teamId }],
+    completedPicks: [] as Array<{
+      round: number;
+      pick: number;
+      teamId: string;
+      playerId: string;
+      settledSalary: number;
+    }>,
+    trades: [],
+    correctionSnapshots: [],
+    currentPickIndex: 0,
+    revision: 0,
+    snakeSetup: {
+      poolPlayerIds: [prospect.id],
+      versionSelections: {},
+      clubs: [{ teamId, gmName: "GM", hotseat: true }],
+      orderSeed: seed,
+    },
+    createdDate: "2026-07-14T12:03:00.000Z",
+    lastModified: "2026-07-14T12:03:00.000Z",
+  };
+  const progressedFarm = input.farmState === "created" || input.farmState === undefined
+    ? createdFarm
+    : {
+        ...createdFarm,
+        completedPicks: [{
+          ...createdFarm.pickOrder[0],
+          playerId: prospect.id,
+          settledSalary: createdFarm.farmSlotSalaries[0],
+        }],
+        currentPickIndex: 1,
+        revision: 1,
+      };
+  const farmSession = input.farmState === "handed-off"
+    ? (() => {
+        const frozenFarm = freezeSnakeDraftSession({
+          session: progressedFarm,
+          expectedPhase: "FARM",
+          poolPlayerIds: [prospect.id],
+          frozenAt: "2026-07-14T12:04:00.000Z",
+        });
+        return {
+          ...frozenFarm,
+          rosterHandoff: buildSnakeRosterHandoff(frozenFarm, "FARM", "2026-07-14T12:05:00.000Z"),
+        };
+      })()
+    : progressedFarm;
+  const resetReceipt = farmSession.rosterHandoff
+    ? buildSnakeDraftResetReceipt(farmSession, "2026-07-14T12:06:00.000Z")
+    : null;
+  const makeRow = (
+    id: string,
+    storeName: string,
+    recordKey: string,
+    data: unknown,
+    receivedAt: string,
+  ): StoreRow => ({
+    id,
+    user_id: "user-1",
+    db_name: "kbl-league-builder",
+    store_name: storeName,
+    record_key: JSON.stringify(recordKey),
+    data,
+    changed_at: Date.parse(receivedAt),
+    received_at: receivedAt,
+    deleted: false,
+  });
+  return {
+    pool: makeRow(
+      `${input.leagueId}-pool-row`,
+      "registeredPools",
+      input.leagueId,
+      { leagueId: input.leagueId, players: mlbPlayers },
+      input.receivedAt.pool,
+    ),
+    mlb: makeRow(
+      `${input.leagueId}-mlb-row`,
+      "mlbDraftSessions",
+      mlbSessionId,
+      handedOffMlb,
+      input.receivedAt.mlb,
+    ),
+    farm: makeRow(
+      `${input.leagueId}-farm-row`,
+      "mlbDraftSessions",
+      farmSessionId,
+      farmSession,
+      input.receivedAt.farm,
+    ),
+    resetReceipt,
+  };
+}
+
 function snakeSeatBoardSyncRows(input: {
   leagueId: string;
   sessionBoardRevision: number;
@@ -1320,7 +1495,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     syncEngine.destroy();
   });
 
-  test("restores a completed season-2 FARM session on a cold device without invoking the MLB pool invariant", async () => {
+  test("does not trust a noncanonical season-2 FARM authority on a cold device", async () => {
     const leagueId = "snake-farm-cold-upsert";
     const sessionId = `${leagueId}::startup-mlb-draft::2`;
     mockState.cloudRows.push({
@@ -1351,47 +1526,198 @@ describe("syncEngine dynamic elimination copied DBs", () => {
 
     await syncEngine.pull({ throwOnError: true });
 
-    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(expect.objectContaining({
-      id: sessionId,
-      seasonNumber: 2,
-      draftManifest: expect.objectContaining({ phase: "FARM" }),
-    }));
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toBeNull();
+    expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).not.toBeNull();
     expect(mockState.metaRows[0]?.last_pull_id).toBe("snake-farm-cold-upsert-row");
     syncEngine.destroy();
   });
 
-  test("applies a season-2 FARM tombstone through ordinary sync semantics", async () => {
-    const leagueId = "snake-farm-tombstone";
-    const sessionId = `${leagueId}::startup-mlb-draft::2`;
+  test.each([
+    ["FARM-first", { farm: "2026-07-14T13:00:00.000Z", mlb: "2026-07-14T13:00:01.000Z", pool: "2026-07-14T13:00:02.000Z" }],
+    ["MLB-first", { mlb: "2026-07-14T13:01:00.000Z", pool: "2026-07-14T13:01:01.000Z", farm: "2026-07-14T13:01:02.000Z" }],
+  ])("restores a canonical clean-device MLB/pool/FARM set in %s record order", async (_order, receivedAt) => {
+    const leagueId = `snake-farm-paired-${_order}`;
+    const rows = await canonicalFarmRestoreRows({ leagueId, receivedAt });
+    mockState.cloudRows.push(rows.farm, rows.mlb, rows.pool);
     const syncEngine = await loadFreshSyncEngine();
     const storage = await import("../leagueBuilderStorage");
     await storage.initLeagueBuilderDatabase();
-    const suppressSeed = vi.spyOn(syncEngine, "isSuppressed").mockReturnValue(true);
-    await storage.saveMlbDraftSession({
-      id: sessionId,
+
+    await syncEngine.pull({ throwOnError: true });
+
+    expect(await storage.getRegisteredPool(leagueId)).toEqual(rows.pool.data);
+    expect(await storage.getMlbDraftSession(leagueId, 1)).toEqual(rows.mlb.data);
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(rows.farm.data);
+    expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).toBeNull();
+    syncEngine.destroy();
+  });
+
+  test("defers FARM-first bootstrap without mutation, then applies it when MLB and pool arrive", async () => {
+    const leagueId = "snake-farm-deferred-bootstrap";
+    const rows = await canonicalFarmRestoreRows({
       leagueId,
-      seasonNumber: 2,
-      seed: "farm-tombstone",
-      workflowVersion: "snake-v1-farm",
-      engineMethodVersion: "snakeFarmSlots-v1",
-      tier: "standard",
-      balanceMode: "taxed",
-      rounds: 10,
-      draftPhase: "FARM",
-      pickOrder: [],
-      completedPicks: [],
-      currentPickIndex: 0,
-    } as Parameters<typeof storage.saveMlbDraftSession>[0]);
-    suppressSeed.mockRestore();
+      receivedAt: {
+        farm: "2026-07-14T13:02:00.000Z",
+        mlb: "2026-07-14T13:02:01.000Z",
+        pool: "2026-07-14T13:02:02.000Z",
+      },
+    });
+    mockState.cloudRows.push(rows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+
+    await syncEngine.pull({ throwOnError: true });
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toBeNull();
+    expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).toContain(rows.farm.id);
+
+    mockState.cloudRows.push(rows.mlb, rows.pool);
+    await syncEngine.pull({ throwOnError: true });
+    expect(await storage.getMlbDraftSession(leagueId, 1)).toEqual(rows.mlb.data);
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(rows.farm.data);
+    expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).toBeNull();
+    syncEngine.destroy();
+  });
+
+  test("rejects a noncanonical FARM bootstrap atomically when its MLB and pool prerequisites exist", async () => {
+    const leagueId = "snake-farm-forged-bootstrap";
+    const rows = await canonicalFarmRestoreRows({
+      leagueId,
+      receivedAt: {
+        mlb: "2026-07-14T13:03:00.000Z",
+        pool: "2026-07-14T13:03:01.000Z",
+        farm: "2026-07-14T13:03:02.000Z",
+      },
+    });
+    rows.farm.data = { ...(rows.farm.data as Record<string, unknown>), seed: "forged-farm-seed" };
+    mockState.cloudRows.push(rows.mlb, rows.pool, rows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+
+    await expect(syncEngine.pull({ throwOnError: true })).rejects.toThrow(/noncanonical FARM authority/i);
+    expect(await storage.getRegisteredPool(leagueId)).toBeNull();
+    expect(await storage.getMlbDraftSession(leagueId, 1)).toBeNull();
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toBeNull();
+    syncEngine.destroy();
+  });
+
+  test("bootstraps a canonical in-progress FARM row on a clean device", async () => {
+    const leagueId = "snake-farm-direct-progress-bootstrap";
+    const rows = await canonicalFarmRestoreRows({
+      leagueId,
+      farmState: "in-progress",
+      receivedAt: {
+        mlb: "2026-07-14T13:03:10.000Z",
+        pool: "2026-07-14T13:03:11.000Z",
+        farm: "2026-07-14T13:03:12.000Z",
+      },
+    });
+    mockState.cloudRows.push(rows.mlb, rows.pool, rows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+
+    await syncEngine.pull({ throwOnError: true });
+
+    expect(await storage.getMlbDraftSession(leagueId, 1)).toEqual(rows.mlb.data);
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(rows.farm.data);
+    expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).toBeNull();
+    syncEngine.destroy();
+  });
+
+  test("accepts later canonical FARM progress after pristine bootstrap", async () => {
+    const leagueId = "snake-farm-progress-bootstrap";
+    const createdRows = await canonicalFarmRestoreRows({
+      leagueId,
+      receivedAt: {
+        mlb: "2026-07-14T13:04:00.000Z",
+        pool: "2026-07-14T13:04:01.000Z",
+        farm: "2026-07-14T13:04:02.000Z",
+      },
+    });
+    mockState.cloudRows.push(createdRows.mlb, createdRows.pool, createdRows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+
+    const progressedRows = await canonicalFarmRestoreRows({
+      leagueId,
+      farmState: "in-progress",
+      receivedAt: {
+        mlb: "2026-07-14T13:04:03.000Z",
+        pool: "2026-07-14T13:04:04.000Z",
+        farm: "2026-07-14T13:04:05.000Z",
+      },
+    });
+    mockState.cloudRows.push(progressedRows.farm);
+    await syncEngine.pull({ throwOnError: true });
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(progressedRows.farm.data);
+    syncEngine.destroy();
+  });
+
+  test.each([
+    ["phase", (farm: Record<string, unknown>) => ({ ...farm, draftPhase: "MLB" })],
+    ["trade", (farm: Record<string, unknown>) => ({ ...farm, trades: [{ id: "forged-trade" }] })],
+    ["creation envelope", (farm: Record<string, unknown>) => ({ ...farm, seed: "mutated-frozen-seed" })],
+  ])("rejects a canonical FARM authority's inbound %s mutation without changing storage", async (_label, mutate) => {
+    const leagueId = `snake-farm-mutation-${_label.replace(" ", "-")}`;
+    const rows = await canonicalFarmRestoreRows({
+      leagueId,
+      receivedAt: {
+        mlb: "2026-07-14T13:05:00.000Z",
+        pool: "2026-07-14T13:05:01.000Z",
+        farm: "2026-07-14T13:05:02.000Z",
+      },
+    });
+    mockState.cloudRows.push(rows.mlb, rows.pool, rows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const before = JSON.stringify(await storage.getMlbDraftSession(leagueId, 2));
+
+    mockState.cloudRows.push({
+      ...rows.farm,
+      id: `${rows.farm.id}-mutation`,
+      data: mutate(rows.farm.data as Record<string, unknown>),
+      changed_at: Date.parse("2026-07-14T13:05:03.000Z"),
+      received_at: "2026-07-14T13:05:03.000Z",
+    });
+    await expect(syncEngine.pull({ throwOnError: true })).rejects.toThrow();
+    expect(JSON.stringify(await storage.getMlbDraftSession(leagueId, 2))).toBe(before);
+    syncEngine.destroy();
+  });
+
+  test("applies a season-2 FARM reset tombstone after a canonical frozen handoff", async () => {
+    const leagueId = "snake-farm-tombstone";
+    const sessionId = `${leagueId}::startup-mlb-draft::2`;
+    const rows = await canonicalFarmRestoreRows({
+      leagueId,
+      farmState: "handed-off",
+      receivedAt: {
+        mlb: "2026-07-14T13:06:00.000Z",
+        pool: "2026-07-14T13:06:01.000Z",
+        farm: "2026-07-14T13:06:02.000Z",
+      },
+    });
+    if (!rows.resetReceipt) throw new Error("Canonical FARM handoff did not produce a reset receipt.");
+    mockState.cloudRows.push(rows.mlb, rows.pool, rows.farm);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    expect(await storage.getMlbDraftSession(leagueId, 2)).toEqual(rows.farm.data);
     mockState.cloudRows.push({
       id: "snake-farm-tombstone-row",
       user_id: "user-1",
       db_name: "kbl-league-builder",
       store_name: "mlbDraftSessions",
       record_key: JSON.stringify(sessionId),
-      data: {},
-      changed_at: Date.parse("2026-07-12T01:31:00.000Z"),
-      received_at: "2026-07-12T01:31:00.000Z",
+      data: rows.resetReceipt,
+      changed_at: Date.parse("2026-07-14T13:06:03.000Z"),
+      received_at: "2026-07-14T13:06:03.000Z",
       deleted: true,
     });
 

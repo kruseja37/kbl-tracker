@@ -14,6 +14,9 @@ import { assembleBoard } from '../../../engines/rosterIntelligencePayload';
 import * as phaseFlags from '../../../utils/franchisePhase2Flags';
 import { syncEngine } from '../../../utils/syncEngine';
 import {
+  getAllLeagueTemplates,
+  getMlbDraftSession as readMlbDraftSession,
+  getRegisteredPool as readRegisteredPool,
   patchApprovedCompanionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
   postApprovedCompanionTradeOffer,
@@ -62,6 +65,7 @@ import {
 import {
   boardSlotPosition,
   buildTaxCoreRows,
+  isCanonicalSnakeBoard,
   reorderSeatBoardRankings,
   type DeskCandidate,
 } from '../components/snake/desk/deskModel';
@@ -208,7 +212,7 @@ export default function SnakeCompanion() {
   } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [assistantOptimizePlayerId, setAssistantOptimizePlayerId] = useState<string | null>(null);
-  const [dismissedConsequencePlayerId, setDismissedConsequencePlayerId] = useState<string | null>(null);
+  const [assistantOptimizeRevision, setAssistantOptimizeRevision] = useState(0);
   const [guidePrefillState, setGuidePrefillState] = useState<{
     scopeKey: string;
     prefill: SnakeTradeGuidePrefill;
@@ -241,7 +245,7 @@ export default function SnakeCompanion() {
     setSelectedPlayerId(null);
     setMessage(null);
     setAssistantOptimizePlayerId(null);
-    setDismissedConsequencePlayerId(null);
+    setAssistantOptimizeRevision(0);
     setGuidePrefillState(null);
     setBoardUndo(null);
     undoOperationRef.current = null;
@@ -313,25 +317,25 @@ export default function SnakeCompanion() {
 
   const findDeviceSession = useCallback(async () => {
     const left = readLeftSessionIds();
-    const sessions: LeagueBuilderMlbDraftSession[] = [];
-    for (const league of leagues) {
-      const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
-      if (candidate) sessions.push(candidate);
-    }
+    const freshLeagues = await getAllLeagueTemplates();
+    const sessions = (await Promise.all(freshLeagues.map((league) => (
+      readMlbDraftSession(league.id, SEASON_NUMBER)
+    )))).filter((candidate): candidate is LeagueBuilderMlbDraftSession => Boolean(candidate));
     return selectCompanionRecoverySession({
       sessions,
       deviceId: ownDeviceId,
       forgottenSessionIds: left,
     });
-  }, [getMlbDraftSession, leagues, ownDeviceId]);
+  }, [ownDeviceId]);
 
   const hasOpenRoom = useCallback(async () => {
-    for (const league of leagues) {
-      const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
+    const freshLeagues = await getAllLeagueTemplates();
+    for (const league of freshLeagues) {
+      const candidate = await readMlbDraftSession(league.id, SEASON_NUMBER);
       if (isCompanionRoomOpen(candidate)) return true;
     }
     return false;
-  }, [getMlbDraftSession, leagues]);
+  }, []);
 
   useEffect(() => {
     if (!auth.isAuthenticated || initialPull !== 'complete' || isLoading) return;
@@ -360,10 +364,17 @@ export default function SnakeCompanion() {
     const requestEpoch = privacyEpochRef.current;
     try {
       await syncEngine.pull({ throwOnError: true });
+      await refresh();
       if (privacyEpochRef.current !== requestEpoch || deviceCoveredRef.current) return;
       if (session) {
-        const fresh = await getMlbDraftSession(session.leagueId, session.seasonNumber);
-        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) setSession(fresh);
+        const [fresh, freshPool] = await Promise.all([
+          readMlbDraftSession(session.leagueId, session.seasonNumber),
+          readRegisteredPool(session.leagueId),
+        ]);
+        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
+          setSession(fresh);
+          setPoolResult({ leagueId: session.leagueId, value: freshPool });
+        }
       } else {
         const recovered = await findDeviceSession();
         const open = await hasOpenRoom();
@@ -377,7 +388,7 @@ export default function SnakeCompanion() {
       const detail = cause instanceof Error ? cause.message : String(cause);
       setMessage(`LIVE ROOM SYNC FAILED — ${detail}`);
     }
-  }, [findDeviceSession, getMlbDraftSession, hasOpenRoom, roomAvailabilityKey, session]);
+  }, [findDeviceSession, hasOpenRoom, refresh, roomAvailabilityKey, session]);
 
   useEffect(() => {
     if (!auth.isAuthenticated
@@ -404,9 +415,11 @@ export default function SnakeCompanion() {
     invalidatePrivateContext();
     try {
       await syncEngine.pull({ throwOnError: true });
+      await refresh();
+      const freshLeagues = await getAllLeagueTemplates();
       let foundOpenRoom = false;
-      for (const league of leagues) {
-        const candidate = await getMlbDraftSession(league.id, SEASON_NUMBER);
+      for (const league of freshLeagues) {
+        const candidate = await readMlbDraftSession(league.id, SEASON_NUMBER);
         if (isCompanionRoomOpen(candidate)) foundOpenRoom = true;
         if (!isCompanionRoomOpen(candidate)) continue;
         if (candidate?.snakeCompanions?.roomCode !== roomCode) continue;
@@ -433,7 +446,7 @@ export default function SnakeCompanion() {
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : String(cause));
     }
-  }, [getMlbDraftSession, invalidatePrivateContext, leagues, ownDeviceId]);
+  }, [invalidatePrivateContext, ownDeviceId, refresh]);
 
   const authSignOut = auth.signOut;
   const signOut = useCallback(async () => {
@@ -502,7 +515,6 @@ export default function SnakeCompanion() {
     setSelectedPlayerId(null);
     setMessage(null);
     setAssistantOptimizePlayerId(null);
-    setDismissedConsequencePlayerId(null);
     setBoardUndo(null);
     undoOperationRef.current = null;
     setUndoWorking(false);
@@ -540,6 +552,14 @@ export default function SnakeCompanion() {
     return built ? [built] : [];
   }), [activePoolRows, playerById, seatingById]);
   const deskById = useMemo(() => new Map(deskPlayers.map((entry) => [entry.playerId, entry])), [deskPlayers]);
+  const boardEligibilityCandidates = useMemo(() => deskPlayers.map((player) => ({
+    id: player.playerId,
+    position: player.position,
+    eligiblePositions: player.eligiblePositions,
+    rosterShape: player.shape,
+    sourceId: player.sourceId,
+    versionGroupId: player.versionGroupId,
+  })), [deskPlayers]);
   const assistantLivePlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -571,13 +591,18 @@ export default function SnakeCompanion() {
     return buildSnakeRationalRiskRequest({
       session,
       askingTeamId: team.id,
-      askedPlayerIds: available.map((entry) => entry.playerId),
+      askedPlayerIds: [...new Set([
+        selectedPlayerId,
+        ...Object.values(board.slots),
+        ...(board.rankings.global ?? []).slice(0, 22),
+      ].filter((playerId): playerId is string => Boolean(playerId)
+        && available.some((player) => player.playerId === playerId)))],
       availablePlayers: available,
       seats,
       baseCaps: pool.luxuryCaps,
       realTeamCount: leagueTeams.length,
     });
-  }, [board, deskById, deskPlayers, deviceCovered, leagueTeams, pool, session, team, unavailable]);
+  }, [board, deskById, deskPlayers, deviceCovered, leagueTeams, pool, selectedPlayerId, session, team, unavailable]);
   const rationalRiskState = useSnakeRationalRisks(rationalRiskRequest);
 
   const deskState = useMemo(() => {
@@ -627,6 +652,9 @@ export default function SnakeCompanion() {
         identityChips: buildSnakePlayerIdentityChips(entry.stored, deskPlayers.map((row) => row.stored)),
         position: entry.position,
         eligiblePositions: entry.eligiblePositions,
+        rosterShape: entry.shape,
+        sourceId: entry.sourceId,
+        versionGroupId: entry.versionGroupId,
         advisorWorth: advisorWorth!,
         iv: entry.price,
         marginalTax,
@@ -634,7 +662,8 @@ export default function SnakeCompanion() {
         archetypeChip: locked.archetypeName,
         fitWord: fitWord({ player: entry, priorities: locked.priorities, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
-        riskPending: rationalRiskState.status === 'pending',
+        riskPending: rationalRiskState.status === 'pending'
+          || (rationalRiskState.status === 'ready' && !risk),
         riskUnavailable: rationalRiskState.status === 'unavailable',
         hasNextPick: risk?.nextPick !== null,
         riskReason: risk
@@ -648,7 +677,11 @@ export default function SnakeCompanion() {
       }];
     });
     const brokenSlots = SNAKE_BOARD_SLOT_IDS.filter((slotId) => !board.slots[slotId] || unavailable.has(board.slots[slotId]));
-    const planBill = brokenSlots.length ? null : evaluateSnakePlan({
+    const boardIsCanonical = isCanonicalSnakeBoard({
+      slots: board.slots,
+      candidates: boardEligibilityCandidates,
+    });
+    const planBill = brokenSlots.length || !boardIsCanonical ? null : evaluateSnakePlan({
       boardPlayerIds: Object.values(board.slots), players: deskPlayers, budget: pool.tierCap,
       baseCaps: pool.luxuryCaps, realTeamCount: leagueTeams.length, capIdentity: locked.capIdentity,
     });
@@ -723,7 +756,7 @@ export default function SnakeCompanion() {
       taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps }),
       advisorLog: brokenSlots.map((slotId) => ({ key: `broken:${slotId}`, text: `YOUR ${slotId} PLAN IS BROKEN — YOUR RANKING HAS NO AVAILABLE NAME.`, actionable: true })),
     };
-  }, [activePoolRows, board, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
+  }, [activePoolRows, board, boardEligibilityCandidates, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
 
   const defaultSelectedPlayerId = useMemo(() => {
     if (!board || !deskState) return null;
@@ -765,7 +798,7 @@ export default function SnakeCompanion() {
         })),
         versionState: session.versionState,
         versionSelections: session.snakeSetup?.versionSelections,
-        selectedPinPlayerId: assistantOptimizePlayerId === selectedCandidateId ? selectedCandidateId : null,
+        selectedPinPlayerId: assistantOptimizePlayerId,
         archetype: historical ? historicalToSimArchetype(historical) : { name: 'Balanced', rawShift: {} },
         ownBandPriorities: resolveLockedSeat({ team, session }).priorities,
         gmRankOverrides: board.rankings,
@@ -777,7 +810,7 @@ export default function SnakeCompanion() {
       },
       savedDesignSlots: team.rosterDesign?.slots,
     });
-  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, board, deskState, deviceCovered, league, leagueTeams.length, pool, selectedCandidateId, session, team]);
+  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, board, deskState, deviceCovered, league, leagueTeams.length, pool, session, team]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
   const consequencePlayers = useMemo(() => {
     const candidateById = new Map((deskState?.candidates ?? []).map((entry) => [entry.id, entry]));
@@ -792,7 +825,7 @@ export default function SnakeCompanion() {
     });
   }, [assistantLivePlayers, deskState?.candidates]);
   const selectedConsequence = useMemo<SelectedPlayerConsequence | null>(() => {
-    if (!assistantIdentity || !session || !pool || !team || !board || !deskState || selectedCandidateId === dismissedConsequencePlayerId) return null;
+    if (!assistantIdentity || !session || !pool || !team || !board || !deskState) return null;
     return buildSelectedPlayerConsequence({
       identity: assistantIdentity,
       selectedPlayerId: selectedCandidateId,
@@ -812,7 +845,7 @@ export default function SnakeCompanion() {
       realTeamCount: leagueTeams.length,
       capIdentity: resolveLockedSeat({ team, session }).capIdentity,
     });
-  }, [assistantIdentity, board, consequencePlayers, deskState, dismissedConsequencePlayerId, leagueTeams.length, pool, selectedCandidateId, session, team]);
+  }, [assistantIdentity, board, consequencePlayers, deskState, leagueTeams.length, pool, selectedCandidateId, session, team]);
 
   const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && selectedCandidateId
     ? rationalRiskState.risks?.find((row) => row.playerId === selectedCandidateId) ?? null
@@ -889,6 +922,12 @@ export default function SnakeCompanion() {
     guard: CompanionPrivateGuard,
   ): Promise<{ saved: LeagueBuilderMlbDraftSession; privateContextStillCurrent: boolean } | null> => {
     if (!session || !board || !team) return null;
+    if (!isCanonicalSnakeBoard({ slots: nextBoard.slots, candidates: boardEligibilityCandidates })) {
+      if (privateContextIsCurrent(guard)) {
+        setMessage('MY BOARD COULD NOT BE SAVED — THE RESULT IS NOT A LEGAL 22-PLAYER ROSTER.');
+      }
+      return null;
+    }
     try {
       await syncEngine.pull({ throwOnError: true });
       const saved = await patchApprovedCompanionSeatBoard({
@@ -921,7 +960,7 @@ export default function SnakeCompanion() {
       }
       return null;
     }
-  }, [board, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
+  }, [board, boardEligibilityCandidates, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
 
   const reorder = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!board || !deskState) return;
@@ -936,7 +975,9 @@ export default function SnakeCompanion() {
       unavailablePlayerIds: unavailable,
     });
     if (!reordered.board) {
-      setMessage(`MY BOARD COULD NOT REFIT — ${reordered.brokenSlots.join(', ')} HAS NO AVAILABLE PLAYER.`);
+      setMessage(reordered.invalidRoster
+        ? 'MY BOARD COULD NOT REFIT — THE RESULT IS NOT A LEGAL 22-PLAYER ROSTER.'
+        : `MY BOARD COULD NOT REFIT — ${reordered.brokenSlots.join(', ')} HAS NO AVAILABLE PLAYER.`);
       return;
     }
     const outcome = await saveBoard(reordered.board, null, guard);
@@ -983,7 +1024,6 @@ export default function SnakeCompanion() {
 
   const selectCandidate = useCallback((playerId: string) => {
     setAssistantOptimizePlayerId(null);
-    setDismissedConsequencePlayerId(null);
     setSelectedPlayerId(playerId);
   }, []);
 
@@ -1004,6 +1044,10 @@ export default function SnakeCompanion() {
       || board.revision !== previewIdentity.boardRevision) {
       setMessage(COMPANION_STALE_COPY);
       await refreshSession();
+      return;
+    }
+    if (!isCanonicalSnakeBoard({ slots: selectedConsequence.board.slots, candidates: boardEligibilityCandidates })) {
+      setMessage('MY BOARD COULD NOT BE SAVED — THE RESULT IS NOT A LEGAL 22-PLAYER ROSTER.');
       return;
     }
     try {
@@ -1035,14 +1079,13 @@ export default function SnakeCompanion() {
         return;
       }
       setSession(saved);
-      setDismissedConsequencePlayerId(null);
     } catch {
       if (privateContextIsCurrent(guard)) {
         setMessage(COMPANION_STALE_COPY);
         await refreshSession();
       }
     }
-  }, [board, capturePrivateContext, getMlbDraftSession, ownDeviceId, privateContextIsCurrent, refreshSession, selectedConsequence, session, team]);
+  }, [board, boardEligibilityCandidates, capturePrivateContext, getMlbDraftSession, ownDeviceId, privateContextIsCurrent, refreshSession, selectedConsequence, session, team]);
 
   const pickValueChart = useMemo(() => derivePickValueChart(
     activePoolRows.map((row) => row.iv),
@@ -1217,11 +1260,10 @@ export default function SnakeCompanion() {
       teamLogoUrl={safeCompanionLogoUrl(team.logoUrl) ?? undefined}
       teamName={team.name}
       onOptimizeAround={() => {
-        setDismissedConsequencePlayerId(null);
         setAssistantOptimizePlayerId(selectedCandidateId);
+        setAssistantOptimizeRevision((revision) => revision + 1);
       }}
       onKeep={() => { void keepSelectedConsequence(); }}
-      onRevert={() => setDismissedConsequencePlayerId(selectedCandidateId)}
       decision={draftDecision}
       onTradeDecision={prefillTradeDecision}
     /> : undefined}
@@ -1263,6 +1305,12 @@ export default function SnakeCompanion() {
       taxCoreRows={deskState.taxCoreRows}
       slotDepth={deskState.slotDepth}
       assistantBoard={assistantBoardState}
+      assistantOptimizationKey={assistantOptimizePlayerId
+        ? `${currentPrivateScopeKey ?? team.id}:${assistantOptimizePlayerId}:${assistantOptimizeRevision}`
+        : null}
+      assistantOptimizationLabel={assistantOptimizePlayerId
+        ? `OPTIMIZED FOR ${deskState.candidates.find((entry) => entry.id === assistantOptimizePlayerId)?.name ?? 'SELECTED PLAYER'}`
+        : null}
       privateScopeKey={currentPrivateScopeKey ?? undefined}
       tradePrefillKey={activeGuidePrefill?.key ?? null}
       showHelp={showHelp}

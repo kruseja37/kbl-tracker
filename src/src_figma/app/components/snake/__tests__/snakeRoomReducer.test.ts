@@ -10,7 +10,7 @@ function run(events: SnakeRoomEvent[]) {
   return events.reduce(snakeRoomReducer, createSnakeRoomState());
 }
 
-const recordedPick = { playerId: 'p1', playerName: 'Sam Slugger', teamId: 'a', teamName: 'Kodiaks' };
+const recordedPick = { pick: 1, playerId: 'p1', playerName: 'Sam Slugger', teamId: 'a', teamName: 'Kodiaks' };
 
 describe('snakeRoomReducer', () => {
   it('keeps REVIEW, ARM, ANNOUNCE, RECORDED, and CORRECTION separate', () => {

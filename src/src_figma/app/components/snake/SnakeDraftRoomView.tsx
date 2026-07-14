@@ -51,6 +51,7 @@ export interface SnakeReviewCandidate {
 export interface SnakeDraftRoomViewProps {
   teams: readonly SnakeRoomTeam[];
   order: readonly SnakeRoomOrderSlot[];
+  totalPickCount?: number;
   currentPickIndex: number;
   ticker: readonly SnakeTickerItem[];
   rostersByTeamId: Readonly<Record<string, readonly SnakePublicRosterPlayer[]>>;
@@ -85,7 +86,7 @@ export interface SnakeDraftRoomViewProps {
   onPauseChange: (paused: boolean) => void | Promise<void>;
   onPracticeFastForwardChange?: (enabled: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
-  onCorrectLatest: () => void | Promise<void>;
+  onCorrectLatest?: () => void | Promise<void>;
   onSoundsEnabledChange: (enabled: boolean) => void;
   onPrivateSeatRevealedChange?: (revealed: boolean) => void;
   onActiveSeatChange?: (teamId: string) => void;
@@ -126,7 +127,6 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const completedHold = useRef(false);
   const completionRequested = useRef(false);
   const lastHotseatCoverPick = useRef<number | null>(initialHotseatCover ? props.currentPickIndex : null);
-  const selectedPlayerRef = useRef<HTMLDivElement | null>(null);
   const armedCandidate = useRef<SnakeReviewCandidate | null>(null);
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
@@ -137,6 +137,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const activeSeatTeam = props.teams.find((team) => team.id === props.activeSeatId);
   const activeSeatBrand = companionTeamBranding(activeSeatTeam?.colors);
   const lensBrand = companionTeamBranding(lensTeam?.colors);
+  const farmMode = props.draftActionLabel === 'DRAFT PROSPECT';
   const activeSeatOnClock = Boolean(props.activeSeatId && currentOrder?.teamId === props.activeSeatId);
   const draftComplete = props.currentPickIndex >= props.order.length;
   const orderWindow = useMemo(() => {
@@ -220,11 +221,6 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     }
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
   }, [coverPrivateSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
-
-  useEffect(() => {
-    if (!revealed || !props.candidate?.id) return;
-    selectedPlayerRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-  }, [props.candidate?.id, revealed]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
@@ -323,6 +319,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       if (liveState.paused || liveState.phase !== 'ANNOUNCE' || props.paused) return;
       completedHold.current = true;
       const recordedPick = {
+        pick: currentOrder?.pick ?? props.currentPickIndex + 1,
         playerId: frozenCandidate.id,
         playerName: frozenCandidate.name,
         teamId: currentTeam?.id ?? currentOrder?.teamId ?? '',
@@ -349,6 +346,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   };
 
   const correctLatest = async () => {
+    if (!props.onCorrectLatest) return;
     try {
       await props.onCorrectLatest();
       dispatch({ type: 'CORRECTION_DONE' });
@@ -372,10 +370,46 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   ) : props.candidate?.blockReason ? (
     <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-warn-border)] px-3 text-xs font-black text-[var(--ballpark-warn-text)]">BLOCKED</span>
   ) : null;
+  const selectedPlayerAction = props.candidate ? (
+    <div data-testid="selected-player-action">
+      {props.consolidatedMlb ? (
+        typeof props.selectedPlayerCard === 'function'
+          ? props.selectedPlayerCard(draftControl)
+          : props.selectedPlayerCard ?? <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
+              <h2 className="break-words text-xl font-black uppercase">{props.candidate.name}</h2>
+              <p className="text-xs font-bold">{props.candidate.position}{props.selectedFitLabel ? ` · ${props.selectedFitLabel}` : ''}</p>
+              <p className="mt-3 font-bold">{props.candidate.consequence}</p>
+              <div className="mt-3">{draftControl}</div>
+            </section>
+      ) : <>
+        <div className="mb-3 flex min-h-11 flex-wrap items-center justify-between gap-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-action-header">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED</p>
+            <h2 className="break-words text-xl font-black uppercase leading-tight">{props.candidate.name}</h2>
+            <p className="text-xs font-bold">{props.candidate.position}{props.selectedFitLabel ? ` · ${props.selectedFitLabel}` : ''}</p>
+          </div>
+          {draftControl}
+        </div>
+        {props.selectedPlayerCard ?? <>
+        <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
+        <h2 className="mt-1 text-2xl font-bold">{props.candidate.name}</h2>
+        <p className="mb-3 text-sm">{props.candidate.position}</p>
+      {props.candidateProfile ? (
+        <PlayerProfilePopover player={props.candidateProfile} revealFull={true}>
+          <span className="ballpark-press-button ballpark-press-sm ballpark-press-default mb-3">VIEW FULL PROFILE</span>
+        </PlayerProfilePopover>
+      ) : null}</>}
+        <p className={`mb-3 border-4 p-3 font-bold ${props.candidate.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>
+          {props.candidate.consequence}
+        </p>
+        {props.candidate.privateNote ? <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p> : null}
+      </>}
+    </div>
+  ) : <p className="mb-3 font-bold">OPEN YOUR BOARD AND CHOOSE A PLAYER.</p>;
 
   return (
     <main
-      className="ballpark-page min-h-screen min-w-0 overflow-x-hidden"
+      className="ballpark-page min-h-screen min-w-0 overflow-x-clip overflow-y-visible"
       data-testid="snake-draft-room"
       onPointerDownCapture={() => {
         if (props.practiceMode && props.practiceFastForward) props.onPracticeFastForwardChange?.(false);
@@ -410,7 +444,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             aria-pressed={Boolean(props.practiceFastForward)}
             onClick={() => props.onPracticeFastForwardChange?.(!props.practiceFastForward)}
           >{props.practiceFastForward ? 'FAST FORWARD ON' : 'FAST FORWARD'}</button> : null}
-          {(!props.consolidatedMlb || props.correctionAvailable) ? <button
+          {props.onCorrectLatest && (!props.consolidatedMlb || props.correctionAvailable) ? <button
             className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
             disabled={!props.correctionAvailable}
             onClick={() => dispatch({ type: 'OPEN_CORRECTION', available: props.correctionAvailable })}
@@ -456,7 +490,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       <section className="mb-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" aria-label="Draft order">
         <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-black tracking-[0.12em] text-[var(--ballpark-brass)]">
           <span>LIVE PICK WINDOW</span>
-          <span>{orderWindow.length ? `PICKS ${orderWindow[0].slot.pick}–${orderWindow.at(-1)!.slot.pick} OF ${props.order.length}` : 'NO PICKS'}</span>
+          <span>{orderWindow.length ? `PICKS ${orderWindow[0].slot.pick}–${orderWindow.at(-1)!.slot.pick} OF ${props.totalPickCount ?? props.order.length}` : 'NO PICKS'}</span>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
           {orderWindow.map(({ slot, index }) => {
@@ -493,8 +527,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
         </div>
       </section>
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(340px,38vw)]" data-testid="room-layout">
-        <section className="ballpark-panel min-w-0 overflow-hidden" aria-label="Private seat">
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,30vw)]" data-testid="room-layout">
+        <section className="ballpark-panel min-w-0 overflow-x-clip overflow-y-visible" aria-label="Private seat">
           <div
             className="ballpark-panel-strip sticky top-0 z-20 mb-3 flex min-h-11 items-center justify-between gap-3"
             style={{ backgroundColor: activeSeatBrand.primary, color: activeSeatBrand.foreground, borderColor: activeSeatBrand.border }}
@@ -526,45 +560,19 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               <p className="mt-2 font-bold">THE BOARD IS CLOSED. CORRECT THE LAST ACTION OR RETURN TO THE RECAP.</p>
             </div>
           ) : !props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : revealed && !effectivePendingSeatId ? (
-            <div>
-              {props.candidate ? (
-                <div ref={selectedPlayerRef} data-testid="selected-player-action">
-                  {props.consolidatedMlb ? (
-                    typeof props.selectedPlayerCard === 'function'
-                      ? props.selectedPlayerCard(draftControl)
-                      : props.selectedPlayerCard ?? <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
-                          <h2 className="break-words text-xl font-black uppercase">{props.candidate.name}</h2>
-                          <p className="text-xs font-bold">{props.candidate.position}{props.selectedFitLabel ? ` · ${props.selectedFitLabel}` : ''}</p>
-                          <p className="mt-3 font-bold">{props.candidate.consequence}</p>
-                          <div className="mt-3">{draftControl}</div>
-                        </section>
-                  ) : <>
-                    <div className="mb-3 flex min-h-11 flex-wrap items-center justify-between gap-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-action-header">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED</p>
-                        <h2 className="break-words text-xl font-black uppercase leading-tight">{props.candidate.name}</h2>
-                        <p className="text-xs font-bold">{props.candidate.position}{props.selectedFitLabel ? ` · ${props.selectedFitLabel}` : ''}</p>
-                      </div>
-                      {draftControl}
-                    </div>
-                    {props.selectedPlayerCard ?? <>
-                    <p className="text-xs font-bold text-[var(--ballpark-brass)]">READ THE PICK</p>
-                    <h2 className="mt-1 text-2xl font-bold">{props.candidate.name}</h2>
-                    <p className="mb-3 text-sm">{props.candidate.position}</p>
-                  {props.candidateProfile ? (
-                    <PlayerProfilePopover player={props.candidateProfile} revealFull={true}>
-                      <span className="ballpark-press-button ballpark-press-sm ballpark-press-default mb-3">VIEW FULL PROFILE</span>
-                    </PlayerProfilePopover>
-                  ) : null}</>}
-                    <p className={`mb-3 border-4 p-3 font-bold ${props.candidate.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>
-                      {props.candidate.consequence}
-                    </p>
-                    {props.candidate.privateNote ? <p className="mb-3 text-sm font-bold">{props.candidate.privateNote}</p> : null}
-                  </>}
+            props.consolidatedMlb ? (
+              <div
+                className="grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+                data-testid="private-workspace-layout"
+              >
+                <div className="sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:top-20 lg:max-h-[calc(100vh-22rem)]" data-testid="selected-player-pane">
+                  {selectedPlayerAction}
                 </div>
-              ) : <p className="mb-3 font-bold">OPEN YOUR BOARD AND CHOOSE A PLAYER.</p>}
-              {renderHelpAware(props.privateDesk)}
-            </div>
+                <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none] lg:h-full" data-testid="private-workspace-scroll">
+                  {renderHelpAware(props.privateDesk)}
+                </div>
+              </div>
+            ) : <div>{selectedPlayerAction}{renderHelpAware(props.privateDesk)}</div>
           ) : (
             <button className="ballpark-press-button ballpark-press-md ballpark-press-default min-h-11" onClick={revealSeat}>
               <Eye size={15} /> REVEAL {teamName(props.teams.find((team) => team.id === props.activeSeatId)).toUpperCase()} SEAT
@@ -572,11 +580,11 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           )}
         </section>
 
-        <aside className="space-y-5 self-start lg:sticky lg:top-4">
+        <aside className="space-y-5 self-start xl:sticky xl:top-4">
           <section className="ballpark-panel" aria-label="Draft ritual">
           <div className="ballpark-panel-strip">
             <span className="font-bold">{state.phase}</span>
-            <span className="text-sm">PICK {currentOrder?.pick ?? '—'} · {state.recordedPick?.teamName ?? teamName(currentTeam)}</span>
+            <span className="text-sm">PICK {state.phase === 'RECORDED' ? state.recordedPick?.pick ?? '—' : currentOrder?.pick ?? '—'} · {state.recordedPick?.teamName ?? teamName(currentTeam)}</span>
           </div>
 
           {state.phase === 'REVIEW' && draftComplete && (
@@ -650,7 +658,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           {state.phase === 'CORRECTION' && (
             <div className="py-4 text-center">
               <h2 className="mb-3 text-lg font-bold">UNDO THE MOST RECENT ACTION?</h2>
-              <p className="mb-5">ONLY THE LATEST PICK OR TRADE CAN BE UNDONE.</p>
+              <p className="mb-5">{farmMode ? 'ONLY THE LATEST PICK CAN BE UNDONE.' : 'ONLY THE LATEST PICK OR TRADE CAN BE UNDONE.'}</p>
               <button className="ballpark-press-button ballpark-press-lg ballpark-press-destruct min-h-11" onClick={() => void correctLatest()}>UNDO LAST ACTION</button>
             </div>
           )}
@@ -682,7 +690,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
               {(lensId ? props.rostersByTeamId[lensId] : [])?.map((player) => <li key={player.id}>{player.position} · {player.name}</li>)}
               {(lensId ? props.rostersByTeamId[lensId] : [])?.length === 0 && <li>NO PICKS RECORDED YET.</li>}
             </ul>
-            <p className="text-xs font-bold text-[var(--ballpark-brass)]">OWNED, TRADEABLE PICKS</p>
+            <p className="text-xs font-bold text-[var(--ballpark-brass)]">{farmMode ? 'REMAINING PICKS' : 'OWNED, TRADEABLE PICKS'}</p>
             <p>{(lensId ? props.ownedPicksByTeamId[lensId] : [])?.join(', ') || 'NONE'}</p>
           </section>
         </aside>

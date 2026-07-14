@@ -152,4 +152,70 @@ describe('snake manifest inbound sync preflight', () => {
       proposedSession: { ...farmSession, farmProspectSnapshot: [{ id: 'prospect-1', name: 'Changed' }] },
     })).toThrow('frozen farm prospect snapshot');
   });
+
+  test('rejects inbound FARM trades and open offers while leaving MLB trade rows valid', () => {
+    expect(() => assertSnakeDraftSessionInboundInvariant({
+      currentSession: null,
+      proposedSession: { leagueId: 'league', draftPhase: 'FARM', trades: [{}] },
+    })).toThrow(/cannot add pick trades.*FARM/i);
+    expect(() => assertSnakeDraftSessionInboundInvariant({
+      currentSession: null,
+      proposedSession: { leagueId: 'league', draftPhase: 'FARM', openTradeOffers: [{}] },
+    })).toThrow(/cannot add pick trades.*FARM/i);
+    expect(() => assertSnakeDraftSessionInboundInvariant({
+      currentSession: null,
+      proposedSession: { leagueId: 'league', draftPhase: 'MLB', trades: [{}], openTradeOffers: [{}] },
+    })).not.toThrow();
+  });
+
+  test('rejects FARM phase erasure and every frozen creation-envelope mutation', () => {
+    const current = {
+      leagueId: 'league', seasonNumber: 2, draftPhase: 'FARM',
+      seed: 'farm-seed', workflowVersion: 'snake-v1-farm', engineMethodVersion: 'snake-s6',
+      tier: 'standard', balanceMode: 'taxed', rounds: 10,
+      pickOrder: [{ round: 1, pick: 1, teamId: 'team-1' }],
+      farmSlotSalaries: [75_000],
+      farmProspectSnapshot: [{ id: 'prospect-1', name: 'One' }],
+      snakeSetup: {
+        poolPlayerIds: ['prospect-1'], versionSelections: {}, orderSeed: 'farm-order',
+        clubs: [{ teamId: 'team-1', hotseat: true, archetypeId: 'farm-balanced' }],
+      },
+      completedPicks: [], currentPickIndex: 0, revision: 0,
+    };
+    const phaseErased = { ...current, draftPhase: undefined, trades: [{}] };
+    expect(() => assertSnakeDraftSessionInboundInvariant({
+      currentSession: current,
+      proposedSession: phaseErased,
+    })).toThrow(/phase cannot be removed|pick trades.*FARM/i);
+
+    const mutations = [
+      { ...current, seed: 'changed' },
+      { ...current, workflowVersion: 'changed' },
+      { ...current, engineMethodVersion: 'changed' },
+      { ...current, tier: 'juiced' },
+      { ...current, balanceMode: 'off' },
+      { ...current, rounds: 9 },
+      { ...current, pickOrder: [{ round: 1, pick: 1, teamId: 'other' }] },
+      { ...current, farmSlotSalaries: [1_000] },
+      { ...current, farmProspectSnapshot: [{ id: 'prospect-1', name: 'Changed' }] },
+      { ...current, snakeSetup: { ...current.snakeSetup, poolPlayerIds: ['replacement'] } },
+      { ...current, snakeSetup: { ...current.snakeSetup, clubs: [{ teamId: 'other', hotseat: true }] } },
+    ];
+    for (const proposedSession of mutations) {
+      expect(() => assertSnakeDraftSessionInboundInvariant({
+        currentSession: current,
+        proposedSession,
+      })).toThrow(/frozen FARM creation envelope|frozen farm prospect snapshot/i);
+    }
+
+    expect(() => assertSnakeDraftSessionInboundInvariant({
+      currentSession: current,
+      proposedSession: {
+        ...current,
+        completedPicks: [{ round: 1, pick: 1, teamId: 'team-1', playerId: 'prospect-1' }],
+        currentPickIndex: 1,
+        revision: 1,
+      },
+    })).not.toThrow();
+  });
 });

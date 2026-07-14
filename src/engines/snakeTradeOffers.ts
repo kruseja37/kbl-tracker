@@ -1,8 +1,9 @@
 import type { SnakeGuidePackage } from './snakeGuideTrade';
-import type {
-  LeagueBuilderMlbDraftSession,
-  SnakeOpenTradeOffer,
-  SnakeRoomLogRecord,
+import {
+  FARM_SNAKE_SESSION_NUMBER,
+  type LeagueBuilderMlbDraftSession,
+  type SnakeOpenTradeOffer,
+  type SnakeRoomLogRecord,
 } from '../utils/leagueBuilderStorage';
 
 function pairKey(left: string, right: string): string {
@@ -13,12 +14,25 @@ function nextRevision(session: LeagueBuilderMlbDraftSession): number {
   return (session.revision ?? 0) + 1;
 }
 
+function assertMlbTradeOfferSession(
+  session: LeagueBuilderMlbDraftSession,
+  offer?: Pick<SnakeOpenTradeOffer, 'phase'>,
+): void {
+  if (
+    session.seasonNumber === FARM_SNAKE_SESSION_NUMBER
+    || session.draftPhase === 'FARM'
+    || session.draftManifest?.phase === 'FARM'
+    || offer?.phase === 'FARM'
+  ) throw new Error('FARM snake sessions do not allow pick trades.');
+}
+
 export function postSnakeTradeOffer(input: {
   session: LeagueBuilderMlbDraftSession;
-  phase: 'MLB' | 'FARM';
+  phase: 'MLB';
   proposal: SnakeGuidePackage;
   postedAt: string;
 }): LeagueBuilderMlbDraftSession {
+  assertMlbTradeOfferSession(input.session, { phase: input.phase });
   if (!Number.isFinite(input.proposal.sellerPremium)) {
     throw new Error('THIS PACKAGE NO LONGER MATCHES THE POSTED GUIDE.');
   }
@@ -56,6 +70,7 @@ export function nodSnakeTradeOffer(
 ): LeagueBuilderMlbDraftSession {
   const offer = session.openTradeOffers?.find((row) => row.id === offerId);
   if (!offer) throw new Error('THAT OFFER IS NO LONGER OPEN.');
+  assertMlbTradeOfferSession(session, offer);
   if (teamId !== offer.buyerTeamId && teamId !== offer.sellerTeamId) {
     throw new Error('ONLY THE TWO CLUBS IN THIS OFFER CAN NOD.');
   }
@@ -73,12 +88,15 @@ export function closeSnakeTradeOffer(
   session: LeagueBuilderMlbDraftSession,
   offerId: string,
 ): LeagueBuilderMlbDraftSession {
-  if (!session.openTradeOffers?.some((row) => row.id === offerId)) {
+  const offers = session.openTradeOffers;
+  const offer = offers?.find((row) => row.id === offerId);
+  if (!offer) {
     throw new Error('THAT OFFER IS NO LONGER OPEN.');
   }
+  assertMlbTradeOfferSession(session, offer);
   return {
     ...session,
-    openTradeOffers: session.openTradeOffers.filter((row) => row.id !== offerId),
+    openTradeOffers: offers!.filter((row) => row.id !== offerId),
     revision: nextRevision(session),
   };
 }
@@ -87,6 +105,7 @@ export function proposalFromOpenSnakeOffer(
   session: LeagueBuilderMlbDraftSession,
   offer: SnakeOpenTradeOffer,
 ): SnakeGuidePackage {
+  assertMlbTradeOfferSession(session, offer);
   if (!offer.buyerNod || !offer.sellerNod) throw new Error('BOTH CLUBS MUST NOD BEFORE THE COMMISSIONER CAN EXECUTE.');
   if (!Number.isFinite(offer.sellerPremium)) throw new Error('THIS OFFER HAS NO AUTHORITATIVE SELLER PREMIUM.');
   return {

@@ -20,10 +20,8 @@ import {
 } from '../../engines/leagueConstruction';
 import {
   createFarmSnakeSession,
-  executeFarmGuidePackage,
   FARM_SNAKE_SESSION_NUMBER,
   farmPickSalary,
-  searchFarmGuidePackage,
 } from '../../engines/snakeFarmSlots';
 import { executeSnakeGuidePackage, searchSnakeGuidePackage } from '../../engines/snakeGuideTrade';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../engines/snakeSession';
@@ -63,6 +61,7 @@ import {
   getScoutProfilesForLeague,
   getTeamRoster,
   markSnakeRosterHandoff,
+  recoverCanonicalMlbSnakePickOrder,
   saveLeagueTemplate,
   saveMlbDraftSession,
   savePlayer,
@@ -529,42 +528,20 @@ describe('S7 snake draft to season closing gauntlet', () => {
 
     let farmSession = await saveMlbDraftSession(createFarmSnakeSession({
       mlbSession,
-      teamOrder: mlbSession.pickOrder.slice(0, TEAM_IDS.length).map((slot) => slot.teamId),
+      teamOrder: recoverCanonicalMlbSnakePickOrder(mlbSession)
+        .filter((slot) => slot.round === 1)
+        .map((slot) => slot.teamId),
       existingFarmRosterCountsByTeamId: Object.fromEntries(TEAM_IDS.map((teamId) => [teamId, 0])),
       farmBudgetsByTeamId,
       farmArchetypeIdByTeamId: Object.fromEntries(teams.map((team) => [team.id, team.farmArchetypeKey])),
       prospectIds: farmPool.prospects.map((prospect) => prospect.id),
       prospects: farmPool.prospects,
       now: '2026-07-10T00:00:00.000Z',
-    }));
+    }), { phaseTransition: 'MLB_TO_FARM' });
     expect(farmSession.id).not.toBe(mlbSession.id);
     expect((await getMlbDraftSession(LEAGUE_ID, 1))?.completedPicks).toHaveLength(176);
-
-    let farmTrade = null as ReturnType<typeof searchFarmGuidePackage>['package'];
-    for (const target of farmSession.pickOrder.slice(0, TEAM_IDS.length)) {
-      const buyer = farmSession.pickOrder.slice(0, TEAM_IDS.length)
-        .find((slot) => slot.teamId !== target.teamId)?.teamId;
-      if (!buyer) continue;
-      farmTrade = searchFarmGuidePackage({
-        session: farmSession,
-        buyerTeamId: buyer,
-        targetPick: target.pick,
-        farmBudgetsByTeamId,
-        remainingUniqueProspects: farmPool.prospects.length,
-      }).package;
-      if (farmTrade) break;
-    }
-    expect(farmTrade).not.toBeNull();
-    const farmTradeResult = executeFarmGuidePackage({
-      session: farmSession,
-      proposal: farmTrade!,
-      farmBudgetsByTeamId,
-      remainingUniqueProspects: farmPool.prospects.length,
-    });
-    expect(farmTradeResult.valid).toBe(true);
-    farmSession = await saveMlbDraftSession(farmTradeResult.session!);
-    farmSession = (await getMlbDraftSession(LEAGUE_ID, FARM_SNAKE_SESSION_NUMBER))!;
-    expect(farmSession.trades).toHaveLength(1);
+    expect(farmSession.trades).toEqual([]);
+    expect(farmSession.openTradeOffers ?? []).toEqual([]);
 
     const farmIdentities = farmPool.prospects.map((prospect) => ({
       playerId: prospect.id,
@@ -661,14 +638,16 @@ describe('S7 snake draft to season closing gauntlet', () => {
       completedPicks: [],
       workflowVersion: 'mutated-after-freeze',
     });
-    await saveMlbDraftSession({
+    const farmBytesBeforeRejectedMutation = JSON.stringify(farmSession);
+    await expect(saveMlbDraftSession({
       ...farmSession,
-      draftPhase: 'MLB',
       currentPickIndex: 0,
       pickOrder: [],
       completedPicks: [],
       farmSlotSalaries: [],
-    });
+    })).rejects.toThrow(/frozen FARM creation envelope/i);
+    expect(JSON.stringify(await getMlbDraftSession(LEAGUE_ID, FARM_SNAKE_SESSION_NUMBER)))
+      .toBe(farmBytesBeforeRejectedMutation);
 
     const franchiseId = await initializeFranchise(franchiseConfig());
     CREATED_FRANCHISE_IDS.push(franchiseId);

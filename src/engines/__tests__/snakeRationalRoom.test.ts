@@ -1,10 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
+import type { LuxuryCapRow } from '../../data/tierParams';
 import {
   applyCanonicalSnakeRiskTriggers,
   computeSnakeScarcity,
   playSnakeRationalRoom,
+  playSnakeRationalRoomProgressively,
   type PlaySnakeRationalRoomInput,
   type SnakeRationalPlayer,
   type SnakeRationalSeat,
@@ -112,6 +114,77 @@ function withShapes(prefix: string, mutate: (shape: RosterSlotPlayer, index: num
 }
 
 describe('deterministic rational-room ensemble', () => {
+  test('emits one exact decision and continues scarcity from the same proof and ensemble', () => {
+    const cloneSpy = vi.spyOn(globalThis, 'structuredClone');
+    const onDecision = vi.fn();
+    try {
+      const result = playSnakeRationalRoomProgressively(room(), onDecision);
+      expect(result.status).toBe('ready');
+      expect(onDecision).toHaveBeenCalledTimes(1);
+      const decision = onDecision.mock.calls[0][0];
+      expect(decision).toEqual(expect.objectContaining({ status: 'ready', scarcity: [] }));
+      expect(result.scenarios).toBe(decision.scenarios);
+      expect(result.risks).toBe(decision.risks);
+      expect(cloneSpy).toHaveBeenCalledTimes(1);
+      expect(result.scarcity.length).toBeGreaterThan(0);
+      const allNumbersFinite = (value: unknown): boolean => {
+        if (typeof value === 'number') return Number.isFinite(value);
+        if (Array.isArray(value)) return value.every(allNumbersFinite);
+        if (value && typeof value === 'object') return Object.values(value).every(allNumbersFinite);
+        return true;
+      };
+      expect(allNumbersFinite(result.scarcity)).toBe(true);
+    } finally {
+      cloneSpy.mockRestore();
+    }
+  });
+
+  test('preserves a negative TAXSWING marginal when the fourth pure starter demotes an elite swing arm', () => {
+    const taxCaps: LuxuryCapRow[] = (['VEL', 'JNK', 'ACC'] as const).flatMap((stat) => [
+      { group: 'rotation', stat, topN: 4, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+      { group: 'bullpen', stat, topN: 4, cap: 10_000, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+    ]);
+    const taxRoster = (prefix: string) => legalTwentyOne(prefix).map((player, index) => {
+      if (index < 13 || index > 16) return player;
+      const role = index === 16 ? 'SP/RP' : 'SP';
+      const rating = index === 13 ? 40 : index === 14 ? 50 : index === 15 ? 60 : 99;
+      const shape = { isPitcher: true, position: role, role } as RosterSlotPlayer;
+      return { ...player, shape, construction: construction(player.playerId, shape, rating) };
+    });
+    const fourthStarterShape = { isPitcher: true, position: 'SP', role: 'SP' } as const;
+    const taxLowering = {
+      ...candidate({ id: 'tax-lowering-fourth-sp', worth: 50, shape: fourthStarterShape }),
+      construction: construction('tax-lowering-fourth-sp', fourthStarterShape, 10),
+    };
+    const higherWorthSwing = candidate({
+      id: 'higher-worth-swing',
+      worth: 100,
+      shape: { isPitcher: true, position: 'SP/RP', role: 'SP/RP' },
+    });
+    const result = playSnakeRationalRoom(room({
+      pickOrder: [
+        { pick: 1, teamId: 'asker' },
+        { pick: 2, teamId: 'rival-z' },
+        { pick: 3, teamId: 'asker' },
+      ],
+      askedPlayerIds: [taxLowering.playerId, higherWorthSwing.playerId],
+      players: [taxLowering, higherWorthSwing],
+      seats: [
+        seat('asker', taxRoster('asker-tax'), 10_000),
+        seat('rival-z', taxRoster('rival-tax'), 10_000),
+      ],
+      baseCaps: taxCaps,
+      realTeamCount: 2,
+      includeScarcity: false,
+    }));
+
+    expect(result.status).toBe('ready');
+    expect(result.scenarios[0].picks[0]).toEqual(expect.objectContaining({
+      playerId: taxLowering.playerId,
+    }));
+    expect(result.scenarios[0].picks[0].interest).toBeGreaterThan(higherWorthSwing.worth);
+  });
+
   test('classifies all, mixed, and no-selection outcomes with stable ranges and unique clubs', () => {
     const result = playSnakeRationalRoom(room());
 

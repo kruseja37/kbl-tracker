@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   commitFarm: vi.fn(),
   saveRoom: vi.fn(async (session: unknown) => session),
   markHandoff: vi.fn(),
+  pull: vi.fn(async () => undefined),
+  refresh: vi.fn(async () => undefined),
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
@@ -18,6 +20,7 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
 });
 
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
+vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
 vi.mock('../../utils/snakeSounds', () => ({
   loadSnakeSoundsEnabled: () => false,
   saveSnakeSoundsEnabled: vi.fn(),
@@ -39,6 +42,12 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
+    getAllLeagueTemplates: vi.fn(async () => mocks.data.leagues ?? []),
+    getAllTeams: vi.fn(async () => mocks.data.teams ?? []),
+    getAllPlayers: vi.fn(async () => mocks.data.players ?? []),
+    getTeamRoster: vi.fn(async (teamId: string) => (
+      (mocks.data.getRoster as ((teamId: string) => Promise<unknown>) | undefined)?.(teamId) ?? null
+    )),
     getScoutProfilesForLeague: vi.fn(async () => [
       { id: 'scout-a', leagueId: 'completion-league', teamId: 'a', name: 'Kodiaks Eyes', specialties: [], weaknesses: [] },
       { id: 'scout-b', leagueId: 'completion-league', teamId: 'b', name: 'Comets Eyes', specialties: [], weaknesses: [] },
@@ -104,6 +113,12 @@ function completedSession(phase: 'MLB' | 'FARM'): LeagueBuilderMlbDraftSession {
         ],
     currentPickIndex: 2, trades: [], revision: 2,
     farmSlotSalaries: phase === 'FARM' ? [30_000, 20_000] : undefined,
+    snakeSetup: {
+      poolPlayerIds: phase === 'FARM' ? ['f1', 'f2'] : ['p1', 'p2'],
+      versionSelections: {},
+      clubs: [{ teamId: 'a', hotseat: true }, { teamId: 'b', hotseat: true }],
+      orderSeed: 'complete-seed',
+    },
     createdDate: '2026-01-01', lastModified: '2026-01-01',
   } as LeagueBuilderMlbDraftSession;
 }
@@ -125,6 +140,7 @@ function setMlbData(session = completedSession('MLB')) {
     leagues: [league], teams, players, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => pool), getMlbDraftSession: vi.fn(async () => mocks.lastSaved ?? session),
     saveMlbDraftSession: vi.fn(async (next) => next), getRoster: vi.fn(async () => ({ teamId: 'a', mlbRoster: [], farmRoster: [] })),
+    refresh: mocks.refresh,
   };
   return session;
 }
@@ -151,12 +167,15 @@ function setFarmData(session = completedSession('FARM')) {
     leagues: [league], teams, players: [], isLoading: false, error: null,
     getMlbDraftSession: vi.fn(async (_leagueId: string, seasonNumber: number) => seasonNumber === 2 ? mocks.lastSaved ?? storedFarm : handedOffMlb),
     saveMlbDraftSession: vi.fn(async (next) => next), getRoster: vi.fn(async (teamId: string) => ({ teamId, mlbRoster: [], farmRoster: [] })),
+    refresh: mocks.refresh,
   };
   return storedFarm;
 }
 
 describe('snake draft durable completion and recap', () => {
   beforeEach(() => {
+    mocks.pull.mockReset().mockResolvedValue(undefined);
+    mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.commitMlb.mockReset().mockResolvedValue(undefined);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
     mocks.lastSaved = null;
@@ -176,6 +195,7 @@ describe('snake draft durable completion and recap', () => {
     const session = setMlbData();
     renderRoom(`/snake-room?leagueId=${league.id}`);
     expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' })).toBeInTheDocument();
+    expect(mocks.pull).toHaveBeenCalledWith({ throwOnError: true });
     expect(screen.queryByText('KODIAKS IS REVIEWING THE BOARD')).not.toBeInTheDocument();
     expect(screen.getByText('MARA DIAZ')).toBeInTheDocument();
     expect(screen.getAllByText('$100,000').length).toBeGreaterThan(0);

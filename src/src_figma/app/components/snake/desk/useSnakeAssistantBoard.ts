@@ -251,7 +251,7 @@ function validReadyBoard(value: unknown, request: SnakeAssistantBoardRequest): v
     && readyBoardMatchesRequest(board, request);
 }
 
-function validWorkerResponse(
+export function validSnakeAssistantBoardWorkerResponse(
   value: unknown,
   request: SnakeAssistantBoardRequest,
 ): value is SnakeAssistantBoardWorkerResponse {
@@ -338,13 +338,13 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
     worker.onmessage = (event: MessageEvent<SnakeAssistantBoardWorkerResponse>) => {
       if (!active) return;
       if (baselineRequest && event.data.key === baselineRequest.key) {
-        settleBaseline(validWorkerResponse(event.data, baselineRequest)
+        settleBaseline(validSnakeAssistantBoardWorkerResponse(event.data, baselineRequest)
           && event.data.result.status === 'ready');
         return;
       }
       if (event.data.key !== requestKey) return;
       pinnedSettled = true;
-      if (!validWorkerResponse(event.data, current)) {
+      if (!validSnakeAssistantBoardWorkerResponse(event.data, current)) {
         fail();
         return;
       }

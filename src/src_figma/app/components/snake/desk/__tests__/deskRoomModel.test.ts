@@ -5,9 +5,11 @@ import type { SnakeSeatingPlayer } from '../../../../../../engines/snakeSeatingP
 import type {
   LeagueBuilderMlbDraftSession,
   Player,
+  SnakeBoardSlotId,
   SnakeSeatBoardRecord,
   Team,
 } from '../../../../../../utils/leagueBuilderStorage';
+import type { DeskEligibilityCandidate } from '../deskModel';
 import {
   buildDeskRoomPlayer,
   buildRationalSeats,
@@ -117,10 +119,60 @@ function board(playerId: string): SnakeSeatBoardRecord {
   };
 }
 
+function canonicalBackfillFixture(prefix: string): {
+  board: SnakeSeatBoardRecord;
+  candidates: DeskEligibilityCandidate[];
+} {
+  const slotRows: Array<[SnakeBoardSlotId, DeskEligibilityCandidate['position'], RosterSlotPlayer]> = [
+    ['C', 'C', { isPitcher: false, position: 'C' }],
+    ['1B', '1B', { isPitcher: false, position: '1B' }],
+    ['2B', '2B', { isPitcher: false, position: '2B' }],
+    ['3B', '3B', { isPitcher: false, position: '3B' }],
+    ['SS', 'SS', { isPitcher: false, position: 'SS' }],
+    ['LF', 'LF', { isPitcher: false, position: 'LF' }],
+    ['CF', 'CF', { isPitcher: false, position: 'CF' }],
+    ['RF', 'RF', { isPitcher: false, position: 'RF' }],
+    ['BACKUP_C', 'C', { isPitcher: false, position: 'C' }],
+    ['SP1', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP2', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP3', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP4', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['RP1', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['RP2', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['RP3', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['CP', 'CP', { isPitcher: true, position: 'CP', role: 'CP' }],
+    ['FLEX1', '1B', { isPitcher: false, position: '1B' }],
+    ['FLEX2', '2B', { isPitcher: false, position: '2B' }],
+    ['FLEX3', '3B', { isPitcher: false, position: '3B' }],
+    ['FLEX4', 'SS', { isPitcher: false, position: 'SS' }],
+    ['SWING', 'CF', { isPitcher: false, position: 'CF' }],
+  ];
+  const candidates = slotRows.map(([slotId, position, rosterShape]) => ({
+    id: `${prefix}-${slotId}`,
+    position,
+    eligiblePositions: [position],
+    rosterShape,
+    versionGroupId: `${prefix}-human-${slotId}`,
+  }));
+  return {
+    board: {
+      slots: Object.fromEntries(slotRows.map(([slotId]) => [slotId, `${prefix}-${slotId}`])) as SnakeSeatBoardRecord['slots'],
+      rankings: {
+        global: candidates.map((candidate) => candidate.id),
+        byPosition: {},
+        frozenPlayerIds: [`${prefix}-frozen`],
+      },
+      revision: 2,
+    },
+    candidates,
+  };
+}
+
 describe('private desk room assembly', () => {
   it('backfills every existing seat board in one next session without revealing a private seat', () => {
+    const fixtures = Object.fromEntries(['a', 'b', 'c'].map((teamId) => [teamId, canonicalBackfillFixture(teamId)]));
     const sourceBoards = Object.fromEntries(['a', 'b', 'c'].map((teamId) => {
-      const source = board(teamId);
+      const source = fixtures[teamId].board;
       return [teamId, {
         ...source,
         slots: { ...source.slots, C: 'drafted-catcher' },
@@ -132,13 +184,16 @@ describe('private desk room assembly', () => {
       }];
     })) as Record<string, SnakeSeatBoardRecord>;
     const source = { ...session(), seatBoards: sourceBoards };
+    const replacements = ['a', 'b', 'c'].map((teamId): DeskEligibilityCandidate => ({
+      id: `${teamId}-replacement`,
+      position: 'C',
+      eligiblePositions: ['C'],
+      rosterShape: { isPitcher: false, position: 'C' },
+      versionGroupId: `${teamId}-replacement-human`,
+    }));
     const result = reconcileExistingSeatBoards({
       session: source,
-      candidates: ['a', 'b', 'c'].map((teamId) => ({
-        id: `${teamId}-replacement`,
-        position: 'C' as const,
-        eligiblePositions: ['C'] as const,
-      })),
+      candidates: [...Object.values(fixtures).flatMap((fixture) => fixture.candidates), ...replacements],
       unavailablePlayerIds: new Set(['drafted-catcher']),
     });
 
@@ -154,6 +209,58 @@ describe('private desk room assembly', () => {
       expect(result.session.seatBoards?.[teamId].rankings).toBe(sourceBoards[teamId].rankings);
       expect(sourceBoards[teamId].slots.C).toBe('drafted-catcher');
     }
+  });
+
+  it('only marks an existing board changed when automatic FLEX backfill can prove canonical version-unique truth', () => {
+    const fixture = canonicalBackfillFixture('automatic');
+    const gonePlayerId = fixture.board.slots.FLEX1;
+    const catcherId = fixture.board.slots.C;
+    const catcher = fixture.candidates.find((candidate) => candidate.id === catcherId)!;
+    const duplicateCatcher: DeskEligibilityCandidate = {
+      id: 'automatic-catcher-alt',
+      position: 'C',
+      eligiblePositions: ['C'],
+      rosterShape: { isPitcher: false, position: 'C' },
+      versionGroupId: catcher.versionGroupId,
+    };
+    const safeHitter: DeskEligibilityCandidate = {
+      id: 'automatic-safe-flex',
+      position: '1B',
+      eligiblePositions: ['1B'],
+      rosterShape: { isPitcher: false, position: '1B' },
+      versionGroupId: 'automatic-safe-flex-human',
+    };
+    const boardWithAttack = {
+      ...fixture.board,
+      rankings: {
+        ...fixture.board.rankings,
+        global: [duplicateCatcher.id, safeHitter.id, ...fixture.board.rankings.global],
+      },
+    };
+    const source = { ...session(), seatBoards: { a: boardWithAttack } };
+    const safe = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, duplicateCatcher, safeHitter],
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+
+    expect(safe.changed).toBe(true);
+    expect(safe.session.seatBoards?.a.slots.FLEX1).toBe(safeHitter.id);
+    expect(source.seatBoards.a).toBe(boardWithAttack);
+
+    const unresolved = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, duplicateCatcher],
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+    expect(unresolved.changed).toBe(false);
+    expect(unresolved.session).toBe(source);
+    expect(unresolved.session.seatBoards?.a).toBe(boardWithAttack);
+    expect(unresolved.eventsByTeamId.a).toEqual([{
+      slotId: 'FLEX1',
+      gonePlayerId,
+      promotedPlayerId: null,
+    }]);
   });
 
   it('uses the canonical player bands so rival locked archetypes materially change the risk read', () => {

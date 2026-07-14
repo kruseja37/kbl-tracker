@@ -1,4 +1,8 @@
-import type { LeagueBuilderMlbDraftSession, SnakeDraftTradeRecord } from '../utils/leagueBuilderStorage';
+import type {
+  LeagueBuilderMlbDraftSession,
+  SnakeDraftTradeRecord,
+} from '../utils/leagueBuilderStorage';
+import { FARM_SNAKE_SESSION_NUMBER } from '../utils/snakeFarmTransitionContract';
 import {
   validateTrade,
   type PickValue,
@@ -9,7 +13,7 @@ import {
   type SnakeSeatingProof,
   type SimultaneousSnakeSeatingInput,
 } from './snakeSeatingProof';
-import { withLatestSnakeCorrection } from './snakeSession';
+import { withLatestSnakeCorrection } from './snakeCorrection';
 
 export interface SnakeGuidePackage {
   buyerTeamId: string;
@@ -36,6 +40,14 @@ interface SnakeGuideCommonInput {
 }
 
 const seatingProofCache = new WeakMap<SimultaneousSnakeSeatingInput, SnakeSeatingProof>();
+
+function assertMlbGuideSession(session: LeagueBuilderMlbDraftSession): void {
+  if (
+    session.seasonNumber === FARM_SNAKE_SESSION_NUMBER
+    || session.draftPhase === 'FARM'
+    || session.draftManifest?.phase === 'FARM'
+  ) throw new Error('FARM snake sessions do not allow pick trades.');
+}
 
 export function primeSnakeGuideSeatingProof(input: SimultaneousSnakeSeatingInput): SnakeSeatingProof {
   const cached = seatingProofCache.get(input);
@@ -141,6 +153,7 @@ function futureOwnedPicks(session: LeagueBuilderMlbDraftSession, teamId: string)
  * balancing return picks are searched explicitly and every candidate package is rechecked by W3.
  */
 export function searchSnakeGuidePackageBruteForce(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
+  assertMlbGuideSession(input.session);
   const targetSlot = input.session.pickOrder
     .slice(input.session.currentPickIndex)
     .find((slot) => slot.pick === input.targetPick);
@@ -230,6 +243,7 @@ function closestSellerProtectedReceivePackages(input: {
  * winner rules shared with the brute-force oracle.
  */
 export function searchSnakeGuidePackage(input: SearchSnakeGuidePackageInput): SnakeGuideSearchResult {
+  assertMlbGuideSession(input.session);
   const targetSlot = input.session.pickOrder
     .slice(input.session.currentPickIndex)
     .find((slot) => slot.pick === input.targetPick);
@@ -424,6 +438,7 @@ function revalidateSnakeGuidePackageSnapshot(input: RevalidateSnakeGuideInput): 
 }
 
 export function revalidateSnakeGuidePackage(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideResult {
+  assertMlbGuideSession(input.session);
   const snapshot = snapshotSnakeGuideInput(input);
   if (!snapshot) return invalidGuidePackage('This package no longer matches the posted guide.');
   const checked = revalidateSnakeGuidePackageSnapshot(snapshot);
@@ -436,6 +451,7 @@ export function revalidateSnakeGuidePackage(input: RevalidateSnakeGuideInput): R
 }
 
 export function executeSnakeGuidePackage(input: RevalidateSnakeGuideInput): RevalidateSnakeGuideResult {
+  assertMlbGuideSession(input.session);
   const snapshot = snapshotSnakeGuideInput(input);
   if (!snapshot) return invalidGuidePackage('This package no longer matches the posted guide.');
   const { proposal, session } = snapshot;

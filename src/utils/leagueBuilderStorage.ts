@@ -48,13 +48,17 @@ import {
   validateSnakeRosterHandoff,
   type SnakeDraftResetReceipt,
 } from './snakeDraftManifest';
+import {
+  assertCanonicalMlbToFarmTransition,
+  FARM_SNAKE_SESSION_NUMBER,
+} from './snakeFarmTransitionContract';
 
 export type { EditHistoryEntry } from './editHistoryTracker';
 export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
 
 const DB_NAME = 'kbl-league-builder';
-const DB_VERSION = 9;
+const DB_VERSION = 10;
 
 const STORES = {
   LEAGUE_TEMPLATES: 'leagueTemplates',
@@ -1018,6 +1022,44 @@ function migratePlayerBaseFameTier(store: IDBObjectStore): void {
   };
 }
 
+const STOCK_SMB4_CLOSER_TEAM_BY_PLAYER_ID = {
+  'wpg-ospeciallo': 'wild-pigs',
+  'sct-vainer': 'sand-cats',
+  'ply-huckster': 'platypi',
+  'grp-meggles': 'grapplers',
+  'htr-enduck': 'heaters',
+  'ovd-nerdwerd': 'overdogs',
+} as const;
+
+/**
+ * v10 corrects six stock SMB4 cards whose bullpen-chair role was imported as RP.
+ * Point reads keep the upgrade fail-closed: no custom/historical card and no
+ * registered-pool or draft-session snapshot is part of this migration.
+ */
+function migrateStockSmb4Closers(store: IDBObjectStore): void {
+  for (const [playerId, teamId] of Object.entries(STOCK_SMB4_CLOSER_TEAM_BY_PLAYER_ID)) {
+    const request = store.get(playerId);
+    request.onsuccess = () => {
+      const player = request.result as Player | undefined;
+      const stock = SMB4_PLAYERS[playerId];
+      const isExactStockRecord = player
+        && player.sourceDatabase === 'SMB4'
+        && player.isCustom !== true
+        && player.leagueAssignments?.some((assignment) => (
+          assignment.leagueId === 'sml'
+          && assignment.teamId === teamId
+        ));
+      if (!isExactStockRecord || !stock || stock.pitcherRole !== 'CP') return;
+
+      store.put({
+        ...player,
+        primaryPosition: 'CP',
+        salary: computeInitialSalary(stock, 'CP'),
+      });
+    };
+  }
+}
+
 function normalizeLeaguePlayerOverrideRecord(
   record: LegacyLeaguePlayerOverrideRecord,
 ): LeaguePlayerOverrideRecord {
@@ -1085,9 +1127,105 @@ async function resolveMigratedLeagueAssignments(db: IDBDatabase): Promise<void> 
   });
 }
 
-export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
-  if (dbInstance) return dbInstance;
+function applyLeagueBuilderDatabaseUpgrade(event: IDBVersionChangeEvent): void {
+  const request = event.target as IDBOpenDBRequest;
+  const db = request.result;
+  const { oldVersion } = event;
 
+  // League Templates store
+  if (!db.objectStoreNames.contains(STORES.LEAGUE_TEMPLATES)) {
+    const store = db.createObjectStore(STORES.LEAGUE_TEMPLATES, { keyPath: 'id' });
+    store.createIndex('name', 'name', { unique: false });
+  }
+
+  // Global Teams store
+  if (!db.objectStoreNames.contains(STORES.GLOBAL_TEAMS)) {
+    const store = db.createObjectStore(STORES.GLOBAL_TEAMS, { keyPath: 'id' });
+    store.createIndex('name', 'name', { unique: false });
+    store.createIndex('abbreviation', 'abbreviation', { unique: false });
+  }
+
+  // Global Players store
+  let globalPlayersStore: IDBObjectStore;
+  if (!db.objectStoreNames.contains(STORES.GLOBAL_PLAYERS)) {
+    globalPlayersStore = db.createObjectStore(STORES.GLOBAL_PLAYERS, { keyPath: 'id' });
+  } else {
+    globalPlayersStore = request.transaction!.objectStore(STORES.GLOBAL_PLAYERS);
+  }
+
+  if (!globalPlayersStore.indexNames.contains('lastName')) {
+    globalPlayersStore.createIndex('lastName', 'lastName', { unique: false });
+  }
+  if (!globalPlayersStore.indexNames.contains('primaryPosition')) {
+    globalPlayersStore.createIndex('primaryPosition', 'primaryPosition', { unique: false });
+  }
+  if (!globalPlayersStore.indexNames.contains('overallGrade')) {
+    globalPlayersStore.createIndex('overallGrade', 'overallGrade', { unique: false });
+  }
+  if (oldVersion < 3) {
+    if (globalPlayersStore.indexNames.contains('currentTeamId')) {
+      globalPlayersStore.deleteIndex('currentTeamId');
+    }
+    migratePlayerBaseFameTier(globalPlayersStore);
+  } else if (oldVersion < 4) {
+    migratePlayerBaseFameTier(globalPlayersStore);
+  }
+  if (oldVersion < 10) {
+    migrateStockSmb4Closers(globalPlayersStore);
+  }
+
+  // Rules Presets store
+  if (!db.objectStoreNames.contains(STORES.RULES_PRESETS)) {
+    const store = db.createObjectStore(STORES.RULES_PRESETS, { keyPath: 'id' });
+    store.createIndex('name', 'name', { unique: false });
+    store.createIndex('isDefault', 'isDefault', { unique: false });
+  }
+
+  // Team Rosters store
+  if (!db.objectStoreNames.contains(STORES.TEAM_ROSTERS)) {
+    db.createObjectStore(STORES.TEAM_ROSTERS, { keyPath: 'teamId' });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.SCOUT_PROFILES)) {
+    const store = db.createObjectStore(STORES.SCOUT_PROFILES, { keyPath: 'id' });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+    store.createIndex('teamId', 'teamId', { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.STARTUP_DRAFT_SESSIONS)) {
+    const store = db.createObjectStore(STORES.STARTUP_DRAFT_SESSIONS, { keyPath: 'id' });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.REGISTERED_POOLS)) {
+    db.createObjectStore(STORES.REGISTERED_POOLS, { keyPath: 'leagueId' });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.MLB_DRAFT_SESSIONS)) {
+    const store = db.createObjectStore(STORES.MLB_DRAFT_SESSIONS, { keyPath: 'id' });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.SNAKE_SEAT_BOARDS)) {
+    const store = db.createObjectStore(STORES.SNAKE_SEAT_BOARDS, { keyPath: 'id' });
+    store.createIndex('sessionId', 'sessionId', { unique: false });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+  }
+
+  if (!db.objectStoreNames.contains(STORES.AUCTION_SESSIONS)) {
+    const store = db.createObjectStore(STORES.AUCTION_SESSIONS, { keyPath: 'id' });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+  }
+
+  // League Player Overrides store
+  if (oldVersion < 2 && !db.objectStoreNames.contains(STORES.LEAGUE_PLAYER_OVERRIDES)) {
+    const store = db.createObjectStore(STORES.LEAGUE_PLAYER_OVERRIDES, { keyPath: 'id' });
+    store.createIndex('leagueId', 'leagueId', { unique: false });
+    store.createIndex('playerId', 'playerId', { unique: false });
+  }
+}
+
+function openCanonicalLeagueBuilderDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -1095,115 +1233,47 @@ export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
       console.error('[leagueBuilderStorage] Failed to open database:', request.error);
       reject(request.error);
     };
-
+    request.onupgradeneeded = applyLeagueBuilderDatabaseUpgrade;
     request.onsuccess = () => {
-      dbInstance = request.result;
-      // Auto-invalidate singleton if the database is externally closed or version-changed
-      dbInstance.onclose = () => { dbInstance = null; };
-      dbInstance.onversionchange = () => {
-        dbInstance?.close();
-        dbInstance = null;
-      };
-
-      resolveMigratedLeagueAssignments(dbInstance)
-        .then(() => resolve(dbInstance!))
-        .catch((error) => reject(error));
-    };
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      const { oldVersion } = event;
-
-      // League Templates store
-      if (!db.objectStoreNames.contains(STORES.LEAGUE_TEMPLATES)) {
-        const store = db.createObjectStore(STORES.LEAGUE_TEMPLATES, { keyPath: 'id' });
-        store.createIndex('name', 'name', { unique: false });
-      }
-
-      // Global Teams store
-      if (!db.objectStoreNames.contains(STORES.GLOBAL_TEAMS)) {
-        const store = db.createObjectStore(STORES.GLOBAL_TEAMS, { keyPath: 'id' });
-        store.createIndex('name', 'name', { unique: false });
-        store.createIndex('abbreviation', 'abbreviation', { unique: false });
-      }
-
-      // Global Players store
-      let globalPlayersStore: IDBObjectStore;
-      if (!db.objectStoreNames.contains(STORES.GLOBAL_PLAYERS)) {
-        globalPlayersStore = db.createObjectStore(STORES.GLOBAL_PLAYERS, { keyPath: 'id' });
-      } else {
-        globalPlayersStore = (event.target as IDBOpenDBRequest).transaction!.objectStore(STORES.GLOBAL_PLAYERS);
-      }
-
-      if (!globalPlayersStore.indexNames.contains('lastName')) {
-        globalPlayersStore.createIndex('lastName', 'lastName', { unique: false });
-      }
-      if (!globalPlayersStore.indexNames.contains('primaryPosition')) {
-        globalPlayersStore.createIndex('primaryPosition', 'primaryPosition', { unique: false });
-      }
-      if (!globalPlayersStore.indexNames.contains('overallGrade')) {
-        globalPlayersStore.createIndex('overallGrade', 'overallGrade', { unique: false });
-      }
-      if (oldVersion < 3) {
-        if (globalPlayersStore.indexNames.contains('currentTeamId')) {
-          globalPlayersStore.deleteIndex('currentTeamId');
-        }
-        migratePlayerBaseFameTier(globalPlayersStore);
-      } else if (oldVersion < 4) {
-        migratePlayerBaseFameTier(globalPlayersStore);
-      }
-
-      // Rules Presets store
-      if (!db.objectStoreNames.contains(STORES.RULES_PRESETS)) {
-        const store = db.createObjectStore(STORES.RULES_PRESETS, { keyPath: 'id' });
-        store.createIndex('name', 'name', { unique: false });
-        store.createIndex('isDefault', 'isDefault', { unique: false });
-      }
-
-      // Team Rosters store
-      if (!db.objectStoreNames.contains(STORES.TEAM_ROSTERS)) {
-        db.createObjectStore(STORES.TEAM_ROSTERS, { keyPath: 'teamId' });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.SCOUT_PROFILES)) {
-        const store = db.createObjectStore(STORES.SCOUT_PROFILES, { keyPath: 'id' });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-        store.createIndex('teamId', 'teamId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.STARTUP_DRAFT_SESSIONS)) {
-        const store = db.createObjectStore(STORES.STARTUP_DRAFT_SESSIONS, { keyPath: 'id' });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.REGISTERED_POOLS)) {
-        db.createObjectStore(STORES.REGISTERED_POOLS, { keyPath: 'leagueId' });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.MLB_DRAFT_SESSIONS)) {
-        const store = db.createObjectStore(STORES.MLB_DRAFT_SESSIONS, { keyPath: 'id' });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.SNAKE_SEAT_BOARDS)) {
-        const store = db.createObjectStore(STORES.SNAKE_SEAT_BOARDS, { keyPath: 'id' });
-        store.createIndex('sessionId', 'sessionId', { unique: false });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-      }
-
-      if (!db.objectStoreNames.contains(STORES.AUCTION_SESSIONS)) {
-        const store = db.createObjectStore(STORES.AUCTION_SESSIONS, { keyPath: 'id' });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-      }
-
-      // League Player Overrides store
-      if (oldVersion < 2 && !db.objectStoreNames.contains(STORES.LEAGUE_PLAYER_OVERRIDES)) {
-        const store = db.createObjectStore(STORES.LEAGUE_PLAYER_OVERRIDES, { keyPath: 'id' });
-        store.createIndex('leagueId', 'leagueId', { unique: false });
-        store.createIndex('playerId', 'playerId', { unique: false });
-      }
+      const db = request.result;
+      resolveMigratedLeagueAssignments(db)
+        .then(() => resolve(db))
+        .catch((error) => {
+          db.close();
+          reject(error);
+        });
     };
   });
+}
+
+/**
+ * Infrastructure callers may require current schema before raw reads/writes,
+ * but must not retain or replace the app-owned singleton connection.
+ */
+export async function runCanonicalLeagueBuilderMigrations(): Promise<void> {
+  if (dbInstance) return;
+  const db = await openCanonicalLeagueBuilderDatabase();
+  db.close();
+}
+
+export async function initLeagueBuilderDatabase(): Promise<IDBDatabase> {
+  if (dbInstance) return dbInstance;
+
+  const db = await openCanonicalLeagueBuilderDatabase();
+  if (dbInstance) {
+    db.close();
+    return dbInstance;
+  }
+
+  dbInstance = db;
+  db.onclose = () => {
+    if (dbInstance === db) dbInstance = null;
+  };
+  db.onversionchange = () => {
+    db.close();
+    if (dbInstance === db) dbInstance = null;
+  };
+  return db;
 }
 
 // ============================================
@@ -1921,6 +1991,50 @@ export async function saveTeamRoster(roster: TeamRoster): Promise<TeamRoster> {
   });
 }
 
+/** Commits completed FARM rosters and their newly drafted player records as one IndexedDB unit. */
+export async function commitFarmDraftRostersAndPlayersAtomically(input: {
+  rosters: readonly TeamRoster[];
+  players: readonly (Omit<Player, 'createdDate' | 'lastModified'> & Partial<Pick<Player, 'createdDate' | 'lastModified'>>)[];
+}): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const now = nowISO();
+  const existingPlayers = await Promise.all(input.players.map((player) => getPlayer(player.id)));
+  const fullRosters = input.rosters.map((roster) => ({ ...roster, lastModified: now }));
+  const fullPlayers = input.players.map((player, index): Player => ({
+    ...player,
+    leagueAssignments: player.leagueAssignments ?? [],
+    createdDate: player.createdDate ?? existingPlayers[index]?.createdDate ?? now,
+    lastModified: now,
+  }));
+
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORES.TEAM_ROSTERS, STORES.GLOBAL_PLAYERS], 'readwrite');
+    try {
+      const rosterStore = tx.objectStore(STORES.TEAM_ROSTERS);
+      const playerStore = tx.objectStore(STORES.GLOBAL_PLAYERS);
+      for (const roster of fullRosters) rosterStore.put(roster);
+      for (const player of fullPlayers) playerStore.put(player);
+    } catch (cause) {
+      tx.abort();
+      reject(cause);
+      return;
+    }
+    tx.oncomplete = () => {
+      if (!syncEngine.isSuppressed()) {
+        for (const roster of fullRosters) {
+          syncEngine.upsert('kbl-league-builder', 'teamRosters', roster.teamId, roster);
+        }
+        for (const player of fullPlayers) {
+          syncEngine.upsert('kbl-league-builder', 'globalPlayers', player.id, player);
+        }
+      }
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('FARM roster commit transaction aborted.'));
+  });
+}
+
 export function createEmptyTeamRoster(teamId: string): TeamRoster {
   return {
     teamId,
@@ -2026,6 +2140,12 @@ export function createMlbDraftSessionId(leagueId: string, seasonNumber = 1): str
   return `${leagueId}::startup-mlb-draft::${seasonNumber}`;
 }
 
+export {
+  buildFarmSlotTableFromTarget,
+  FARM_SLOT_SALARY_UNIT,
+  FARM_SNAKE_SESSION_NUMBER,
+  recoverCanonicalMlbSnakePickOrder,
+} from './snakeFarmTransitionContract';
 export function createAuctionSessionId(leagueId: string, seasonNumber = 1): string {
   return `${leagueId}::startup-auction-draft::${seasonNumber}`;
 }
@@ -2214,6 +2334,63 @@ export async function deleteStartupDraftSession(leagueId: string, seasonNumber =
   });
 }
 
+function isFarmSnakeAuthority(session: LeagueBuilderMlbDraftSession): boolean {
+  return session.seasonNumber === FARM_SNAKE_SESSION_NUMBER
+    || session.draftPhase === 'FARM'
+    || session.draftManifest?.phase === 'FARM';
+}
+
+function assertFarmSessionHasNoTradeState(
+  session: LeagueBuilderMlbDraftSession,
+  current?: LeagueBuilderMlbDraftSession | null,
+): void {
+  if (!isFarmSnakeAuthority(session) && (!current || !isFarmSnakeAuthority(current))) return;
+  if ((session.trades !== undefined && (!Array.isArray(session.trades) || session.trades.length > 0))
+    || (session.openTradeOffers !== undefined
+      && (!Array.isArray(session.openTradeOffers) || session.openTradeOffers.length > 0))) {
+    throw new Error('FARM snake sessions cannot contain pick trades or open trade offers.');
+  }
+}
+
+function assertSnakeSessionPhaseUnchanged(
+  current: LeagueBuilderMlbDraftSession,
+  proposed: LeagueBuilderMlbDraftSession,
+): void {
+  const currentPhase = validatedSnakeSessionPhase(current);
+  const proposedPhase = validatedSnakeSessionPhase(proposed);
+  const currentHasExplicitPhase = Object.prototype.hasOwnProperty.call(current, 'draftPhase');
+  if (
+    currentPhase !== proposedPhase
+    || (currentHasExplicitPhase && proposed.draftPhase !== current.draftPhase)
+  ) throw new Error('The snake session phase cannot be removed or changed after creation.');
+}
+
+const FARM_CREATION_ENVELOPE_KEYS = [
+  'seed',
+  'workflowVersion',
+  'engineMethodVersion',
+  'tier',
+  'balanceMode',
+  'rounds',
+  'pickOrder',
+  'farmSlotSalaries',
+  'farmProspectSnapshot',
+  'snakeSetup',
+] as const satisfies readonly (keyof LeagueBuilderMlbDraftSession)[];
+
+function assertFrozenFarmCreationEnvelopeUnchanged(
+  current: LeagueBuilderMlbDraftSession,
+  proposed: LeagueBuilderMlbDraftSession,
+): void {
+  assertSnakeSessionPhaseUnchanged(current, proposed);
+  if (!isFarmSnakeAuthority(current)) return;
+  for (const key of FARM_CREATION_ENVELOPE_KEYS) {
+    if (!structurallyEqual(current[key], proposed[key])) {
+      throw new Error(`The frozen FARM creation envelope cannot change (${key}).`);
+    }
+  }
+}
+
 export async function getMlbDraftSession(
   leagueId: string,
   seasonNumber = 1,
@@ -2235,6 +2412,7 @@ function hydrateIndependentSeatBoards(
   session: LeagueBuilderMlbDraftSession,
   rows: SnakeSeatBoardStoreRecord[],
 ): LeagueBuilderMlbDraftSession {
+  assertFarmSessionHasNoTradeState(session);
   validateEmbeddedSeatBoardAuthority(session);
   const sessionPhase = validatedSnakeSessionPhase(session);
   const frozenTeamIds = validatedFrozenSnakeTeamIds(session);
@@ -2572,11 +2750,43 @@ function prepareSeatBoardPersistence(input: {
   return { session, rowsToWrite };
 }
 
+export interface SaveMlbDraftSessionOptions {
+  /** Canonical creation of a new FARM authority from the separately persisted MLB recap. */
+  phaseTransition?: 'MLB_TO_FARM';
+}
+
+function assertCanonicalMlbToFarmStandaloneRows(
+  candidate: LeagueBuilderMlbDraftSession,
+  rows: readonly SnakeSeatBoardStoreRecord[],
+): void {
+  const frozenTeamIds = validatedFrozenSnakeTeamIds(candidate);
+  const malformed = () => new Error(
+    'The FARM transition found standalone seat-board metadata outside its canonical season-2 namespace.',
+  );
+  for (const rawRow of rows as readonly unknown[]) {
+    if (!isRecord(rawRow)) throw malformed();
+    const phase = rawRow.phase;
+    const teamId = rawRow.teamId;
+    if (
+      (phase !== 'MLB' && phase !== 'FARM')
+      || typeof teamId !== 'string'
+      || !frozenTeamIds.has(teamId)
+      || rawRow.id !== snakeSeatBoardStoreId(candidate.id, phase, teamId)
+      || rawRow.sessionId !== candidate.id
+      || rawRow.leagueId !== candidate.leagueId
+      || rawRow.seasonNumber !== FARM_SNAKE_SESSION_NUMBER
+    ) throw malformed();
+    const board = validateSeatBoardPayload(rawRow.board, phase, teamId);
+    if (!Number.isInteger(rawRow.revision) || rawRow.revision !== board.revision) throw malformed();
+  }
+}
+
 export async function saveMlbDraftSession(
   session: Omit<LeagueBuilderMlbDraftSession, 'createdDate' | 'lastModified'> & {
     createdDate?: string;
     lastModified?: string;
   },
+  options: SaveMlbDraftSessionOptions = {},
 ): Promise<LeagueBuilderMlbDraftSession> {
   const db = await initLeagueBuilderDatabase();
   const now = nowISO();
@@ -2586,14 +2796,16 @@ export async function saveMlbDraftSession(
     const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readwrite');
     const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
     const read = store.get(id);
+    const mlbAuthorityRead = store.get(createMlbDraftSessionId(session.leagueId, 1));
     const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
     const boardsRead = boardStore.index('sessionId').getAll(id);
     let fullSession: LeagueBuilderMlbDraftSession | null = null;
     let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
+    let staleTransitionBoardRows: SnakeSeatBoardStoreRecord[] = [];
     let completedReads = 0;
     const apply = () => {
       completedReads += 1;
-      if (completedReads !== 2) return;
+      if (completedReads !== 3) return;
       try {
         const rawExisting = read.result as LeagueBuilderMlbDraftSession | undefined;
         const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
@@ -2605,9 +2817,25 @@ export async function saveMlbDraftSession(
           createdDate: session.createdDate ?? existing?.createdDate ?? now,
           lastModified: now,
         };
+        const createsFarmAuthority = options.phaseTransition === 'MLB_TO_FARM';
+        if (!rawExisting && isFarmSnakeAuthority(candidate) && !createsFarmAuthority) {
+          throw new Error('A FARM snake authority can only be created by the sanctioned MLB-to-FARM transition.');
+        }
+        if (existing) assertFrozenFarmCreationEnvelopeUnchanged(existing, candidate);
+        assertFarmSessionHasNoTradeState(candidate, existing);
+        if (createsFarmAuthority) {
+          if (rawExisting) throw new Error('The FARM snake session already exists and cannot be recreated in place.');
+          assertCanonicalMlbToFarmTransition(
+            candidate,
+            id,
+            mlbAuthorityRead.result as LeagueBuilderMlbDraftSession | undefined,
+          );
+          assertCanonicalMlbToFarmStandaloneRows(candidate, standaloneRows);
+        }
         if (!existing?.draftManifest && candidate.draftManifest?.phase === 'MLB') {
           throw new Error('MLB draft confirmation must freeze the session and RegisteredPool together.');
         }
+        const authoritativeStandaloneRows = createsFarmAuthority ? [] : standaloneRows;
         const draftManifest = preservePersistedSnakeDraftManifest(existing, candidate);
         const rosterHandoff = preservePersistedSnakeRosterHandoff(existing, candidate);
         const farmProspectSnapshot = preservePersistedFarmProspectSnapshot(existing, candidate);
@@ -2618,14 +2846,17 @@ export async function saveMlbDraftSession(
           ...(rosterHandoff ? { rosterHandoff } : {}),
           ...(farmProspectSnapshot ? { farmProspectSnapshot } : {}),
         };
+        assertFarmSessionHasNoTradeState(proposed, existing);
         const prepared = prepareSeatBoardPersistence({
           preAction: existing,
-          proposed: existing ? proposed : hydrateIndependentSeatBoards(proposed, standaloneRows),
-          standaloneRows,
+          proposed: existing ? proposed : hydrateIndependentSeatBoards(proposed, authoritativeStandaloneRows),
+          standaloneRows: authoritativeStandaloneRows,
           modifiedAt: now,
         });
         fullSession = prepared.session;
         boardRowsWritten = prepared.rowsToWrite;
+        staleTransitionBoardRows = createsFarmAuthority ? standaloneRows : [];
+        for (const row of staleTransitionBoardRows) boardStore.delete(row.id);
         store.put(fullSession);
         for (const row of boardRowsWritten) boardStore.put(row);
       } catch (error) {
@@ -2634,8 +2865,10 @@ export async function saveMlbDraftSession(
       }
     };
     read.onsuccess = apply;
+    mlbAuthorityRead.onsuccess = apply;
     boardsRead.onsuccess = apply;
     read.onerror = () => reject(read.error);
+    mlbAuthorityRead.onerror = () => reject(mlbAuthorityRead.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
       if (!fullSession) {
@@ -2643,6 +2876,12 @@ export async function saveMlbDraftSession(
         return;
       }
       if (!syncEngine.isSuppressed()) {
+        const rewrittenBoardIds = new Set(boardRowsWritten.map((row) => row.id));
+        for (const row of staleTransitionBoardRows) {
+          if (!rewrittenBoardIds.has(row.id)) {
+            syncEngine.remove('kbl-league-builder', 'snakeSeatBoards', row.id);
+          }
+        }
         syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', fullSession.id, fullSession);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
@@ -2697,10 +2936,13 @@ export async function updateMlbDraftSessionAtomically(
               lastModified: now,
             }
           : preAction;
+        assertFrozenFarmCreationEnvelopeUnchanged(preAction, callbackCandidate);
+        assertFarmSessionHasNoTradeState(callbackCandidate, preAction);
         const draftManifest = preservePersistedSnakeDraftManifest(preAction, callbackCandidate);
         const candidate = draftManifest
           ? { ...callbackCandidate, draftManifest, draftPhase: draftManifest.phase }
           : callbackCandidate;
+        assertFarmSessionHasNoTradeState(candidate, preAction);
         const prepared = prepareSeatBoardPersistence({
           preAction,
           proposed: candidate,
@@ -2967,7 +3209,13 @@ export async function postApprovedCompanionTradeOffer(input: {
   };
   postedAt: string;
 }): Promise<LeagueBuilderMlbDraftSession> {
+  if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
+    throw new Error('FARM snake sessions do not allow pick trades.');
+  }
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (validatedSnakeSessionPhase(current) === 'FARM') {
+      throw new Error('FARM snake sessions do not allow pick trades.');
+    }
     approvedCompanionClaimForSeat(current, input.deviceId, input.teamId);
     if (input.teamId !== input.proposal.buyerTeamId) throw new Error('YOU CAN ONLY POST FOR YOUR OWN CLUB.');
     if ((current.revision ?? 0) !== input.proposal.sessionRevision) throw new Error('THE DRAFT MOVED ON — REFRESH.');
@@ -3008,7 +3256,13 @@ export async function respondApprovedCompanionTradeOffer(input: {
   offerId: string;
   action: 'NOD' | 'WITHDRAW' | 'DECLINE';
 }): Promise<LeagueBuilderMlbDraftSession> {
+  if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
+    throw new Error('FARM snake sessions do not allow pick trades.');
+  }
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (validatedSnakeSessionPhase(current) === 'FARM') {
+      throw new Error('FARM snake sessions do not allow pick trades.');
+    }
     approvedCompanionClaimForSeat(current, input.deviceId, input.teamId);
     const offer = current.openTradeOffers?.find((row) => row.id === input.offerId);
     if (!offer) throw new Error('THAT OFFER IS NO LONGER OPEN.');

@@ -108,6 +108,8 @@ describe('PrivateDesk', () => {
     expect(screen.getByRole('button', { name: 'PLAYER POOL' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'SS RANKINGS' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SS' })).toHaveClass('min-w-11');
+    expect(screen.getByRole('button', { name: 'Send AVAILABLE PLAYER to top' })).toHaveClass('min-w-11');
     fireEvent.click(screen.getByRole('button', { name: 'Move AVAILABLE PLAYER up' }));
     expect(onReorderOverall).toHaveBeenLastCalledWith(['available', 'muraski']);
 
@@ -139,6 +141,7 @@ describe('PrivateDesk', () => {
     expect(onSelectCandidate).toHaveBeenCalledWith('available');
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toHaveTextContent('DRAFTED');
     expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('blocked');
@@ -167,6 +170,7 @@ describe('PrivateDesk', () => {
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'jovita' } });
     expect(screen.getByRole('button', { name: 'SELECT JOVITA PULO' })).toHaveTextContent('#2');
+    expect(screen.getByRole('button', { name: 'Send JOVITA PULO to top' })).toHaveClass('min-w-11');
     fireEvent.click(screen.getByRole('button', { name: 'Send JOVITA PULO to top' }));
     expect(onReorderOverall).toHaveBeenCalledWith(['target', 'muraski']);
   });
@@ -237,6 +241,25 @@ describe('PrivateDesk', () => {
     expect(screen.getByRole('button', { name: 'ACTIVITY' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ACTIVITY' }));
     expect(screen.getByText('YOU TRADED PICKS 24+36 FOR 19+41.')).toBeInTheDocument();
+  });
+
+  it('opens and reopens the Assistant GM result for every revisioned optimization', () => {
+    const common = {
+      candidates: [candidate], rankings: { SS: ['muraski'] }, overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' }, brokenSlots: [], planBill: null, advisorLog: [],
+      taxCoreRows: [], slotDepth: { SS: 1 }, assistantBoard: idleAssistant,
+      onReorder: () => undefined, assistantOptimizationLabel: 'OPTIMIZED FOR MURASKI',
+    };
+    const { rerender } = render(<PrivateDesk {...common} />);
+    expect(screen.getByRole('button', { name: 'MY BOARD' })).toHaveAttribute('aria-pressed', 'true');
+
+    rerender(<PrivateDesk {...common} assistantOptimizationKey="team:muraski:1" />);
+    expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('assistant-optimization-result')).toHaveTextContent('OPTIMIZED FOR MURASKI');
+
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
+    rerender(<PrivateDesk {...common} assistantOptimizationKey="team:muraski:2" />);
+    expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

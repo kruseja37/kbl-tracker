@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   exportAllData,
   KBL_BACKUP_VERSION,
+  openDatabaseWithSchema,
   restoreAllData,
+  STATIC_DATABASE_SCHEMAS,
   type BackupData,
 } from "../backupRestore";
 import {
@@ -60,6 +62,7 @@ import {
 import {
   __resetLeagueBuilderDatabaseForTests,
   getAllOverridesForLeague,
+  getPlayer,
   initLeagueBuilderDatabase,
   setLeaguePlayerOverride,
   type Player,
@@ -71,6 +74,65 @@ const ACTIVE_ELIMINATION_ID = "elim-backup-active";
 const ARCHIVED_ELIMINATION_ID = "elim-backup-archived";
 const EVENT_GAME_ID = `${ARCHIVED_ELIMINATION_ID}-event-game`;
 const DYNAMIC_IDS = [ACTIVE_ELIMINATION_ID, ARCHIVED_ELIMINATION_ID];
+const LEAGUE_BUILDER_BACKUP_STORES = [
+  "leaguePlayerOverrides",
+  "scoutProfiles",
+  "startupDraftSessions",
+  "registeredPools",
+  "mlbDraftSessions",
+  "snakeSeatBoards",
+  "auctionSessions",
+] as const;
+const LEAGUE_BUILDER_SYNCHRONIZED_ROWS: Record<
+  (typeof LEAGUE_BUILDER_BACKUP_STORES)[number],
+  Record<string, unknown>
+> = {
+  leaguePlayerOverrides: {
+    id: "backup-league::backup-player",
+    leagueId: "backup-league",
+    playerId: "backup-player",
+    overrides: { power: 91 },
+  },
+  scoutProfiles: {
+    id: "backup-scout",
+    leagueId: "backup-league",
+    teamId: "backup-team",
+    name: "Scout Backup",
+  },
+  startupDraftSessions: {
+    id: "backup-league::startup-farm-draft::1",
+    leagueId: "backup-league",
+    seasonNumber: 1,
+    phase: "FARM",
+  },
+  registeredPools: {
+    leagueId: "backup-league",
+    locked: true,
+    players: [{ id: "backup-player", iv: 123_456 }],
+  },
+  mlbDraftSessions: {
+    id: "backup-league::startup-mlb-draft::1",
+    leagueId: "backup-league",
+    seasonNumber: 1,
+    currentPickIndex: 0,
+  },
+  snakeSeatBoards: {
+    id: "backup-league::startup-mlb-draft::1::mlb-seat::backup-team",
+    sessionId: "backup-league::startup-mlb-draft::1",
+    leagueId: "backup-league",
+    seasonNumber: 1,
+    teamId: "backup-team",
+    phase: "MLB",
+    board: { slots: {}, rankings: { global: ["backup-player"] }, revision: 2 },
+    revision: 2,
+  },
+  auctionSessions: {
+    id: "backup-league::startup-auction-draft::1",
+    leagueId: "backup-league",
+    seasonNumber: 1,
+    seed: "backup-seed",
+  },
+};
 
 function deleteDatabase(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -164,11 +226,49 @@ async function clearEventLog(): Promise<void> {
   db.close();
 }
 
-async function clearLeagueBuilderOverrides(): Promise<void> {
+async function clearLeagueBuilderBackupStores(): Promise<void> {
   const db = await initLeagueBuilderDatabase();
-  const tx = db.transaction("leaguePlayerOverrides", "readwrite");
-  tx.objectStore("leaguePlayerOverrides").clear();
+  const tx = db.transaction([...LEAGUE_BUILDER_BACKUP_STORES], "readwrite");
+  for (const storeName of LEAGUE_BUILDER_BACKUP_STORES) {
+    tx.objectStore(storeName).clear();
+  }
   await transactionToPromise(tx);
+}
+
+async function seedLeagueBuilderSynchronizedRows(): Promise<void> {
+  const db = await initLeagueBuilderDatabase();
+  const tx = db.transaction([...LEAGUE_BUILDER_BACKUP_STORES], "readwrite");
+  for (const storeName of LEAGUE_BUILDER_BACKUP_STORES) {
+    tx.objectStore(storeName).put(LEAGUE_BUILDER_SYNCHRONIZED_ROWS[storeName]);
+  }
+  await transactionToPromise(tx);
+}
+
+async function seedV9StockCloserBeforeBackupOpen(): Promise<void> {
+  resetStorageConnections();
+  await deleteDatabase("kbl-league-builder");
+  const db = await openDatabase("kbl-league-builder", 9, (upgradeDb) => {
+    const schema = STATIC_DATABASE_SCHEMAS["kbl-league-builder"];
+    for (const [storeName, storeSchema] of Object.entries(schema.stores)) {
+      const store = upgradeDb.createObjectStore(storeName, { keyPath: storeSchema.keyPath });
+      for (const indexSchema of storeSchema.indexes ?? []) {
+        store.createIndex(indexSchema.name, indexSchema.keyPath, indexSchema.options);
+      }
+    }
+  });
+  const tx = db.transaction("globalPlayers", "readwrite");
+  tx.objectStore("globalPlayers").put({
+    id: "wpg-ospeciallo",
+    firstName: "Hander",
+    lastName: "O'Speciallo",
+    sourceDatabase: "SMB4",
+    isCustom: false,
+    primaryPosition: "RP",
+    salary: 111,
+    leagueAssignments: [{ leagueId: "sml", teamId: "wild-pigs", rosterStatus: "MLB" }],
+  });
+  await transactionToPromise(tx);
+  db.close();
 }
 
 async function wipeRestorableData(): Promise<void> {
@@ -181,7 +281,7 @@ async function wipeRestorableData(): Promise<void> {
     deleteDatabase("kbl-manager-identity"),
     ...DYNAMIC_IDS.map((id) => deleteDatabase(`kbl-elimination-${id}`)),
   ]);
-  await clearLeagueBuilderOverrides();
+  await clearLeagueBuilderBackupStores();
   await clearAppMeta();
   await clearEventLog();
   resetStorageConnections();
@@ -653,6 +753,83 @@ describe("modern manual backup/restore for elimination data", () => {
       success: false,
       error: "Backup is missing required store payload kbl-playoffs.series",
     });
+  });
+
+  test("keeps v10 League Builder payload validation fail-closed", async () => {
+    const backup = await exportAllData();
+    const missingRequiredStore = JSON.parse(JSON.stringify(backup)) as BackupData;
+    const malformedOptionalStore = JSON.parse(JSON.stringify(backup)) as BackupData;
+    delete missingRequiredStore.databases["kbl-league-builder"].leaguePlayerOverrides;
+    malformedOptionalStore.databases["kbl-league-builder"].snakeSeatBoards = {
+      forged: true,
+    } as unknown as unknown[];
+
+    await expect(restoreAllData(missingRequiredStore)).resolves.toMatchObject({
+      success: false,
+      error: "Backup is missing required store payload kbl-league-builder.leaguePlayerOverrides",
+    });
+    await expect(restoreAllData(malformedOptionalStore)).resolves.toMatchObject({
+      success: false,
+      error: "Backup store payload kbl-league-builder.snakeSeatBoards must be an array",
+    });
+  });
+
+  test("round-trips every synchronized League Builder draft store at v10", async () => {
+    await seedLeagueBuilderSynchronizedRows();
+
+    const backup = await exportAllData();
+    expect(backup.databases["kbl-league-builder"]).toMatchObject(
+      Object.fromEntries(
+        LEAGUE_BUILDER_BACKUP_STORES.map((storeName) => [
+          storeName,
+          [LEAGUE_BUILDER_SYNCHRONIZED_ROWS[storeName]],
+        ]),
+      ),
+    );
+
+    await clearLeagueBuilderBackupStores();
+    const clearedBackup = await exportAllData();
+    for (const storeName of LEAGUE_BUILDER_BACKUP_STORES) {
+      expect(clearedBackup.databases["kbl-league-builder"][storeName]).toEqual([]);
+    }
+
+    await expect(restoreAllData(backup)).resolves.toMatchObject({ success: true });
+    resetStorageConnections();
+
+    const restoredBackup = await exportAllData();
+    expect(restoredBackup.databases["kbl-league-builder"]).toMatchObject(
+      Object.fromEntries(
+        LEAGUE_BUILDER_BACKUP_STORES.map((storeName) => [
+          storeName,
+          [LEAGUE_BUILDER_SYNCHRONIZED_ROWS[storeName]],
+        ]),
+      ),
+    );
+  });
+
+  test("runs the canonical stock-closer migration before backup can consume v9 to v10", async () => {
+    await seedV9StockCloserBeforeBackupOpen();
+
+    try {
+      const backupOpenedDb = await openDatabaseWithSchema(
+        "kbl-league-builder",
+        STATIC_DATABASE_SCHEMAS["kbl-league-builder"],
+      );
+      backupOpenedDb.close();
+      const backup = await exportAllData();
+      const restoreResult = await restoreAllData(backup);
+      expect(restoreResult.success, restoreResult.error).toBe(true);
+      resetStorageConnections();
+
+      await expect(getPlayer("wpg-ospeciallo")).resolves.toMatchObject({
+        primaryPosition: "CP",
+        sourceDatabase: "SMB4",
+      });
+      expect((await getPlayer("wpg-ospeciallo"))?.salary).not.toBe(111);
+    } finally {
+      resetStorageConnections();
+      await deleteDatabase("kbl-league-builder");
+    }
   });
 
   test("repairs current-version databases missing required stores and indexes", async () => {

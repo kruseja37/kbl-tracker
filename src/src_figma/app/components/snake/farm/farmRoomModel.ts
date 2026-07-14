@@ -28,6 +28,48 @@ export interface FarmBoardCandidate {
   eligiblePositions: readonly string[];
 }
 
+export interface FarmPublicRosterPlayer {
+  id: string;
+  name: string;
+  position: string;
+}
+
+/** Combines the saved FARM roster with live picks without duplicating a player already committed. */
+export function buildFarmPublicRosters(input: {
+  teamIds: readonly string[];
+  existingFarmRosterIdsByTeamId: Readonly<Record<string, readonly string[]>>;
+  storedPlayers: readonly { id: string; firstName: string; lastName: string; primaryPosition: string }[];
+  completedPicks: readonly { teamId: string; playerId: string }[];
+  prospects: readonly { id: string; firstName: string; lastName: string; primaryPosition: string }[];
+}): Record<string, FarmPublicRosterPlayer[]> {
+  const storedById = new Map(input.storedPlayers.map((player) => [player.id, player]));
+  const prospectById = new Map(input.prospects.map((prospect) => [prospect.id, prospect]));
+
+  return Object.fromEntries(input.teamIds.map((teamId) => {
+    const roster = new Map<string, FarmPublicRosterPlayer>();
+    for (const playerId of input.existingFarmRosterIdsByTeamId[teamId] ?? []) {
+      const player = storedById.get(playerId);
+      if (!player) continue;
+      roster.set(player.id, {
+        id: player.id,
+        name: `${player.firstName} ${player.lastName}`.trim(),
+        position: player.primaryPosition,
+      });
+    }
+    for (const pick of input.completedPicks) {
+      if (pick.teamId !== teamId || roster.has(pick.playerId)) continue;
+      const prospect = prospectById.get(pick.playerId);
+      if (!prospect) continue;
+      roster.set(prospect.id, {
+        id: prospect.id,
+        name: `${prospect.firstName} ${prospect.lastName}`.trim(),
+        position: prospect.primaryPosition,
+      });
+    }
+    return [teamId, [...roster.values()]];
+  }));
+}
+
 function expandFarmPosition(position: string | null | undefined): string[] {
   if (!position) return [];
   if (position === 'IF' || position === 'INF') return ['1B', '2B', 'SS', '3B'];

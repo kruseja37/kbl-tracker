@@ -46,6 +46,7 @@ import {
   type RulesPreset,
   type TeamRoster,
   type LeagueBuilderMlbDraftSession,
+  type SaveMlbDraftSessionOptions,
 } from '../../utils/leagueBuilderStorage';
 import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
@@ -105,6 +106,7 @@ export interface UseLeagueBuilderDataReturn {
       createdDate?: string;
       lastModified?: string;
     },
+    options?: SaveMlbDraftSessionOptions,
   ) => Promise<LeagueBuilderMlbDraftSession>;
 
   // Team operations
@@ -566,8 +568,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       createdDate?: string;
       lastModified?: string;
     },
+    options?: SaveMlbDraftSessionOptions,
   ) => {
-    return saveMlbDraftSessionToStorage(session);
+    return saveMlbDraftSessionToStorage(session, options);
   }, []);
 
   // ============================================

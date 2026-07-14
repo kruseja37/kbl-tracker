@@ -107,7 +107,9 @@ function cloneVersionState(session: LeagueBuilderMlbDraftSession): SnakeDraftMan
 
 function lockedClubs(session: LeagueBuilderMlbDraftSession): SnakeDraftManifest['lockedClubs'] {
   const setupByTeamId = new Map((session.snakeSetup?.clubs ?? []).map((club) => [club.teamId, club]));
-  return [...new Set(session.pickOrder.map((slot) => slot.teamId))].map((teamId) => {
+  const draftingTeamIds = [...new Set(session.pickOrder.map((slot) => slot.teamId))];
+  const teamIds = session.draftPhase === 'FARM' ? [...setupByTeamId.keys()] : draftingTeamIds;
+  return teamIds.map((teamId) => {
     const club = setupByTeamId.get(teamId);
     return {
       teamId,
@@ -254,11 +256,18 @@ export function validateSnakeDraftManifest(
     if (!orderByPick.has(expectedPick)) throw new Error('Snake draft manifest pick order must cover contiguous absolute picks.');
   }
   const clubTeamIds = new Set<string>();
+  const farmManifest = manifest.phase === 'FARM';
   for (const club of manifest.lockedClubs) {
-    if (!club.teamId || clubTeamIds.has(club.teamId) || !orderTeamIds.has(club.teamId)) throw new Error('Snake draft manifest locked clubs are invalid.');
+    if (!club.teamId || clubTeamIds.has(club.teamId) || (!farmManifest && !orderTeamIds.has(club.teamId))) {
+      throw new Error('Snake draft manifest locked clubs are invalid.');
+    }
     clubTeamIds.add(club.teamId);
   }
-  if (clubTeamIds.size !== orderTeamIds.size) throw new Error('Snake draft manifest must lock exactly one club for every drafting team.');
+  if (farmManifest
+    ? clubTeamIds.size === 0 || [...orderTeamIds].some((teamId) => !clubTeamIds.has(teamId))
+    : clubTeamIds.size !== orderTeamIds.size) {
+    throw new Error('Snake draft manifest must lock exactly one club for every drafting team.');
+  }
   const seenPlayerIds = new Set<string>();
   const seenPickNumbers = new Set<number>();
   for (const pick of manifest.completedPicks) {

@@ -9,6 +9,8 @@ const mocks = vi.hoisted(() => ({
   patchBoard: vi.fn(),
   guideAsk: vi.fn(),
   pull: vi.fn(async () => undefined),
+  refresh: vi.fn(async () => undefined),
+  freshData: null as null | Record<string, unknown>,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -45,6 +47,9 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
+    getAllLeagueTemplates: vi.fn(async () => (mocks.freshData?.leagues ?? mocks.data.leagues ?? [])),
+    getAllTeams: vi.fn(async () => (mocks.freshData?.teams ?? mocks.data.teams ?? [])),
+    getAllPlayers: vi.fn(async () => (mocks.freshData?.players ?? mocks.data.players ?? [])),
     saveMlbDraftRoomSession: async (next: LeagueBuilderMlbDraftSession, ...args: unknown[]) => {
       mocks.roomState = next;
       return mocks.saveRoom(next, ...args);
@@ -80,9 +85,14 @@ import type {
   SnakeSeatBoardRecord,
   Team,
 } from '../../../utils/leagueBuilderStorage';
+import { getAllPlayers as readAllPlayers } from '../../../utils/leagueBuilderStorage';
 import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
 import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
-import { canonicalDeskEligiblePositions, isCandidateEligibleForBoardSlot } from '../../app/components/snake/desk/deskModel';
+import {
+  canonicalDeskEligiblePositions,
+  isCandidateEligibleForBoardSlot,
+  isCanonicalSnakeBoard,
+} from '../../app/components/snake/desk/deskModel';
 import { resolveLockedSeat } from '../../app/components/snake/desk/deskRoomModel';
 import SnakeDraftRoom from '../../app/pages/SnakeDraftRoom';
 
@@ -209,6 +219,7 @@ function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: T
     leagues: [league], teams: overrides.teams ?? teams, players: overrides.players ?? players, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => overrides.pool ?? pool), getMlbDraftSession: vi.fn(async () => mocks.roomState),
     saveMlbDraftSession: vi.fn(async (next) => next),
+    refresh: mocks.refresh,
   };
   return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
 }
@@ -226,6 +237,34 @@ function selectTeam(teamId: string): void {
 }
 
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
+  test('derives the room from authority re-read after pull instead of the stale hook snapshot', async () => {
+    const freshPlayers = players.map((row) => row.id === 'a-replacement'
+      ? { ...row, firstName: 'Fresh', lastName: 'Authority' }
+      : row);
+    const stalePlayers = players.map((row) => row.id === 'a-replacement'
+      ? { ...row, firstName: 'Stale', lastName: 'Snapshot' }
+      : row);
+    const source = session(false);
+    mocks.roomState = source;
+    mocks.data = {
+      leagues: [league], teams, players: stalePlayers, isLoading: false, error: null,
+      getRegisteredPool: vi.fn(async () => pool),
+      getMlbDraftSession: vi.fn(async () => mocks.roomState),
+      saveMlbDraftSession: vi.fn(async (next) => next),
+      refresh: mocks.refresh,
+    };
+    mocks.freshData = { leagues: [league], teams, players: freshPlayers };
+
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+
+    await screen.findByTestId('snake-draft-room');
+    expect(mocks.pull.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(readAllPlayers).mock.invocationCallOrder[0]);
+    selectTeam('a');
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    expect(await screen.findAllByText(/Fresh Authority/i)).not.toHaveLength(0);
+    expect(document.body).not.toHaveTextContent('Stale Snapshot');
+  });
+
   test('an advisor backfill for an absent player uses neutral copy without exposing the internal id', async () => {
     const missingPlayerId = 'internal-gone-player-42';
     const source = session(true);
@@ -266,6 +305,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     });
     mocks.guideAsk.mockReset();
     mocks.pull.mockClear();
+    mocks.freshData = null;
+    mocks.refresh.mockReset().mockImplementation(async () => {
+      if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
+    });
   });
   afterEach(() => cleanup());
 
@@ -274,10 +317,137 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await screen.findByTestId('snake-draft-room');
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     const saved = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
-    for (const teamId of TEAM_IDS) expect(saved.seatBoards?.[teamId].slots.C).toBe(`${teamId}-replacement`);
+    const expectedPrimaryCatchers = {
+      a: 'b-replacement',
+      b: 'b-replacement',
+      c: 'c-replacement',
+    } as const;
+    const canonicalCandidates = players.map((stored) => {
+      const eligiblePositions = canonicalDeskEligiblePositions(stored.primaryPosition, stored.secondaryPosition);
+      return {
+        id: stored.id,
+        position: eligiblePositions[0]!,
+        eligiblePositions,
+      };
+    });
+    for (const teamId of TEAM_IDS) {
+      const savedBoard = saved.seatBoards![teamId];
+      const savedCatcher = players.find((stored) => stored.id === savedBoard.slots.C)!;
+      expect(savedBoard.slots.C).toBe(expectedPrimaryCatchers[teamId]);
+      expect(savedCatcher.primaryPosition).toBe('C');
+      expect(new Set(Object.values(savedBoard.slots))).toHaveLength(22);
+      expect(isCanonicalSnakeBoard({ slots: savedBoard.slots, candidates: canonicalCandidates })).toBe(true);
+    }
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     await act(async () => { await Promise.resolve(); });
     expect(mocks.saveRoom).toHaveBeenCalledTimes(1);
+  });
+
+  test('automatic persistence skips a duplicate-version FLEX backfill and writes the later canonical hitter', async () => {
+    const source = session(false);
+    const attackBoard: SnakeSeatBoardRecord = {
+      ...board('a'),
+      slots: {
+        ...board('a').slots,
+        SWING: 'flex-5',
+      },
+      rankings: {
+        ...board('a').rankings,
+        global: ['a-replacement', 'flex-6', ...(board('a').rankings.global ?? [])],
+      },
+    };
+    source.seatBoards = { a: attackBoard };
+    source.completedPicks = [{
+      round: 1,
+      pick: 1,
+      teamId: 'b',
+      playerId: attackBoard.slots.FLEX1,
+      settledSalary: 10_000,
+      marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    const attackPlayers = players.map((row) => (
+      row.id === attackBoard.slots.C || row.id === 'a-replacement'
+        ? { ...row, versionGroupId: 'existing-catcher-human' }
+        : row
+    ));
+    const sourceBoardBytes = structuredClone(attackBoard);
+
+    renderRoom(source, { players: attackPlayers });
+    await screen.findByTestId('snake-draft-room');
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+
+    const persisted = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
+    expect(persisted.seatBoards?.a.slots.FLEX1).toBe('flex-6');
+    expect(persisted.seatBoards?.a.slots.FLEX1).not.toBe('a-replacement');
+    expect(persisted.seatBoards?.a.rankings).toBe(attackBoard.rankings);
+    expect(attackBoard).toEqual(sourceBoardBytes);
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+  });
+
+  test('automatic persistence leaves prior board bytes untouched when every FLEX backfill is unsafe', async () => {
+    const source = session(false);
+    const attackBoard: SnakeSeatBoardRecord = {
+      ...board('a'),
+      slots: {
+        ...board('a').slots,
+        SWING: 'flex-5',
+      },
+      rankings: {
+        ...board('a').rankings,
+        global: ['a-replacement', ...Object.values(board('a').slots)],
+      },
+    };
+    source.seatBoards = { a: attackBoard };
+    source.completedPicks = [{
+      round: 1,
+      pick: 1,
+      teamId: 'b',
+      playerId: attackBoard.slots.FLEX1,
+      settledSalary: 10_000,
+      marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    source.snakeSetup!.poolPlayerIds = [...new Set([...Object.values(attackBoard.slots), 'a-replacement'])];
+    const attackPlayers = players.map((row) => (
+      row.id === attackBoard.slots.C || row.id === 'a-replacement'
+        ? { ...row, versionGroupId: 'only-unsafe-catcher-human' }
+        : row
+    ));
+    const sourceBoardBytes = structuredClone(attackBoard);
+
+    renderRoom(source, { players: attackPlayers });
+    await screen.findByTestId('snake-draft-room');
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 100)); });
+
+    expect(mocks.saveRoom.mock.calls.every(([saved]) => (
+      (saved as LeagueBuilderMlbDraftSession).seatBoards?.a.slots.FLEX1 === attackBoard.slots.FLEX1
+    ))).toBe(true);
+    expect(mocks.roomState.seatBoards?.a).toEqual(sourceBoardBytes);
+  });
+
+  test('fails money, chemistry, and persistence closed for a complete nine-hitter, thirteen-pitcher refit', async () => {
+    const source = session(false);
+    source.snakeSetup!.poolPlayerIds = Object.values(baseSlots);
+    const illegalPlayers = players.map((row) => (
+      ['flex-1', 'flex-2', 'flex-3', 'flex-4'].includes(row.id) ? player(row.id, 'SP') : row
+    ));
+    const beforeBoards = structuredClone(source.seatBoards);
+    renderRoom(source, { players: illegalPlayers });
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
+    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+
+    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('MY BOARD COULD NOT REFIT');
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.saveRoom).not.toHaveBeenCalled();
+    expect(mocks.roomState?.seatBoards).toEqual(beforeBoards);
   });
 
   test('refits only the active club plan after every reorder and restores the exact prior board with Undo', async () => {
@@ -345,22 +515,29 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const afterPosition = mocks.saveRoom.mock.calls[1][0] as LeagueBuilderMlbDraftSession;
     expect(mocks.patchBoard.mock.calls[1][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterOverall.seatBoards!.a.revision });
     expect(afterPosition.seatBoards?.a.rankings.byPosition?.C?.slice(0, 2)).toEqual(['a-replacement', 'gone-c']);
-    expect(afterPosition.seatBoards?.a.slots).not.toEqual(afterOverall.seatBoards?.a.slots);
+    expect(afterPosition.seatBoards?.a.rankings).not.toEqual(afterOverall.seatBoards?.a.rankings);
+    expect(afterPosition.seatBoards?.a.revision).toBe(afterOverall.seatBoards!.a.revision + 1);
+    expect(afterPosition.seatBoards?.a.slots).toEqual(afterOverall.seatBoards?.a.slots);
     expect(new Set(Object.values(afterPosition.seatBoards!.a.slots))).toHaveLength(22);
     expect(afterPosition.seatBoards?.b).toEqual(untouchedB);
     expect(afterPosition.seatBoards?.c).toEqual(untouchedC);
+    expect(await screen.findByTestId('main-board-update-banner'))
+      .toHaveTextContent('MY BOARD UPDATED — 0 SLOTS CHANGED.');
 
     fireEvent.click(await screen.findByRole('button', { name: 'UNDO BOARD UPDATE' }));
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(3));
-    const restored = (mocks.saveRoom.mock.calls[2][0] as LeagueBuilderMlbDraftSession).seatBoards!.a;
+    const restoredSession = mocks.saveRoom.mock.calls[2][0] as LeagueBuilderMlbDraftSession;
+    const restored = restoredSession.seatBoards!.a;
     expect(mocks.patchBoard.mock.calls[2][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterPosition.seatBoards!.a.revision });
     expect(restored.slots).toEqual(afterOverall.seatBoards!.a.slots);
     expect(restored.rankings).toEqual(afterOverall.seatBoards!.a.rankings);
     expect(restored.revision).toBe(afterPosition.seatBoards!.a.revision + 1);
+    expect(restoredSession.seatBoards?.b).toEqual(untouchedB);
+    expect(restoredSession.seatBoards?.c).toEqual(untouchedC);
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   }, 10_000);
 
-  test('assistant viewing, optimize, and Revert never write; stale Keep fails closed', async () => {
+  test('assistant viewing and optimize never invent Revert; stale Keep fails closed', async () => {
     const source = session(false);
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
@@ -369,12 +546,14 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(await screen.findByRole('button', { name: 'KEEP ON MY BOARD' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    expect(screen.getByTestId('assistant-optimization-result')).toHaveTextContent('OPTIMIZED FOR');
+    expect(screen.queryByRole('button', { name: 'REVERT' })).not.toBeInTheDocument();
     expect(mocks.patchBoard).not.toHaveBeenCalled();
     expect(mocks.saveRoom).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
     const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
     const current = mocks.roomState!;
     mocks.roomState = { ...current, revision: (current.revision ?? 0) + 1 };
@@ -509,6 +688,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
       getRegisteredPool,
       getMlbDraftSession: vi.fn(async () => source),
       saveMlbDraftSession: vi.fn(async (next) => next),
+      refresh: mocks.refresh,
     };
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByText(/temporary room read failure/i)).toBeInTheDocument();

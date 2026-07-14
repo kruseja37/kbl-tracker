@@ -778,7 +778,7 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
     },
   },
   'kbl-league-builder': {
-    version: 9,
+    version: 10,
     stores: {
       leagueTemplates: {
         keyPath: 'id',
@@ -1055,11 +1055,22 @@ export function openDatabaseWithSchema(
   return openDatabaseWithSchemaRepair(dbName, schema, options);
 }
 
+async function runCanonicalContentMigrationsBeforeSchemaOpen(dbName: string): Promise<void> {
+  if (dbName !== 'kbl-league-builder') return;
+
+  // This module is imported by syncEngine, which is imported by League Builder
+  // storage. Keep the dependency lazy so the canonical storage initializer can
+  // own every content-bearing version upgrade without creating a module cycle.
+  const { runCanonicalLeagueBuilderMigrations } = await import('./leagueBuilderStorage');
+  await runCanonicalLeagueBuilderMigrations();
+}
+
 async function openDatabaseWithSchemaRepair(
   dbName: string,
   schema: DatabaseSchema,
   options: OpenDatabaseWithSchemaOptions,
 ): Promise<IDBDatabase> {
+  await runCanonicalContentMigrationsBeforeSchemaOpen(dbName);
   let db: IDBDatabase;
 
   try {

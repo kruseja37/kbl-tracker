@@ -22,7 +22,13 @@ describe('SnakeCompanionFrame Batch 5 surface', () => {
       onCover={vi.fn()}
     />);
 
-    expect(screen.getByTestId('snake-companion-frame')).toHaveClass('min-w-0', 'overflow-x-hidden');
+    expect(screen.getByTestId('snake-companion-frame')).toHaveClass('min-w-0', 'overflow-x-clip', 'overflow-y-visible');
+    expect(screen.getByTestId('companion-selected-player-pane')).toHaveClass(
+      'sticky',
+      'top-3',
+      'self-start',
+      'lg:max-h-[calc(100vh-18rem)]',
+    );
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('PICK 19');
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('#20 BEEWOLVES');
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('KODIAKS SELECTED JOVITA PULO');

@@ -85,7 +85,7 @@ export function SnakeCompanionFrame(props: {
   const [showHelp, setShowHelp] = useState(false);
   const privateDesk = typeof props.privateDesk === 'function' ? props.privateDesk(showHelp) : props.privateDesk;
   return (
-    <main className="ballpark-page min-h-screen min-w-0 overflow-x-hidden" data-testid="snake-companion-frame">
+    <main className="ballpark-page min-h-screen min-w-0 overflow-x-clip overflow-y-visible" data-testid="snake-companion-frame">
       <header
         className="mb-5 flex flex-wrap items-center justify-between gap-3 border-4 p-3"
         style={{ backgroundColor: branding.background, color: branding.foreground, borderColor: branding.border }}
@@ -116,9 +116,16 @@ export function SnakeCompanionFrame(props: {
           {props.ticker.length ? props.ticker.map((line) => <span key={line} className="shrink-0 whitespace-nowrap text-sm font-bold">{line}</span>) : <span className="shrink-0 whitespace-nowrap text-sm">BOARD OPEN</span>}
         </div>
       </section>
-      {props.selectedPlayer}
-      {props.draftedTruth ? <div className="mb-4">{props.draftedTruth}</div> : null}
-      <section className="ballpark-panel mb-4 min-w-0 overflow-hidden">{privateDesk}</section>
+      <div
+        className="grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(300px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+        data-testid="companion-private-workspace-layout"
+      >
+        <div className="sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:max-h-[calc(100vh-18rem)]" data-testid="companion-selected-player-pane">
+          {props.selectedPlayer}
+          {props.draftedTruth ? <div className="mb-4">{props.draftedTruth}</div> : null}
+        </div>
+        <section className="ballpark-panel min-h-0 min-w-0 overflow-y-auto overscroll-contain [overflow-anchor:none] lg:h-full" data-testid="companion-private-workspace-scroll">{privateDesk}</section>
+      </div>
     </main>
   );
 }

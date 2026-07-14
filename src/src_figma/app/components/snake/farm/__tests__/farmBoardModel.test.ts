@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 
 import {
   canonicalFarmEligiblePositions,
+  buildFarmPublicRosters,
+  buildFarmScoutPressure,
   reconcileFarmSeatBoards,
   reorderFarmBoard,
   seedFarmSeatBoard,
@@ -32,6 +34,43 @@ function session(): LeagueBuilderMlbDraftSession {
 }
 
 describe('farm private boards under scouting fog', () => {
+  test('combines saved FARM players with live picks exactly once and uses the complete public roster for pressure', () => {
+    const publicRosters = buildFarmPublicRosters({
+      teamIds: ['a', 'b'],
+      existingFarmRosterIdsByTeamId: {
+        a: ['a-catcher', 'a-arm'],
+        b: Array.from({ length: 10 }, (_, index) => `b-${index}`),
+      },
+      storedPlayers: [
+        { id: 'a-catcher', firstName: 'Ari', lastName: 'Backstop', primaryPosition: 'C' },
+        { id: 'a-arm', firstName: 'Kai', lastName: 'Starter', primaryPosition: 'SP' },
+        ...Array.from({ length: 10 }, (_, index) => ({
+          id: `b-${index}`, firstName: 'Full', lastName: `Roster ${index}`, primaryPosition: 'SP',
+        })),
+      ],
+      completedPicks: [
+        { teamId: 'a', playerId: 'a-arm' },
+        { teamId: 'a', playerId: 'a-live' },
+      ],
+      prospects: [
+        { id: 'a-arm', firstName: 'Duplicate', lastName: 'Pick', primaryPosition: 'SP' },
+        { id: 'a-live', firstName: 'New', lastName: 'Bat', primaryPosition: 'SS' },
+      ],
+    });
+
+    expect(publicRosters.a.map((player) => player.id)).toEqual(['a-catcher', 'a-arm', 'a-live']);
+    expect(new Set(publicRosters.a.map((player) => player.id)).size).toBe(publicRosters.a.length);
+    expect(publicRosters.b).toHaveLength(10);
+    expect(buildFarmScoutPressure({
+      card: {
+        id: 'target', name: 'Target Arm', position: 'SP', scoutedGrade: 'B', gradeRange: 'A-C',
+        confidence: 'medium', scoutName: 'Scout', scoutsCall: '', eligiblePositions: ['SP'],
+      },
+      publicRosters,
+      farmTarget: 10,
+    })).toContain('0 CLUBS STILL NEED ARMS');
+  });
+
   test('canonicalizes secondary and two-way positions without any rating input', () => {
     expect(canonicalFarmEligiblePositions('SS', '2B')).toEqual(['SS', '2B']);
     expect(canonicalFarmEligiblePositions('SP/RP')).toEqual(['SP/RP', 'SP', 'RP']);

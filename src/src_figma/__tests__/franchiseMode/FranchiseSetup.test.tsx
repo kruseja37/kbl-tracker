@@ -42,6 +42,7 @@ vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
 }));
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
+  FARM_SNAKE_SESSION_NUMBER: 2,
   getAuctionSession: (...args: unknown[]) => mockGetAuctionSession(...args),
   getAuctionSessionById: (...args: unknown[]) => mockGetAuctionSessionById(...args),
   getMlbDraftSession: (...args: unknown[]) => mockGetMlbDraftSession(...args),
@@ -516,6 +517,7 @@ describe('FranchiseSetup Component', () => {
       await waitFor(() => expect(
         within(screen.getByText('KRUSE BASEBALL LEAGUE').parentElement as HTMLElement).getByText('Draft complete'),
       ).toBeInTheDocument());
+      expect(mockGetMlbDraftSession).toHaveBeenCalledWith('kbl', 2);
     });
   });
 

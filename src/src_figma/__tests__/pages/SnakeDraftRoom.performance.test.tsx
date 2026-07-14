@@ -10,6 +10,15 @@ const engineProfile = vi.hoisted(() => ({
   seatingProofResult: null as unknown,
 }));
 const useLeagueBuilderDataMock = vi.hoisted(() => vi.fn());
+const directStorage = vi.hoisted(() => ({
+  leagues: [] as LeagueTemplate[],
+  teams: [] as Team[],
+  players: [] as Player[],
+  pull: vi.fn(async () => undefined),
+  getAllLeagueTemplates: vi.fn(async () => directStorage.leagues),
+  getAllTeams: vi.fn(async () => directStorage.teams),
+  getAllPlayers: vi.fn(async () => directStorage.players),
+}));
 
 vi.mock('../../../engines/snakeRationalRoom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../engines/snakeRationalRoom')>();
@@ -58,6 +67,20 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   return { ...actual, useLeagueBuilderData: useLeagueBuilderDataMock };
 });
 
+vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
+  return {
+    ...actual,
+    getAllLeagueTemplates: directStorage.getAllLeagueTemplates,
+    getAllTeams: directStorage.getAllTeams,
+    getAllPlayers: directStorage.getAllPlayers,
+  };
+});
+
+vi.mock('../../../utils/syncEngine', () => ({
+  syncEngine: { pull: directStorage.pull },
+}));
+
 vi.mock('../../../utils/franchisePhase2Flags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/franchisePhase2Flags')>();
   return { ...actual, isSnakeDraftV1Enabled: () => true };
@@ -75,6 +98,7 @@ import type { RegisteredPool } from '../../../engines/leagueConstruction';
 import { searchSnakeGuidePackage } from '../../../engines/snakeGuideTrade';
 import type {
   LeagueBuilderMlbDraftSession,
+  LeagueTemplate,
   Player,
   SnakeBoardSlotId,
   SnakeSeatBoardRecord,
@@ -147,6 +171,11 @@ function board(): SnakeSeatBoardRecord {
 function fixture(): UseLeagueBuilderDataReturn {
   const players = Array.from({ length: 250 }, (_, index) => player(index));
   const teams = TEAM_IDS.map(team);
+  const leagues: LeagueTemplate[] = [{
+    id: LEAGUE_ID, name: 'Performance League', teamIds: TEAM_IDS, conferences: [], divisions: [],
+    defaultRulesPreset: 'standard', draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed',
+    salaryCap: TIER_CAPS.standard.tierCap, createdDate: '2026-07-11', lastModified: '2026-07-11',
+  }];
   const pickOrder = buildSnakeOrder(TEAM_IDS, 22);
   const session: LeagueBuilderMlbDraftSession = {
     id: `mlb-draft:${LEAGUE_ID}:1`, leagueId: LEAGUE_ID, seasonNumber: 1, seed: 'perfroom-seed',
@@ -167,17 +196,17 @@ function fixture(): UseLeagueBuilderDataReturn {
   };
   profileSession = session;
   profilePool = pool;
+  directStorage.leagues = leagues;
+  directStorage.teams = teams;
+  directStorage.players = players;
   const saveMlbDraftSession = vi.fn(async (next: LeagueBuilderMlbDraftSession) => next);
   return {
-    leagues: [{
-      id: LEAGUE_ID, name: 'Performance League', teamIds: TEAM_IDS, conferences: [], divisions: [],
-      defaultRulesPreset: 'standard', draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed',
-      salaryCap: TIER_CAPS.standard.tierCap, createdDate: '2026-07-11', lastModified: '2026-07-11',
-    }],
+    leagues,
     teams, players, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => pool),
     getMlbDraftSession: vi.fn(async () => session),
     saveMlbDraftSession,
+    refresh: vi.fn(async () => undefined),
   } as unknown as UseLeagueBuilderDataReturn;
 }
 

@@ -49,7 +49,6 @@ describe('SelectedPlayerCard', () => {
   it('renders the complete compact profile and exact consequences without visible pronouns or zero ratings', () => {
     const onOptimizeAround = vi.fn();
     const onKeep = vi.fn();
-    const onRevert = vi.fn();
     const onTradeDecision = vi.fn();
     const { container } = render(<SelectedPlayerCard
       player={player}
@@ -59,7 +58,6 @@ describe('SelectedPlayerCard', () => {
       teamName="Beewolves"
       onOptimizeAround={onOptimizeAround}
       onKeep={onKeep}
-      onRevert={onRevert}
       decision={{
         kind: 'TRADE_TO_PICK', playerId: 'jovita', targetPick: 19,
         proposal: { buyerTeamId: 'bew', sellerTeamId: 'buz', targetPick: 19, offerPickNumbers: [24, 36], receivePickNumbers: [19, 41], offerValue: 100, receiveValue: 95, sessionRevision: 7 },
@@ -96,12 +94,10 @@ describe('SelectedPlayerCard', () => {
     for (const word of ['COMPETITIVE', 'SPIRITED', 'CRAFTY', 'SCHOLARLY', 'DISCIPLINED']) expect(screen.getByLabelText('Selected player chemistry consequences')).toHaveTextContent(word);
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
     fireEvent.click(screen.getByRole('button', { name: 'KEEP ON MY BOARD' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
     fireEvent.click(screen.getByRole('button', { name: 'TRADE TO #19' }));
     expect(screen.getByTestId('selected-player-card')).toContainElement(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
     expect(onOptimizeAround).toHaveBeenCalledOnce();
     expect(onKeep).toHaveBeenCalledOnce();
-    expect(onRevert).toHaveBeenCalledOnce();
     expect(onTradeDecision).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b|pronouns?/i);
     for (const control of container.querySelectorAll('button')) {
@@ -136,10 +132,49 @@ describe('SelectedPlayerCard', () => {
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
   });
 
+  it('never labels a consequence dismissal as Revert; undo is owned by the saved board transaction', () => {
+    render(<SelectedPlayerCard
+      player={player}
+      candidate={candidate}
+      consequence={{ status: 'already-on-board', selectedPlayerId: 'jovita' }}
+      teamName="Beewolves"
+      onRevert={vi.fn()}
+    />);
+    expect(screen.queryByRole('button', { name: 'REVERT' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  });
+
   it('uses a pixel portrait when the club has no logo without displaying gender or pronouns', () => {
     render(<SelectedPlayerCard player={player} candidate={candidate} consequence={null} teamName="Beewolves" />);
     expect(screen.getByRole('img', { name: 'Jovita Pulo pixel portrait' })).toBeInTheDocument();
     expect(screen.getByTestId('selected-player-card').textContent).not.toMatch(/female|woman|she|her|pronouns?/i);
+  });
+
+  it('keeps a portrait action strip outside the collapsible full profile', () => {
+    render(<SelectedPlayerCard
+      player={player}
+      candidate={candidate}
+      consequence={consequence}
+      teamName="Beewolves"
+      actionConsequence="AFTER THIS PICK AND A LEGAL FINISH: $90,000 LEFT."
+      draftAction={<button type="button" className="min-h-11">DRAFT PLAYER</button>}
+    />);
+
+    const strip = screen.getByTestId('selected-player-action-strip');
+    const profileBody = screen.getByTestId('selected-player-profile-body');
+    const toggle = screen.getByRole('button', { name: 'OPEN PLAYER CARD' });
+    expect(strip).toHaveTextContent('Jovita Pulo');
+    expect(strip).toHaveTextContent('AFTER THIS PICK AND A LEGAL FINISH: $90,000 LEFT.');
+    expect(strip).toContainElement(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(profileBody).toHaveClass('hidden', 'lg:block');
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: 'CLOSE PLAYER CARD' })).toHaveAttribute('aria-expanded', 'true');
+    expect(profileBody).not.toHaveClass('hidden');
+    expect(profileBody).toHaveClass('lg:block');
+    expect(profileBody).toHaveTextContent('PLAYER ARCHETYPE · Effectively-Wild');
+    expect(profileBody).toHaveTextContent('TRUE COST$102,500');
   });
 });
 

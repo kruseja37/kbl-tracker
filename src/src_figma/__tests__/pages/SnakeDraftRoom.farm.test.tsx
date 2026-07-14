@@ -1,37 +1,31 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { FarmSeatBoardRecord, LeagueBuilderMlbDraftSession } from '../../../utils/leagueBuilderStorage';
+import { buildSnakeOrder } from '../../../engines/leagueConstruction';
 
-const { saveSession, getSession, getRoster, commissionerProps } = vi.hoisted(() => ({
+const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows, farmTeamRows } = vi.hoisted(() => ({
   saveSession: vi.fn(async (session) => ({ ...session })),
   getSession: vi.fn(),
   getRoster: vi.fn(),
-  commissionerProps: { current: null as null | { onFailure?: () => void | Promise<void> } },
-}));
-
-vi.mock('../../app/components/snake/trade/SnakeCommissionerTrade', () => ({
-  SnakeCommissionerTrade: (props: { onFailure?: () => void | Promise<void> }) => {
-    commissionerProps.current = props;
-    return <div data-testid="farm-commissioner-trade" />;
-  },
+  refresh: vi.fn(async () => undefined),
+  playerRows: [] as Array<Record<string, unknown>>,
+  farmLeagueRows: [{ id: 'league-farm', name: 'Farm League', teamIds: ['a', 'b'], draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed', salaryCap: 1_000_000 }],
+  farmTeamRows: [
+    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human' },
+    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai' },
+  ],
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../hooks/useLeagueBuilderData')>();
-  const leagues = [{ id: 'league-farm', name: 'Farm League', teamIds: ['a', 'b'], draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed', salaryCap: 1_000_000 }];
-  const teams = [
-    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human' },
-    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai' },
-  ];
-  const players: never[] = [];
   return {
     ...actual,
     useLeagueBuilderData: () => ({
-      leagues, teams, players, isLoading: false, error: null,
+      leagues: farmLeagueRows, teams: farmTeamRows, players: playerRows, isLoading: false, error: null,
       getMlbDraftSession: getSession,
       saveMlbDraftSession: saveSession,
-      getRoster,
+      refresh,
     }),
   };
 });
@@ -48,6 +42,10 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   };
   return {
     ...actual,
+    getAllLeagueTemplates: vi.fn(async () => farmLeagueRows),
+    getAllTeams: vi.fn(async () => farmTeamRows),
+    getAllPlayers: vi.fn(async () => playerRows),
+    getTeamRoster: (...args: unknown[]) => getRoster(...args),
     getScoutProfilesForLeague: vi.fn(async () => [
       { id: 'scout-a', leagueId: 'league-farm', teamId: 'a', name: 'Comets Eyes', specialties: [], weaknesses: [], accuracyByPosition: {}, seed: 'a', createdDate: 'now', lastModified: 'now' },
       { id: 'scout-b', leagueId: 'league-farm', teamId: 'b', name: 'Bears Eyes', specialties: [], weaknesses: [], accuracyByPosition: {}, seed: 'b', createdDate: 'now', lastModified: 'now' },
@@ -82,24 +80,42 @@ import {
 describe('S6 farm room continuation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    commissionerProps.current = null;
+    playerRows.length = 0;
     getRoster.mockResolvedValue({ teamId: 'a', mlbRoster: [], farmRoster: [] });
+    const originalPickOrder = buildSnakeOrder(['a', 'b'], 22);
+    const tradedPickOrder = originalPickOrder.map((slot) => {
+      if (slot.pick === 1) return { ...slot, teamId: 'b' };
+      if (slot.pick === 3) return { ...slot, teamId: 'a' };
+      return slot;
+    });
+    const mlbPlayerIds = tradedPickOrder.map((slot) => `mlb-${slot.pick}`);
     const mlbSession = {
       id: 'mlb-session', leagueId: 'league-farm', seasonNumber: 1, seed: 'mlb-seed',
-      workflowVersion: 'snake-v1', engineMethodVersion: 'snake-s1a', tier: 'standard', balanceMode: 'taxed', rounds: 1,
-      pickOrder: [{ round: 1, pick: 1, teamId: 'a' }, { round: 1, pick: 2, teamId: 'b' }],
-      completedPicks: [
-        { round: 1, pick: 1, teamId: 'a', playerId: 'mlb-a', settledSalary: 100_000, marginalTax: 0 },
-        { round: 1, pick: 2, teamId: 'b', playerId: 'mlb-b', settledSalary: 100_000, marginalTax: 0 },
-      ],
-      currentPickIndex: 2, revision: 0, createdDate: '2026-07-10', lastModified: '2026-07-10',
-      snakeSetup: { poolPlayerIds: ['mlb-a', 'mlb-b'], versionSelections: {}, clubs: [{ teamId: 'a', hotseat: true }, { teamId: 'b', hotseat: true }], orderSeed: 'order' },
+      workflowVersion: 'snake-v1', engineMethodVersion: 'snake-s1a', tier: 'standard', balanceMode: 'taxed', rounds: 22,
+      pickOrder: tradedPickOrder,
+      completedPicks: tradedPickOrder.map((slot, index) => ({
+        ...slot,
+        playerId: mlbPlayerIds[index],
+        settledSalary: 100_000,
+        marginalTax: 0,
+      })),
+      trades: [{
+        id: 'round-one-guide-trade', atPickIndex: 0, humanTeamId: 'b', cpuTeamId: 'a',
+        humanPickNumbers: [3], cpuPickNumbers: [1], humanValue: 100, cpuValue: 100, greedMargin: 0,
+      }],
+      currentPickIndex: tradedPickOrder.length, revision: 1, createdDate: '2026-07-10', lastModified: '2026-07-10',
+      snakeSetup: {
+        poolPlayerIds: mlbPlayerIds,
+        versionSelections: {},
+        clubs: [{ teamId: 'b', hotseat: true }, { teamId: 'a', hotseat: true }],
+        orderSeed: 'ranked-club-order-is-not-draft-order',
+      },
     };
     const frozenMlb = freezeSnakeDraftSession({
       session: mlbSession,
       expectedPhase: 'MLB',
-      poolPlayerIds: ['mlb-a', 'mlb-b'],
-      salaryByPlayerId: new Map([['mlb-a', 100_000], ['mlb-b', 100_000]]),
+      poolPlayerIds: mlbPlayerIds,
+      salaryByPlayerId: new Map(mlbPlayerIds.map((playerId) => [playerId, 100_000])),
       frozenAt: '2026-07-12T11:00:00.000Z',
     });
     const handedOffMlb = {
@@ -116,6 +132,8 @@ describe('S6 farm room continuation', () => {
     const created = saveSession.mock.calls[0][0];
     expect(created).toEqual(expect.objectContaining({ draftPhase: 'FARM', workflowVersion: 'snake-v1-farm', currentPickIndex: 0 }));
     expect(created.pickOrder).toHaveLength(20);
+    expect(created.pickOrder.slice(0, 2).map((slot) => slot.teamId)).toEqual(['a', 'b']);
+    expect(created.snakeSetup.clubs.map((club) => club.teamId)).toEqual(['a', 'b']);
     expect(created.farmSlotSalaries).toHaveLength(20);
     expect(created.farmSlotSalaries[0]).toBe(3 * created.farmSlotSalaries.at(-1));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
@@ -124,6 +142,44 @@ describe('S6 farm room continuation', () => {
     expect(screen.getAllByText(/PICK 1 PAYS/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/SCOUT’S CALL/).length).toBeGreaterThan(0);
     expect(document.body.textContent).not.toMatch(/TRUE COST|SAFE TO WAIT|LIKELY GONE|LEGAL-FINISH|\bIV\b/);
+  });
+
+  test('opens the FARM recap directly when every canonical club already has ten prospects', async () => {
+    getRoster.mockImplementation(async (teamId: string) => ({
+      teamId,
+      mlbRoster: [],
+      farmRoster: Array.from({ length: 10 }, (_, index) => `${teamId}-existing-${index + 1}`),
+    }));
+
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    expect(await screen.findByRole('heading', { name: 'FARM DRAFT RECAP' })).toBeInTheDocument();
+    const created = saveSession.mock.calls[0][0];
+    expect(created.pickOrder).toEqual([]);
+    expect(created.completedPicks).toEqual([]);
+    expect(created.farmSlotSalaries).toEqual([]);
+    expect(created.snakeSetup.clubs.map((club: { teamId: string }) => club.teamId)).toEqual(['a', 'b']);
+    expect(screen.queryByRole('heading', { name: 'THE FARM ROOM COULD NOT OPEN' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'CONFIRM FARM DRAFT' })).toBeInTheDocument();
+  });
+
+  test('shows saved partial FARM players in the public club lens before the first live pick', async () => {
+    playerRows.push(
+      { id: 'a-existing-c', firstName: 'Ari', lastName: 'Backstop', primaryPosition: 'C', salary: 10_000 },
+      { id: 'a-existing-sp', firstName: 'Kai', lastName: 'Starter', primaryPosition: 'SP', salary: 10_000 },
+      { id: 'b-existing-ss', firstName: 'Bo', lastName: 'Glove', primaryPosition: 'SS', salary: 10_000 },
+    );
+    getRoster.mockImplementation(async (teamId: string) => ({
+      teamId,
+      mlbRoster: [],
+      farmRoster: teamId === 'a' ? ['a-existing-c', 'a-existing-sp'] : ['b-existing-ss'],
+    }));
+
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    expect(await screen.findByText('C · Ari Backstop')).toBeInTheDocument();
+    expect(screen.getByText('SP · Kai Starter')).toBeInTheDocument();
+    expect(screen.queryByText('NO PICKS RECORDED YET.')).not.toBeInTheDocument();
   });
 
   test('seeds all private farm boards once and lets an off-clock club reorder but not draft', async () => {
@@ -166,15 +222,14 @@ describe('S6 farm room continuation', () => {
     expect(screen.getByRole('button', { name: 'DRAFT PROSPECT' })).toBeInTheDocument();
   });
 
-  test('wires a rejected commissioner trade back to a fresh farm-room load', async () => {
+  test('does not expose a trade guide or commissioner trade path in the farm room', async () => {
     render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
 
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
-    expect(await screen.findByTestId('farm-commissioner-trade')).toBeInTheDocument();
-    expect(commissionerProps.current?.onFailure).toBeTypeOf('function');
-    const readsBeforeRefresh = getSession.mock.calls.length;
-    await act(async () => { await commissionerProps.current!.onFailure!(); });
-    expect(getSession.mock.calls.length).toBeGreaterThan(readsBeforeRefresh);
+    expect(screen.queryByRole('button', { name: 'THE GUIDE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'TRADE' })).not.toBeInTheDocument();
+    expect(screen.getByText('REMAINING PICKS')).toBeInTheDocument();
+    expect(screen.queryByText('OWNED, TRADEABLE PICKS')).not.toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/tradeable|pick or trade/i);
   });
 });

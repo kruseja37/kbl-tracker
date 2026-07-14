@@ -48,7 +48,7 @@ export function RankingsView(props: {
             key={next}
             type="button"
             aria-pressed={view === next}
-            className={`ballpark-press-button ballpark-press-sm min-h-11 ${view === next ? 'ballpark-press-action' : 'ballpark-press-default'}`}
+            className={`ballpark-press-button ballpark-press-sm min-h-11 min-w-11 ${view === next ? 'ballpark-press-action' : 'ballpark-press-default'}`}
             onClick={() => setView(next)}
           >
             {next}
@@ -79,7 +79,7 @@ export function RankingsView(props: {
               />
               <button
                 type="button"
-                className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+                className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 min-w-11"
                 disabled={rank === 1}
                 aria-label={`Send ${candidate.name} to top`}
                 onClick={() => persistOrder([candidate.id, ...ids.filter((id) => id !== candidate.id)])}
@@ -104,7 +104,7 @@ export function RankingsView(props: {
           arrowButtonClassName="min-h-11 min-w-11 border-2 px-2 font-bold"
           rankBadgeClassName="min-h-11 min-w-11 border-2 border-[var(--ballpark-brass)] px-2 py-1 font-bold"
           rankInputClassName="min-h-11 w-16 border-2 bg-[var(--ballpark-action-green)] px-2"
-          sendToTopClassName="min-h-11 border-2 px-2 text-xs font-bold"
+          sendToTopClassName="min-h-11 min-w-11 border-2 px-2 text-xs font-bold"
         />}
       </section>
     </div>

@@ -3,7 +3,10 @@ import { describe, expect, test } from 'vitest';
 
 import { evaluatePoolDemandSufficiency } from '../leagueBuilderPoolBuilder';
 import { SIZING_TUNING, poolDemandModel } from '../../engines/auctionPoolSizing';
-import { derivePositionSupplyFloorTargets } from '../../engines/poolFromDemand';
+import {
+  deriveHardPositionSupplyFloorTargets,
+  derivePositionSupplyFloorTargets,
+} from '../../engines/poolFromDemand';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 
 /**
@@ -111,7 +114,7 @@ describe('evaluatePoolDemandSufficiency position-aware floors', () => {
   test('fails with a structured reason when the actual pool is short on closers', () => {
     const teamCount = 3;
     const shapes = floorSatisfiedShapes(teamCount).filter((shape, index) => shape.role !== 'CP' || index % 2 === 0);
-    const cpNeeded = derivePositionSupplyFloorTargets(teamCount).find((target) => target.position === 'CP')!.needed;
+    const cpNeeded = deriveHardPositionSupplyFloorTargets(teamCount).find((target) => target.position === 'CP')!.needed;
     const sufficiency = evaluatePoolDemandSufficiency(1_000, teamCount, 0, undefined, shapes);
 
     expect(sufficiency.meetsFloor).toBe(false);

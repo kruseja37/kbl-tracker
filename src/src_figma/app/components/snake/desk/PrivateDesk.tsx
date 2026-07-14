@@ -34,6 +34,8 @@ export function PrivateDesk(props: {
   taxCoreRows: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   assistantBoard: SnakeAssistantBoardState;
+  assistantOptimizationKey?: string | null;
+  assistantOptimizationLabel?: string | null;
   tradeGuide?: ReactNode;
   tradePrefillKey?: string | null;
   showHelp?: boolean;
@@ -44,21 +46,34 @@ export function PrivateDesk(props: {
   privateScopeKey?: string;
 }) {
   const scopeKey = props.privateScopeKey ?? props.logScopeId ?? 'desk';
-  const [tabState, setTabState] = useState<{ scopeKey: string; tab: DeskTab; tradePrefillKey: string | null }>({
+  const [tabState, setTabState] = useState<{
+    scopeKey: string;
+    tab: DeskTab;
+    tradePrefillKey: string | null;
+    assistantOptimizationKey: string | null;
+  }>({
     scopeKey,
     tab: 'MY_BOARD',
     tradePrefillKey: null,
+    assistantOptimizationKey: null,
   });
   const consequentialActivity = props.advisorLog.filter((entry) => entry.actionable && !entry.expired);
   const currentPrefillKey = props.tradePrefillKey ?? null;
+  const currentAssistantOptimizationKey = props.assistantOptimizationKey ?? null;
   const stateMatchesScope = tabState.scopeKey === scopeKey;
+  const hasUnseenAssistantOptimization = Boolean(
+    currentAssistantOptimizationKey
+    && (!stateMatchesScope || tabState.assistantOptimizationKey !== currentAssistantOptimizationKey),
+  );
   const hasUnseenTradePrefill = Boolean(
     props.tradeGuide
     && currentPrefillKey
     && (!stateMatchesScope || tabState.tradePrefillKey !== currentPrefillKey),
   );
-  const requestedTab = hasUnseenTradePrefill
-    ? 'TRADE_PICKS'
+  const requestedTab = hasUnseenAssistantOptimization
+    ? 'ASST_GM_BOARD'
+    : hasUnseenTradePrefill
+      ? 'TRADE_PICKS'
     : stateMatchesScope
       ? tabState.tab
       : 'MY_BOARD';
@@ -67,7 +82,12 @@ export function PrivateDesk(props: {
     : requestedTab === 'ACTIVITY' && consequentialActivity.length === 0
       ? 'MY_BOARD'
       : requestedTab;
-  const setTab = (next: DeskTab) => setTabState({ scopeKey, tab: next, tradePrefillKey: currentPrefillKey });
+  const setTab = (next: DeskTab) => setTabState({
+    scopeKey,
+    tab: next,
+    tradePrefillKey: currentPrefillKey,
+    assistantOptimizationKey: currentAssistantOptimizationKey,
+  });
   const [seenByScope, setSeenByScope] = useState<Record<string, string[]>>({});
   const logScope = props.logScopeId ?? 'desk';
   const seen = new Set(seenByScope[logScope] ?? []);
@@ -103,6 +123,9 @@ export function PrivateDesk(props: {
         <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} planChemistry={props.planChemistry} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} showHelp={props.showHelp ?? false} />
       </div>}
       {tab === 'ASST_GM_BOARD' && <div role="region" id="private-desk-panel-asst_gm_board" aria-labelledby="private-desk-tab-asst_gm_board" data-testid="assistant-board-panel">
+        {props.assistantOptimizationLabel ? <p className="mb-3 inline-flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="assistant-optimization-result">
+          {props.assistantOptimizationLabel}
+        </p> : null}
         {props.assistantBoard.status === 'ready' && props.assistantBoard.board ? (
           <BoardView
             candidates={props.candidates}

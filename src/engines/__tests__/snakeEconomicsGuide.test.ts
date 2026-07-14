@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import { buildSnakeOrder, derivePickValueChart } from '../leagueConstruction';
 import {
+  evaluateSnakeLegalFinish,
   evaluateSnakeBills,
   evaluateSnakePlan,
 } from '../snakeEconomics';
@@ -13,9 +14,18 @@ import {
   searchSnakeGuidePackageBruteForce,
   type SnakeGuidePackage,
 } from '../snakeGuideTrade';
+import {
+  closeSnakeTradeOffer,
+  nodSnakeTradeOffer,
+  postSnakeTradeOffer,
+  proposalFromOpenSnakeOffer,
+} from '../snakeTradeOffers';
 import { restoreLatestSnakeCorrection } from '../snakeSession';
 import { proveSimultaneousSnakeSeating, type SnakeSeatingPlayer } from '../snakeSeatingProof';
-import type { LeagueBuilderMlbDraftSession } from '../../utils/leagueBuilderStorage';
+import {
+  recoverCanonicalMlbSnakePickOrder,
+  type LeagueBuilderMlbDraftSession,
+} from '../../utils/leagueBuilderStorage';
 
 function player(playerId: string, price: number, shape: RosterSlotPlayer): SnakeSeatingPlayer {
   return {
@@ -102,6 +112,55 @@ function legalSeating() {
 }
 
 describe('snake two-bills economics and guide packages', () => {
+  test('rejects every guide and offer operation at the FARM engine boundary', () => {
+    const session = {
+      ...sessionWithOwners({
+        id: 'farm-guide-rejected',
+        pickCount: 4,
+        owners: { 1: 'seller', 2: 'buyer', 3: 'seller', 4: 'buyer' },
+      }),
+      seasonNumber: 2,
+      draftPhase: 'FARM' as const,
+    };
+    const pickValueChart = chart([100, 100, 100, 100]);
+    const seatingProofInput = legalSeating();
+    const proposal: SnakeGuidePackage = {
+      buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 1,
+      offerPickNumbers: [2], receivePickNumbers: [1],
+      offerValue: 100, receiveValue: 100, sellerPremium: 0,
+      sessionRevision: session.revision ?? 0,
+    };
+    const offer = {
+      id: 'forged-farm-offer', phase: 'FARM' as const,
+      buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 1,
+      offerPickNumbers: [2], receivePickNumbers: [1],
+      offerValue: 100, receiveValue: 100, sellerPremium: 0,
+      postedSessionRevision: session.revision ?? 0,
+      buyerNod: true, sellerNod: true, postedAt: '2026-07-14T12:00:00.000Z',
+    };
+    const withOffer = { ...session, openTradeOffers: [offer] };
+
+    expect(() => searchSnakeGuidePackage({
+      session, buyerTeamId: 'buyer', targetPick: 1, pickValueChart, seatingProofInput,
+    })).toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => searchSnakeGuidePackageBruteForce({
+      session, buyerTeamId: 'buyer', targetPick: 1, pickValueChart, seatingProofInput,
+    })).toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => revalidateSnakeGuidePackage({ session, proposal, pickValueChart, seatingProofInput }))
+      .toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => executeSnakeGuidePackage({ session, proposal, pickValueChart, seatingProofInput }))
+      .toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => postSnakeTradeOffer({
+      session, phase: 'FARM' as never, proposal, postedAt: '2026-07-14T12:00:00.000Z',
+    })).toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => nodSnakeTradeOffer(withOffer, offer.id, 'buyer'))
+      .toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => closeSnakeTradeOffer(withOffer, offer.id))
+      .toThrow(/FARM.*do not allow pick trades/i);
+    expect(() => proposalFromOpenSnakeOffer(withOffer, offer))
+      .toThrow(/FARM.*do not allow pick trades/i);
+  });
+
   test('two-bills-never-equal-by-construction in both pressure directions', () => {
     const expensivePlan = legalPlayers('plan-expensive', 30);
     const cheapPool = legalPlayers('pool-cheap', 5);
@@ -134,6 +193,47 @@ describe('snake two-bills economics and guide packages', () => {
     expect(finishTight.legalFinish.legalFinishCushion).toBe(40);
   });
 
+  test('legal finish preserves a negative TAXSWING settlement delta as available budget', () => {
+    const taxCaps = (['VEL', 'JNK', 'ACC'] as const).flatMap((stat) => [
+      { group: 'rotation' as const, stat, topN: 4, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+      { group: 'bullpen' as const, stat, topN: 4, cap: 10_000, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+    ]);
+    const swingId = 'tax-refund-current-SP3';
+    const omittedRelieverId = 'tax-refund-current-RP2';
+    const currentRoster = legalPlayers('tax-refund-current', 10)
+      .filter((row) => row.playerId !== omittedRelieverId)
+      .map((row) => row.playerId === swingId ? {
+        ...row,
+        shape: { isPitcher: true, position: 'SP/RP', role: 'SP/RP' },
+        construction: {
+          ...row.construction,
+          role: 'SP/RP' as const,
+          pit: { VEL: 99, JNK: 99, ACC: 99 },
+        },
+      } : row);
+    const fourthPureStarter = player(
+      'tax-refund-fourth-sp',
+      10,
+      { isPitcher: true, position: 'SP', role: 'SP' },
+    );
+    const committedSpent = currentRoster.reduce((sum, row) => sum + row.price, 0);
+
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster,
+      committedSpent,
+      availablePool: [fourthPureStarter],
+      budget: committedSpent + fourthPureStarter.price + 120,
+      baseCaps: taxCaps,
+      realTeamCount: 2,
+    });
+
+    expect(finish.feasible).toBe(true);
+    expect(finish.completionPlayerIds).toEqual([fourthPureStarter.playerId]);
+    expect(finish.completionCost).toBe(10);
+    expect(finish.completionTax).toBe(-267);
+    expect(finish.legalFinishCushion).toBe(0);
+  });
+
   test('slot reassignment never changes plan tax because membership is unchanged', () => {
     const plan = legalPlayers('same-members', 10);
     const first = evaluateSnakePlan({
@@ -151,6 +251,27 @@ describe('snake two-bills economics and guide packages', () => {
       realTeamCount: 2,
     });
     expect(second.planTax).toBe(first.planTax);
+  });
+
+  test('plan economics refuses authoritative money for a complete nine-hitter, thirteen-pitcher board', () => {
+    const legal = legalPlayers('illegal-plan', 10);
+    const hitters = legal.filter((row) => !row.shape.isPitcher).slice(0, 9);
+    const canonicalPitchers = legal.filter((row) => row.shape.isPitcher);
+    const extraStarters = Array.from({ length: 5 }, (_, index) => player(
+      `illegal-plan-extra-sp-${index + 1}`,
+      10,
+      { isPitcher: true, position: 'SP', role: 'SP' },
+    ));
+    const illegalPlan = [...hitters, ...canonicalPitchers, ...extraStarters];
+
+    expect(illegalPlan).toHaveLength(22);
+    expect(() => evaluateSnakePlan({
+      boardPlayerIds: illegalPlan.map((row) => row.playerId),
+      players: illegalPlan,
+      budget: 1_000,
+      baseCaps: [],
+      realTeamCount: 2,
+    })).toThrow('PLAN COST needs a canonically legal 22-player roster.');
   });
 
   test('guide search finds a balancing-return package from a generated surplus chart', () => {
@@ -196,6 +317,125 @@ describe('snake two-bills economics and guide packages', () => {
       pickValueChart,
       seatingProofInput: { ...seatingProofInput, pool: [] },
     })).toEqual({ package: null, message: 'No legal guide trade reaches pick 2.' });
+  });
+
+  test('FARM launch order is not derived from mutable round-one ownership after a guide trade', () => {
+    const pickOrder = buildSnakeOrder(['seller', 'buyer'], 22);
+    const session: LeagueBuilderMlbDraftSession = {
+      id: 'farm-order-trade-repro',
+      leagueId: 'league',
+      seasonNumber: 1,
+      seed: 'farm-order-seed',
+      workflowVersion: 'snake-v1',
+      engineMethodVersion: 'snake-s1a',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 22,
+      pickOrder,
+      completedPicks: [],
+      trades: [],
+      snakeSetup: {
+        poolPlayerIds: ['player-a'],
+        versionSelections: {},
+        clubs: [{ teamId: 'buyer', hotseat: false }, { teamId: 'seller', hotseat: false }],
+        orderSeed: 'ranked-club-order-is-not-draft-order',
+      },
+      currentPickIndex: 0,
+      revision: 0,
+      createdDate: '2026-07-14T10:00:00.000Z',
+      lastModified: '2026-07-14T10:00:00.000Z',
+    };
+    const executed = executeSnakeGuidePackage({
+      session,
+      proposal: {
+        buyerTeamId: 'buyer',
+        sellerTeamId: 'seller',
+        targetPick: 1,
+        offerPickNumbers: [3],
+        receivePickNumbers: [1],
+        offerValue: 100,
+        receiveValue: 100,
+        sellerPremium: 0,
+        sessionRevision: 0,
+      },
+      pickValueChart: chart(pickOrder.map(() => 100)),
+      seatingProofInput: legalSeating(),
+    });
+
+    expect(executed.valid).toBe(true);
+    expect(executed.proposedSession!.pickOrder.slice(0, 2).map((slot) => slot.teamId))
+      .toEqual(['buyer', 'buyer']);
+    expect(recoverCanonicalMlbSnakePickOrder(executed.proposedSession!)).toEqual(pickOrder);
+
+    const second = executeSnakeGuidePackage({
+      session: executed.proposedSession!,
+      proposal: {
+        buyerTeamId: 'buyer',
+        sellerTeamId: 'seller',
+        targetPick: 4,
+        offerPickNumbers: [1],
+        receivePickNumbers: [4],
+        offerValue: 100,
+        receiveValue: 100,
+        sellerPremium: 0,
+        sessionRevision: 1,
+      },
+      pickValueChart: chart(pickOrder.map(() => 100)),
+      seatingProofInput: legalSeating(),
+    });
+    expect(second.valid).toBe(true);
+    expect(recoverCanonicalMlbSnakePickOrder(second.proposedSession!)).toEqual(pickOrder);
+
+    const twiceTraded = second.proposedSession!;
+    const corruptions: LeagueBuilderMlbDraftSession[] = [
+      { ...twiceTraded, trades: [...twiceTraded.trades!].reverse() },
+      {
+        ...twiceTraded,
+        trades: twiceTraded.trades!.map((trade, index) => index === 1
+          ? { ...trade, humanPickNumbers: [1, 1], cpuPickNumbers: [4, 2] }
+          : trade),
+      },
+      {
+        ...twiceTraded,
+        trades: twiceTraded.trades!.map((trade, index) => index === 1
+          ? { ...trade, humanPickNumbers: [pickOrder.length + 1] }
+          : trade),
+      },
+      {
+        ...twiceTraded,
+        pickOrder: twiceTraded.pickOrder.map((slot) => slot.pick === 3
+          ? { ...slot, teamId: 'buyer' }
+          : slot),
+      },
+      {
+        ...twiceTraded,
+        trades: twiceTraded.trades!.map((trade, index) => index === 1
+          ? { ...trade, id: twiceTraded.trades![0].id }
+          : trade),
+      },
+    ];
+    for (const corrupt of corruptions) {
+      expect(() => recoverCanonicalMlbSnakePickOrder(corrupt)).toThrow(/trade history is corrupt/i);
+    }
+  });
+
+  test('a canonical production MLB session with no trade property still recovers its order', () => {
+    const pickOrder = buildSnakeOrder(['seller', 'buyer'], 22);
+    const noTradeSession: LeagueBuilderMlbDraftSession = {
+      id: 'farm-order-no-trade', leagueId: 'league', seasonNumber: 1, seed: 'seed',
+      workflowVersion: 'snake-v1', engineMethodVersion: 'snake-s1a', tier: 'standard', balanceMode: 'taxed',
+      rounds: 22, pickOrder, completedPicks: [], currentPickIndex: 0,
+      snakeSetup: {
+        poolPlayerIds: ['player-a'], versionSelections: {}, orderSeed: 'seed',
+        clubs: [{ teamId: 'buyer', hotseat: false }, { teamId: 'seller', hotseat: false }],
+      },
+      createdDate: '2026-07-14T10:00:00.000Z', lastModified: '2026-07-14T10:00:00.000Z',
+    };
+
+    expect(noTradeSession).not.toHaveProperty('trades');
+    expect(recoverCanonicalMlbSnakePickOrder(noTradeSession)).toEqual(pickOrder);
+    expect(() => recoverCanonicalMlbSnakePickOrder({ ...noTradeSession, trades: null as never }))
+      .toThrow(/trade history is corrupt/i);
   });
 
   test('carries a nonzero authoritative seller premium and rejects missing, malformed, or tampered premium snapshots', () => {

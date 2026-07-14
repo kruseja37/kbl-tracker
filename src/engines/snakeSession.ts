@@ -1,15 +1,20 @@
 import {
   SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
-  type SnakeDraftCorrectionSnapshot,
   type SnakeSeatBoardRecord,
 } from '../utils/leagueBuilderStorage';
+import { withLatestSnakeCorrection } from './snakeCorrection';
 import {
   deriveVersionGroupId,
   emptySnakeVersionState,
   retireDraftedVersion,
   type VersionedPlayerIdentity,
 } from './snakeVersioning';
+
+export {
+  restoreLatestSnakeCorrection,
+  withLatestSnakeCorrection,
+} from './snakeCorrection';
 
 export interface SeatBoardValidation {
   valid: boolean;
@@ -27,35 +32,6 @@ export function validateSeatBoard(board: SnakeSeatBoardRecord): SeatBoardValidat
   if (playerIds.some((playerId) => !playerId)) errors.push('Every board slot needs a player.');
   if (new Set(playerIds).size !== playerIds.length) errors.push('The board must contain 22 unique player IDs.');
   return { valid: errors.length === 0, errors };
-}
-
-function snapshot(
-  session: LeagueBuilderMlbDraftSession,
-  action: SnakeDraftCorrectionSnapshot['action'],
-): SnakeDraftCorrectionSnapshot {
-  const priorSession = { ...session };
-  delete priorSession.correctionSnapshots;
-  return {
-    action,
-    // Run It Back is a real one-action rewind. Offers that were live immediately
-    // before the action are part of that truth and carry the restored revision.
-    priorSession,
-  };
-}
-
-/** One window only: every completed action overwrites the previous correction snapshot. */
-export function withLatestSnakeCorrection(
-  session: LeagueBuilderMlbDraftSession,
-  action: SnakeDraftCorrectionSnapshot['action'],
-): LeagueBuilderMlbDraftSession {
-  return { ...session, correctionSnapshots: [snapshot(session, action)] };
-}
-
-export function restoreLatestSnakeCorrection(
-  session: LeagueBuilderMlbDraftSession,
-): LeagueBuilderMlbDraftSession {
-  const latest = session.correctionSnapshots?.[0];
-  return latest ? latest.priorSession : session;
 }
 
 export function applySnakePickWithCorrection<T extends VersionedPlayerIdentity>(input: {

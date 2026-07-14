@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   manualGuidePromise: null as Promise<unknown> | null,
   companionFreshnessRefresh: null as null | (() => void | Promise<void>),
   mainFreshnessRefresh: null as null | (() => void | Promise<void>),
+  freshData: null as null | Record<string, unknown>,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -143,6 +144,13 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
   return {
     ...actual,
+    getAllLeagueTemplates: vi.fn(async () => (mocks.freshData?.leagues ?? mocks.data.leagues ?? [])),
+    getAllTeams: vi.fn(async () => (mocks.freshData?.teams ?? mocks.data.teams ?? [])),
+    getAllPlayers: vi.fn(async () => (mocks.freshData?.players ?? mocks.data.players ?? [])),
+    getMlbDraftSession: vi.fn(async () => mocks.currentSession),
+    getRegisteredPool: vi.fn(async () => (
+      mocks.freshData?.pool ?? await (mocks.data.getRegisteredPool as () => Promise<unknown>)()
+    )),
     patchApprovedCompanionSeatBoard: (...args: unknown[]) => mocks.patchBoard(...args),
     patchMlbDraftSessionSnakeCompanions: vi.fn(),
     saveMlbDraftRoomSession: async (next: LeagueBuilderMlbDraftSession) => {
@@ -261,10 +269,10 @@ function session(): LeagueBuilderMlbDraftSession {
   };
 }
 
-function prepare(source = session()) {
+function prepare(source = session(), activePlayers = players) {
   mocks.currentSession = source;
   mocks.data = {
-    leagues: [league], teams, players, isLoading: false, error: null, refresh: mocks.refresh,
+    leagues: [league], teams, players: activePlayers, isLoading: false, error: null, refresh: mocks.refresh,
     getRegisteredPool: vi.fn(async () => pool),
     getMlbDraftSession: vi.fn(async () => mocks.currentSession as LeagueBuilderMlbDraftSession),
   };
@@ -297,7 +305,10 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     localStorage.setItem('kbl-snake-companion-device-id', 'ipad-a');
     mocks.patchBoard.mockReset();
     mocks.pull.mockClear();
-    mocks.refresh.mockClear();
+    mocks.freshData = null;
+    mocks.refresh.mockReset().mockImplementation(async () => {
+      if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
+    });
     mocks.assistantRequests.length = 0;
     mocks.assistantResults.length = 0;
     mocks.omitContextPlayerId = null;
@@ -314,6 +325,23 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare();
   });
   afterEach(() => cleanup());
+
+  test('refreshes companion player and pool authority after every recurring pull', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const freshPlayers = players.map((row) => row.id === 'dual'
+      ? { ...row, firstName: 'Fresh', lastName: 'Authority' }
+      : row);
+    mocks.freshData = { leagues: [league], teams, players: freshPlayers, pool };
+    const refreshesBefore = mocks.refresh.mock.calls.length;
+
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    expect(mocks.refresh.mock.calls.length).toBeGreaterThan(refreshesBefore);
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(await screen.findAllByText(/Fresh Authority/i)).not.toHaveLength(0);
+    expect(document.body).not.toHaveTextContent('dual Player');
+  });
 
   test('an approved off-clock companion refits only its plan and can undo the last reorder exactly', async () => {
     const originalA = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
@@ -340,9 +368,13 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(mocks.patchBoard.mock.calls[1][0]).toMatchObject({ teamId: 'a', expectedBoardRevision: afterOverall.revision });
     const afterPosition = mocks.patchBoard.mock.calls[1][0].board as SnakeSeatBoardRecord;
     expect(afterPosition.rankings.byPosition?.C?.slice(0, 2)).toEqual(['dual', 'catcher']);
-    expect(afterPosition.slots).not.toEqual(afterOverall.slots);
+    expect(afterPosition.rankings).not.toEqual(afterOverall.rankings);
+    expect(afterPosition.revision).toBe(afterOverall.revision + 1);
+    expect(afterPosition.slots).toEqual(afterOverall.slots);
     expect(new Set(Object.values(afterPosition.slots))).toHaveLength(22);
     expect((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards?.b).toEqual(originalB);
+    expect(await screen.findByTestId('companion-board-update-banner'))
+      .toHaveTextContent('MY BOARD UPDATED — 0 SLOTS CHANGED.');
 
     fireEvent.click(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' }));
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(3));
@@ -351,22 +383,48 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(restored.slots).toEqual(afterOverall.slots);
     expect(restored.rankings).toEqual(afterOverall.rankings);
     expect(restored.revision).toBe(afterPosition.revision + 1);
+    expect((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards?.b).toEqual(originalB);
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
-  test('assistant viewing, optimize, and Revert never write; stale companion Keep fails closed', async () => {
+  test('fails money, chemistry, and persistence closed for a complete nine-hitter, thirteen-pitcher refit', async () => {
+    const source = session();
+    source.snakeSetup!.poolPlayerIds = Object.values(slots);
+    const illegalPlayers = players.map((row) => (
+      ['flex-1', 'flex-2', 'flex-3', 'flex-4'].includes(row.id) ? player(row.id, 'SP') : row
+    ));
+    const before = structuredClone(source);
+    prepare(source, illegalPlayers);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+
+    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
+    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+
+    expect(await screen.findByText(/MY BOARD COULD NOT REFIT/)).toBeInTheDocument();
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.currentSession).toEqual(before);
+  });
+
+  test('assistant viewing and optimize never invent Revert; stale companion Keep fails closed', async () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'KEEP ON MY BOARD' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVERT' }));
+    expect(screen.getByTestId('assistant-optimization-result')).toHaveTextContent('OPTIMIZED FOR');
+    expect(screen.queryByRole('button', { name: 'REVERT' })).not.toBeInTheDocument();
     expect(mocks.patchBoard).not.toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
     const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
     mocks.currentSession = { ...current, revision: (current.revision ?? 0) + 1 };
@@ -415,6 +473,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
     await waitFor(() => expect(mocks.assistantRequests.at(-1)?.input.selectedPinPlayerId).toBe('dual'));
+    expect(screen.getByTestId('assistant-optimization-result')).toHaveTextContent('OPTIMIZED FOR');
     const optimized = mocks.assistantResults.at(-1) as {
       status: string;
       reason?: string;

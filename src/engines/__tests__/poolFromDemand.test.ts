@@ -5,8 +5,11 @@ import {
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   derivePoolQualityTuning,
+  deriveHardPositionSupplyFloorTargets,
   derivePositionSupplyFloorTargets,
   enforcePositionSupplyFloors,
+  evaluateCompetitivePositionSupplyFloors,
+  evaluatePositionSupplyFloors,
   extractPoolFromDemand,
   numericGradeForPoolShape,
   poolBalancePresetTuning,
@@ -245,6 +248,26 @@ function floorTarget(teamCount: number, position: string) {
   if (!target) throw new Error(`Missing floor target ${position}`);
   return target;
 }
+
+describe('hard legality versus competitive position depth', () => {
+  it('keeps twenty-club closer legality at 20 while retaining the 27-card quality target', () => {
+    const teamCount = 20;
+    const closerShapes = Array.from({ length: 22 }, () => ({
+      isPitcher: true,
+      position: 'CP',
+      role: 'CP',
+    } as const));
+
+    expect(deriveHardPositionSupplyFloorTargets(teamCount).find((target) => target.position === 'CP'))
+      .toMatchObject({ needed: 20, slack: 0 });
+    expect(derivePositionSupplyFloorTargets(teamCount).find((target) => target.position === 'CP'))
+      .toMatchObject({ needed: 27, slack: 7 });
+    expect(evaluatePositionSupplyFloors(closerShapes, teamCount).find((row) => row.position === 'CP'))
+      .toMatchObject({ needed: 20, available: 22, missing: 0 });
+    expect(evaluateCompetitivePositionSupplyFloors(closerShapes, teamCount).find((row) => row.position === 'CP'))
+      .toMatchObject({ needed: 27, available: 22, missing: 5 });
+  });
+});
 
 function hardFloorUniverse(teamCount: number, cpCount = floorTarget(teamCount, 'CP').needed): DemandUniversePlayer[] {
   n = 0;

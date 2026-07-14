@@ -103,14 +103,14 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('PRIVATE FIT STRONG · CHEM 2→3')).toBeInTheDocument();
   });
 
-  it('puts the private desk first in the 1024-wide room layout and keeps the ritual rail sticky', () => {
+  it('puts the private desk first at iPad width and keeps the ritual rail sticky on wide screens', () => {
     render(<SnakeDraftRoomView {...props()} />);
     const privateSeat = screen.getByRole('region', { name: 'Private seat' });
     const ritual = screen.getByRole('region', { name: 'Draft ritual' });
 
-    expect(privateSeat.parentElement).toHaveClass('lg:grid-cols-[minmax(0,1fr)_minmax(340px,38vw)]');
+    expect(privateSeat.parentElement).toHaveClass('xl:grid-cols-[minmax(0,1fr)_minmax(280px,30vw)]');
     expect(privateSeat.compareDocumentPosition(ritual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(ritual.parentElement).toHaveClass('self-start', 'lg:sticky', 'lg:top-4');
+    expect(ritual.parentElement).toHaveClass('self-start', 'xl:sticky', 'xl:top-4');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD').parentElement).toHaveClass('min-h-36');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toHaveClass('text-xl');
 
@@ -147,6 +147,12 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('PICKS 10–16 OF 20')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comets pick 12' })).toHaveAttribute('aria-current', 'step');
     expect(screen.queryByRole('button', { name: 'Kodiaks pick 1' })).not.toBeInTheDocument();
+  });
+
+  it('uses an explicit full-draft count when the room receives an absolute-pick preview window', () => {
+    const order = Array.from({ length: 6 }, (_, index) => ({ pick: index + 19, teamId: index % 2 ? 'a' : 'b' }));
+    render(<SnakeDraftRoomView {...props({ order, totalPickCount: 44 })} />);
+    expect(screen.getByText('PICKS 19–24 OF 44')).toBeInTheDocument();
   });
 
   it('opens the pass cover only for the hotseat club on the clock', () => {
@@ -226,7 +232,7 @@ describe('SnakeDraftRoomView', () => {
         expect(control).toHaveClass('min-h-11');
       }
     };
-    expect(screen.getByTestId('snake-draft-room')).toHaveClass('min-w-0', 'overflow-x-hidden');
+    expect(screen.getByTestId('snake-draft-room')).toHaveClass('min-w-0', 'overflow-x-clip', 'overflow-y-visible');
     expect(screen.getByTestId('room-layout')).toHaveClass('min-w-0');
     expect(screen.getByRole('combobox', { name: 'TEAM' })).toHaveClass('min-h-11');
     expectEveryPersistentControlToBeTouchSafe();
@@ -375,6 +381,44 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByRole('button', { name: 'REVEAL KODIAKS SEAT' })).not.toBeInTheDocument();
   });
 
+  it('keeps selection inside independent profile and board panes without page scroll choreography', () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const { rerender } = render(<SnakeDraftRoomView {...props({
+      consolidatedMlb: true,
+      selectedPlayerCard: <div data-testid="profile-details">PROFILE RATINGS AND TRAITS</div>,
+      privateDesk: <div data-testid="private-board">22-PLAYER BOARD</div>,
+    })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
+    scrollIntoView.mockClear();
+    expect(screen.getByTestId('private-workspace-layout')).toHaveClass(
+      'lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)]',
+    );
+    expect(screen.getByTestId('selected-player-pane')).toContainElement(screen.getByTestId('profile-details'));
+    expect(screen.getByTestId('selected-player-pane')).toHaveClass(
+      'sticky',
+      'top-3',
+      'self-start',
+      'lg:top-20',
+      'lg:max-h-[calc(100vh-22rem)]',
+    );
+    expect(screen.getByTestId('private-workspace-scroll')).toContainElement(screen.getByTestId('private-board'));
+    expect(screen.getByTestId('private-workspace-scroll')).toHaveClass('overflow-y-auto');
+
+    rerender(<SnakeDraftRoomView {...props({
+      consolidatedMlb: true,
+      candidate: { id: 'p2', name: 'Pat Pitcher', position: 'SP', consequence: 'A different legal finish.' },
+      selectedPlayerCard: <div data-testid="profile-details">PAT PROFILE RATINGS AND TRAITS</div>,
+      privateDesk: <div data-testid="private-board">22-PLAYER BOARD</div>,
+    })} />);
+    expect(screen.getByText('PAT PROFILE RATINGS AND TRAITS')).toBeInTheDocument();
+    expect(scrollIntoView).not.toHaveBeenCalled();
+  });
+
   it('opens the selected player shared full profile without a pronoun label', () => {
     render(<SnakeDraftRoomView {...props()} />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
@@ -411,6 +455,23 @@ describe('SnakeDraftRoomView', () => {
     render(<SnakeDraftRoomView {...props({ correctionAvailable: true })} />);
     fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
     expect(screen.getByText('UNDO THE MOST RECENT ACTION?')).toBeInTheDocument();
+  });
+
+  it('uses pick-only ownership and correction copy in FARM without trade language', () => {
+    render(<SnakeDraftRoomView {...props({
+      draftActionLabel: 'DRAFT PROSPECT',
+      correctionAvailable: true,
+      tradeGuide: undefined,
+      commissionerTrade: undefined,
+    })} />);
+
+    expect(screen.getByText('REMAINING PICKS')).toBeInTheDocument();
+    expect(screen.queryByText('OWNED, TRADEABLE PICKS')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'THE GUIDE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'TRADE' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
+    expect(screen.getByText('ONLY THE LATEST PICK CAN BE UNDONE.')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/tradeable|pick or trade/i);
   });
 
   it('does not announce a correction when the durable write is rejected', async () => {
@@ -505,6 +566,7 @@ describe('SnakeDraftRoomView', () => {
 
     expect(screen.getByText('SAM SLUGGER')).toBeInTheDocument();
     expect(screen.getByText('THE KODIAKS SELECT…')).toBeInTheDocument();
+    expect(screen.getByText('PICK 1 · Kodiaks')).toBeInTheDocument();
     expect(screen.queryByText('PAT PITCHER')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'ADVANCE TO NEXT PICK' })).not.toBeInTheDocument();
     await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });

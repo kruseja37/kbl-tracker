@@ -5,6 +5,7 @@ import {
 } from './leagueBuilderStorage';
 import { isLegalRoster } from '../data/rosterConstruction';
 import { toRosterSlotPlayer } from '../engines/rosterNeed';
+import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM } from './farmAuctionPool';
 import { readSnakeDraftTruth, validateSnakeRosterHandoff } from './snakeDraftManifest';
 
 export interface SnakeRosterHandoffReadiness {
@@ -30,7 +31,9 @@ export async function assertSnakeRosterHandoffReady(
     picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
   }
 
-  for (const [teamId, picks] of picksByTeamId) {
+  const frozenTeamIds = truth.lockedClubs.map((club) => club.teamId);
+  for (const teamId of frozenTeamIds) {
+    const picks = picksByTeamId.get(teamId) ?? [];
     const roster = await getTeamRoster(teamId);
     if (!roster) throw new Error(`The ${phase} roster handoff is still syncing for ${teamId}.`);
     const rosterIds = phase === 'MLB' ? roster.mlbRoster : roster.farmRoster;
@@ -41,19 +44,27 @@ export async function assertSnakeRosterHandoffReady(
     if (phase === 'MLB' && (rosterIds.length !== picks.length || rosterSet.size !== picks.length)) {
       throw new Error(`The MLB roster handoff does not match the frozen picks for ${teamId}.`);
     }
+    if (phase === 'FARM' && rosterIds.length !== FARM_AUCTION_ROSTER_SLOTS_PER_TEAM) {
+      throw new Error(`The FARM roster handoff for ${teamId} has ${rosterIds.length}/${FARM_AUCTION_ROSTER_SLOTS_PER_TEAM} players.`);
+    }
     if (picks.some((pick) => !rosterSet.has(pick.playerId))) {
       throw new Error(`The ${phase} roster handoff is missing a frozen pick for ${teamId}.`);
     }
+    const pickByPlayerId = new Map(picks.map((pick) => [pick.playerId, pick]));
     const storedPlayers = [];
-    for (const pick of picks) {
-      const player = await getPlayer(pick.playerId);
-      const assignment = player?.leagueAssignments?.find((row) => row.leagueId === session.leagueId);
-      if (!player || assignment?.teamId !== teamId || assignment.rosterStatus !== phase) {
-        throw new Error(`The ${phase} player handoff is still syncing for ${pick.playerId}.`);
+    for (const playerId of rosterIds) {
+      const player = await getPlayer(playerId);
+      const assignments = player?.leagueAssignments?.filter((row) => row.leagueId === session.leagueId) ?? [];
+      if (!player || assignments.length !== 1
+        || assignments[0].teamId !== teamId || assignments[0].rosterStatus !== phase) {
+        throw new Error(`The ${phase} player handoff is still syncing for ${playerId}.`);
       }
-      const salary = player.settledSalary ?? player.salary;
-      if (!Number.isFinite(salary) || salary !== pick.launchSalary) {
-        throw new Error(`The ${phase} salary handoff does not match the frozen pick for ${pick.playerId}.`);
+      const pick = pickByPlayerId.get(playerId);
+      if (pick) {
+        const salary = player.settledSalary ?? player.salary;
+        if (!Number.isFinite(salary) || salary !== pick.launchSalary) {
+          throw new Error(`The ${phase} salary handoff does not match the frozen pick for ${playerId}.`);
+        }
       }
       storedPlayers.push(player);
     }
@@ -73,7 +84,7 @@ export async function assertSnakeRosterHandoffReady(
     phase,
     ready: true,
     playerCount: truth.completedPicks.length,
-    teamCount: picksByTeamId.size,
+    teamCount: frozenTeamIds.length,
   };
 }
 
