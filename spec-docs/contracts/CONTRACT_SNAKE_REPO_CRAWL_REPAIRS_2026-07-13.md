@@ -28,6 +28,11 @@ authorization in every transaction that can persist board maps, including
 `saveMlbDraftSession`, `updateMlbDraftSessionAtomically`, and
 `saveMlbDraftRoomSession`. No new production path is required.
 
+**Amendment 5:** Lane B re-audit found six behavior regressions in the lint and
+test-isolation repair. All six must be repaired without restoring lint debt or
+weakening readiness assertions. The existing product paths are already allowed;
+the focused test paths listed below are added for mutation-honest coverage.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -179,12 +184,34 @@ Rules:
   healthy but delayed under full-suite CPU saturation; it may not replace a
   missing event or write.
 - The file must pass alone, in the changed-file matrix, and in the full suite.
+- Every Regenerate interaction in the affected quality-center/hydration tests
+  must use the readiness-aware helper, including the hard-keep/manual-exclusion
+  case. Saturated parallel repetitions must pass without a timeout increase.
+
+### B4. Preserve behavior while clearing lint
+
+- Auction nomination selection plus opening-bid reset must be one atomic state
+  transition. A non-default selected player may not be overwritten by stale
+  pre-event state.
+- MLB and FARM bid draft state must be keyed by lot identity/generation as well
+  as its minimum. Consecutive lots with the same opening ask must not resurrect
+  a prior lot's custom amount.
+- Franchise persistence repair must not rerun on ordinary rerenders. Retain the
+  latest refresh functions safely while keeping the repair trigger dependent on
+  stable franchise/season primitives.
+- Advisor responses for a prior draft/session must be ignored after the active
+  draft changes. A late payload may not switch state back to its draft ID.
+- Team Hub sort output must preserve the original relational comparison and
+  missing-value behavior exactly. Locale-aware replacement semantics are not
+  authorized.
 
 ### Lane B additional allowed files
 
 - `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`
 - `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`
 - `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.testUtils.ts`
+- `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.test.tsx`
+- `src/src_figma/__tests__/franchiseMode/FranchiseHome.test.tsx`
 - Existing focused tests that import a moved pure helper, import-update only
 - At most one new adjacent pure helper module for each affected production page
 
@@ -211,6 +238,22 @@ Frozen helper and importer paths:
 
 Lane B must report every added helper/importer before final handoff. It may not
 touch Lane A files.
+
+### Amendment 5 required tests
+
+1. Select a non-default auction player and nominate that exact player.
+2. Two consecutive MLB lots with the same minimum start from independent bid
+   drafts.
+3. Two consecutive FARM lots with the same minimum start from independent bid
+   drafts.
+4. Ordinary Franchise Home rerenders and tab changes perform persistence repair
+   once for the same stable franchise/season identity.
+5. A deferred advisor response for draft A resolves after switching to draft B
+   and is ignored.
+6. Team Hub sorting matches the pre-repair relational order for strings,
+   numerics, equal values, and missing values.
+7. At least four saturated parallel pool-lock runs pass all readiness cases with
+   no sleep or timeout increase.
 
 ## Gates required for each lane
 
