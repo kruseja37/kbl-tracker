@@ -13,6 +13,11 @@ guide package validator would reject the newly required premium key. The narrow
 validator implementation and its owned test are therefore added below. No other
 desk-model change is authorized.
 
+**Amendment 2:** Typecheck proved that the farm slot adapter constructs the same
+`SnakeGuidePackage`. That single constructor and its owned test are authorized
+to carry the canonical premium. This is compatibility wiring only; no farm
+search, guide behavior, roster rule, or UI change is authorized.
+
 ## Why this repair exists
 
 The independent Batch 5 audit returned one major and two minor findings. This
@@ -89,6 +94,7 @@ Premium pipeline:
 
 - `src/engines/snakeGuideTrade.ts`
 - `src/engines/snakeTradeOffers.ts`
+- `src/engines/snakeFarmSlots.ts` (the `SnakeGuidePackage` constructor only)
 - `src/utils/leagueBuilderStorage.ts`
 - `src/src_figma/app/components/snake/desk/snakeDraftDecisionModel.ts`
 - `src/src_figma/app/components/snake/trade/TradePackageCard.tsx`
@@ -108,6 +114,7 @@ Durable responsive fixture:
 ## Allowed tests
 
 - `src/engines/__tests__/snakeEconomicsGuide.test.ts`
+- `src/engines/__tests__/snakeFarmSlots.test.ts` (premium assertion only, if needed)
 - `src/utils/tests/snakeRoomPersistence.test.ts`
 - `src/src_figma/app/components/snake/desk/__tests__/snakeDraftDecisionModel.test.ts`
 - Existing owned Batch 5 main-room, companion, trade, privacy, selected-card,
