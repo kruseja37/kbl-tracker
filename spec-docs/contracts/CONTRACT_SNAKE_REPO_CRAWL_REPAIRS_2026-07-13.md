@@ -7,6 +7,11 @@
 **Audit of record:** `/root/snake_repo_crawl_auditor`
 **Status:** Open
 
+**Amendment 1:** Lane B proved the exact export consumers before mutation. The
+three adjacent modules and import-only consumer paths listed below are frozen as
+authorized. `FranchiseHomeContext.ts` may contain only the existing React
+context and hook; it may not add persistence, routing, state transitions, or UI.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -137,6 +142,23 @@ Rules:
 - `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.testUtils.ts`
 - Existing focused tests that import a moved pure helper, import-update only
 - At most one new adjacent pure helper module for each affected production page
+
+Frozen helper and importer paths:
+
+- `src/src_figma/app/pages/LeagueBuilderAuctionDraft.helpers.ts` (new; the five
+  existing pure exported helpers only)
+- `src/src_figma/__tests__/pages/LeagueBuilderAuctionDraft.computeBoardAutoAdvanceLine.test.ts`
+- `src/src_figma/app/hooks/__tests__/useAuctionDraft.test.ts`
+- `src/src_figma/app/components/auction/__tests__/WhisperPanel.test.tsx`
+- `src/src_figma/app/pages/LeagueBuilderFarmAuctionDraft.helpers.ts` (new;
+  `buildFarmBridgeHeadline` only)
+- `src/src_figma/__tests__/pages/LeagueBuilderFarmAuctionDraft.test.tsx`
+- `src/src_figma/app/pages/FranchiseHomeContext.ts` (new; existing context and
+  hook only)
+- `src/src_figma/app/components/TeamHubContent.tsx` (import update only)
+- `src/src_figma/app/components/LineupsTabContent.tsx` (import update only)
+- `src/src_figma/__tests__/franchiseMode/FranchiseHomeLaunch.test.tsx` (replace
+  page re-export imports with direct canonical helper imports only)
 
 Lane B must report every added helper/importer before final handoff. It may not
 touch Lane A files.
