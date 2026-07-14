@@ -3,6 +3,7 @@ import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxono
 import { RankReorderList } from '../../shared/RankReorderList';
 import { DeskCandidateRow } from './DeskCandidateRow';
 import type { DeskCandidate } from './deskModel';
+import type { SnakeDraftDecision } from './snakeDraftDecisionModel';
 
 export type SnakeRankingView = 'OVERALL' | TaxonomyPosition;
 
@@ -18,6 +19,8 @@ export function RankingsView(props: {
   onReorderOverall?: (orderedIds: readonly string[]) => void;
   selectedCandidateId?: string | null;
   onSelectCandidate?: (candidateId: string) => void;
+  decision?: SnakeDraftDecision | null;
+  onTradeDecision?: (decision: Extract<SnakeDraftDecision, { kind: 'TRADE_TO_PICK' }>) => void;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   const positionButtons = POSITION_ORDER.filter((position) => (props.rankings[position]?.length ?? 0) > 0);
@@ -76,6 +79,8 @@ export function RankingsView(props: {
                 prefix={`#${rank}`}
                 selected={props.selectedCandidateId === candidate.id}
                 onSelect={props.onSelectCandidate}
+                decision={props.decision}
+                onTradeDecision={props.onTradeDecision}
               />
               <button
                 type="button"
@@ -96,6 +101,8 @@ export function RankingsView(props: {
             candidate={candidate}
             selected={props.selectedCandidateId === candidate.id}
             onSelect={props.onSelectCandidate}
+            decision={props.decision}
+            onTradeDecision={props.onTradeDecision}
           />}
           rowClassName={(_candidate, _index, dragged) => `grid grid-cols-[1fr_auto] gap-2 border-4 p-2 ${dragged ? 'opacity-60' : ''}`}
           leftWrapClassName="flex min-w-0 items-start gap-2"

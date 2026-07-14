@@ -10,6 +10,7 @@ import { RankingsView } from './RankingsView';
 import type { ChemistryStripRow } from './draftTruthModel';
 import type { AdvisorLogEntry, DeskCandidate, TaxCoreRow } from './deskModel';
 import type { SnakeAssistantBoardState } from './useSnakeAssistantBoard';
+import type { SnakeDraftDecision } from './snakeDraftDecisionModel';
 
 type DeskTab = 'MY_BOARD' | 'ASST_GM_BOARD' | 'RANKINGS' | 'LOG' | 'GUIDE';
 
@@ -41,8 +42,14 @@ export function PrivateDesk(props: {
   onSelectCandidate?: (candidateId: string) => void;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onReorderOverall?: (orderedIds: readonly string[]) => void;
+  decision?: SnakeDraftDecision | null;
+  onTradeDecision?: (decision: Extract<SnakeDraftDecision, { kind: 'TRADE_TO_PICK' }>) => void;
+  privateScopeKey?: string;
 }) {
-  const [tab, setTab] = useState<DeskTab>('MY_BOARD');
+  const scopeKey = props.privateScopeKey ?? props.logScopeId ?? 'desk';
+  const [tabState, setTabState] = useState<{ scopeKey: string; tab: DeskTab }>({ scopeKey, tab: 'MY_BOARD' });
+  const tab = tabState.scopeKey === scopeKey ? tabState.tab : 'MY_BOARD';
+  const setTab = (next: DeskTab) => setTabState({ scopeKey, tab: next });
   const [seenByScope, setSeenByScope] = useState<Record<string, string[]>>({});
   const logScope = props.logScopeId ?? 'desk';
   const seen = new Set(seenByScope[logScope] ?? []);
@@ -93,7 +100,7 @@ export function PrivateDesk(props: {
           {props.assistantBoard.status === 'pending' ? 'ASST GM BOARD CALCULATING…' : 'ASST GM BOARD UNAVAILABLE'}
         </p>}
       </div>}
-      {tab === 'RANKINGS' && <div role="region" id="private-desk-panel-rankings" aria-labelledby="private-desk-tab-rankings"><RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} /></div>}
+      {tab === 'RANKINGS' && <div role="region" id="private-desk-panel-rankings" aria-labelledby="private-desk-tab-rankings"><RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} decision={props.decision} onTradeDecision={(decision) => { setTab('GUIDE'); props.onTradeDecision?.(decision); }} /></div>}
       {tab === 'LOG' && <div role="region" id="private-desk-panel-log" aria-labelledby="private-desk-tab-log"><AdvisorLog entries={props.advisorLog} /></div>}
       {tab === 'GUIDE' && <div role="region" id="private-desk-panel-guide" aria-labelledby="private-desk-tab-guide">{props.tradeGuide}</div>}
     </section>

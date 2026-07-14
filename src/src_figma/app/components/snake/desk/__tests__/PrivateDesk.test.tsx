@@ -24,7 +24,7 @@ const candidate: DeskCandidate = {
     pit: { VEL: 0, JNK: 0, ACC: 0 },
   },
 };
-const idleAssistant = { status: 'idle' as const, board: null };
+const idleAssistant = { status: 'idle' as const, board: null, infeasibleReason: null };
 
 describe('PrivateDesk', () => {
   it('shows the distinct 22-player plan ledger, five chemistry families, and canonical Assistant GM status', () => {
@@ -184,6 +184,7 @@ describe('PrivateDesk', () => {
       slotDepth={{ SS: 1 }}
       assistantBoard={{
         status: 'ready',
+        infeasibleReason: null,
         board: {
           kind: 'snake-assistant-board', teamId: 'team-a',
           slots: [{ slotId: 'SS', playerId: 'muraski', pinned: false }],
@@ -214,6 +215,43 @@ describe('PrivateDesk', () => {
     fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
   });
+
+  it('shows sparse decision labels and lets only a trade call open the existing guide', () => {
+    const onTradeDecision = vi.fn();
+    const tradeDecision = {
+      kind: 'TRADE_TO_PICK' as const,
+      playerId: 'muraski',
+      targetPick: 19,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 19,
+        offerPickNumbers: [24, 36], receivePickNumbers: [19, 41],
+        offerValue: 100, receiveValue: 95, sessionRevision: 7,
+      },
+    };
+    const common = {
+      candidates: [candidate], rankings: { SS: ['muraski'] }, overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' }, brokenSlots: [], planBill: null, advisorLog: [],
+      taxCoreRows: [], slotDepth: { SS: 1 }, assistantBoard: idleAssistant,
+      onReorder: () => undefined, tradeGuide: <div>EXISTING MANUAL GUIDE</div>,
+    };
+    const { rerender } = render(<PrivateDesk
+      {...common}
+      decision={{ kind: 'SAFE_TO_WAIT', playerId: 'muraski', nextPick: 24 }}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(screen.getByTestId('snake-decision-label')).toHaveTextContent('SAFE TO WAIT');
+    expect(screen.queryByRole('button', { name: 'SAFE TO WAIT' })).not.toBeInTheDocument();
+
+    rerender(<PrivateDesk
+      {...common}
+      decision={tradeDecision}
+      onTradeDecision={onTradeDecision}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE TO #19' }));
+    expect(onTradeDecision).toHaveBeenCalledWith(tradeDecision);
+    expect(screen.getByText('EXISTING MANUAL GUIDE')).toBeInTheDocument();
+  });
 });
 
 describe('downward tax consequence copy (TAXSWING seam)', () => {
@@ -228,5 +266,14 @@ describe('downward tax consequence copy (TAXSWING seam)', () => {
     render(<DeskCandidateRow candidate={{ ...candidate, name: 'YOINK SAX', identityChips: ['2024', 'BEW'] }} />);
     expect(screen.getByText('2024 · BEW')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'SELECT YOINK SAX · 2024 · BEW' })).toBeInTheDocument();
+  });
+
+  it.each([
+    [{ kind: 'TAKE_NOW' as const, playerId: 'muraski' }, 'TAKE NOW'],
+    [{ kind: 'PASS' as const, playerId: 'muraski' }, 'PASS'],
+  ])('renders %s as a status, not an assistant action button', (decision, label) => {
+    render(<DeskCandidateRow candidate={candidate} decision={decision} />);
+    expect(screen.getByTestId('snake-decision-label')).toHaveTextContent(label);
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
   });
 });

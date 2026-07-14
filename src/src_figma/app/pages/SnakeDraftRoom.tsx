@@ -75,6 +75,14 @@ import {
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
 import {
+  buildSnakeDecisionCandidateFacts,
+  buildSnakeGuideRecommendationRequest,
+  resolveSnakeDraftDecision,
+  snakeGuideThreatPick,
+  type SnakeDraftDecision,
+} from '../components/snake/desk/snakeDraftDecisionModel';
+import { useSnakeGuideRecommendation } from '../components/snake/desk/useSnakeGuideRecommendation';
+import {
   buildSnakeRationalRiskRequest,
   useSnakeRationalRisks,
 } from '../components/snake/desk/useSnakeRationalRisks';
@@ -87,7 +95,9 @@ import { buildInitialSnakeSeatBoards } from '../components/snake/setup/SnakeDraf
 import {
   executeAskedPickTrade,
   guideForAskedPick,
+  prefillGuideForPackage,
   type ExecutedAskedPickTrade,
+  type SnakeTradeGuidePrefill,
 } from '../components/snake/trade/tradeGuideModel';
 import { FarmPrivateDesk, FarmSelectedProspectCard } from '../components/snake/farm/FarmPrivateDesk';
 import {
@@ -765,6 +775,10 @@ function MlbSnakeDraftRoom() {
   const [tradeReceiptsBySeat, setTradeReceiptsBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
   const [assistantOptimizePlayerId, setAssistantOptimizePlayerId] = useState<string | null>(null);
   const [dismissedConsequencePlayerId, setDismissedConsequencePlayerId] = useState<string | null>(null);
+  const [guidePrefillState, setGuidePrefillState] = useState<{
+    scopeKey: string;
+    prefill: SnakeTradeGuidePrefill;
+  } | null>(null);
   const [boardUndo, setBoardUndo] = useState<{
     teamId: string;
     board: SnakeSeatBoardRecord;
@@ -796,6 +810,7 @@ function MlbSnakeDraftRoom() {
     setPrivateDeskRevealed(false);
     setAssistantOptimizePlayerId(null);
     setDismissedConsequencePlayerId(null);
+    setGuidePrefillState(null);
     setBoardUndo(null);
     undoOperationRef.current = null;
     setUndoWorking(false);
@@ -909,6 +924,9 @@ function MlbSnakeDraftRoom() {
     privateIdentityKeyRef.current = currentPrivateIdentityKey;
     privateEpochRef.current += 1;
   }
+  const currentPrivateScopeKey = currentPrivateIdentityKey
+    ? `${currentPrivateIdentityKey}|${privateEpochRef.current}`
+    : null;
   privateIdentityRef.current = currentPrivateIdentity;
   useLayoutEffect(() => {
     setAssistantOptimizePlayerId(null);
@@ -1554,6 +1572,127 @@ function MlbSnakeDraftRoom() {
     });
   }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, dismissedConsequencePlayerId, leagueTeams.length, pool, privateDeskReady, privateDeskRevealed, session]);
 
+  const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && candidateId
+    ? rationalRiskState.risks?.find((row) => row.playerId === candidateId) ?? null
+    : null, [candidateId, rationalRiskState.risks, rationalRiskState.status]);
+  const selectedScarcity = useMemo(() => rationalRiskState.status === 'ready' && candidateId
+    ? rationalRiskState.scarcity?.filter((row) => row.playerId === candidateId) ?? null
+    : null, [candidateId, rationalRiskState.scarcity, rationalRiskState.status]);
+  const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
+    playerId: candidateId ?? '',
+    candidate: deskState?.selectedCandidate ?? null,
+    consequence: selectedConsequence,
+  }), [candidateId, deskState?.selectedCandidate, selectedConsequence]);
+  const replacementDecisionFacts = useMemo(() => {
+    if (!privateDeskRevealed || !privateDeskReady || !assistantIdentity || !session || !pool
+      || !deskTeam || !deskState?.board || !candidateId || !selectedScarcity) return null;
+    const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
+    const replacementIds = [...new Set(selectedScarcity.flatMap((row) => (
+      row.replacementState === 'AVAILABLE'
+      && row.replacementPlayerId
+      && row.replacementPlayerId !== candidateId
+      && !unavailable.has(row.replacementPlayerId)
+        ? [row.replacementPlayerId]
+        : []
+    )))];
+    return replacementIds.flatMap((replacementId) => {
+      const consequence = buildSelectedPlayerConsequence({
+        identity: assistantIdentity,
+        selectedPlayerId: replacementId,
+        teamId: deskTeam.id,
+        board: deskState.board!,
+        designSlots: deskTeam.rosterDesign?.slots,
+        players: consequencePlayers,
+        completedPicks: session.completedPicks.map((pick) => ({
+          teamId: pick.teamId,
+          playerId: pick.playerId,
+          settledSalary: pick.settledSalary,
+        })),
+        versionState: session.versionState,
+        versionSelections: session.snakeSetup?.versionSelections,
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: deskState.locked.capIdentity,
+      });
+      return buildSnakeDecisionCandidateFacts({
+        playerId: replacementId,
+        candidate: candidatesById.get(replacementId) ?? null,
+        consequence,
+      }) ?? [];
+    });
+  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskReady, privateDeskRevealed, selectedScarcity, session, unavailable]);
+  const assistantPriorityPlayerIds = assistantBoardState.status === 'ready'
+    ? assistantBoardState.board?.playerIds ?? null
+    : null;
+  const infeasibleForPlayerId = assistantBoardState.infeasibleReason
+    && assistantOptimizePlayerId === candidateId
+      ? candidateId
+      : null;
+  const guideThreatPick = snakeGuideThreatPick({
+    selectedPlayerId: candidateId,
+    askingTeamId: deskTeam?.id ?? null,
+    livePickTeamId: currentSlot?.teamId ?? null,
+    assistantPriorityPlayerIds,
+    assistantInfeasibleReason: assistantBoardState.infeasibleReason,
+    infeasibleForPlayerId,
+    selected: selectedDecisionFacts,
+    risk: selectedRisk,
+    scarcity: selectedScarcity,
+  });
+  const guideRecommendationRequest = useMemo(() => {
+    if (!session || !deskTeam || !seatingProofInput || guideThreatPick === null) return null;
+    return buildSnakeGuideRecommendationRequest({
+      session,
+      buyerTeamId: deskTeam.id,
+      earliestThreatPick: guideThreatPick,
+      pickValueChart,
+      seatingProofInput,
+    });
+  }, [deskTeam, guideThreatPick, pickValueChart, seatingProofInput, session]);
+  const guideRecommendation = useSnakeGuideRecommendation(
+    guideRecommendationRequest,
+    assistantRequest?.key ?? null,
+  );
+  const draftDecision = resolveSnakeDraftDecision({
+    selectedPlayerId: candidateId,
+    askingTeamId: deskTeam?.id ?? null,
+    livePickTeamId: currentSlot?.teamId ?? null,
+    assistantPriorityPlayerIds,
+    assistantInfeasibleReason: assistantBoardState.infeasibleReason,
+    infeasibleForPlayerId,
+    selected: selectedDecisionFacts,
+    replacements: replacementDecisionFacts,
+    risk: selectedRisk,
+    scarcity: selectedScarcity,
+    guide: guideRecommendation,
+  });
+  const guideDecisionKey = draftDecision?.kind === 'TRADE_TO_PICK'
+    ? [
+        draftDecision.playerId,
+        draftDecision.targetPick,
+        draftDecision.proposal.sessionRevision,
+        draftDecision.proposal.offerPickNumbers.join(','),
+        draftDecision.proposal.receivePickNumbers.join(','),
+      ].join(':')
+    : null;
+  const currentGuideScopeKey = assistantRequest && session && deskTeam && guideDecisionKey
+    ? `${assistantRequest.key}|${session.revision ?? 0}|${deskTeam.id}|${guideDecisionKey}`
+    : null;
+  const activeGuidePrefill = currentGuideScopeKey
+    && guidePrefillState?.scopeKey === currentGuideScopeKey
+      ? guidePrefillState.prefill
+      : null;
+  const prefillTradeDecision = useCallback((decision: Extract<SnakeDraftDecision, { kind: 'TRADE_TO_PICK' }>) => {
+    if (!session || !currentGuideScopeKey || draftDecision?.kind !== 'TRADE_TO_PICK'
+      || decision.playerId !== draftDecision.playerId
+      || decision.targetPick !== draftDecision.targetPick) return;
+    setGuidePrefillState({
+      scopeKey: currentGuideScopeKey,
+      prefill: prefillGuideForPackage({ session, proposal: decision.proposal }),
+    });
+  }, [currentGuideScopeKey, draftDecision, session]);
+
   useEffect(() => {
     if (!session || !deskTeam || !deskState?.board) return;
     if (session.draftManifest || session.currentPickIndex >= session.pickOrder.length) return;
@@ -2173,6 +2312,9 @@ function MlbSnakeDraftRoom() {
           taxCoreRows={deskState.taxCoreRows}
           slotDepth={deskState.slotDepth}
           assistantBoard={assistantBoardState}
+          privateScopeKey={currentPrivateScopeKey ?? undefined}
+          decision={draftDecision}
+          onTradeDecision={prefillTradeDecision}
           showHelp={showHelp}
           selectedCandidateId={candidateId}
           onSelectCandidate={selectCandidate}
@@ -2188,12 +2330,14 @@ function MlbSnakeDraftRoom() {
             fixedBuyerTeamId={deskTeam?.id ?? null}
             pickValueChart={pickValueChart}
             sessionRevision={session.revision ?? 0}
+            privateScopeKey={currentPrivateScopeKey}
             onAsk={askTradeGuide}
             onPost={postTradeOffer}
             openOffers={(session.openTradeOffers ?? []).filter((offer) => offer.phase === 'MLB' && (offer.buyerTeamId === deskTeam?.id || offer.sellerTeamId === deskTeam?.id))}
             onNod={nodTradeOffer}
             onClose={closeTradeOffer}
             onFailure={refreshRoomTruth}
+            prefill={activeGuidePrefill}
           />}
         />
       </>)) : privateDeskRevealed ? <p className="font-bold" data-testid="private-draft-desk">CALCULATING THE DESK…</p> : null}

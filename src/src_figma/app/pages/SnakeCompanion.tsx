@@ -80,12 +80,24 @@ import {
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
 import {
+  buildSnakeDecisionCandidateFacts,
+  buildSnakeGuideRecommendationRequest,
+  resolveSnakeDraftDecision,
+  snakeGuideThreatPick,
+  type SnakeDraftDecision,
+} from '../components/snake/desk/snakeDraftDecisionModel';
+import { useSnakeGuideRecommendation } from '../components/snake/desk/useSnakeGuideRecommendation';
+import {
   buildSnakeRationalRiskRequest,
   useSnakeRationalRisks,
 } from '../components/snake/desk/useSnakeRationalRisks';
 import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
-import { guideForAskedPick as buildAskedPickGuide } from '../components/snake/trade/tradeGuideModel';
+import {
+  guideForAskedPick as buildAskedPickGuide,
+  prefillGuideForPackage,
+  type SnakeTradeGuidePrefill,
+} from '../components/snake/trade/tradeGuideModel';
 
 const SEASON_NUMBER = 1;
 const DEVICE_KEY = 'kbl-snake-companion-device-id';
@@ -195,6 +207,10 @@ export default function SnakeCompanion() {
   const [message, setMessage] = useState<string | null>(null);
   const [assistantOptimizePlayerId, setAssistantOptimizePlayerId] = useState<string | null>(null);
   const [dismissedConsequencePlayerId, setDismissedConsequencePlayerId] = useState<string | null>(null);
+  const [guidePrefillState, setGuidePrefillState] = useState<{
+    scopeKey: string;
+    prefill: SnakeTradeGuidePrefill;
+  } | null>(null);
   const [boardUndo, setBoardUndo] = useState<{
     board: SnakeSeatBoardRecord;
     expectedBoardRevision: number;
@@ -224,6 +240,7 @@ export default function SnakeCompanion() {
     setMessage(null);
     setAssistantOptimizePlayerId(null);
     setDismissedConsequencePlayerId(null);
+    setGuidePrefillState(null);
     setBoardUndo(null);
     undoOperationRef.current = null;
     setUndoWorking(false);
@@ -475,6 +492,9 @@ export default function SnakeCompanion() {
     privateIdentityKeyRef.current = currentPrivateIdentityKey;
     privacyEpochRef.current += 1;
   }
+  const currentPrivateScopeKey = currentPrivateIdentityKey
+    ? `${currentPrivateIdentityKey}|${approved?.claimId ?? ''}|${privacyEpochRef.current}`
+    : null;
   privateIdentityRef.current = currentPrivateIdentity;
   useLayoutEffect(() => {
     setSelectedPlayerId(null);
@@ -792,6 +812,75 @@ export default function SnakeCompanion() {
     });
   }, [assistantIdentity, board, consequencePlayers, deskState, dismissedConsequencePlayerId, leagueTeams.length, pool, selectedCandidateId, session, team]);
 
+  const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && selectedCandidateId
+    ? rationalRiskState.risks?.find((row) => row.playerId === selectedCandidateId) ?? null
+    : null, [rationalRiskState.risks, rationalRiskState.status, selectedCandidateId]);
+  const selectedScarcity = useMemo(() => rationalRiskState.status === 'ready' && selectedCandidateId
+    ? rationalRiskState.scarcity?.filter((row) => row.playerId === selectedCandidateId) ?? null
+    : null, [rationalRiskState.scarcity, rationalRiskState.status, selectedCandidateId]);
+  const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
+    playerId: selectedCandidateId ?? '',
+    candidate: selectedCandidate,
+    consequence: selectedConsequence,
+  }), [selectedCandidate, selectedCandidateId, selectedConsequence]);
+  const replacementDecisionFacts = useMemo(() => {
+    if (!assistantIdentity || !session || !pool || !team || !board || !deskState
+      || !selectedCandidateId || !selectedScarcity || deviceCovered) return null;
+    const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
+    const replacementIds = [...new Set(selectedScarcity.flatMap((row) => (
+      row.replacementState === 'AVAILABLE'
+      && row.replacementPlayerId
+      && row.replacementPlayerId !== selectedCandidateId
+      && !unavailable.has(row.replacementPlayerId)
+        ? [row.replacementPlayerId]
+        : []
+    )))];
+    return replacementIds.flatMap((replacementId) => {
+      const consequence = buildSelectedPlayerConsequence({
+        identity: assistantIdentity,
+        selectedPlayerId: replacementId,
+        teamId: team.id,
+        board,
+        designSlots: team.rosterDesign?.slots,
+        players: consequencePlayers,
+        completedPicks: session.completedPicks.map((pick) => ({
+          teamId: pick.teamId,
+          playerId: pick.playerId,
+          settledSalary: pick.settledSalary,
+        })),
+        versionState: session.versionState,
+        versionSelections: session.snakeSetup?.versionSelections,
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: resolveLockedSeat({ team, session }).capIdentity,
+      });
+      return buildSnakeDecisionCandidateFacts({
+        playerId: replacementId,
+        candidate: candidatesById.get(replacementId) ?? null,
+        consequence,
+      }) ?? [];
+    });
+  }, [assistantIdentity, board, consequencePlayers, deskState, deviceCovered, leagueTeams.length, pool, selectedCandidateId, selectedScarcity, session, team, unavailable]);
+  const assistantPriorityPlayerIds = assistantBoardState.status === 'ready'
+    ? assistantBoardState.board?.playerIds ?? null
+    : null;
+  const infeasibleForPlayerId = assistantBoardState.infeasibleReason
+    && assistantOptimizePlayerId === selectedCandidateId
+      ? selectedCandidateId
+      : null;
+  const guideThreatPick = snakeGuideThreatPick({
+    selectedPlayerId: selectedCandidateId,
+    askingTeamId: team?.id ?? null,
+    livePickTeamId: session?.pickOrder[session.currentPickIndex]?.teamId ?? null,
+    assistantPriorityPlayerIds,
+    assistantInfeasibleReason: assistantBoardState.infeasibleReason,
+    infeasibleForPlayerId,
+    selected: selectedDecisionFacts,
+    risk: selectedRisk,
+    scarcity: selectedScarcity,
+  });
+
   const saveBoard = useCallback(async (
     nextBoard: SnakeSeatBoardRecord,
     successMessage: string | null,
@@ -975,6 +1064,58 @@ export default function SnakeCompanion() {
       baseCaps: pool.luxuryCaps, realTeamCount: leagueTeams.length, versionState: session.versionState,
     };
   }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+  const guideRecommendationRequest = useMemo(() => {
+    if (!session || !team || !seatingProofInput || guideThreatPick === null || deviceCovered) return null;
+    return buildSnakeGuideRecommendationRequest({
+      session,
+      buyerTeamId: team.id,
+      earliestThreatPick: guideThreatPick,
+      pickValueChart,
+      seatingProofInput,
+    });
+  }, [deviceCovered, guideThreatPick, pickValueChart, seatingProofInput, session, team]);
+  const guideRecommendation = useSnakeGuideRecommendation(
+    guideRecommendationRequest,
+    assistantRequest?.key ?? null,
+  );
+  const draftDecision = resolveSnakeDraftDecision({
+    selectedPlayerId: selectedCandidateId,
+    askingTeamId: team?.id ?? null,
+    livePickTeamId: session?.pickOrder[session.currentPickIndex]?.teamId ?? null,
+    assistantPriorityPlayerIds,
+    assistantInfeasibleReason: assistantBoardState.infeasibleReason,
+    infeasibleForPlayerId,
+    selected: selectedDecisionFacts,
+    replacements: replacementDecisionFacts,
+    risk: selectedRisk,
+    scarcity: selectedScarcity,
+    guide: guideRecommendation,
+  });
+  const guideDecisionKey = draftDecision?.kind === 'TRADE_TO_PICK'
+    ? [
+        draftDecision.playerId,
+        draftDecision.targetPick,
+        draftDecision.proposal.sessionRevision,
+        draftDecision.proposal.offerPickNumbers.join(','),
+        draftDecision.proposal.receivePickNumbers.join(','),
+      ].join(':')
+    : null;
+  const currentGuideScopeKey = assistantRequest && session && team && guideDecisionKey
+    ? `${assistantRequest.key}|${session.revision ?? 0}|${team.id}|${guideDecisionKey}`
+    : null;
+  const activeGuidePrefill = currentGuideScopeKey
+    && guidePrefillState?.scopeKey === currentGuideScopeKey
+      ? guidePrefillState.prefill
+      : null;
+  const prefillTradeDecision = useCallback((decision: Extract<SnakeDraftDecision, { kind: 'TRADE_TO_PICK' }>) => {
+    if (!session || !currentGuideScopeKey || draftDecision?.kind !== 'TRADE_TO_PICK'
+      || decision.playerId !== draftDecision.playerId
+      || decision.targetPick !== draftDecision.targetPick) return;
+    setGuidePrefillState({
+      scopeKey: currentGuideScopeKey,
+      prefill: prefillGuideForPackage({ session, proposal: decision.proposal }),
+    });
+  }, [currentGuideScopeKey, draftDecision, session]);
   const askGuide = useCallback((buyerTeamId: string, targetPick: number) => {
     if (!session || !seatingProofInput) return { message: `No legal guide trade reaches pick ${targetPick}.`, proposal: null, nextPickMoves: [] };
     return buildAskedPickGuide({ session, pickValueChart, seatingProofInput, buyerTeamId, targetPick });
@@ -1118,6 +1259,9 @@ export default function SnakeCompanion() {
       taxCoreRows={deskState.taxCoreRows}
       slotDepth={deskState.slotDepth}
       assistantBoard={assistantBoardState}
+      privateScopeKey={currentPrivateScopeKey ?? undefined}
+      decision={draftDecision}
+      onTradeDecision={prefillTradeDecision}
       selectedCandidateId={selectedCandidateId}
       onSelectCandidate={selectCandidate}
       onReorder={(position, orderedIds) => { void reorder(position, orderedIds); }}
@@ -1127,11 +1271,13 @@ export default function SnakeCompanion() {
         fixedBuyerTeamId={team.id}
         pickValueChart={pickValueChart}
         sessionRevision={session.revision ?? 0}
+        privateScopeKey={currentPrivateScopeKey}
         onAsk={askGuide}
         onPost={postTradeOffer}
         openOffers={(session.openTradeOffers ?? []).filter((offer) => offer.phase === 'MLB' && (offer.buyerTeamId === team.id || offer.sellerTeamId === team.id))}
         onNod={(offerId) => respondToTradeOffer(offerId, 'NOD')}
         onClose={(offerId, action) => respondToTradeOffer(offerId, action === 'WITHDRAWN' ? 'WITHDRAW' : 'DECLINE')}
+        prefill={activeGuidePrefill}
       />}
       />
     </>}

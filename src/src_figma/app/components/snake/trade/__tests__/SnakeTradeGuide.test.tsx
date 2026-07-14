@@ -1,10 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SnakeGuidePackage } from '../../../../../../engines/snakeGuideTrade';
 import { SnakeCommissionerTrade } from '../SnakeCommissionerTrade';
 import { SnakeTradeGuide } from '../SnakeTradeGuide';
 import type { AskedPickGuideResult, ExecutedAskedPickTrade } from '../tradeGuideModel';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (cause?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 const teams = [
   { id: 'buyer', name: 'Kodiaks' },
@@ -183,5 +193,141 @@ describe('S4 guide surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'DECLINE' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledWith(openOffer.id, 'DECLINED'));
     expect(onFailure).toHaveBeenCalledTimes(2);
+  });
+
+  it('prefills an exact verified package without asking or posting and clears it before paint', () => {
+    const onAsk = vi.fn();
+    const onPost = vi.fn();
+    const prefill = { key: 'prefill-7', result: answer as typeof answer & { proposal: SnakeGuidePackage } };
+    const view = render(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="buyer"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      prefill={prefill}
+      onAsk={onAsk}
+      onPost={onPost}
+    />);
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(9);
+    expect(screen.getByText(answer.message)).toBeInTheDocument();
+    expect(onAsk).not.toHaveBeenCalled();
+    expect(onPost).not.toHaveBeenCalled();
+
+    view.rerender(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="buyer"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={8}
+      prefill={prefill}
+      onAsk={onAsk}
+      onPost={onPost}
+    />);
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(null);
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+    expect(onPost).not.toHaveBeenCalled();
+
+    view.rerender(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="seller"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      prefill={prefill}
+      onAsk={onAsk}
+      onPost={onPost}
+    />);
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(null);
+
+    view.rerender(<SnakeTradeGuide
+      teams={teams}
+      fixedBuyerTeamId="buyer"
+      pickValueChart={[{ pick: 9, value: 150 }]}
+      sessionRevision={7}
+      prefill={null}
+      onAsk={onAsk}
+      onPost={onPost}
+    />);
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+    expect(onAsk).not.toHaveBeenCalled();
+    expect(onPost).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['team switch', { fixedBuyerTeamId: 'seller' }],
+    ['revision switch', { sessionRevision: 8 }],
+    ['claim/private-epoch switch', { privateScopeKey: 'claim-b|epoch-2' }],
+  ])('ignores a deferred guide answer after a %s', async (_name, override) => {
+    const pending = deferred<AskedPickGuideResult>();
+    const onFailure = vi.fn();
+    const common = {
+      teams,
+      fixedBuyerTeamId: 'buyer',
+      pickValueChart: [{ pick: 9, value: 150 }],
+      sessionRevision: 7,
+      privateScopeKey: 'claim-a|epoch-1',
+      onAsk: vi.fn(() => pending.promise),
+      onFailure,
+    };
+    const view = render(<SnakeTradeGuide {...common} />);
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 9' }));
+    view.rerender(<SnakeTradeGuide {...common} {...override} />);
+    await act(async () => { pending.resolve(answer); await pending.promise; });
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(onFailure).not.toHaveBeenCalled();
+  });
+
+  it('ignores a deferred guide answer after prefill becomes null or the covered desk unmounts', async () => {
+    const pending = deferred<AskedPickGuideResult>();
+    const prefill = { key: 'prefill-7', result: answer as typeof answer & { proposal: SnakeGuidePackage } };
+    const common = {
+      teams, fixedBuyerTeamId: 'buyer', pickValueChart: [{ pick: 9, value: 150 }],
+      sessionRevision: 7, privateScopeKey: 'claim-a|epoch-1', onAsk: vi.fn(() => pending.promise),
+    };
+    const view = render(<SnakeTradeGuide {...common} prefill={prefill} />);
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 9' }));
+    view.rerender(<SnakeTradeGuide {...common} prefill={null} />);
+    await act(async () => { pending.resolve(answer); await pending.promise; });
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+
+    const coveredPending = deferred<AskedPickGuideResult>();
+    view.rerender(<SnakeTradeGuide {...common} onAsk={() => coveredPending.promise} />);
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '9' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 9' }));
+    view.unmount();
+    await act(async () => { coveredPending.resolve(answer); await coveredPending.promise; });
+    expect(screen.queryByText(answer.message)).not.toBeInTheDocument();
+  });
+
+  it('never publishes stale post, nod, or close completions after the private context changes', async () => {
+    const postPending = deferred<void>();
+    const nodPending = deferred<void>();
+    const closePending = deferred<void>();
+    const common = {
+      teams, fixedBuyerTeamId: 'buyer', pickValueChart: [{ pick: 9, value: 150 }],
+      sessionRevision: 7, privateScopeKey: 'claim-a|epoch-1', onAsk: vi.fn(),
+      openOffers: [{ ...openOffer, buyerNod: false }],
+      onPost: vi.fn(() => postPending.promise),
+      onNod: vi.fn(() => nodPending.promise),
+      onClose: vi.fn(() => closePending.promise),
+    };
+    const prefill = { key: 'prefill-7', result: answer as typeof answer & { proposal: SnakeGuidePackage } };
+    const view = render(<SnakeTradeGuide {...common} prefill={prefill} />);
+    fireEvent.click(screen.getByRole('button', { name: 'POST OFFER' }));
+    view.rerender(<SnakeTradeGuide {...common} prefill={null} privateScopeKey="claim-b|epoch-2" />);
+    await act(async () => { postPending.resolve(); await postPending.promise; });
+    expect(screen.queryByText('THE OFFER IS POSTED.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'NOD' }));
+    view.rerender(<SnakeTradeGuide {...common} prefill={null} sessionRevision={8} />);
+    await act(async () => { nodPending.resolve(); await nodPending.promise; });
+    expect(screen.queryByText('YOUR NOD IS RECORDED.')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'WITHDRAW' }));
+    view.rerender(<SnakeTradeGuide {...common} prefill={null} fixedBuyerTeamId="seller" />);
+    await act(async () => { closePending.resolve(); await closePending.promise; });
+    expect(screen.queryByText('THE OFFER IS CLOSED.')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

@@ -25,6 +25,11 @@ export interface AskedPickGuideResult {
   nextPickMoves: NextPickMove[];
 }
 
+export interface SnakeTradeGuidePrefill {
+  key: string;
+  result: AskedPickGuideResult & { proposal: SnakeGuidePackage };
+}
+
 export interface SnakeTradeReceipt {
   teamId: string;
   text: string;
@@ -74,6 +79,32 @@ export function guideForAskedPick(
     message: result.message,
     proposal: result.package,
     nextPickMoves: result.package ? projectedNextPickMoves(input.session, result.package) : [],
+  };
+}
+
+/** Adapts a worker-verified exact package for the existing manual guide. It performs no write. */
+export function prefillGuideForPackage(input: {
+  session: LeagueBuilderMlbDraftSession;
+  proposal: SnakeGuidePackage;
+}): SnakeTradeGuidePrefill {
+  const proposal = structuredClone(input.proposal);
+  return {
+    key: [
+      input.session.id,
+      input.session.revision ?? 0,
+      proposal.buyerTeamId,
+      proposal.sellerTeamId,
+      proposal.targetPick,
+      proposal.offerPickNumbers.join(','),
+      proposal.receivePickNumbers.join(','),
+      proposal.offerValue,
+      proposal.receiveValue,
+    ].join(':'),
+    result: {
+      message: `OFFER ${proposal.offerPickNumbers.join('+')}; RECEIVE ${proposal.receivePickNumbers.join('+')} — guide-matched and legal now.`,
+      proposal,
+      nextPickMoves: projectedNextPickMoves(input.session, proposal),
+    },
   };
 }
 

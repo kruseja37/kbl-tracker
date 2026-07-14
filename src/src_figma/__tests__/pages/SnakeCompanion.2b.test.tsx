@@ -12,6 +12,14 @@ const mocks = vi.hoisted(() => ({
   assistantResults: [] as Array<Record<string, unknown>>,
   mainSave: vi.fn(),
   omitContextPlayerId: null as string | null,
+  riskMode: 'NONE' as 'NONE' | 'SAFE' | 'URGENT',
+  guideMode: 'NONE' as 'NONE' | 'READY' | 'MALFORMED',
+  assistantFailureReason: null as null | 'PIN_UNMATCHED' | 'INSOLVENT_BOARD',
+  guideRequests: [] as unknown[],
+  manualGuideCalls: [] as unknown[],
+  manualGuidePromise: null as Promise<unknown> | null,
+  companionFreshnessRefresh: null as null | (() => void | Promise<void>),
+  mainFreshnessRefresh: null as null | (() => void | Promise<void>),
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -39,19 +47,93 @@ vi.mock('../../utils/snakeSounds', () => ({
   saveSnakeSoundsEnabled: vi.fn(),
   createSnakeSoundPlayer: () => ({ play: vi.fn() }),
 }));
-vi.mock('../../app/components/snake/companion/companionFreshness', () => ({ startCompanionFreshness: () => () => undefined }));
+vi.mock('../../app/components/snake/companion/companionFreshness', () => ({
+  startCompanionFreshness: (input: { pullAndRefresh: () => void | Promise<void> }) => {
+    mocks.companionFreshnessRefresh = input.pullAndRefresh;
+    return () => { mocks.companionFreshnessRefresh = null; };
+  },
+}));
+vi.mock('../../app/components/snake/snakeRoomFreshness', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/snakeRoomFreshness')>();
+  return {
+    ...actual,
+    startSnakeRoomFreshness: (input: { pullAndRefresh: () => void | Promise<void> }) => {
+      mocks.mainFreshnessRefresh = input.pullAndRefresh;
+      return () => { mocks.mainFreshnessRefresh = null; };
+    },
+  };
+});
 vi.mock('../../app/components/snake/desk/useSnakeAssistantBoard', async () => {
   const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
   return {
     useSnakeAssistantBoard: (request: Parameters<typeof model.runSnakeAssistantBoardRequest>[0] | null) => {
-      if (!request) return { status: 'idle', board: null };
+      if (!request) return { status: 'idle', board: null, infeasibleReason: null };
       const snapshot = structuredClone(request);
+      if (request.input.selectedPinPlayerId && mocks.assistantFailureReason) {
+        mocks.assistantRequests.push(snapshot as unknown as { key: string; input: Record<string, unknown> });
+        mocks.assistantResults.push({ status: 'unavailable', reason: mocks.assistantFailureReason });
+        return {
+          status: 'unavailable',
+          board: null,
+          infeasibleReason: mocks.assistantFailureReason === 'PIN_UNMATCHED' ? 'PIN_UNMATCHED' : null,
+        };
+      }
       const result = model.runSnakeAssistantBoardRequest(snapshot);
       mocks.assistantRequests.push(snapshot as unknown as { key: string; input: Record<string, unknown> });
       mocks.assistantResults.push(result as unknown as Record<string, unknown>);
       return result.status === 'ready'
-        ? { status: 'ready', board: result.board }
-        : { status: 'unavailable', board: null };
+        ? { status: 'ready', board: result.board, infeasibleReason: null }
+        : { status: 'unavailable', board: null, infeasibleReason: null };
+    },
+  };
+});
+vi.mock('../../app/components/snake/desk/useSnakeRationalRisks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/desk/useSnakeRationalRisks')>();
+  return { ...actual, useSnakeRationalRisks: (request: unknown) => {
+    if (!request || mocks.riskMode === 'NONE') {
+      return { status: request ? 'unavailable' : 'idle', risks: null, scarcity: null };
+    }
+    const safe = mocks.riskMode === 'SAFE';
+    return {
+      status: 'ready',
+      risks: [{
+        playerId: 'dual', risk: safe ? 'SAFE_TO_WAIT' : 'AT_RISK', nextPick: 2,
+        earliestSelectingPick: safe ? null : 1, latestSelectingPick: safe ? 2 : 1,
+        latestSelectingPickIsAskingTurn: safe, interestedClubCount: safe ? 0 : 1,
+        draftedAtPick: safe ? null : 1, rationalBuyersBeforeTurn: safe ? 0 : 1,
+      }],
+      scarcity: [{
+        playerId: 'dual', role: 'C', viablePeopleLeft: 1, clubsStillNeeding: 1,
+        lowestViableTrueCost: 10_000, highestViableTrueCost: 10_000,
+        targetContextualWorth: 100, replacementPlayerId: null, replacementContextualWorth: null,
+        contextualWorthDrop: null, replacementState: 'UNAVAILABLE',
+      }],
+    };
+  } };
+});
+vi.mock('../../app/components/snake/desk/useSnakeGuideRecommendation', () => ({
+  useSnakeGuideRecommendation: (request: unknown) => {
+    if (request) mocks.guideRequests.push(structuredClone(request));
+    if (!request || mocks.guideMode === 'NONE') return { status: request ? 'unavailable' : 'idle', proposal: null };
+    if (mocks.guideMode === 'MALFORMED') return { status: 'unavailable', proposal: null };
+    const typed = request as { input: { session: { revision: number } } };
+    return {
+      status: 'ready',
+      proposal: {
+        buyerTeamId: 'a', sellerTeamId: 'b', targetPick: 1,
+        offerPickNumbers: [2, 3], receivePickNumbers: [1, 4],
+        offerValue: 200, receiveValue: 200, sessionRevision: typed.input.session.revision,
+      },
+    };
+  },
+}));
+vi.mock('../../app/components/snake/trade/tradeGuideModel', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/trade/tradeGuideModel')>();
+  return {
+    ...actual,
+    guideForAskedPick: (input: Parameters<typeof actual.guideForAskedPick>[0]) => {
+      mocks.manualGuideCalls.push(structuredClone(input));
+      return mocks.manualGuidePromise ?? actual.guideForAskedPick(input);
     },
   };
 });
@@ -165,8 +247,11 @@ function board(prefix: string): SnakeSeatBoardRecord {
 function session(): LeagueBuilderMlbDraftSession {
   return {
     id: 'mlb:companion-2b:1', leagueId: league.id, seasonNumber: 1, seed: 'seed', workflowVersion: 'snake-v1', engineMethodVersion: 'snake-s1a',
-    tier: 'standard', balanceMode: 'taxed', rounds: 1,
-    pickOrder: [{ round: 1, pick: 1, teamId: 'b' }, { round: 1, pick: 2, teamId: 'a' }], completedPicks: [], currentPickIndex: 0,
+    tier: 'standard', balanceMode: 'taxed', rounds: 2,
+    pickOrder: [
+      { round: 1, pick: 1, teamId: 'b' }, { round: 1, pick: 2, teamId: 'a' },
+      { round: 2, pick: 3, teamId: 'a' }, { round: 2, pick: 4, teamId: 'b' },
+    ], completedPicks: [], currentPickIndex: 0,
     revision: 4, seatBoards: { a: board('a-only'), b: board('b-only') },
     snakeSetup: { poolPlayerIds: players.map((row) => row.id), versionSelections: {}, clubs: [{ teamId: 'a', gmName: 'Alex', hotseat: false }, { teamId: 'b', gmName: 'Blair', hotseat: false }], orderSeed: 'seed' },
     snakeCompanions: { roomCode: '4821', claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'a', status: 'approved' }] },
@@ -210,6 +295,14 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.assistantRequests.length = 0;
     mocks.assistantResults.length = 0;
     mocks.omitContextPlayerId = null;
+    mocks.riskMode = 'NONE';
+    mocks.guideMode = 'NONE';
+    mocks.assistantFailureReason = null;
+    mocks.guideRequests.length = 0;
+    mocks.manualGuideCalls.length = 0;
+    mocks.manualGuidePromise = null;
+    mocks.companionFreshnessRefresh = null;
+    mocks.mainFreshnessRefresh = null;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
@@ -340,6 +433,191 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(mainRequest.input).toEqual(companionRequest.input);
   }, 10_000);
 
+  test.each([
+    ['SAFE_TO_WAIT', 'SAFE TO WAIT'],
+    ['TAKE_NOW', 'TAKE NOW'],
+    ['PASS', 'PASS'],
+  ] as const)('main and companion render the same noninteractive %s decision from current facts', async (decision, label) => {
+    const source = session();
+    if (decision === 'TAKE_NOW') {
+      source.pickOrder = [
+        { round: 1, pick: 1, teamId: 'a' }, { round: 1, pick: 2, teamId: 'b' },
+        { round: 2, pick: 3, teamId: 'b' }, { round: 2, pick: 4, teamId: 'a' },
+      ];
+    }
+    mocks.riskMode = decision === 'SAFE_TO_WAIT' ? 'SAFE' : decision === 'TAKE_NOW' ? 'URGENT' : 'NONE';
+    mocks.assistantFailureReason = decision === 'PASS' ? 'PIN_UNMATCHED' : null;
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    if (decision === 'PASS') fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(await screen.findByTestId('snake-decision-label')).toHaveTextContent(label);
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+
+    cleanup();
+    mocks.assistantRequests.length = 0;
+    mocks.assistantResults.length = 0;
+    prepare(structuredClone(source));
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await screen.findByTestId('private-draft-desk');
+    if (decision === 'PASS') fireEvent.click(await screen.findByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    expect(await screen.findByTestId('snake-decision-label')).toHaveTextContent(label);
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument();
+  }, 15_000);
+
+  test('main and companion use the same current trade decision, exact prefill, public proof, and zero automatic writes', async () => {
+    mocks.riskMode = 'URGENT';
+    mocks.guideMode = 'READY';
+    const source = session();
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    const companionTrade = await screen.findByRole('button', { name: 'TRADE TO #1' });
+    const companionRequest = structuredClone(mocks.guideRequests.at(-1)!);
+    mocks.patchBoard.mockClear();
+    mocks.mainSave.mockClear();
+    mocks.manualGuideCalls.length = 0;
+    fireEvent.click(companionTrade);
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(1);
+    expect(screen.getByText('OFFER 2+3; RECEIVE 1+4 — guide-matched and legal now.')).toBeInTheDocument();
+    expect(mocks.manualGuideCalls).toHaveLength(0);
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.mainSave).not.toHaveBeenCalled();
+    expect(screen.getByTestId('companion-team-header')).toHaveTextContent('CLUB A');
+    expect((companionRequest as { input: { seatingProofInput: { clubs: Array<{ teamId: string }> } } })
+      .input.seatingProofInput.clubs.map((club) => club.teamId).sort()).toEqual(['a', 'b']);
+
+    cleanup();
+    mocks.guideRequests.length = 0;
+    mocks.manualGuideCalls.length = 0;
+    prepare(structuredClone(source));
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await screen.findByTestId('private-draft-desk');
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    const mainTrade = await screen.findByRole('button', { name: 'TRADE TO #1' });
+    const mainRequest = structuredClone(mocks.guideRequests.at(-1)!);
+    mocks.patchBoard.mockClear();
+    mocks.mainSave.mockClear();
+    fireEvent.click(mainTrade);
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(1);
+    expect(screen.getByText('OFFER 2+3; RECEIVE 1+4 — guide-matched and legal now.')).toBeInTheDocument();
+    expect(mocks.manualGuideCalls).toHaveLength(0);
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(mocks.mainSave).not.toHaveBeenCalled();
+    const companionInput = structuredClone((companionRequest as { input: Record<string, unknown> }).input);
+    const mainInput = structuredClone((mainRequest as { input: Record<string, unknown> }).input);
+    const companionPublicSession = companionInput.session as { revision: number };
+    const mainPublicSession = mainInput.session as { revision: number };
+    expect(companionPublicSession.revision).toBe(4);
+    expect(mainPublicSession.revision).toBe((mocks.currentSession as LeagueBuilderMlbDraftSession).revision);
+    companionPublicSession.revision = mainPublicSession.revision;
+    expect(mainInput).toEqual(companionInput);
+  }, 15_000);
+
+  test('generic assistant failure and malformed guide state remain neutral on both pages', async () => {
+    mocks.riskMode = 'URGENT';
+    mocks.guideMode = 'MALFORMED';
+    mocks.assistantFailureReason = 'INSOLVENT_BOARD';
+    const source = session();
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(screen.getByRole('button', { name: 'RANKINGS' }));
+    expect(screen.queryByTestId('snake-decision-label')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /TRADE TO/ })).not.toBeInTheDocument();
+
+    cleanup();
+    prepare(structuredClone(source));
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await screen.findByTestId('private-draft-desk');
+    fireEvent.click(await screen.findByRole('button', { name: 'OPTIMIZE AROUND' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'RANKINGS' }));
+    expect(screen.queryByTestId('snake-decision-label')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /TRADE TO/ })).not.toBeInTheDocument();
+  }, 15_000);
+
+  test('deferred guide answers cannot cross companion cover/revoke or main revision/team boundaries', async () => {
+    const answer = {
+      message: 'OLD GUIDE ANSWER', proposal: null,
+      nextPickMoves: [],
+    };
+    const source = session();
+    prepare(source);
+    const covered = deferred<unknown>();
+    mocks.manualGuidePromise = covered.promise;
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
+    await screen.findByTestId('snake-companion-covered');
+    await act(async () => { covered.resolve(answer); await covered.promise; });
+    expect(screen.queryByText('OLD GUIDE ANSWER')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    await screen.findByTestId('snake-companion-frame');
+    const revoked = deferred<unknown>();
+    mocks.manualGuidePromise = revoked.promise;
+    fireEvent.click(screen.getByRole('button', { name: 'GUIDE' }));
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
+    const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = {
+      ...current,
+      revision: (current.revision ?? 0) + 1,
+      snakeCompanions: {
+        ...current.snakeCompanions!,
+        claims: current.snakeCompanions!.claims.map((claim) => ({ ...claim, status: 'revoked' as const })),
+      },
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    await act(async () => { revoked.resolve(answer); await revoked.promise; });
+    expect(screen.queryByText('OLD GUIDE ANSWER')).not.toBeInTheDocument();
+
+    cleanup();
+    prepare(session());
+    const revised = deferred<unknown>();
+    mocks.manualGuidePromise = revised.promise;
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await screen.findByTestId('private-draft-desk');
+    fireEvent.click(await screen.findByRole('button', { name: 'GUIDE' }));
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
+    const mainCurrent = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = { ...mainCurrent, revision: (mainCurrent.revision ?? 0) + 1 };
+    await act(async () => { await mocks.mainFreshnessRefresh?.(); });
+    await act(async () => { revised.resolve(answer); await revised.promise; });
+    expect(screen.queryByText('OLD GUIDE ANSWER')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?')).toHaveValue(null);
+
+    const switched = deferred<unknown>();
+    mocks.manualGuidePromise = switched.promise;
+    fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'CLUB B' }));
+    await act(async () => { switched.resolve(answer); await switched.promise; });
+    expect(screen.queryByText('OLD GUIDE ANSWER')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
+  }, 20_000);
+
   test('companion emits no assistant request, result, or board when one live player lacks contextual advisor worth', async () => {
     mocks.omitContextPlayerId = 'dual';
     prepare(session());
@@ -358,13 +636,20 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(session());
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'CLUB A' }));
+    });
+    const reveal = await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' });
+    await act(async () => {
+      fireEvent.click(reveal);
+    });
     const assistantTab = await screen.findByRole('button', { name: 'ASST GM BOARD' });
 
     expect(mocks.assistantRequests).toHaveLength(0);
     expect(mocks.assistantResults).toHaveLength(0);
-    fireEvent.click(assistantTab);
+    await act(async () => {
+      fireEvent.click(assistantTab);
+    });
     expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
     expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
   });
