@@ -21,6 +21,13 @@ storage, routing, assertion, or rendered-output change is authorized.
 context export. Its mock path may be repointed to the extracted canonical
 `FranchiseHomeContext` module only. No mock behavior or assertion may change.
 
+**Amendment 4:** Lane A re-audit proved that generic session writers bypass the
+narrow board patch guard and that recap-confirm error copy can still expose a
+player key. Lane A must centralize authoritative resolution and board-delta
+authorization in every transaction that can persist board maps, including
+`saveMlbDraftSession`, `updateMlbDraftSessionAtomically`, and
+`saveMlbDraftRoomSession`. No new production path is required.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -45,6 +52,15 @@ builder audits its own work. The audit-of-record agent must re-audit both lanes.
 - Applying session and standalone-board sync groups in either order must converge
   to a writable state once both groups arrive.
 - Stale expected revisions must still fail; do not weaken optimistic concurrency.
+- `saveMlbDraftSession` must read the existing session plus both standalone board
+  stores and write the candidate session plus converged standalone copies in one
+  transaction. A conflict must abort before either store changes.
+- Generic session/room writers must resolve authoritative pre-write boards before
+  applying any candidate board map. They may not overwrite a newer standalone or
+  embedded copy.
+- Missing or malformed standalone board records, including a phase/payload shape
+  mismatch, must fail closed or use a validated authoritative copy. Runtime
+  validation is required at the storage boundary; TypeScript shape is not proof.
 
 ### A2. Authorize main-device board writes in the transaction
 
@@ -57,6 +73,14 @@ builder audits its own work. The audit-of-record agent must re-audit both lanes.
 - The checks occur inside the same transaction that writes the board.
 - Practice MLB sessions follow the MLB rule; normal valid main and companion
   writes remain unchanged.
+- Board-delta authorization applies to every exported writer capable of changing
+  `seatBoards` or `farmSeatBoards`, not only `patchIndependentSeatBoard`.
+- Compare the authoritative pre-transaction boards with the proposed boards. For
+  every changed key enforce incomplete pre-action state, correct frozen phase,
+  and frozen-club membership before any store write.
+- Valid initial session creation is permitted after validating all initial board
+  keys against the new session's frozen phase/clubs. A valid final-pick write is
+  permitted because authorization uses the fresh incomplete pre-action session.
 
 ### A3. Never render raw player identifiers
 
@@ -65,6 +89,10 @@ builder audits its own work. The audit-of-record agent must re-audit both lanes.
 - Recap, ticker, accessibility labels, titles, and error copy must never fall back
   to `playerId`, UUIDs, canonical IDs, or other internal keys.
 - Known players continue to render their normal names.
+- MLB and FARM recap confirmation failures must render neutral user-facing copy.
+  They may not render arbitrary engine/storage error messages verbatim. Tests
+  must click Confirm and inspect alert text, visible text, and `innerHTML` for the
+  missing raw ID.
 
 ### Lane A allowed files
 
@@ -91,6 +119,14 @@ and a committed contract amendment.
 7. MLB/FARM phase mismatch rejects writes.
 8. Unknown player in MLB recap, FARM recap, and live ticker renders exactly
    `UNKNOWN PLAYER`, with no internal ID in the DOM.
+9. Generic save/session-room writers cannot bypass completion, phase, club, or
+   authoritative-revision rules.
+10. Generic save conflict leaves embedded and standalone raw-store bytes
+    unchanged.
+11. Valid initial creation and final-pick reconciliation still succeed.
+12. Missing/malformed board records and phase/payload mismatch fail closed.
+13. MLB and FARM missing-player recap tests press Confirm and prove no raw ID is
+    present in the alert, visible text, or `innerHTML`.
 
 ## Lane B: branch acceptance gates
 
