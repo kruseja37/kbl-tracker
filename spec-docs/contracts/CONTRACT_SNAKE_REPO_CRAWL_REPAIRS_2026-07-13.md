@@ -39,6 +39,11 @@ authorization retains an untouched authoritative pre-action snapshot. Runtime
 standalone and embedded board keys must be validated against primitive key
 types, the active session phase, and frozen clubs before hydration or carryover.
 
+**Amendment 7:** Lane A's third re-audit proved that authorization facts could
+still be changed in a prior board-free transaction. Post-creation frozen club
+team-ID membership and persisted draft-manifest truth are immutable across every
+writer. A present runtime manifest without a valid phase must fail closed.
+
 ## Why this contract exists
 
 The hostile full-repository Snake crawl confirmed two product bugs, one storage
@@ -79,6 +84,15 @@ builder audits its own work. The audit-of-record agent must re-audit both lanes.
   teams, and self-consistent record IDs derived from invalid runtime metadata.
 - Every carried-forward resolved board key is validated against the session
   phase and frozen clubs even when the caller does not change that key.
+- After initial creation, every writer preserves the authoritative frozen club
+  team-ID set. Existing same-team metadata such as `hotseat` may change only when
+  already allowed; team membership may not expand, shrink, or be replaced.
+- Every atomic/generic writer preserves a persisted draft manifest through the
+  canonical `preservePersistedSnakeDraftManifest` invariant before persistence.
+  A board-free transaction may not remove completion truth or reset it for a
+  later board mutation.
+- If `draftManifest` is present at runtime, its required `phase` must be present
+  and valid. Missing phase is malformed, not equivalent to no manifest.
 
 ### A2. Authorize main-device board writes in the transaction
 
@@ -150,6 +164,11 @@ and a committed contract amendment.
 15. Raw standalone rows with wrong session phase, nonmember teams, empty keys, or
     non-string keys fail hydration and leave all stores byte-unchanged after
     rejected save/update/room/freeze attempts.
+16. A two-transaction club-expansion then board-creation attack fails and leaves
+    raw bytes unchanged.
+17. A two-transaction manifest-removal/reset then completed-session board attack
+    fails and leaves raw bytes unchanged.
+18. Hydration/save/update/room/freeze reject a present manifest missing `phase`.
 
 ## Lane B: branch acceptance gates
 
