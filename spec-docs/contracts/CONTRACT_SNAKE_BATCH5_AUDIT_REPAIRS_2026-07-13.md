@@ -18,6 +18,12 @@ desk-model change is authorized.
 to carry the canonical premium. This is compatibility wiring only; no farm
 search, guide behavior, roster rule, or UI change is authorized.
 
+**Amendment 3:** The repair re-audit found one stale valid worker-response test
+fixture and two browser states that were asserted only by class name. The hook
+test is authorized to add the required canonical premium. The already-allowed
+preview and Playwright journey must enter and measure rank-edit and companion
+cover states at both iPad viewports. No additional product path is authorized.
+
 ## Why this repair exists
 
 The independent Batch 5 audit returned one major and two minor findings. This
@@ -117,6 +123,7 @@ Durable responsive fixture:
 - `src/engines/__tests__/snakeFarmSlots.test.ts` (premium assertion only, if needed)
 - `src/utils/tests/snakeRoomPersistence.test.ts`
 - `src/src_figma/app/components/snake/desk/__tests__/snakeDraftDecisionModel.test.ts`
+- `src/src_figma/app/components/snake/desk/__tests__/useSnakeGuideRecommendation.test.tsx`
 - Existing owned Batch 5 main-room, companion, trade, privacy, selected-card,
   room-view, and performance tests
 - The new Playwright journey named above
@@ -138,6 +145,11 @@ name it before creating it. No unrelated test snapshots may be rewritten.
 7. Buyer and seller views show correct counterparties and inverse give/get rows.
 8. The permanent four-case iPad Playwright gate passes.
 9. A mutation that removes a required 44px class fails a durable test.
+10. The permanent browser journey clicks a rank badge, observes the rank input,
+    and measures that input at both main-surface viewports.
+11. The permanent browser journey activates the companion privacy cover,
+    renders the real `CompanionCoveredScreen`, and measures its persistent
+    controls at both companion-surface viewports.
 
 ## Required gates
 
