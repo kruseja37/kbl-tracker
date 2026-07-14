@@ -8,6 +8,11 @@
 **Auditor:** `/root/snake_batch5_auditor`
 **Status:** Open
 
+**Amendment 1:** The builder proved before mutation that the exact worker-boundary
+guide package validator would reject the newly required premium key. The narrow
+validator implementation and its owned test are therefore added below. No other
+desk-model change is authorized.
+
 ## Why this repair exists
 
 The independent Batch 5 audit returned one major and two minor findings. This
@@ -85,6 +90,7 @@ Premium pipeline:
 - `src/engines/snakeGuideTrade.ts`
 - `src/engines/snakeTradeOffers.ts`
 - `src/utils/leagueBuilderStorage.ts`
+- `src/src_figma/app/components/snake/desk/snakeDraftDecisionModel.ts`
 - `src/src_figma/app/components/snake/trade/TradePackageCard.tsx`
 
 Touch-target repair only:
@@ -103,6 +109,7 @@ Durable responsive fixture:
 
 - `src/engines/__tests__/snakeEconomicsGuide.test.ts`
 - `src/utils/tests/snakeRoomPersistence.test.ts`
+- `src/src_figma/app/components/snake/desk/__tests__/snakeDraftDecisionModel.test.ts`
 - Existing owned Batch 5 main-room, companion, trade, privacy, selected-card,
   room-view, and performance tests
 - The new Playwright journey named above
