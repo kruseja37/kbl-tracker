@@ -15,11 +15,12 @@
 
 ---
 
-## Current Phase: 0 — COMPLETE → Moving to Phase 1
+## Current Phase: Snake Draft automated close COMPLETE — JK browser acceptance next
 
-Phase 0 inventory complete. Critical architectural finding: Gemini's refactor
-landed on the wrong file. Active app is untouched by all claimed improvements.
-Next action: Phase 1 — read active GameTracker.tsx and useGameState.ts in full.
+The Snake repo crawl, builder-auditor repair loop, live UI crawl, and certification are
+complete on code commit `f8ca392d`. Final proof: 686 passed files / 10,227 passed tests,
+17/17 live browser journeys, strict lint, TypeScript, production build, and diff integrity.
+Next action: JK's hands-on browser walk; it remains the sole product-acceptance gate.
 
 ---
 
@@ -32,6 +33,7 @@ Next action: Phase 1 — read active GameTracker.tsx and useGameState.ts in full
 | 2 | Seams Audit | NOT STARTED | — | — |
 | 3 | Known Bug Verification | NOT STARTED | — | — |
 | 4 | Debt Inventory | NOT STARTED | — | — |
+| SNAKE-1 | Snake mock draft close | AUTOMATED COMPLETE — JK WALK PENDING | 2026-07-13 | 2026-07-14 |
 
 ---
 
@@ -1107,3 +1109,64 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 | FINDING-157 | 2026-07-14 | FIXED-AND-VERIFIED — AMENDMENT 9 | SnakeCompanion.tsx / useSnakeRationalRisks.ts | Cover now creates a real privacy epoch: prior rational-risk results and late pre-cover worker responses cannot reappear when the same seat/key returns. Direct unmocked mutation proof and independent audit are green. | Full text: FINDINGS_142_onwards.md |
 | FINDING-158 | 2026-07-14 | FIXED-AND-VERIFIED — AMENDMENT 9 | Snake/League Draft Setup hooks and pages | Assistant/guide state and worker lifecycle now share semantic request identity; same-key clones preserve ready output and changed keys restart cleanly. Exact changed-file no-inline lint is 0/0. | Full text: FINDINGS_142_onwards.md |
 | FINDING-159 | 2026-07-14 | FIXED-AND-VERIFIED — AMENDMENT 9 | Snake room / companion / setup identity fallbacks | All contracted missing identities now use exact neutral UNKNOWN PLAYER / UNKNOWN TEAM copy; live fallback sweeps and DOM tests expose neither internal IDs nor CLUB/A PLAYER placeholders. | Full text: FINDINGS_142_onwards.md |
+| FINDING-160 | 2026-07-14 | FIXED-AND-VERIFIED — AMENDMENT 10 | deskModel.ts / deskRoomModel.ts / SnakeDraftRoom.tsx / SnakeCompanion.tsx / snakeEconomics.ts | FLEX obeys 13–14H/8–9P canon; all persisted/evaluated boards fail closed on legality/version conflicts; automatic backfill skips unsafe cards, backtracks deterministically, and leaves no-safe boards byte-stable. Final independent re-audit: 0 major/0 minor with direct mutations. | Full text: FINDINGS_142_onwards.md |
+| FINDING-161 | 2026-07-14 | FIXED-AND-VERIFIED — LIVE-CRAWL CONTRACT | playerDatabase.ts / leagueBuilderStorage.ts / poolFromDemand.ts / Snake setup proof | Exact six stock roles corrected and guarded-migrated; all 20 stock 22s and the full 506-card universe constructively seat. Hard legality is 20 CP, competitive shaping remains 27, CP-only canon and locked draft bytes preserved. Independent audit: 0 major/0 minor, 181/181. | Full text: FINDINGS_142_onwards.md |
+| FINDING-162 | 2026-07-14 | CONFIRMED-OPEN — LIVE-CRAWL CONTRACTED | Snake rational/assistant workers / seating proof / main+companion | A real 506-card early draft left strategy output calculating for tens of seconds and delayed browser work about 40 seconds; after the board became legal, Asst GM still returned UNAVAILABLE and starved the next click. | Full text: FINDINGS_142_onwards.md |
+| FINDING-163 | 2026-07-14 | CONFIRMED-OPEN — FIRST RE-AUDIT NOT VERIFIED (7 MAJOR/2 MINOR COMBINED) | SnakeResponsivePreview.tsx / preview fixture / responsive Playwright | Stateful preview still misstates consequence money/refit, enables off-clock and duplicate drafting, leaves drafted cards on boards, fails to move live pick ownership, diverges main/companion finances, and has dead recap/reset/revert semantics. Green tests missed the outcomes. | Full text: FINDINGS_142_onwards.md |
+| FINDING-164 | 2026-07-14 | CONFIRMED-OPEN — FIRST RE-AUDIT NOT VERIFIED (7 MAJOR/2 MINOR COMBINED) | SnakeDraftRoomView.tsx / SelectedPlayerCard.tsx / companion frame | Portrait action strip scrolls offscreen with its card sibling; companion lacks independent responsive profile/board workspace at both iPad orientations. Existing anchor test records an already-broken state. | Full text: FINDINGS_142_onwards.md |
+| FINDING-165 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SnakeDraftRoomView.tsx / FARM room tests | FARM hides trade controls but still calls remaining picks tradeable and correction trade-capable. | Full text: FINDINGS_165_onwards.md |
+| FINDING-166 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | leagueBuilderStorage.ts / syncEngine.ts | Existing FARM authority can erase its phase and inject retired trade state through local or inbound writers. | Full text: FINDINGS_165_onwards.md |
+| FINDING-167 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | syncConfig.ts / Snake rooms / companion | Full sync omits scout/startup stores and post-pull room derivation can use stale player and salary truth. | Full text: FINDINGS_165_onwards.md |
+| FINDING-168 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SelectedPlayerCard.tsx / SnakeDraftRoom.tsx | Production REVERT is a consequence dismissal, not an exact board undo. | Full text: FINDINGS_165_onwards.md |
+| FINDING-169 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | snakeFarmSlots.ts | Pristine FARM drafts still use a global curve that valid unequal carryover budgets cannot afford. | Full text: FINDINGS_165_onwards.md |
+| FINDING-170 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SnakeResponsivePreview.tsx | Preview dynamic guide and canned executable offer can contradict each other. | Full text: FINDINGS_165_onwards.md |
+| FINDING-171 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SnakeDraftRoomView.tsx / responsive journey | Landscape player selection clips the sticky action strip under the team header. | Full text: FINDINGS_165_onwards.md |
+| FINDING-172 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SnakeResponsivePreview.tsx | Preview trade nudge and Activity remain hard-coded to a completed or owned pick 19. | Full text: FINDINGS_165_onwards.md |
+| FINDING-173 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | leagueBuilderStorage.ts / syncEngine.ts | Post-creation writers can mutate FARM frozen pick order and slot salaries. | Full text: FINDINGS_165_onwards.md |
+| FINDING-174 | 2026-07-14 | CONFIRMED-OPEN — DOC CLOSE REQUIRED | active Snake specs/status docs | Active docs still promise FARM draft-pick trades after JK retired them. | Full text: FINDINGS_165_onwards.md |
+| FINDING-175 | 2026-07-14 | CONFIRMED TEST GAP — CLOSING GATE REQUIRED | FARM transition/commit/handoff integrations | Real-storage 9+1 and 10+0 FARM boundaries are not proven end-to-end. | Full text: FINDINGS_165_onwards.md |
+| FINDING-176 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | SnakeResponsivePreview.tsx companion surface | Cover rotates the preview privacy epoch but restores the prior GM's selected player and assistant pin on return. | Full text: FINDINGS_165_onwards.md |
+| FINDING-177 | 2026-07-14 | CONFIRMED TEST REGRESSION — REPAIR CONTRACTED | SnakeDraftRoom.completion.test.tsx | Mandatory sync freshness now falls into real IndexedDB in the completion harness, blocking all 11 correction/recap tests. | Full text: FINDINGS_165_onwards.md |
+| FINDING-178 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | syncEngine.ts season-2 bootstrap | Clean-device inbound sync stores a noncanonical FARM authority because season-2 rows bypass canonical MLB-to-FARM creation validation. | Full text: FINDINGS_165_onwards.md |
+| FINDING-179 | 2026-07-14 | CONFIRMED TEST REGRESSION — REPAIR CONTRACTED | Snake performance + companion auth harnesses | Fresh storage rereads bypass the mocked hook and fall into missing IndexedDB, so five owned cases never reach their assertions. | Full text: FINDINGS_165_onwards.md |
+| FINDING-180 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | backupRestore.ts / League Builder editorial migration test | League Builder is version 10 while backup restore and one migration assertion still declare version 9; isolated restore and schema gates are red. | Full text: FINDINGS_165_onwards.md |
+| FINDING-181 | 2026-07-14 | CONFIRMED TEST REGRESSION — REPAIR CONTRACTED | FranchiseSetup.test.tsx | Its storage mock omits the shared FARM season constant, so the season-2 read defaults to season 1 and falsely reports Draft required. | Full text: FINDINGS_165_onwards.md |
+| FINDING-182 | 2026-07-14 | CONFIRMED-OPEN — REPAIR CONTRACTED | backupRestore.ts / League Builder v10 migration seam | Generic backup opening can consume the v9→v10 version bump without running the canonical stock-player content migration, permanently stranding old rows. | Full text: FINDINGS_165_onwards.md |
+
+### 2026-07-14 Snake final closure — append-only superseding status
+
+| Finding | Date | Status | Surface | Resolution |
+|---------|------|--------|---------|------------|
+| FINDING-152 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake intelligence | Live board refit, fair trade guide, and coherent decision intelligence shipped. |
+| FINDING-153 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | MLB pick packages | Unique/disjoint/current-value/directional transaction rails and fair packages proved. |
+| FINDING-154 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | My Board / Asst GM Board | Shared legal solvent worker-backed assistant board and exact consequences proved. |
+| FINDING-155 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Rational room | Public scenario range, rival pressure, scarcity, opportunity cost, and action bridge proved. |
+| FINDING-156 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Main/companion private desk | One team-first four-job desk and complete trade/profile truth proved. |
+| FINDING-162 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Early-draft workers | Production-shape assistant/rational reads return useful results without freezing the room. |
+| FINDING-163 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Responsive preview | Covered, stateful, transaction-honest test drive proved. |
+| FINDING-164 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | iPad workspace | Stable profile/action plus independently scrolling board proved at both orientations. |
+| FINDING-165 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | FARM copy | No retired trade language remains in the live FARM room. |
+| FINDING-166 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | FARM writers | Local and inbound writers reject phase removal and trade state. |
+| FINDING-167 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Sync freshness | Scout/startup stores synchronize and rooms reread fresh storage after pull. |
+| FINDING-168 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Selected-player action | REVERT exists only as exact saved-board undo. |
+| FINDING-169 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | FARM salary curve | Every club gets a local 75% curve with exact 3x endpoint ratio. |
+| FINDING-170 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Preview trade truth | Preview offer comes from and executes through the real guide engine. |
+| FINDING-171 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | iPad selected player | Action strip remains reachable while the board scrolls. |
+| FINDING-172 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Trade target signal | Target derives from live ownership and disappears when unreachable. |
+| FINDING-173 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Frozen FARM authority | Creation envelope is immutable after sanctioned transition. |
+| FINDING-174 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Active Snake docs | FARM draft-pick trades are retired canon; historical references are marked superseded. |
+| FINDING-175 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | FARM 9+1 / 10+0 | Real-storage boundary transitions, commits, handoffs, and retries proved. |
+| FINDING-176 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Companion privacy epoch | Cover clears private transient choices while preserving durable My Board. |
+| FINDING-177 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Correction/recap harness | All 11 cases reach owned assertions with production freshness intact. |
+| FINDING-178 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Clean-device FARM sync | Season-2 authority is deferred/rejected until canonical MLB prerequisites prove it. |
+| FINDING-179 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Fresh-read harnesses | Performance and companion auth suites use honest fixture-backed storage reads. |
+| FINDING-180 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Backup schema | Manual backup/restore matches League Builder v10 and all synchronized stores. |
+| FINDING-181 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Franchise Setup test seam | Explicit FARM season-2 read is proved. |
+| FINDING-182 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Canonical migration | Backup cannot steal the v9→v10 content migration. |
+| FINDING-183 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Backup connection lifecycle | Backup-owned canonical migration connection closes without touching the app singleton. |
+| FINDING-184 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Guide worker build | Worker graph is cycle-neutral and production builds all Snake workers. |
+| FINDING-185 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Final lint honesty | Lifecycle fixtures retain exact storage types and full snapshot comparison. |
+
+Final evidence: code commit `f8ca392d`; 686 passed files / 10,227 passed tests / zero failures;
+17/17 responsive and production-lifecycle browser journeys; strict changed-file lint, TypeScript,
+production build, and diff integrity green. JK's browser walk remains the sole acceptance gate.

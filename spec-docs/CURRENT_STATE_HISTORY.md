@@ -1186,3 +1186,11 @@ merged, S7 plus the companion stitch still open, and JK's browser walkthrough ne
 This lane adds a branch-local UNIFYSETUP status above it: implementation and focused
 firewalls are green, but the one-worker full suite has two non-amended failures, so
 the lane is stopped pending a captain ruling rather than marked complete.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 final Snake close
+
+The prior live header recorded the combined Snake branch after Amendment 9: 681 passed
+files / 10,120 passed tests, responsive Playwright 4/4, and the live UI crawl still next.
+The final close then completed that crawl, repaired every resulting finding through
+FINDING-185 under builder-auditor separation, and advanced the exact code tree to commit
+`f8ca392d` with a larger clean repository and browser proof.

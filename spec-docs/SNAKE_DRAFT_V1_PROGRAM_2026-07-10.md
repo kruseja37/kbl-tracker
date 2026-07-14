@@ -2,6 +2,13 @@
 # Captain: Fable. Vision: SNAKE_DRAFT_VISION_2026-07-10.md (committed beside this doc —
 # LAYERED: later sections supersede earlier on any conflict; the redline and JK closing
 # rulings are the top layers). JK signed off 2026-07-10.
+# **CURRENT RULING (2026-07-14): FARM draft-pick trades are retired. MLB draft-pick trades
+# remain in S4; in-season player trades are separate and unchanged. Older FARM-trade wording
+# below is historical program evidence and is superseded.**
+# **FINAL AUTOMATED STATUS (2026-07-14; code commit `f8ca392d`): S0-S7 plus the approved
+# intelligence, repo-crawl, UI-crawl, and tail repairs are complete and independently verified.
+# Final gates: 686 passed files / 10,227 passed tests, 17/17 browser journeys, strict lint,
+# TypeScript, build, and diff integrity. JK's browser walk remains the sole acceptance gate.**
 # THE FIRST LAW governs every lane: it's the GM's board; the Asst GM never picks, never
 # optimizes, never rearranges — he does the money and the math so the GM has no blind
 # spots, all in service of the GM's 22-man draft board.
@@ -140,8 +147,8 @@ companions (write: own records only) · read surfaces (ticker/board/lens) · syn
 
 ### S6 — THE FARM ROOM
 Farm snake variant: fog cards (scout bands; SCOUT'S CALL), slotted salaries from the
-absolute pick (fixed table, tuned once), SCOUT PRESSURE advisor per CT2's answer, guide
-trades, same ritual/room, farm handoff (appendix 16).
+absolute pick (fixed table, tuned once), SCOUT PRESSURE advisor per CT2's answer, no
+draft-pick trades, same ritual/room, farm handoff (appendix 16).
 
 ### S7 — IDENTITY, SOUND & SEASON PROOF
 Team editor LOGO slot [CT4] + logo rendering (ritual card, lens, order rail) · the 14-year-

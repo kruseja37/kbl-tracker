@@ -6,7 +6,7 @@
 
 ## Crawled path
 
-League Builder -> Draft Setup -> snake room registration -> covered team lens -> private board -> player inspection -> pick -> trade/correction -> MLB recap -> Scout Hire -> farm room -> farm recap -> staffing -> Franchise Setup -> launch with no schedule -> Living Season schedule entry.
+League Builder -> Draft Setup -> snake room registration -> covered team lens -> private board -> player inspection -> pick -> MLB trade/correction -> MLB recap -> Scout Hire -> farm room (pick corrections, no draft-pick trades) -> farm recap -> staffing -> Franchise Setup -> launch with no schedule -> Living Season schedule entry.
 
 ## Broken or illogical paths found
 
@@ -55,8 +55,9 @@ JK's browser walk is the sole acceptance gate; automation can only make the buil
   tax, fit, chemistry, cushion, and legality. Availability backfill preserves saved rankings.
 - Final-pick recap no longer steals the last correction opportunity. Confirm writes one immutable
   manifest and handoff marker; failed or concurrent confirmation remains retryable/fail-closed.
-- Farm boards remain fog-safe, with salary fixed to absolute draft slot after trades. Hidden farm
-  true-value rows remain excluded while settled salary and morale reach Franchise launch.
+- Farm boards remain fog-safe, with salary fixed to immutable absolute draft slots and no FARM
+  draft-pick trades. Hidden farm true-value rows remain excluded while settled salary and morale
+  reach Franchise launch.
 - The old POC page/engine, unused pass-cover input, and noncanonical route ownership are removed;
   legacy URLs redirect to the shared setup/canonical room.
 - Touch targets, selected semantics, focus-managed privacy/confirm overlays, retry states, and
@@ -71,6 +72,21 @@ JK's browser walk is the sole acceptance gate; automation can only make the buil
   handoff contract, so it was discarded rather than misreported as live evidence; these two
   controls remain explicit items for JK's sole acceptance walk.
 
-The independent closing repository gate passed 674 test files with 8 skipped (682 total): 9,955
-tests passed, 15 skipped (9,970 total), 0 failed. JK's own hands-on browser walk remains the sole visual and
-product acceptance gate.
+## Final hostile recrawl — 2026-07-14
+
+**Automated verdict:** VERIFIED WITH ZERO REMAINING FINDINGS. READY FOR JK WALK; not product acceptance.
+
+- The independent UI auditor cleared the production main room and companion at 1180x820 and
+  430x932 with no overflow, private-data leak, undersized action, console error, broken control,
+  or orphaned state found.
+- The final responsive/lifecycle Playwright gate passed 17/17. It covers both iPad orientations,
+  the narrow companion privacy epoch, full-pool player choice, persistent My Board and derived
+  Asst GM Board, exact MLB trade transfer, duplicate-pick prevention, recap/restart, MLB→FARM,
+  immutable no-trade FARM authority, staffing, Franchise launch with zero schedule rows, and
+  later manual and CSV schedule entry.
+- The final serial repository gate passed 686 files with 8 skipped (694 total): 10,227 tests
+  passed, 15 skipped (10,242 total), zero failed. Strict changed-file lint, TypeScript,
+  production build, and diff integrity are green on code commit `f8ca392d`.
+- FINDING-152 through FINDING-185 in the Snake lane are fixed and independently verified.
+
+JK's own hands-on browser walk remains the sole visual and product acceptance gate.

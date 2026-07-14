@@ -1,21 +1,29 @@
-# NOW — Snake Draft: full mock-draft hardening assembled; JK walk is the gate
+# NOW — Snake Draft: certified mock-draft build ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-12 post-midnight)
-- **Current thread move:** complete the final hostile repository/full-suite/UI crawl on branch
-  `codex/snake-mock-draft-ready`, fix every deterministic red, then hand the exact build to JK for
-  his browser walk. No design decision is waiting on JK before that walk.
+## VERIFIED (git, 2026-07-14; code commit `f8ca392d`)
+- **Current thread move:** keep the frozen preview running and hand the exact build to JK for his
+  browser walk. The hostile repository crawl, separate builder/auditor repair loop, live UI crawl,
+  and final certification are complete. No design decision is waiting on JK before that walk.
 - The production route is shared Draft Setup → `/snake-room`; the retired
   `LeagueBuilderSnakeDraft.tsx` page and `snakeDraftPoc` engine are deleted. Legacy snake URLs
   redirect into the canonical setup/room flow.
 - The assembled path now covers team-first private work, exact player inspection and search,
   overall/position boards, explicit 22-slot planning, live roster and money/tax/fit/chemistry
-  truth, atomic trades/corrections, immutable MLB/farm manifests, fog-safe farm boards, recap
+  truth, atomic MLB pick trades and phase-appropriate corrections, immutable MLB/farm manifests,
+  fog-safe farm boards with no draft-pick trades, recap
   confirmation, staffing, compact Franchise Setup, and zero-schedule launch. Pronouns remain in
   engine data and do not render.
+- My Board and Asst GM Board share the same live public/player truth on main and companion. Board
+  refits, salary/tax/fit/chemistry, scarcity/rival risk, opportunity cost, TAKE/WAIT/TRADE/PASS,
+  and fair executable MLB pick packages recalculate as players and picks leave the room.
+- The closing serial repository gate is 686 passed files / 8 skipped and 10,227 passed tests /
+  15 skipped, zero failures. The responsive plus full-production Playwright gate is 17/17 across
+  both iPad orientations and a 430px companion. Strict changed-file lint, TypeScript, production
+  build, and diff integrity are green.
 - Walkthrough wave 1 merged as PRs #90-#98: unified setup (UNIFYSETUP), room performance
   (PERFROOM: room-code write-once + field-patch persistence; 217,865→1 proofs), route bridge,
   room fixes. Design/plan of record: `spec-docs/SNAKE_DRAFT_VISION_2026-07-10.md` +
@@ -40,19 +48,18 @@
   `spec-docs/contracts/CONTRACT_COMPANIONAUTH_2026-07-12.md`,
   `spec-docs/contracts/CONTRACT_HELPSWEEP_2026-07-12.md`.
 
-## CARRIED from Fable memory — re-verify before acting
-- **Companion cross-device flow is now BUILT + MERGED but UNVERIFIED on real hardware.** The
-  sign-in gap fix (PR #110 above) has not yet been proven on an actual second physical device —
-  JK's own phone-to-Mac round-trip (`http://192.168.68.54:5173/snake-companion`, same Wi-Fi, same
-  account) is the morning's first gate. Do this before anything else.
-- After the phone round-trip: continue JK's walkthrough wave 2 (farm snake, trades, season
-  handoff — still unwalked; he'll see the new board-first room layout live for the first time).
+## OPEN ACCEPTANCE ONLY
+- **Companion cross-device behavior is code-, sync-, and two-origin-browser-verified but still
+  unaccepted on real hardware.** JK's own phone/iPad-to-Mac round-trip (same Wi-Fi, same account)
+  belongs inside the final hands-on walk.
+- JK should walk the MLB room, pick trade, FARM draft, recap/staffing handoff, zero-schedule launch,
+  and later schedule entry. His browser walk remains the sole acceptance gate.
 - A smaller ticketed finding: the Draft Setup "can't legally seat every club at 22 under the cap"
   blocker message misdirects (an SML-import repro found raising the cap 1.2M→10M changed
   nothing — the real constraint is position-supply shape, not the cap number).
 - The snake draft is the ruled v1 flagship draft path; the auction stays routed/testable,
   frozen for v2.
-- General state: code/system/UI crawl repairs are assembled; JK walkthrough findings, not an
+- General state: code/system/UI crawl repairs are committed; JK walkthrough findings, not an
   agent's visual opinion, decide acceptance and any next repair queue.
 
 ## ADDENDUM (2026-07-12 early AM) — EXECUTED, see VERIFIED above

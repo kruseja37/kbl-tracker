@@ -293,7 +293,7 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 ### FINDING-152
 **Date:** 2026-07-13
 **Phase:** Snake mock-draft browser audit follow-up
-**Status:** CONFIRMED-OPEN — JK approved the complete repair/intelligence plan
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
 **File:** `src/src_figma/app/components/snake/desk/deskModel.ts`; `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; snake desk/room/companion/guide tests
 
 **Evidence:**
@@ -315,7 +315,7 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 ### FINDING-153
 **Date:** 2026-07-13
 **Phase:** Snake Intelligence Batch 2 pre-build trace
-**Status:** CONFIRMED-OPEN — build contract amended
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
 **File:** `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; MLB snake guide callers/tests
 
 **Evidence:**
@@ -351,7 +351,7 @@ unchanged. Exact math and test gates are frozen in Batch 2 of the Snake Intellig
 ### FINDING-154
 **Date:** 2026-07-13
 **Phase:** Snake Intelligence Batch 3 pre-build trace
-**Status:** CONFIRMED-OPEN — shared assistant-board architecture contracted
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
 **File:** `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`; `src/src_figma/app/components/snake/desk/deskModel.ts`; canonical Best-22/legality/economics engines
 
 **Evidence:**
@@ -386,7 +386,7 @@ contract.
 ### FINDING-155
 **Date:** 2026-07-13
 **Phase:** Snake Intelligence Batch 4 pre-build trace
-**Status:** CONFIRMED-OPEN — availability/scarcity/action architecture contracted
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
 **File:** `src/engines/snakeRationalRoom.ts`; `src/src_figma/app/components/snake/desk/deskRoomModel.ts`; `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`; snake private-desk and trade-guide surfaces
 
 **Evidence:**
@@ -423,7 +423,7 @@ Batch 4A/4B allowlists and adversarial gates are frozen in the Snake Intelligenc
 ### FINDING-156
 **Date:** 2026-07-13
 **Phase:** Snake Intelligence Batch 5 pre-build UI trace
-**Status:** CONFIRMED-OPEN — final MLB room consolidation contracted
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
 **File:** MLB `SnakeDraftRoom.tsx`; `SnakeDraftRoomView.tsx`; private desk/board/selected-player components; `SnakeCompanion.tsx`; `SnakeCompanionFrame.tsx`; MLB trade-guide presentation
 
 **Evidence:**
@@ -460,21 +460,21 @@ privacy teardown, and Help-only explanations. Full Batch 5 allowlist and UI gate
 Intelligence contract.
 
 ### FINDING-157
-**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
 **Files:** `SnakeCompanion.tsx`, `useSnakeRationalRisks.ts`
 **Evidence:** The companion rational-risk request is built without `deviceCovered`; the covered-screen return occurs later. The hook retains its prior ready snapshot for the same request key. Covering and returning to the same seat can therefore reuse private pre-cover advice instead of clearing synchronously.
 **Impact:** A privacy cover can hide the DOM without invalidating private derived state, violating the team-first fail-closed cover contract.
 **Action:** Amendment 8 A8-1 in `CONTRACT_SNAKE_REPO_CRAWL_REPAIRS_2026-07-13.md`; caller-level red-first cover/reveal test, separate audit required.
 
 ### FINDING-158
-**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
 **Files:** `useSnakeAssistantBoard.ts`, `useSnakeGuideRecommendation.ts`, `SnakeDraftSetupAdapter.tsx`, `LeagueBuilderDraftSetup.tsx`
 **Evidence:** Normal changed-file lint is green only with inline configuration active. `--no-inline-config` exposes 20 findings: 16 errors and four warnings, including set-state-in-effect, fast-refresh export, and hook dependency failures. The repair contract explicitly forbids suppressions.
 **Impact:** The branch does not satisfy its acceptance gate, and hidden hook/state defects remain structurally unresolved.
 **Action:** Amendment 8 A8-2; remove suppressions, relocate pure exports where necessary, prove no behavior drift, separate audit required.
 
 ### FINDING-159
-**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** CONFIRMED-OPEN — REPAIR CONTRACTED
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
 **Files:** `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `SnakeDraftRoomView.tsx`, `SnakeDraftSetupAdapter.tsx`
 **Evidence:** Missing player lookup in the advisor activity log falls back to `gonePlayerId`; companion ticker uses `A PLAYER`; two missing-team paths fall back to internal team keys. The contract requires exact neutral `UNKNOWN PLAYER` / `UNKNOWN TEAM` copy and no internal identifier exposure.
 **Impact:** Corrupt, migrated, or incomplete identity data can leak internal keys into user-visible Snake surfaces and produce inconsistent recovery language.
@@ -510,3 +510,59 @@ no residual `CLUB`, `A PLAYER`, or internal-ID recovery copy. Focused proof was
 green. After that independent verdict, the final serial repository run passed
 681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped (10,135
 total), zero failed. FINDING-157, FINDING-158, and FINDING-159 are closed.
+
+### FINDING-160
+**Date:** 2026-07-14 | **Phase:** Final committed whole-branch hostile audit | **Status:** FIXED-AND-VERIFIED — AMENDMENT 10
+**Files:** `deskModel.ts`, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `snakeEconomics.ts`, `rosterConstruction.ts`
+**Evidence:** The independent auditor fresh-fetched and attacked committed HEAD `fcfb44c3`. `refitBoardSlots` treats every `FLEX` slot as eligible for every player. A direct production-code probe supplied nine required hitters, eight pure starters, four relievers, and one closer; the refit returned no broken slots and assigned pure SPs to FLEX1–FLEX4, producing nine hitters and thirteen pitchers. Main and companion persist this board, and `evaluateSnakePlan` prices its 22 unique ids without a canonical roster-legality check.
+**Impact:** My Board can show authoritative salary, tax, cushion, chemistry, and availability for a roster the franchise cannot legally carry. This falsifies the legal-22, scarce-role-safe board contract and can steer both the host and companion into a dead draft.
+**Action:** Amendment 10 in `CONTRACT_SNAKE_REPO_CRAWL_REPAIRS_2026-07-13.md`. FLEX must obey the canonical 13–14 hitter / 8–9 pitcher roster law; every persisted/evaluated board must fail closed if canonical legality is not proven. Direct mutation-honest refit plus main/companion persistence tests and separate re-audit are required.
+
+**First A10 re-audit:** **NOT VERIFIED — one major, zero minor.** The direct FLEX, economics, main-save, and companion-save mutations all failed correctly; 202 focused tests, exact-file lint, TypeScript, and production build were green. A separate production-code attack began with a canonical 14H/8P board, made FLEX1 unavailable, and ranked an eligible alternate version of the existing catcher first. `reconcileBoardAvailability` accepted that duplicate-version card, `reconcileExistingSeatBoards` returned `changed: true`, and the main room's automatic effect would persist the resulting non-canonical board. Amendment 10 now explicitly covers this automatic writer: ranked backfill must test the complete canonical/version invariant, skip unsafe candidates, and leave an unresolved slot unpersisted when no safe candidate exists.
+
+**Final A10 re-audit:** **VERIFIED — zero major, zero minor.** The original 9H/13P attack is rejected; valid 13/9 and 14/8 controls remain deterministic. The duplicate-version first replacement is skipped for a later safe hitter, while a no-safe result returns the original board object and bytes unchanged. An independent two-slot C/SS probe confirmed deterministic backtracking, stable unaffected slots/rankings, and all-or-nothing failure. Whole-board/version and final-legality mutations failed the direct, session, main-page, and sole-primary-SS regressions. Exact proof was 79/79 plus 137/137 broader tests; exact-path lint, TypeScript, production build, and diff checks were green. FINDING-160 is closed.
+
+### FINDING-161
+**Date:** 2026-07-14 | **Phase:** Live production setup crawl | **Status:** FIXED-AND-VERIFIED — LIVE-CRAWL CONTRACT
+**Files:** `playerDatabase.ts`, `leagueBuilderStorage.ts`, Snake Draft Setup pool proof
+**Evidence:** The stock 20-club Super Mega League loaded every available source card yet the rendered source universe remained short five true closers with zero cards left to add. Static source proof found fourteen SML club records marked CP plus two free agents, while six clubs store their final bullpen chair as RP even though every other SML roster stores that chair as CP. Correcting those six exact records yields one closer for every stock club plus two free agents; all twenty original 22-player rosters are then individually legal and form a disjoint constructive seating. The remaining five-card shortage comes from the setup proof treating the seven-card competitive-surplus target (27 CP) as a hard legality floor instead of the canonical one-per-club minimum (20 CP).
+**Impact:** The bad stock roles and conflation of hard feasibility with competitive pool quality make a constructively legal stock league dead-end before the Snake room.
+**Action:** Correct the six stock roles and migrate existing IndexedDB installs without clearing user data. Preserve CP-only canon. Use the canonical one-per-club CP minimum for hard seating/start proof, retain surplus as a soft quality/production-shape target, and prove all twenty stock clubs constructively seat. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**Independent verdict:** **VERIFIED — zero major, zero minor.** Exact source proof found only the six contracted RP-to-CP changes. Fresh stock has twenty club-assigned true closers; all original 22s are legal; a strengthened probe seated 440 unique/disjoint assignments from all 506 cards. Hard feasibility is twenty CP while competitive shaping remains twenty-seven, and mutations kill either caller conflation. The guarded v9-to-v10 migration preserves salary/IV, refuses custom/historical collisions, upgrades older databases, and leaves locked pool/session bytes unchanged. The reconstructed audit passed 181/181 focused tests, exact-path lint, TypeScript, build, and diff checks. FINDING-161 is closed.
+
+### FINDING-162
+**Date:** 2026-07-14 | **Phase:** Live production room crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** Snake rational/assistant workers, `snakeRationalRoom.ts`, `snakeSeatingProof.ts`, main/companion request wiring
+**Evidence:** In a real two-club practice room with 506 available cards, risk rows and the Asst GM Board remained calculating for tens of seconds, and a simple browser query was delayed about forty seconds while the workers ran. After Amendment 10 made the displayed board legal, a fresh first-pick reveal correctly showed `ON BOARD`, but the Asst GM Board settled to `UNAVAILABLE` in about 2.8 seconds and the next My Board click missed the browser deadline while intelligence work continued. The existing 484-player benchmark gives every club twenty-one drafted players and therefore measures only the final-seat fast path. The early-draft worker repeatedly validates a large constructive certificate during candidate proofs.
+**Impact:** The strategic intelligence exists but is not usable at the moment a GM clicks, compares, or reorganizes players; concurrent workers can make the iPad feel frozen.
+**Action:** Add an honest 500+ card, 20-club, zero-pick benchmark; remove repeated proof work; prioritize exact useful results without weakening public simulation, legality, money, scarcity, privacy, or companion parity. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+### FINDING-163
+**Date:** 2026-07-14 | **Phase:** Frozen responsive-preview crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** `SnakeResponsivePreview.tsx`, responsive Playwright
+**Evidence:** The preview hard-codes Jovita and sends selection, reorder, team-switch, trade, and draft callbacks to no-ops. The Asst GM Board is permanently idle. Live clicks on Sam, ranking moves, team switch, seller nod, and execute did not change rendered truth. The companion fixture opens with private Beewolves data visible instead of covered.
+**Impact:** The frozen build can look polished while teaching the wrong privacy model and proving none of the interaction the user must accept.
+**Action:** Turn the preview into a deterministic, covered, stateful test drive with real local selection/refit/team/trade/assistant transitions and browser assertions. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**First independent audit:** **NOT VERIFIED — seven major, two minor across FINDING-163/164.** The stateful preview's selected consequence did not match its actual Keep/refit money or moved slots; an off-clock Beewolves desk drafted for the on-clock Buzzards; initial/drafted players stayed enabled and Jovita could be drafted three times; a pick trade changed owned lists but not live order; main and companion showed contradictory salary and hardcoded zero tax; portrait lost the action strip while organizing and companion lacked the contracted responsive workspace; all green tests missed these outcomes. REVERT could restore an unrelated ranking action, SIGN OUT/FORGET ROOM left private state behind, and the final recap control was a no-op. Contract amended with the exact repair and regression gate.
+
+### FINDING-164
+**Date:** 2026-07-14 | **Phase:** iPad live workflow crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** `SnakeDraftRoomView.tsx`, selected-player card, private desk, responsive Playwright
+**Evidence:** At 1280x720 the selected-player card fills the private column's viewport and the board starts below it. Each candidate change calls page-level `scrollIntoView`, pulling the GM away from the board. Existing responsive checks scroll every target into view and therefore cannot detect the repeated board -> profile -> board loop.
+**Impact:** Organizing and comparing specific players requires continuous vertical recovery, exactly where the draft room must be fastest and clearest.
+**Action:** At iPad landscape keep profile/action beside a stable-scroll board; at portrait use a compact persistent selection strip plus full profile without losing board position. Remove forced page scrolling and add a multi-player browser journey. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**First independent audit:** **NOT VERIFIED.** At 768x1024, scrolling to organize the player pool placed the selected pane at y=-126.5 and action strip at y=-122.5 while the board began at y=166.5; the strip was sticky only inside its off-screen card sibling. Companion remained a sequential profile/roster/board stack at both iPad sizes and lost its action while scrolling. The passing anchor check recorded an already-wrong page position and never asserted visible action. The combined FINDING-163/164 rejection and exact repair gate are recorded in the live-crawl contract.
+
+**Final Snake close (2026-07-14): FIXED-AND-INDEPENDENTLY-VERIFIED.** FINDING-152
+through FINDING-156 and FINDING-162 through FINDING-164 are closed on code commit
+`f8ca392d`. Main and companion now consume the same worker-backed assistant board,
+legal-finish/scarcity/rival reads, current fair trade packages, and team-first privacy
+model. The preview is stateful and covered; the selected-player workspace remains usable
+at both iPad orientations and 430px companion width. Independent browser review found
+zero remaining UI findings. Final gates: 686 passed test files / 10,227 passed tests /
+zero failures, 17/17 Playwright journeys, strict changed-file lint, TypeScript,
+production build, and diff integrity. JK's hands-on browser walk remains the sole
+product-acceptance gate.

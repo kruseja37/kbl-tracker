@@ -7173,3 +7173,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   verdict on the commit, then crawl the live production Snake, companion, farm, recap, and
   zero-schedule handoff paths. Every live finding still requires a separate builder and auditor.
   JK's browser walk remains the sole product-acceptance gate.
+
+## 2026-07-14 (Codex, final continuation) — Snake repo/UI crawl closed; ready for JK walk
+
+- Fresh-fetched `origin/main` before final state and commit: `ea66830e0305d999f4140a101d452417f7d9152e`.
+  The isolated branch was 43 ahead / 0 behind before code commit `f8ca392d`; main did not move.
+- Completed the full hostile repository and UI crawl under builder-auditor separation. Every new
+  defect was booked before repair. FINDING-152 through FINDING-185 in the Snake lane are now fixed
+  and independently verified; rejected first repairs remained recorded rather than hidden.
+- Closed the final tail: FARM has no draft-pick trades and a frozen club-local 75%/3x salary
+  envelope; clean-device sync cannot bootstrap invalid season-2 authority; backup owns the v10
+  schema without stealing content migration or leaking a connection; the guide worker builds
+  without dragging storage/sync/backup code into its graph; final lifecycle fixtures are type-honest.
+- Final serial repository gate: 686 passed files / 8 skipped (694 total); 10,227 passed tests /
+  15 skipped (10,242 total); zero failures in 816.95 seconds.
+- Final live gate: 17/17 Playwright journeys across 1024x768, 768x1024, and 430x932. The full
+  production path completed MLB and FARM, staffing, Franchise launch with zero schedule rows, then
+  accepted manual and CSV schedule rows inside Living Season. Privacy epochs, board persistence,
+  exact trade transfer, recap/restart, and duplicate-pick prevention all passed.
+- Strict lint across every changed TypeScript file, TypeScript, production build, and diff integrity
+  are green. Production build transformed 2,718 modules and emitted every Snake worker.
+- Decisions preserved: FARM draft-pick trades retired; MLB draft-pick trades live; in-season player
+  trades separate; Help-button law canon; schedule is entered after launch for testing; no Legends
+  Library work belongs in this lane.
+- Code/test tree committed as `f8ca392d` (`feat: complete snake draft mock flow`). This documentation
+  close is the required separate session-end commit.
+- **Pending / next start:** run JK's hands-on browser walk against the frozen preview, including a
+  physical companion-device pass. Automated green is not acceptance; JK's walk is the only gate.

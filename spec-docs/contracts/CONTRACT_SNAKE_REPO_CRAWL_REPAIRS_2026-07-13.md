@@ -505,3 +505,112 @@ audited tree: 681 files passed with 8 skipped (689 total); 10,120 tests passed
 with 15 skipped (10,135 total); zero failed. Amendment 9 closes FINDING-157,
 FINDING-158, and FINDING-159. The next gate is the live Snake UI crawl; JK's
 browser walk remains the only product-acceptance gate.
+
+## Amendment 10 — final committed whole-branch audit rejection (2026-07-14)
+
+### Re-audit verdict
+
+The independent final audit of committed HEAD `fcfb44c3` returned **NOT
+VERIFIED: one major, zero minor**. Amendment 8/9 remained green, but the auditor
+proved that the editable My Board can persist and price an impossible
+thirteen-pitcher roster.
+
+### A10-1. FLEX cannot bypass canonical roster legality
+
+- `refitBoardSlots` may use FLEX for eligible surplus hitters and only the
+  canonical optional ninth pitcher. It may never make every FLEX slot
+  universally pitcher-eligible.
+- A complete board must contain exactly 22 unique, version-unique players and
+  satisfy the canonical 13–14 position-player / 8–9 pitcher roster law,
+  including all position, rotation, bullpen, closer, and swing requirements.
+- Preserve deterministic rank-first refitting and keep valid hitter FLEX and
+  optional ninth-pitcher behavior. Do not hard-code a single fixed 14/8 split.
+- Main and companion must reject, not persist, a proposed refit whose complete
+  slot map fails canonical legality. The selected-player and plan-economics
+  paths must not render authoritative money/chemistry for an illegal complete
+  board.
+- Add a direct production-code regression using the auditor's nine-hitter +
+  thirteen-pitcher attack. Mutation must fail if universal FLEX eligibility is
+  restored. Add valid 13/9 and 14/8 controls, multi-position/swing controls,
+  and main/companion persistence rejection coverage.
+
+### A10-2. Automatic backfill is also a persisted-board writer
+
+The first A10 re-audit returned **NOT VERIFIED: one major, zero minor**. The
+manual reorder, Keep, undo, economics, main save, and companion save seams were
+green, but the auditor proved a separate automatic writer:
+
+- `reconcileBoardAvailability` may replace a drafted-away slot only when the
+  resulting complete board remains 22-player unique, version-unique, and
+  canonically legal. Slot eligibility and player-ID uniqueness alone are not
+  sufficient.
+- `reconcileExistingSeatBoards` must not place or persist a replacement whose
+  complete board fails the shared canonical helper. If no ranked candidate can
+  preserve the whole-board invariant, the slot remains broken and the prior
+  persisted board bytes remain unchanged; the UI may report the unresolved
+  slot but may not write false certainty.
+- Use the next eligible ranked candidate when the first candidate would create
+  a duplicate version or illegal roster. Preserve frozen-touch behavior:
+  rankings and all unaffected slots remain byte-stable.
+- Add the auditor's direct production-code regression: begin with a canonical
+  14-hitter/8-pitcher board, remove FLEX1, rank an eligible alternate version of
+  the existing catcher first, and prove that card is skipped rather than
+  persisted. Include a later valid replacement control, no-valid-replacement
+  control, 13/9 control, and main automatic-persist seam coverage.
+
+### Amendment 10 allowlist
+
+Product edits are limited to:
+
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- one narrowly shared legality helper only if required to prevent duplicate
+  main/companion validation
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/pages/SnakeCompanion.tsx`
+- `src/engines/snakeEconomics.ts` only if the builder proves the UI validation
+  seam alone cannot make authoritative plan output fail closed
+
+Tests may cover the named functions/pages and existing Snake desk/economics
+suites only. Canonical roster constants and roster legality are read-only.
+
+### Amendment 10 gates
+
+1. Auditor's exact 9-hitter/13-pitcher mutation red first, then green.
+2. Valid 13/9 and 14/8 plans remain complete and deterministic.
+3. Main and companion refuse to persist an illegal refit and remain byte-stable
+   on storage failure. Automatic drafted-away-player backfill also skips every
+   replacement that would make the complete board non-canonical or
+   duplicate-version and never persists an unresolved illegal result.
+4. Selected-player and plan money/chemistry fail closed for any complete board
+   that cannot prove canonical legality.
+5. Existing My Board, assistant board, selected consequence, main/companion,
+   privacy, and ranking-refit suites.
+6. Exact changed-file no-inline lint, TypeScript, production build, diff check.
+7. Separate auditor returns VERIFIED with zero major and zero minor findings.
+
+Builder does not edit audit/status/contract docs, stage, or commit. Builder does
+not audit its own work.
+
+### A10 final re-audit verdict
+
+The independent A10/A10-2 re-audit returned **VERIFIED: zero major, zero
+minor**. The original 9H/13P attack remained rejected; 13/9 and 14/8 controls
+remained deterministic. The automatic-backfill attack now skips the first
+duplicate-version alternate and chooses the later safe candidate; a no-safe
+case returns the original board object and bytes unchanged. An independent
+two-slot C/SS probe confirmed deterministic backtracking, stable unaffected
+slots/rankings, and all-or-nothing failure. Removing the whole-board/version
+gate or the final canonical-legality check made the direct, session, main-page,
+and sole-primary-SS attacks fail. Exact proof was 79/79 plus 137/137 broader
+tests, exact-path lint, TypeScript, production build, and diff hygiene. A10
+closes FINDING-160.
+
+## Final repository-close verdict — 2026-07-14
+
+The follow-on live-crawl and tail contracts closed FINDING-162 through
+FINDING-185. Independent final proof on code commit `f8ca392d`: 686 passed files /
+10,227 passed tests / zero failures; 17/17 responsive and production-lifecycle
+browser journeys; strict changed-file lint, TypeScript, production build, and
+diff integrity green. Automated repository work is complete; JK's hands-on
+browser walk remains the sole product-acceptance gate.
