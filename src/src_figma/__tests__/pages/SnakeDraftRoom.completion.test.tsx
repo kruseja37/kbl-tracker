@@ -217,7 +217,7 @@ describe('snake draft durable completion and recap', () => {
     mocks.commitMlb.mockRejectedValueOnce(new Error('MLB commit failed')).mockResolvedValueOnce(undefined);
     renderRoom(`/snake-room?leagueId=${league.id}`);
     fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
-    expect(await screen.findByText('MLB COMMIT FAILED')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
     expect(screen.queryByTestId('navigation-target')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
     expect(await screen.findByTestId('navigation-target')).toBeInTheDocument();
@@ -260,6 +260,35 @@ describe('snake draft durable completion and recap', () => {
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
   });
 
+  test('a missing MLB player lookup uses neutral copy in the recap and live ticker without exposing the internal id', async () => {
+    const missingPlayerId = 'mlb-internal-player-id-99';
+    const completed = completedSession('MLB');
+    setMlbData({
+      ...completed,
+      completedPicks: [
+        { ...completed.completedPicks[0], playerId: missingPlayerId },
+        completed.completedPicks[1],
+      ],
+    });
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+
+    expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' })).toBeInTheDocument();
+    expect(screen.getByText('UNKNOWN PLAYER')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+
+    fireEvent.click(screen.getByRole('button', { name: 'BACK TO ROOM' }));
+    expect(await screen.findByText('KODIAKS SELECTED UNKNOWN PLAYER')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+
+    fireEvent.click(screen.getByRole('button', { name: 'VIEW DRAFT RECAP' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+  });
+
   test('a completed farm reload opens fog-safe recap and commits only before Staff Hire navigation', async () => {
     const session = setFarmData();
     renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
@@ -276,6 +305,29 @@ describe('snake draft durable completion and recap', () => {
     });
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitFarm.mock.invocationCallOrder[0]);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/staff-hire?leagueId=${league.id}`);
+  });
+
+  test('a missing FARM player lookup uses neutral recap copy without exposing the internal id', async () => {
+    const missingPlayerId = 'farm-internal-prospect-id-88';
+    const completed = completedSession('FARM');
+    setFarmData({
+      ...completed,
+      completedPicks: [
+        { ...completed.completedPicks[0], playerId: missingPlayerId },
+        completed.completedPicks[1],
+      ],
+    });
+    renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
+
+    expect(await screen.findByRole('heading', { name: 'FARM DRAFT RECAP' })).toBeInTheDocument();
+    expect(screen.getByText('UNKNOWN PLAYER')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
+
+    fireEvent.click(screen.getByRole('button', { name: 'CONFIRM FARM DRAFT' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
+    expect(document.body).not.toHaveTextContent(missingPlayerId);
+    expect(document.body.innerHTML).not.toContain(missingPlayerId);
   });
 
   test('the first farm recap confirmation freezes the latest stored revision', async () => {
@@ -336,7 +388,7 @@ describe('snake draft durable completion and recap', () => {
     mocks.commitFarm.mockRejectedValue(new Error('Farm commit failed'));
     renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
     fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM FARM DRAFT' }));
-    expect(await screen.findByText('FARM COMMIT FAILED')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
     expect(screen.queryByTestId('navigation-target')).not.toBeInTheDocument();
   });
 });

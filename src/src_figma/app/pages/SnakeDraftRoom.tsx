@@ -181,6 +181,9 @@ function fullName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName}`.trim();
 }
 
+const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
+const RECAP_CONFIRMATION_ERROR = 'THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.';
+
 function hotseatPassName(
   session: { snakeSetup?: { clubs: Array<{ teamId: string; gmName?: string; hotseat: boolean }> } } | null,
   team: { id: string; name: string } | null,
@@ -496,8 +499,8 @@ function FarmSnakeRoom() {
       setSession(handedOff);
       await assertSnakeRosterHandoffReady(handedOff, 'FARM');
       navigate(staffHireRouteForLeague(league));
-    } catch (cause) {
-      setRecapError((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
+    } catch {
+      setRecapError(RECAP_CONFIRMATION_ERROR);
     } finally {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
@@ -627,7 +630,7 @@ function FarmSnakeRoom() {
         pick: pick.pick,
         teamId: pick.teamId,
         playerId: pick.playerId,
-        playerName: prospect ? `${prospect.firstName} ${prospect.lastName}` : pick.playerId,
+        playerName: prospect ? `${prospect.firstName} ${prospect.lastName}` : UNKNOWN_PLAYER,
         ...(prospect?.primaryPosition ? { position: prospect.primaryPosition } : {}),
         ...(typeof pick.settledSalary === 'number' ? { salary: pick.settledSalary } : {}),
       };
@@ -642,7 +645,7 @@ function FarmSnakeRoom() {
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     order={session.pickOrder.map((slot, index, all) => ({ pick: slot.pick, teamId: slot.teamId, endpoint: all[index - 1]?.teamId === slot.teamId || all[index + 1]?.teamId === slot.teamId }))}
     currentPickIndex={session.currentPickIndex}
-    ticker={session.completedPicks.slice(-8).reverse().map((pick) => ({ id: `${pick.pick}-${pick.playerId}`, teamId: pick.teamId, text: `${leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB'} SELECTED ${farmPool.prospects.find((row) => row.id === pick.playerId)?.firstName ?? 'A PROSPECT'}` }))}
+    ticker={session.completedPicks.slice(-8).reverse().map((pick) => ({ id: `${pick.pick}-${pick.playerId}`, teamId: pick.teamId, text: `${leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB'} SELECTED ${farmPool.prospects.find((row) => row.id === pick.playerId)?.firstName ?? UNKNOWN_PLAYER}` }))}
     rostersByTeamId={rostersByTeamId}
     ownedPicksByTeamId={ownedPicksByTeamId}
     activeSeatId={farmDraftComplete ? null : deskTeam?.id ?? null}
@@ -1188,11 +1191,14 @@ function MlbSnakeDraftRoom() {
     team.id,
     (session?.pickOrder ?? []).slice(session?.currentPickIndex ?? 0).filter((slot) => slot.teamId === team.id).map((slot) => slot.pick),
   ])), [leagueTeams, session]);
-  const ticker = useMemo(() => (session?.completedPicks ?? []).slice(-8).reverse().map((pick) => ({
-    id: `${pick.round}-${pick.pick}-${pick.playerId}`,
-    teamId: pick.teamId,
-    text: `${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB').toUpperCase()} SELECTED ${(playerById.get(pick.playerId) ? fullName(playerById.get(pick.playerId)!.firstName, playerById.get(pick.playerId)!.lastName) : pick.playerId).toUpperCase()}`,
-  })), [leagueTeams, playerById, session]);
+  const ticker = useMemo(() => (session?.completedPicks ?? []).slice(-8).reverse().map((pick) => {
+    const player = playerById.get(pick.playerId);
+    return {
+      id: `${pick.round}-${pick.pick}-${pick.playerId}`,
+      teamId: pick.teamId,
+      text: `${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? 'CLUB').toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`,
+    };
+  }), [leagueTeams, playerById, session]);
   const latestPick = session?.completedPicks.at(-1);
   const currentBoardPlayerIds = new Set([
     ...(currentBoard?.rankings.global ?? []),
@@ -2040,8 +2046,8 @@ function MlbSnakeDraftRoom() {
       setPracticeFastForward(false);
       setPrivateDeskRevealed(false);
       setRecapOpen(false);
-    } catch (cause) {
-      setRecapError((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
+    } catch {
+      setRecapError(RECAP_CONFIRMATION_ERROR);
     } finally {
       setCommittingRecap(false);
     }
@@ -2084,8 +2090,8 @@ function MlbSnakeDraftRoom() {
       setSession(handedOff);
       await assertSnakeRosterHandoffReady(handedOff, 'MLB');
       navigate(scoutHireRouteForLeague(league));
-    } catch (cause) {
-      setRecapError((cause instanceof Error ? cause.message : String(cause)).toUpperCase());
+    } catch {
+      setRecapError(RECAP_CONFIRMATION_ERROR);
     } finally {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
@@ -2209,7 +2215,7 @@ function MlbSnakeDraftRoom() {
         pick: pick.pick,
         teamId: pick.teamId,
         playerId: pick.playerId,
-        playerName: player ? fullName(player.firstName, player.lastName) : pick.playerId,
+        playerName: player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER,
         ...(player?.primaryPosition ? { position: player.primaryPosition } : {}),
         ...(typeof pick.settledSalary === 'number' ? { salary: pick.settledSalary } : {}),
         ...(typeof pick.marginalTax === 'number' ? { tax: pick.marginalTax } : {}),

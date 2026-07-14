@@ -499,12 +499,17 @@ function atomicUpsertCloudRows(rows: AtomicStoreRow[]) {
       continue;
     }
 
-    const {
-      op_id: _opId,
-      base_received_at: _baseReceivedAt,
-      base_id: _baseId,
-      ...storeRow
-    } = row;
+    const storeRow: StoreRow = {
+      id: row.id,
+      user_id: row.user_id,
+      db_name: row.db_name,
+      store_name: row.store_name,
+      record_key: row.record_key,
+      data: row.data,
+      changed_at: row.changed_at,
+      received_at: row.received_at,
+      deleted: row.deleted,
+    };
     mockState.kblStoreUpserts.push(storeRow);
     upsertCloudRows([storeRow]);
     if (opKey) {
@@ -601,12 +606,14 @@ function atomicUpsertLocalRows(rows: AtomicLocalStorageRow[]) {
       continue;
     }
 
-    const {
-      op_id: _opId,
-      base_received_at: _baseReceivedAt,
-      base_key: _baseKey,
-      ...localRow
-    } = row;
+    const localRow: LocalStorageRow = {
+      user_id: row.user_id,
+      key: row.key,
+      data: row.data,
+      changed_at: row.changed_at,
+      received_at: row.received_at,
+      deleted: row.deleted,
+    };
     upsertLocalRows([localRow]);
     if (opKey) {
       recordAppliedOp(opKey, localAppliedOpTarget(row));
@@ -1109,6 +1116,82 @@ function snakeRestoreRows(input: {
   };
 }
 
+function snakeSeatBoardSyncRows(input: {
+  leagueId: string;
+  sessionBoardRevision: number;
+  standaloneBoardRevision: number;
+  sessionReceivedAt: string;
+  boardReceivedAt: string;
+}): { session: StoreRow; board: StoreRow } {
+  const sessionId = `${input.leagueId}::startup-mlb-draft::1`;
+  const teamId = "team-a";
+  const makeBoard = (revision: number, source: string) => ({
+    slots: {},
+    rankings: { global: [`${source}-${revision}`] },
+    revision,
+  });
+  const embeddedBoard = makeBoard(input.sessionBoardRevision, "embedded");
+  const standaloneBoard = makeBoard(input.standaloneBoardRevision, "standalone");
+  const boardId = `${sessionId}::mlb-seat::${teamId}`;
+  return {
+    session: {
+      id: `${input.leagueId}-session-row`,
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(sessionId),
+      data: {
+        id: sessionId,
+        leagueId: input.leagueId,
+        seasonNumber: 1,
+        seed: "seat-sync-seed",
+        workflowVersion: "snake-v1",
+        engineMethodVersion: "snake-s1a",
+        tier: "standard",
+        balanceMode: "taxed",
+        rounds: 1,
+        pickOrder: [{ round: 1, pick: 1, teamId }],
+        completedPicks: [],
+        currentPickIndex: 0,
+        revision: 0,
+        seatBoards: { [teamId]: embeddedBoard },
+        snakeSetup: {
+          poolPlayerIds: ["player-a"],
+          versionSelections: {},
+          clubs: [{ teamId, hotseat: false }],
+          orderSeed: "order",
+        },
+        createdDate: "2026-07-13T01:00:00.000Z",
+        lastModified: "2026-07-13T01:00:00.000Z",
+      },
+      changed_at: Date.parse(input.sessionReceivedAt),
+      received_at: input.sessionReceivedAt,
+      deleted: false,
+    },
+    board: {
+      id: `${input.leagueId}-board-row`,
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "snakeSeatBoards",
+      record_key: JSON.stringify(boardId),
+      data: {
+        id: boardId,
+        sessionId,
+        leagueId: input.leagueId,
+        seasonNumber: 1,
+        teamId,
+        phase: "MLB",
+        board: standaloneBoard,
+        revision: input.standaloneBoardRevision,
+        lastModified: "2026-07-13T01:00:00.000Z",
+      },
+      changed_at: Date.parse(input.boardReceivedAt),
+      received_at: input.boardReceivedAt,
+      deleted: false,
+    },
+  };
+}
+
 describe("syncEngine dynamic elimination copied DBs", () => {
   beforeEach(async () => {
     mockState.reset();
@@ -1169,6 +1252,71 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     );
     expect(await storage.getRegisteredPool(leagueId)).toEqual(rows.pool.data);
     expect(localStorage.getItem("kbl-sync-deferred-snake-protected-rows")).toBeNull();
+    syncEngine.destroy();
+  });
+
+  test.each([
+    ["session-first", 2, 1],
+    ["standalone-board-first", 1, 2],
+  ])("session and standalone seat-board sync groups converge and remain writable when %s", async (
+    order,
+    sessionBoardRevision,
+    standaloneBoardRevision,
+  ) => {
+    const leagueId = `seat-sync-${order}`;
+    const rows = snakeSeatBoardSyncRows({
+      leagueId,
+      sessionBoardRevision,
+      standaloneBoardRevision,
+      sessionReceivedAt: order === "session-first"
+        ? "2026-07-13T01:00:00.000Z"
+        : "2026-07-13T01:00:01.000Z",
+      boardReceivedAt: order === "session-first"
+        ? "2026-07-13T01:00:01.000Z"
+        : "2026-07-13T01:00:00.000Z",
+    });
+    const first = order === "session-first" ? rows.session : rows.board;
+    const second = order === "session-first" ? rows.board : rows.session;
+    mockState.cloudRows.push(first);
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+
+    await syncEngine.pull({ throwOnError: true });
+    mockState.cloudRows.push(second);
+    await syncEngine.pull({ throwOnError: true });
+
+    const loaded = await storage.getMlbDraftSession(leagueId, 1);
+    const loadedBoard = loaded?.seatBoards?.["team-a"];
+    expect(loadedBoard?.revision).toBe(2);
+    if (!loadedBoard) throw new Error("The authoritative team-a seat board did not arrive.");
+    const saved = await storage.patchMlbDraftSessionSeatBoard({
+      leagueId,
+      seasonNumber: 1,
+      teamId: "team-a",
+      expectedBoardRevision: 2,
+      board: {
+        ...loadedBoard,
+        rankings: { global: ["converged-3"] },
+        revision: 3,
+      },
+    });
+    expect(saved.seatBoards?.["team-a"]?.revision).toBe(3);
+    await syncEngine.flush({ throwOnPending: true });
+
+    const cloudSession = mockState.cloudRows.find((row) => (
+      row.store_name === "mlbDraftSessions"
+      && row.record_key === JSON.stringify(storage.createMlbDraftSessionId(leagueId, 1))
+    ));
+    const cloudBoard = mockState.cloudRows.find((row) => (
+      row.store_name === "snakeSeatBoards"
+      && row.record_key === JSON.stringify(`${storage.createMlbDraftSessionId(leagueId, 1)}::mlb-seat::team-a`)
+    ));
+    if (!cloudSession || !cloudBoard) throw new Error("Both converged seat-board sync groups must reach cloud storage.");
+    expect((cloudSession.data as import("../leagueBuilderStorage").LeagueBuilderMlbDraftSession)
+      .seatBoards?.["team-a"]?.revision).toBe(3);
+    expect((cloudBoard.data as import("../leagueBuilderStorage").SnakeSeatBoardStoreRecord)
+      .board.revision).toBe(3);
     syncEngine.destroy();
   });
 
@@ -1363,7 +1511,10 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       tier: "standard",
       balanceMode: "balanced",
       rounds: 22,
-      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-a" },
+        { round: 2, pick: 2, teamId: "team-a" },
+      ],
       completedPicks: [],
       currentPickIndex: 0,
       revision: 1,
@@ -1439,7 +1590,8 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       seasonNumber: 1,
       patch: (current, fresh) => {
         const value = { ...fresh, snakeCompanions: current };
-        const pending = value.snakeCompanions?.claims.find((claim) => claim.deviceId === "phone-device")!;
+        const pending = value.snakeCompanions?.claims.find((claim) => claim.deviceId === "phone-device");
+        if (!pending) throw new Error("The pending phone claim disappeared before approval.");
         return approveCompanionClaim(
           value,
           companionClaimIdentity(pending),
