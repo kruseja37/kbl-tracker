@@ -1,9 +1,9 @@
 # CONTRACT — SNAKE INTELLIGENCE: MY BOARD, ASST GM BOARD, AND FAIR TRADES
 
-**Date:** 2026-07-13  
-**Base checkpoint:** `99d130805bd36227b4e8ff68aa53970c4ee0458b`  
-**Branch:** `codex/snake-mock-draft-ready`  
-**Authority:** JK approval of FINDING-152's ten-recommendation plan  
+**Date:** 2026-07-13
+**Base checkpoint:** `99d130805bd36227b4e8ff68aa53970c4ee0458b`
+**Branch:** `codex/snake-mock-draft-ready`
+**Authority:** JK approval of FINDING-152's ten-recommendation plan
 **Builder/auditor law:** separate agents; JK browser walk is the sole acceptance gate
 
 ## Product contract

@@ -255,7 +255,7 @@ export function FranchiseSetup() {
   const handoffLeagueApplied = useRef(false);
   const handoffLivingSeasonApplied = useRef(false);
   const requestedLeagueId = useMemo(() => new URLSearchParams(window.location.search).get("leagueId"), []);
-  const leagueIdsKey = leagues.map((league) => league.id).join("|");
+  const leagueIdsKey = leagues.map((league) => league.id).join("\u0000");
 
   // Auto-seed SMB4 data if no leagues exist (first-time setup)
   useEffect(() => {
@@ -284,20 +284,21 @@ export function FranchiseSetup() {
       setDraftCompletionChecked(false);
       return;
     }
-    if (leagues.length === 0) {
+    if (leagueIdsKey.length === 0) {
       setDraftHandoffChecks({});
       setDraftCompletionErrors({});
       setDraftCompletionChecked(true);
       return;
     }
+    const leagueIds = leagueIdsKey.split("\u0000");
     setDraftCompletionChecked(false);
     let cancelled = false;
-    Promise.all(leagues.map(async (league) => {
+    Promise.all(leagueIds.map(async (leagueId) => {
       try {
-        return { leagueId: league.id, check: await readDraftHandoffCompletion(league.id), error: null };
+        return { leagueId, check: await readDraftHandoffCompletion(leagueId), error: null };
       } catch (caught) {
         return {
-          leagueId: league.id,
+          leagueId,
           check: null,
           error: caught instanceof Error ? caught.message : "Draft completion could not be read.",
         };
@@ -406,7 +407,7 @@ export function FranchiseSetup() {
       setIsInitializing(true);
       setInitError(null);
       try {
-        let handoffValidation = config.league
+        const handoffValidation = config.league
           ? await validatePreparedLeagueBuilderFarmScoutingState(config.league)
           : null;
         if (handoffValidation) {
@@ -703,7 +704,7 @@ export function FranchiseSetup() {
                       {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
                       {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
                       {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
-                      {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} livingSeasonEnabled={livingSeasonEnabled} setLivingSeasonEnabled={setLivingSeasonEnabled} />}
+                      {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} livingSeasonEnabled={livingSeasonEnabled} setLivingSeasonEnabled={setLivingSeasonEnabled} />}
                     </>
                   )}
                 </>
@@ -1075,24 +1076,18 @@ function Step2SeasonSettings({
   const isCustomGamesActive = !GAMES_PER_TEAM_PRESETS.includes(config.season.gamesPerTeam);
   const isCustomInningsActive = !INNINGS_PER_GAME_PRESETS.includes(config.season.inningsPerGame);
 
-  const [customGamesText, setCustomGamesText] = useState(String(config.season.gamesPerTeam));
-  const [customInningsText, setCustomInningsText] = useState(String(config.season.inningsPerGame));
+  const [customGamesDraft, setCustomGamesDraft] = useState<string | null>(null);
+  const [customInningsDraft, setCustomInningsDraft] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
-
-  useEffect(() => {
-    setCustomGamesText(String(config.season.gamesPerTeam));
-  }, [config.season.gamesPerTeam]);
-
-  useEffect(() => {
-    setCustomInningsText(String(config.season.inningsPerGame));
-  }, [config.season.inningsPerGame]);
+  const customGamesText = customGamesDraft ?? String(config.season.gamesPerTeam);
+  const customInningsText = customInningsDraft ?? String(config.season.inningsPerGame);
 
   const commitCustomGames = () => {
     const parsed = Number.parseInt(customGamesText, 10);
     const clamped = Number.isFinite(parsed)
       ? clampSeasonInt(parsed, GAMES_PER_TEAM_MIN, GAMES_PER_TEAM_MAX)
       : config.season.gamesPerTeam;
-    setCustomGamesText(String(clamped));
+    setCustomGamesDraft(null);
     if (clamped !== config.season.gamesPerTeam) {
       setConfig({ ...config, season: { ...config.season, gamesPerTeam: clamped } });
     }
@@ -1103,7 +1098,7 @@ function Step2SeasonSettings({
     const clamped = Number.isFinite(parsed)
       ? clampSeasonInt(parsed, INNINGS_PER_GAME_MIN, INNINGS_PER_GAME_MAX)
       : config.season.inningsPerGame;
-    setCustomInningsText(String(clamped));
+    setCustomInningsDraft(null);
     if (clamped !== config.season.inningsPerGame) {
       setConfig({ ...config, season: { ...config.season, inningsPerGame: clamped } });
     }
@@ -1206,7 +1201,7 @@ function Step2SeasonSettings({
               min={GAMES_PER_TEAM_MIN}
               max={GAMES_PER_TEAM_MAX}
               value={customGamesText}
-              onChange={(e) => setCustomGamesText(e.target.value)}
+              onChange={(e) => setCustomGamesDraft(e.target.value)}
               onBlur={commitCustomGames}
               onKeyDown={commitOnEnter(commitCustomGames)}
               className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
@@ -1260,7 +1255,7 @@ function Step2SeasonSettings({
               min={INNINGS_PER_GAME_MIN}
               max={INNINGS_PER_GAME_MAX}
               value={customInningsText}
-              onChange={(e) => setCustomInningsText(e.target.value)}
+              onChange={(e) => setCustomInningsDraft(e.target.value)}
               onBlur={commitCustomInnings}
               onKeyDown={commitOnEnter(commitCustomInnings)}
               className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
@@ -2061,7 +2056,6 @@ function Step6Confirm({
   config,
   setConfig,
   jumpToStep,
-  leagues,
   leagueTeams,
   farmScoutingReport,
   farmScoutingLoading,
@@ -2072,7 +2066,6 @@ function Step6Confirm({
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   jumpToStep: (step: number) => void;
-  leagues: LeagueTemplate[];
   leagueTeams: Team[];
   farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
   farmScoutingLoading: boolean;

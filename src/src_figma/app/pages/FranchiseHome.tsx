@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, createContext, useContext, useRef } from "react";
+import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { Calendar, Users, TrendingUp, Newspaper, Trophy, Folder, ChevronDown, ChevronUp, DollarSign, ClipboardList, Star, Award, TrendingDown, Shuffle, UserMinus, CheckCircle, ArrowRight, BarChart3, Plus, GitMerge, FlaskConical, Sunrise, ListOrdered } from "lucide-react";
 import { getTeamColors } from "@/config/teamColors";
@@ -17,7 +17,7 @@ import { SpringTrainingFlow } from "@/app/components/SpringTrainingFlow";
 import { AwardsWatchlist } from "@/app/components/AwardsWatchlist";
 import { AddGameModal, type GameFormData } from "@/app/components/AddGameModal";
 import { ScheduleContent } from "@/app/components/ScheduleContent";
-import { useFranchiseData, type UseFranchiseDataReturn } from "@/hooks/useFranchiseData";
+import { useFranchiseData } from "@/hooks/useFranchiseData";
 import { useScheduleData, type ScheduledGame } from "@/hooks/useScheduleData";
 import { usePlayoffData, type PlayoffPlayerStats, type PlayoffSeries, type SeriesGame } from "@/hooks/usePlayoffData";
 import { getHomeFieldPattern, detectClinch } from "../../../engines/playoffEngine";
@@ -73,7 +73,6 @@ import {
   loadFranchisePregameMilestoneWatchesForData,
   markFranchisePostGameColumnsPending,
   prepareFranchisePregameData,
-  resolveFranchiseExtraInnings,
   resolveFranchiseGameUseDH,
   type FranchisePregameData,
 } from "../utils/franchiseGameLaunch";
@@ -90,19 +89,7 @@ import type {
   OptimalLineupSnapshot,
 } from "../../../types/managerWpa";
 import type { FranchisePlayoffSeedingReview } from "../../../utils/franchisePlayoffSeedingReview";
-
-export { resolveFranchiseExtraInnings, resolveFranchiseGameUseDH } from "../utils/franchiseGameLaunch";
-
-// Context for passing franchise data to child components
-const FranchiseDataContext = createContext<UseFranchiseDataReturn | null>(null);
-
-export function useFranchiseDataContext() {
-  const context = useContext(FranchiseDataContext);
-  if (!context) {
-    throw new Error('useFranchiseDataContext must be used within FranchiseDataProvider');
-  }
-  return context;
-}
+import { FranchiseDataContext, useFranchiseDataContext } from "./FranchiseHomeContext";
 
 async function ensureFranchiseReporterForTeam({
   teamId,
@@ -268,13 +255,34 @@ export function FranchiseHome() {
   // Real season data from IndexedDB (with mock fallbacks)
   const franchiseData = useFranchiseData(franchiseId, currentSeason);
   const franchiseLeagueId = franchiseData.franchiseConfig?.league || 'sml';
-  const franchiseRepairPromise = useRef<Promise<void> | null>(null);
+  const refreshFranchiseData = franchiseData.refresh;
+  const refreshScheduleData = scheduleData.refresh;
+  const repairLeagueId = franchiseData.franchiseConfig?.league ?? null;
+  const latestRepairRefreshRef = useRef({
+    franchise: refreshFranchiseData,
+    schedule: refreshScheduleData,
+  });
+  useEffect(() => {
+    latestRepairRefreshRef.current = {
+      franchise: refreshFranchiseData,
+      schedule: refreshScheduleData,
+    };
+  }, [refreshFranchiseData, refreshScheduleData]);
+  const franchiseRepairStateRef = useRef<{
+    identity: string | null;
+    promise: Promise<void> | null;
+  }>({ identity: null, promise: null });
 
-  const runFranchisePersistenceRepair = async () => {
-    if (!franchiseId || !franchiseData.franchiseConfig?.league) return;
+  const runFranchisePersistenceRepair = useCallback(async () => {
+    if (!franchiseId || !repairLeagueId) return;
+    const identity = `${franchiseId}:${currentSeason}:${repairLeagueId}`;
+    const currentRepair = franchiseRepairStateRef.current;
+    if (currentRepair.identity === identity) {
+      if (currentRepair.promise) await currentRepair.promise;
+      return;
+    }
 
-    if (!franchiseRepairPromise.current) {
-      franchiseRepairPromise.current = repairFranchisePersistence(franchiseId, currentSeason)
+    const promise = repairFranchisePersistence(franchiseId, currentSeason)
         .then(async (result) => {
           if (
             result.rosterBackfilled ||
@@ -282,18 +290,26 @@ export function FranchiseHome() {
             result.seasonMetadataUpdated
           ) {
             await Promise.all([
-              franchiseData.refresh(),
-              scheduleData.refresh(),
+              latestRepairRefreshRef.current.franchise(),
+              latestRepairRefreshRef.current.schedule(),
             ]);
           }
-        })
-        .finally(() => {
-          franchiseRepairPromise.current = null;
         });
-    }
+    franchiseRepairStateRef.current = { identity, promise };
 
-    await franchiseRepairPromise.current;
-  };
+    try {
+      await promise;
+    } catch (caught) {
+      if (franchiseRepairStateRef.current.identity === identity) {
+        franchiseRepairStateRef.current = { identity: null, promise: null };
+      }
+      throw caught;
+    } finally {
+      if (franchiseRepairStateRef.current.identity === identity) {
+        franchiseRepairStateRef.current = { identity, promise: null };
+      }
+    }
+  }, [currentSeason, franchiseId, repairLeagueId]);
   const [addGameModalOpen, setAddGameModalOpen] = useState(false);
   const [editingScheduleGame, setEditingScheduleGame] = useState<{
     id: string;
@@ -319,6 +335,10 @@ export function FranchiseHome() {
 
   // Playoff System State - Persisted to IndexedDB via usePlayoffData
   const playoffData = usePlayoffData(currentSeason, { franchiseId });
+  const refreshPlayoffData = playoffData.refresh;
+  const playoffState = playoffData.playoff;
+  const getPlayoffBattingLeaders = playoffData.getBattingLeaders;
+  const getPlayoffPitchingLeaders = playoffData.getPitchingLeaders;
   const location = useLocation();
   const locationState = (location.state ?? {}) as {
     refreshAfterGame?: boolean;
@@ -351,7 +371,7 @@ export function FranchiseHome() {
   }, [franchiseId]);
 
   useEffect(() => {
-    if (!franchiseId || !franchiseData.franchiseConfig?.league) return;
+    if (!franchiseId || !repairLeagueId) return;
 
     void runFranchisePersistenceRepair().catch((err) => {
       console.warn('[FranchiseHome] Franchise persistence repair failed:', err);
@@ -359,7 +379,8 @@ export function FranchiseHome() {
   }, [
     franchiseId,
     currentSeason,
-    franchiseData.franchiseConfig?.league,
+    repairLeagueId,
+    runFranchisePersistenceRepair,
   ]);
 
   useEffect(() => {
@@ -370,9 +391,9 @@ export function FranchiseHome() {
     const refreshAll = async () => {
       try {
         await Promise.all([
-          franchiseData.refresh(),
-          scheduleData.refresh(),
-          playoffData.refresh(),
+          refreshFranchiseData(),
+          refreshScheduleData(),
+          refreshPlayoffData(),
         ]);
       } catch (err) {
         console.error('[FranchiseHome] Failed to refresh data after game completion:', err);
@@ -383,14 +404,14 @@ export function FranchiseHome() {
   }, [
     shouldRefreshAfterGame,
     refreshToken,
-    franchiseData.refresh,
-    scheduleData.refresh,
-    playoffData.refresh,
+    refreshFranchiseData,
+    refreshScheduleData,
+    refreshPlayoffData,
   ]);
 
   useEffect(() => {
     if (activeTab !== "playoff-leaders" && activeTab !== "playoff-stats") return;
-    if (!playoffData.playoff || playoffData.playoff.status === 'NOT_STARTED') {
+    if (!playoffState || playoffState.status === 'NOT_STARTED') {
       setPlayoffLeaderBatting({});
       setPlayoffLeaderPitching({});
       setPlayoffLeaderFielding({});
@@ -424,13 +445,13 @@ export function FranchiseHome() {
 
         const [battingEntries, pitchingEntries, fieldingEntries] = await Promise.all([
           Promise.all(
-            Object.entries(battingStats).map(async ([label, stat]) => [label, await playoffData.getBattingLeaders(stat, 5)] as const)
+            Object.entries(battingStats).map(async ([label, stat]) => [label, await getPlayoffBattingLeaders(stat, 5)] as const)
           ),
           Promise.all(
-            Object.entries(pitchingStats).map(async ([label, stat]) => [label, await playoffData.getPitchingLeaders(stat, 5)] as const)
+            Object.entries(pitchingStats).map(async ([label, stat]) => [label, await getPlayoffPitchingLeaders(stat, 5)] as const)
           ),
           Promise.all(
-            Object.entries(fieldingStats).map(async ([label, stat]) => [label, await playoffData.getBattingLeaders(stat, 5)] as const)
+            Object.entries(fieldingStats).map(async ([label, stat]) => [label, await getPlayoffBattingLeaders(stat, 5)] as const)
           ),
         ]);
 
@@ -455,9 +476,9 @@ export function FranchiseHome() {
     };
   }, [
     activeTab,
-    playoffData.playoff,
-    playoffData.getBattingLeaders,
-    playoffData.getPitchingLeaders,
+    playoffState,
+    getPlayoffBattingLeaders,
+    getPlayoffPitchingLeaders,
   ]);
 
   // Offseason State - tracks current phase progression
@@ -576,10 +597,10 @@ export function FranchiseHome() {
 
   // All-Star voting helpers — return empty until season stats engine populates data
   type AllStarPlayer = { name: string; team: string; pos: string; votes: number };
-  const getTopPlayerByPosition = (_league: "Eastern" | "Western", _position: string): AllStarPlayer | undefined => undefined;
-  const getBenchPlayers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
-  const getStartingPitchers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
-  const getReliefPitchers = (_league: "Eastern" | "Western"): AllStarPlayer[] => [];
+  const getTopPlayerByPosition: (league: "Eastern" | "Western", position: string) => AllStarPlayer | undefined = () => undefined;
+  const getBenchPlayers: (league: "Eastern" | "Western") => AllStarPlayer[] = () => [];
+  const getStartingPitchers: (league: "Eastern" | "Western") => AllStarPlayer[] = () => [];
+  const getReliefPitchers: (league: "Eastern" | "Western") => AllStarPlayer[] = () => [];
 
   useEffect(() => {
     // Try to load the selected league from localStorage
@@ -590,8 +611,8 @@ export function FranchiseHome() {
         if (league.name) {
           setLeagueName(league.name);
         }
-      } catch (e) {
-        console.error("Error loading league:", e);
+      } catch (error) {
+        console.error("Error loading league:", error);
       }
     }
   }, []);
@@ -748,7 +769,7 @@ export function FranchiseHome() {
         parsedDate.setDate(parsedDate.getDate() + 1);
         return parsedDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
       }
-    } catch (e) {
+    } catch {
       // If parsing fails, just use today
     }
 
@@ -1281,7 +1302,7 @@ export function FranchiseHome() {
       {/* Sub-tabs */}
       <div className="bg-[var(--franchise-header)] overflow-x-auto border-b-4 border-[var(--franchise-border)]">
         <div className={`mx-auto flex w-max min-w-full max-w-7xl ${seasonPhase === "regular" ? "gap-0" : "gap-0"}`}>
-          {currentTabs.map((tab, index) => {
+          {currentTabs.map((tab) => {
             return (
               <button
                 key={tab.id}

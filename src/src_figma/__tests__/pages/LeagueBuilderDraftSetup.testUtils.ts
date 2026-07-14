@@ -12,7 +12,7 @@
 // module graph loaded during a given test file's run, including modules this file imports
 // (useLeagueBuilderData, extractPoolFromDemand, etc.) -- exactly how the original single file's
 // helpers already worked against those same mocked bindings.
-import { act, configure, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, configure, fireEvent, screen, waitFor } from "@testing-library/react";
 import { expect, vi } from "vitest";
 
 import type { Best22Target } from "../../../engines/best22Target";
@@ -333,6 +333,12 @@ export async function waitForExtractPoolOptions(
 
 export async function clickDraftSetupButton(name: string | RegExp): Promise<void> {
   const button = await screen.findByRole("button", { name });
+  // The page renders controls before its saved-draft and session-preference gates finish
+  // hydrating. A click on the still-disabled control is dropped forever, so wait for the real
+  // readiness contract instead of extending the later assertion timeout.
+  await waitFor(() => {
+    expect(button).toBeEnabled();
+  });
   await act(async () => {
     fireEvent.click(button);
   });

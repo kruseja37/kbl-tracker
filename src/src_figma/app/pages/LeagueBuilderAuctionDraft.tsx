@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, Gavel, RefreshCw, ShieldAlert, UserCheck } from "lucide-react";
 
@@ -66,7 +66,6 @@ import {
   type KeepTargetPoolPlayer,
 } from "../../../engines/auctionKeepTargetAllIn";
 import { LUXURY_CAP_TABLES } from "../../../data/tierParams";
-import { resolveClubBandPriorities } from "../../../engines/archetypeIdentity";
 import {
   buildAuctionBoardFrame,
   type AuctionBoardFrame,
@@ -75,7 +74,6 @@ import {
 import { buildAuctionExitReport, describeRosterLawGaps } from "../../../engines/auctionExitGate";
 import { deriveShillTeamIds } from "../../../engines/cpuTeamRoles";
 import { rosterNeedBreakdown, toRosterSlotPlayer, type RosterNeedBreakdown, type RosterPositionMap } from "../../../engines/rosterNeed";
-import type { BandPriorities } from "../../../engines/leagueConstruction";
 import {
   leagueIdFromSearch,
   reservePriceKFromSearch,
@@ -95,7 +93,6 @@ import {
   lotOpeningAsk,
   type AuctionPlayer,
   type AuctionResult,
-  type AuctionResultDisposition,
   type AuctionSession,
 } from "../../../engines/auctionStateMachine";
 import {
@@ -103,10 +100,7 @@ import {
   assembleFiveLights,
   assembleRosterIntelligencePayload,
   assembleWorthToYou,
-  sortBoardEntriesForPosition,
   type BoardEntry,
-  type FiveLights,
-  type Light,
   type MarketRead,
   type RosterIntelligencePayload,
 } from "../../../engines/rosterIntelligencePayload";
@@ -122,15 +116,20 @@ import {
   type AuctionAdvisorFactPayload,
 } from "../../../engines/auctionAdvisorColor";
 import { emitAuctionAdvisorMoment } from "../engines/reporter/auctionAdvisorColorEmission";
-import { historicalToSimArchetype } from "../../../engines/draftabilityRanker";
-import { archetypeFitScorer, type SimArchetype, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
+import { archetypeFitScorer, type SimPlayer } from "../../../engines/archetypeBalanceSimulator";
 import {
   toConstructionPlayer,
-  type LeagueTemplate,
   type Player,
   type Team,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
+import {
+  applyAuctionWhisperRosterCleanGates,
+  applyLiveBoardRankOverlay,
+  buildMarketBandPrioritiesByTeamId,
+  computeBoardAutoAdvanceLine,
+  resolveAuctionWhisperIdentityArchetype,
+} from "./LeagueBuilderAuctionDraft.helpers";
 
 type DraftPool = Awaited<ReturnType<UseLeagueBuilderDataReturn["getRegisteredPool"]>>;
 
@@ -191,18 +190,6 @@ const HISTORICAL_ARCHETYPE_BY_ID = new Map(HISTORICAL_ARCHETYPES.map((archetype)
 // COCKPIT W1b Tier-2 WAIT/CHASE chip (nominationOdds, auctionMarketModel.ts:613): "within K lots"
 // horizon. K=3 per DRAFT_COCKPIT_DESIGN_2026-07-08.md §2 Tier 2 example ("within 3 lots").
 
-const UNKNOWN_SHAPE_LIGHT: Light = {
-  status: "unknown",
-  sentence: "Shape read needs the full roster.",
-  detailKey: "shape",
-};
-
-const UNKNOWN_CHEMISTRY_LIGHT: Light = {
-  status: "unknown",
-  sentence: "Chemistry read needs the full roster.",
-  detailKey: "chemistry",
-};
-
 function formatMoney(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "N/A";
   return `$${Math.round(value).toLocaleString()}`;
@@ -221,18 +208,6 @@ function minimumBid(session: AuctionSession): number | null {
 
 function playerPositions(player: Player | null | undefined): string[] {
   return Array.from(new Set([player?.primaryPosition, player?.secondaryPosition].filter(Boolean) as string[]));
-}
-
-function positionBadges(player: Player | null | undefined) {
-  const positions = playerPositions(player);
-  if (positions.length === 0) {
-    return <span className="bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold">POS</span>;
-  }
-  return positions.map((position) => (
-    <span key={position} className="bg-[#3B7DD8] px-2 py-0.5 text-xs font-bold">
-      {position}
-    </span>
-  ));
 }
 
 function resultText(result: AuctionResult, playerById: Map<string, Player>, teamNameById: (teamId: string | null | undefined) => string): string {
@@ -604,36 +579,6 @@ function playerToSimPlayer(player: Player, iv: number): SimPlayer {
   };
 }
 
-export function resolveAuctionWhisperIdentityArchetype(
-  team: Pick<Team, "mlbArchetypeKey">,
-): SimArchetype | undefined {
-  const historical = team.mlbArchetypeKey ? HISTORICAL_ARCHETYPE_BY_ID.get(team.mlbArchetypeKey) : undefined;
-  return historical ? historicalToSimArchetype(historical) : undefined;
-}
-
-export function applyAuctionWhisperRosterCleanGates(
-  scorecard: FiveLights,
-  rosterPlayersClean: boolean,
-): FiveLights {
-  if (rosterPlayersClean) return scorecard;
-  return {
-    ...scorecard,
-    shape: UNKNOWN_SHAPE_LIGHT,
-    chemistry: UNKNOWN_CHEMISTRY_LIGHT,
-  };
-}
-
-export function buildMarketBandPrioritiesByTeamId(leagueTeams: readonly Team[]): Map<string, BandPriorities> {
-  const map = new Map<string, BandPriorities>();
-  for (const team of leagueTeams) {
-    const priorities = resolveClubBandPriorities(team);
-    if (priorities) {
-      map.set(team.id, priorities);
-    }
-  }
-  return map;
-}
-
 function boardPositionLabel(player: Player | null | undefined): string {
   return playerPositions(player).join("/") || "POS";
 }
@@ -648,130 +593,11 @@ function isRosterSlotPlayer(shape: RosterSlotPlayer | undefined): shape is Roste
 // cross-imported between sibling pages).
 const BOARD_RANK_SAVE_DEBOUNCE_MS = 500;
 
-/**
- * COCKPIT WAVE 2 (B3/S3.4 auto-advance): when the MOST RECENTLY resolved lot was a SALE of the
- * GM's OWN explicit #1 at that position, name the promoted next target. SOLD-ONLY GATE (Wave-2
- * audit Note 1, captain-ratified 2026-07-08): only a SOLD disposition permanently removes the
- * player from availablePlayerIds — `finalizePassedLot` (auctionStateMachine.ts:919-953) RECYCLES a
- * first-pass player BACK into availablePlayerIds under reserve pricing (ON by default,
- * MAX_RESERVE_RENOMINATION_PASSES=2), so a PASSED result's player can still be on the board and
- * announcing a "promotion" for him would be false. Scoped deliberately to the GM-ranked case only
- * (the spec's OR clause also allows the engine's own natural top pick when the GM never ranked
- * anyone, but that needs cross-turn history tracking this lane does not build -- see the build
- * report). No new engine math: this is pure selection over the already-ranked board. Extracted as
- * a pure function (no React, no session plumbing) so it is directly unit-testable without driving
- * a full auction through the UI.
- *
- * Line variants (Wave-2 audit Note 5, captain design ruling): when the promoted target IS the
- * player on the block RIGHT NOW (the board includes the current lot), say so — that is the single
- * most valuable state to announce; otherwise the standard "Next up" promotion copy.
- */
-export function computeBoardAutoAdvanceLine(input: {
-  latestResultPlayerId: string | undefined;
-  latestResultDisposition: AuctionResultDisposition | undefined;
-  soldPosition: TaxonomyPosition | undefined;
-  currentLotPlayerId: string | undefined;
-  board: readonly BoardEntry[];
-  boardRankOverrides: Team["boardRankOverrides"] | undefined;
-  boardMeta: Record<string, { name?: string; positions?: string }>;
-}): string | null {
-  const {
-    latestResultPlayerId,
-    latestResultDisposition,
-    soldPosition,
-    currentLotPlayerId,
-    board,
-    boardRankOverrides,
-    boardMeta,
-  } = input;
-  if (!latestResultPlayerId || !soldPosition) return null;
-  // Audit Note 1: SOLD only. A PASSED lot may have been recycled back onto the board (reserve
-  // pricing), and SET_ASIDE is not a competitive departure either — announce neither.
-  if (latestResultDisposition !== 'SOLD') return null;
-  const positionOverride = boardRankOverrides?.byPosition?.[soldPosition];
-  if (!positionOverride?.length) return null;
-  // Reconstruct "available immediately before this resolution" = current available + the
-  // just-departed player -- the GM's effective current #1 is the first override entry still in
-  // that set. If it isn't the player who just left, this departure isn't the GM's own top target
-  // leaving (either a lower-ranked name went, or an earlier gap already promoted someone else) --
-  // stay quiet (anti-generic law, design §1.8).
-  const priorAvailableIds = new Set<string>([...board.map((entry) => entry.playerId), latestResultPlayerId]);
-  const gmsEffectiveTopBeforeThisResolution = positionOverride.find((id) => priorAvailableIds.has(id));
-  if (gmsEffectiveTopBeforeThisResolution !== latestResultPlayerId) return null;
-  // BOARDFIX2 (Item B): `sortBoardEntriesForPosition`'s blend is a worth+rank NUDGE, not a
-  // positional override -- it can pick a DIFFERENT "#1" than the one the GM's override (and the
-  // materialized board the GM actually sees) literally names. Materialize the same way the
-  // rendered board does so the citation always matches what's on screen.
-  const promoted = materializeRankOrder(
-    sortBoardEntriesForPosition(board, soldPosition, undefined),
-    (entry) => entry.playerId,
-    positionOverride,
-  )[0];
-  if (!promoted) return null;
-  const rankLabel = positionOverride.indexOf(promoted.playerId) + 1;
-  const promotedName = boardMeta[promoted.playerId]?.name ?? promoted.note ?? promoted.playerId;
-  // Audit Note 5: the promoted target may be the player being auctioned RIGHT NOW.
-  if (promoted.playerId === currentLotPlayerId) {
-    return rankLabel > 0
-      ? `On the block now: ${promotedName} — your #${rankLabel} at ${soldPosition}.`
-      : `On the block now: ${promotedName} at ${soldPosition}.`;
-  }
-  return rankLabel > 0
-    ? `Next up at ${soldPosition}: ${promotedName} — your #${rankLabel}.`
-    : `Next up at ${soldPosition}: ${promotedName}.`;
-}
-
-/**
- * CALLFIX (2026-07-08) Item 4: after a live rank edit, the board renders instantly from the local
- * `pendingBoardRankOverrides` overlay (see the perf note on `displayedWhisperPayload` below), but
- * BEFORE this fix the auto-advance "Next up" line stayed baked into the heavier `whisperPayload`
- * memo, computed against the PERSISTED `team.boardRankOverrides` -- stale for up to
- * BOARD_RANK_SAVE_DEBOUNCE_MS after the edit. If a lot resolved in that window, the citation could
- * name the pre-edit "#1" even though the board on screen already showed the new order.
- *
- * This recomputes `board` AND `nextUpLine` from the SAME live overlay together, so they can never
- * disagree -- exported standalone (no React) so the recompute itself is directly unit-testable,
- * mirroring computeBoardAutoAdvanceLine's own "pure function, no session plumbing" discipline
- * above. `boardMeta` is intentionally omitted from the computeBoardAutoAdvanceLine call: every
- * BoardEntry.note already carries the same display name boardMeta would have looked up (see
- * assembleBoard's boardCandidates construction in the whisperPayload memo), so the name-lookup
- * fallback chain resolves identically without needing to thread it through here.
- */
-export function applyLiveBoardRankOverlay(
-  payload: RosterIntelligencePayload,
-  overlay: { overrides: NonNullable<Team["boardRankOverrides"]> },
-  latestResult: {
-    latestResultPlayerId: string | undefined;
-    latestResultDisposition: AuctionResultDisposition | undefined;
-    soldPosition: TaxonomyPosition | undefined;
-    currentLotPlayerId: string | undefined;
-  },
-): RosterIntelligencePayload & { boardRankOverrides?: Team["boardRankOverrides"] | null; nextUpLine?: string | null } {
-  const overrideBoard = materializeRankOrder(
-    payload.board ?? [],
-    (entry) => entry.playerId,
-    overlay.overrides.global,
-  );
-  const nextUpLine = computeBoardAutoAdvanceLine({
-    latestResultPlayerId: latestResult.latestResultPlayerId,
-    latestResultDisposition: latestResult.latestResultDisposition,
-    soldPosition: latestResult.soldPosition,
-    currentLotPlayerId: latestResult.currentLotPlayerId,
-    board: overrideBoard,
-    boardRankOverrides: overlay.overrides,
-    boardMeta: {},
-  });
-  return Object.assign({}, payload, {
-    board: overrideBoard,
-    boardRankOverrides: overlay.overrides,
-    nextUpLine,
-  });
-}
-
 export function LeagueBuilderAuctionDraft() {
   const navigate = useNavigate();
   const auction = useAuctionDraft();
   const { leagueData, loadAuction, session } = auction;
+  const getRegisteredPool = leagueData.getRegisteredPool;
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
   const requestedReservePriceK = useMemo(
@@ -779,29 +605,34 @@ export function LeagueBuilderAuctionDraft() {
     [],
   );
   const requestedDevSeed = useMemo(() => devSeedFromSearch(window.location.search), []);
-  const [activeLeagueId, setActiveLeagueId] = useState("");
   const [cpuAdvancePending, setCpuAdvancePending] = useState(false);
-  const [bidAmount, setBidAmount] = useState("");
   const [debouncedContemplatedBid, setDebouncedContemplatedBid] = useState<{
     lotPlayerId: string;
     amount: number;
   } | null>(null);
-  const [registeredPool, setRegisteredPool] = useState<DraftPool>(null);
-  const [poolLoading, setPoolLoading] = useState(false);
-  const [poolError, setPoolError] = useState<string | null>(null);
-  const [nominationPlayerId, setNominationPlayerId] = useState("");
-  const [nominationOpen, setNominationOpen] = useState(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
-  const [advisorMomentsBySeat, setAdvisorMomentsBySeat] = useState<Record<string, AdvisorMomentVM[]>>({});
+  const [registeredPoolResult, setRegisteredPoolResult] = useState<{
+    leagueId: string;
+    pool: DraftPool;
+    error: string | null;
+  } | null>(null);
+  const [nominationDraft, setNominationDraft] = useState({
+    playerId: "",
+    openingBid: String(Math.ceil(LEAGUE_MINIMUM_SALARY)),
+  });
+  const [advisorMomentState, setAdvisorMomentState] = useState<{
+    draftId: string;
+    bySeat: Record<string, AdvisorMomentVM[]>;
+  } | null>(null);
   const loadedKeyRef = useRef<string | null>(null);
   const cpuAdvanceInFlightRef = useRef(false);
   const advisorRequestedKeysRef = useRef(new Set<string>());
-  const advisorDraftIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!activeLeagueId && leagueData.leagues.length > 0) {
-      setActiveLeagueId(resolveInitialLeagueId(leagueData.leagues, requestedLeagueId));
-    }
-  }, [activeLeagueId, leagueData.leagues, requestedLeagueId]);
+  const [selectedLeagueId, setActiveLeagueId] = useState<string | null>(null);
+  const activeLeagueId = useMemo(
+    () => selectedLeagueId && leagueData.leagues.some((league) => league.id === selectedLeagueId)
+      ? selectedLeagueId
+      : resolveInitialLeagueId(leagueData.leagues, requestedLeagueId),
+    [leagueData.leagues, requestedLeagueId, selectedLeagueId],
+  );
 
   useEffect(() => {
     if (!activeLeagueId) return;
@@ -812,34 +643,30 @@ export function LeagueBuilderAuctionDraft() {
   }, [activeLeagueId, loadAuction]);
 
   useEffect(() => {
-    if (!activeLeagueId) {
-      setRegisteredPool(null);
-      setPoolError(null);
-      setPoolLoading(false);
-      return;
-    }
+    if (!activeLeagueId) return;
 
     let cancelled = false;
-    setPoolLoading(true);
-    setPoolError(null);
-    void leagueData.getRegisteredPool(activeLeagueId)
+    void getRegisteredPool(activeLeagueId)
       .then((pool) => {
-        if (!cancelled) setRegisteredPool(pool);
+        if (!cancelled) setRegisteredPoolResult({ leagueId: activeLeagueId, pool, error: null });
       })
       .catch((caught) => {
         if (!cancelled) {
-          setRegisteredPool(null);
-          setPoolError(caught instanceof Error ? caught.message : "Could not load player pool.");
+          setRegisteredPoolResult({
+            leagueId: activeLeagueId,
+            pool: null,
+            error: caught instanceof Error ? caught.message : "Could not load player pool.",
+          });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setPoolLoading(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [activeLeagueId, leagueData.getRegisteredPool]);
+  }, [activeLeagueId, getRegisteredPool]);
+  const registeredPool = registeredPoolResult?.leagueId === activeLeagueId ? registeredPoolResult.pool : null;
+  const poolError = registeredPoolResult?.leagueId === activeLeagueId ? registeredPoolResult.error : null;
+  const poolLoading = Boolean(activeLeagueId) && registeredPoolResult?.leagueId !== activeLeagueId;
 
   const activeLeague = useMemo(
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
@@ -881,6 +708,13 @@ export function LeagueBuilderAuctionDraft() {
     if (!session || !activeLeagueId) return null;
     return `${activeLeagueId}:${session.sessionLaunchNonce ?? session.sessionBaseSeed ?? "session"}`;
   }, [activeLeagueId, session]);
+  const activeAdvisorDraftIdRef = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    activeAdvisorDraftIdRef.current = advisorDraftId;
+  }, [advisorDraftId]);
+  const advisorMomentsBySeat = advisorMomentState?.draftId === advisorDraftId
+    ? advisorMomentState.bySeat
+    : {};
   const advisorKnownEntityNames = useMemo(
     () => [
       ...leagueTeams.map((team) => teamDisplayName(team)),
@@ -906,17 +740,21 @@ export function LeagueBuilderAuctionDraft() {
   }, [leagueTeams, playerById]);
 
   const queueAdvisorPayload = useCallback((payload: AuctionAdvisorFactPayload) => {
-    if (advisorRequestedKeysRef.current.has(payload.cacheKey)) return;
-    advisorRequestedKeysRef.current.add(payload.cacheKey);
+    const requestKey = `${payload.draftId}:${payload.cacheKey}`;
+    if (advisorRequestedKeysRef.current.has(requestKey)) return;
+    advisorRequestedKeysRef.current.add(requestKey);
 
     const putMoment = (moment: AdvisorMomentVM) => {
-      if (advisorDraftIdRef.current !== payload.draftId) return;
-      setAdvisorMomentsBySeat((current) => {
-        const existing = current[payload.seatTeamId] ?? [];
+      setAdvisorMomentState((current) => {
+        const bySeat = current?.draftId === payload.draftId ? current.bySeat : {};
+        const existing = bySeat[payload.seatTeamId] ?? [];
         const withoutCurrent = existing.filter((item) => item.key !== moment.key);
         return {
-          ...current,
-          [payload.seatTeamId]: [...withoutCurrent, moment],
+          draftId: payload.draftId,
+          bySeat: {
+            ...bySeat,
+            [payload.seatTeamId]: [...withoutCurrent, moment],
+          },
         };
       });
     };
@@ -928,6 +766,7 @@ export function LeagueBuilderAuctionDraft() {
       source: "template",
     });
     void emitAuctionAdvisorMoment(payload).then((result) => {
+      if (activeAdvisorDraftIdRef.current !== payload.draftId) return;
       putMoment({
         key: payload.cacheKey,
         title: payload.title,
@@ -936,13 +775,6 @@ export function LeagueBuilderAuctionDraft() {
       });
     });
   }, []);
-
-  useEffect(() => {
-    if (advisorDraftIdRef.current === advisorDraftId) return;
-    advisorDraftIdRef.current = advisorDraftId;
-    advisorRequestedKeysRef.current.clear();
-    setAdvisorMomentsBySeat({});
-  }, [advisorDraftId]);
   const teamNameById = useCallback((teamId: string | null | undefined): string => {
     if (!teamId) return "Unknown Team";
     if (shillTeamIdSet.has(teamId)) {
@@ -1014,6 +846,22 @@ export function LeagueBuilderAuctionDraft() {
   const currentBidder = auction.currentBidderTeamId ? teamById.get(auction.currentBidderTeamId) : null;
   const currentLotPlayer = session?.currentLot ? playerById.get(session.currentLot.playerId) : null;
   const minBid = session ? minimumBid(session) : null;
+  const bidLotKey = session?.currentLot
+    ? `${session.results.length}:${session.currentLot.playerId}`
+    : null;
+  const [bidAmountDraft, setBidAmountDraft] = useState<{
+    lotKey: string | null;
+    minimum: number | null;
+    value: string;
+  } | null>(null);
+  const bidAmount = bidAmountDraft?.lotKey === bidLotKey && bidAmountDraft.minimum === minBid
+    ? bidAmountDraft.value
+    : minBid === null
+      ? ""
+      : String(Math.ceil(minBid));
+  const setBidAmount = useCallback((value: string) => {
+    setBidAmountDraft({ lotKey: bidLotKey, minimum: minBid, value });
+  }, [bidLotKey, minBid]);
   const lot = session?.currentLot ?? null;
   const lotAuctionPlayer = lot ? session?.players[lot.playerId] ?? null : null;
   const pendingClaimTeam = session?.pendingClaim ? teamById.get(session.pendingClaim.teamId) : null;
@@ -1295,10 +1143,6 @@ export function LeagueBuilderAuctionDraft() {
     session,
     shillTeamIdSet,
   ]);
-  useEffect(() => {
-    if (minBid !== null) setBidAmount(String(Math.ceil(minBid)));
-  }, [minBid]);
-
   // STAKES Tier 1: the expensive board re-projection follows settled bid-step intent, not every
   // render. The lot id travels with the value so a next-lot paint can never reuse the prior lot's
   // contemplated amount while this trailing debounce settles.
@@ -1428,8 +1272,6 @@ export function LeagueBuilderAuctionDraft() {
     return "Review CPU decision";
   }, [
     auction,
-    currentBidder,
-    pendingClaimTeam,
     session,
     teamNameById,
   ]);
@@ -1448,19 +1290,26 @@ export function LeagueBuilderAuctionDraft() {
       return (rightPlayer?.iv ?? 0) - (leftPlayer?.iv ?? 0) || left.localeCompare(right);
     });
   }, [session]);
-
-  useEffect(() => {
-    if (!session || session.state !== "NOMINATION") return;
-    if (cpuNominationDecision) {
-      setNominationPlayerId(cpuNominationDecision.playerId);
-      setNominationOpen(String(Math.round(cpuNominationDecision.openingBid)));
-      return;
-    }
-    if (!nominationCandidateIds.includes(nominationPlayerId)) {
-      setNominationPlayerId(nominationCandidateIds[0] ?? "");
-      setNominationOpen(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
-    }
-  }, [cpuNominationDecision, nominationCandidateIds, nominationPlayerId, session]);
+  const nominationPlayerId = cpuNominationDecision?.playerId
+    ?? (nominationCandidateIds.includes(nominationDraft.playerId)
+      ? nominationDraft.playerId
+      : nominationCandidateIds[0] ?? "");
+  const nominationOpen = cpuNominationDecision
+    ? String(Math.round(cpuNominationDecision.openingBid))
+    : nominationDraft.playerId === nominationPlayerId
+      ? nominationDraft.openingBid
+      : String(Math.ceil(LEAGUE_MINIMUM_SALARY));
+  const setNominationPlayerId = (playerId: string) => {
+    setNominationDraft({ playerId, openingBid: String(Math.ceil(LEAGUE_MINIMUM_SALARY)) });
+  };
+  const setNominationOpen = (openingBid: string) => {
+    setNominationDraft((current) => ({
+      playerId: nominationCandidateIds.includes(current.playerId)
+        ? current.playerId
+        : nominationPlayerId,
+      openingBid,
+    }));
+  };
 
   // BOARDFIX2 (Item C, perf): reorders on the LIVE board update this local, in-memory overlay
   // INSTANTLY; the actual `saveTeam` write is debounced (trailing, see the effect below) so a
@@ -1513,24 +1362,24 @@ export function LeagueBuilderAuctionDraft() {
   const handleBoardReorderGlobal = useCallback((orderedIds: readonly string[]) => {
     const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
     if (!team) return;
-    const current = pendingBoardRankOverridesRef.current?.team.id === team.id
-      ? pendingBoardRankOverridesRef.current.overrides
-      : team.boardRankOverrides;
-    setPendingBoardRankOverrides({ team, overrides: { ...current, global: [...orderedIds] } });
+    setPendingBoardRankOverrides((pending) => {
+      const current = pending?.team.id === team.id ? pending.overrides : team.boardRankOverrides;
+      return { team, overrides: { ...current, global: [...orderedIds] } };
+    });
   }, [activeWhisperSeatTeamId, teamById]);
 
   const handleBoardReorderPosition = useCallback((position: TaxonomyPosition, orderedIds: readonly string[]) => {
     const team = activeWhisperSeatTeamId ? teamById.get(activeWhisperSeatTeamId) : null;
     if (!team) return;
-    const current = pendingBoardRankOverridesRef.current?.team.id === team.id
-      ? pendingBoardRankOverridesRef.current.overrides
-      : team.boardRankOverrides;
-    setPendingBoardRankOverrides({
-      team,
-      overrides: {
-        ...current,
-        byPosition: { ...current?.byPosition, [position]: [...orderedIds] },
-      },
+    setPendingBoardRankOverrides((pending) => {
+      const current = pending?.team.id === team.id ? pending.overrides : team.boardRankOverrides;
+      return {
+        team,
+        overrides: {
+          ...current,
+          byPosition: { ...current?.byPosition, [position]: [...orderedIds] },
+        },
+      };
     });
   }, [activeWhisperSeatTeamId, teamById]);
 
@@ -1928,8 +1777,10 @@ export function LeagueBuilderAuctionDraft() {
     auction,
     handleBoardReorderGlobal,
     handleBoardReorderPosition,
+    leagueTeams.length,
     marketBandPrioritiesByTeamId,
     marketHumanTeamIds,
+    minBid,
     constructionPlayerById,
     playerById,
     publicMarket,
@@ -2030,8 +1881,8 @@ export function LeagueBuilderAuctionDraft() {
     poolLoading,
     registeredPool?.locked,
     session,
-    session?.state,
     setupPoolSufficiency.meetsFloor,
+    setupPoolSufficiency.positionFloorReasons,
     setupPoolSufficiency.surplus,
     setupShillCount,
   ]);
@@ -2441,7 +2292,6 @@ export function LeagueBuilderAuctionDraft() {
                       value={nominationPlayerId}
                       onChange={(event) => {
                         setNominationPlayerId(event.target.value);
-                        setNominationOpen(String(Math.ceil(LEAGUE_MINIMUM_SALARY)));
                       }}
                       style={{ display: "block", width: "100%", marginTop: 4, padding: 8 }}
                     >

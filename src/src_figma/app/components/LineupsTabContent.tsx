@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
+import { useFranchiseDataContext } from "@/app/pages/FranchiseHomeContext";
 import type { LeagueStandings, StandingEntry } from "@/hooks/useFranchiseData";
 import type { MojoState, Player } from "../../../utils/leagueBuilderStorage";
 import { optimalLineupField } from "../../../utils/optimalLineup";

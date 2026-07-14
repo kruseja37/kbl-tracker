@@ -6,7 +6,7 @@ import type { LiquidityReasonCode, LiquidityState } from "../../../../../engines
 import {
   applyAuctionWhisperRosterCleanGates,
   resolveAuctionWhisperIdentityArchetype,
-} from "../../../pages/LeagueBuilderAuctionDraft";
+} from "../../../pages/LeagueBuilderAuctionDraft.helpers";
 import { assembleFiveLights, type FiveLights } from "../../../../../engines/rosterIntelligencePayload";
 import type { SimPlayer } from "../../../../../engines/archetypeBalanceSimulator";
 import type { RosterIntelligencePayload } from "../../../../../engines/rosterIntelligencePayload";

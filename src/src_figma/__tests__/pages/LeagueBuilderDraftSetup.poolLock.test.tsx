@@ -338,8 +338,8 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/^Grounded$/i);
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalled();
@@ -433,10 +433,13 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    // The league id resolves one render before session-backed pool preferences hydrate. Prove the
+    // restored quality signal is visible before driving Regenerate so the click cannot race the
+    // preference commit and permanently launch extraction with the default center.
+    expect(await screen.findByText("highest")).toBeInTheDocument();
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitForExtractPoolOptions((options) => options.poolQualityCenter === 74);
-    expect(screen.getByText("highest")).toBeInTheDocument();
   });
 
   test("repeated pool-first regenerate is idempotent for engine-generated players", async () => {
@@ -470,7 +473,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(addPlayersToLeaguePool).toHaveBeenCalled();
@@ -510,7 +513,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalledTimes(2);
@@ -721,8 +724,8 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     const options = await waitForExtractPoolOptions((candidate) => (
       candidate.poolQualityCenter === 72
@@ -870,7 +873,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
     await waitFor(() => {
       expect(addPlayersToLeaguePool).toHaveBeenCalled();
     });
@@ -910,8 +913,8 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/^Grounded$/i);
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(removePlayersFromLeaguePool).toHaveBeenCalled();

@@ -9,13 +9,18 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // ============================================
 // MOCKS - Must be before component import
 // ============================================
 
 const mockNavigate = vi.fn();
+const mockRepairFranchisePersistence = vi.hoisted(() => vi.fn(async () => ({
+  rosterBackfilled: false,
+  seasonMetadataCreated: false,
+  seasonMetadataUpdated: false,
+})));
 const mockLocation = {
   pathname: "/franchise/test-franchise-123",
   search: "",
@@ -48,7 +53,7 @@ vi.mock('@/app/components/TeamHubContent', () => ({
 }));
 
 vi.mock('@/app/components/MuseumContent', () => ({
-  MuseumContent: ({ retiredJerseys }: { retiredJerseys: unknown[] }) => <div data-testid="museum-content">Museum Content</div>,
+  MuseumContent: () => <div data-testid="museum-content">Museum Content</div>,
 }));
 
 vi.mock('@/app/components/FreeAgencyFlow', () => ({
@@ -179,7 +184,18 @@ vi.mock('@/hooks/usePlayoffData', () => ({
   })),
 }));
 
+vi.mock('../../../utils/franchiseInitializer', async () => {
+  const actual = await vi.importActual<typeof import('../../../utils/franchiseInitializer')>(
+    '../../../utils/franchiseInitializer',
+  );
+  return {
+    ...actual,
+    repairFranchisePersistence: mockRepairFranchisePersistence,
+  };
+});
+
 // Import component after all mocks are set up
+import { useFranchiseData } from '@/hooks/useFranchiseData';
 import { usePlayoffData } from '@/hooks/usePlayoffData';
 import { FranchiseHome } from '../../app/pages/FranchiseHome';
 
@@ -191,9 +207,54 @@ describe('FranchiseHome Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue(null);
+    vi.mocked(useFranchiseData).mockImplementation(() => ({
+      teams: [
+        { id: 'team-1', name: 'Tigers', abbr: 'DET' },
+        { id: 'team-2', name: 'Sox', abbr: 'SOX' },
+      ],
+      standings: [
+        { teamId: 'team-1', wins: 50, losses: 30 },
+        { teamId: 'team-2', wins: 48, losses: 32 },
+      ],
+      leaders: { batting: [], pitching: [] },
+      battingLeaders: { AVG: [], HR: [], RBI: [], SB: [], OPS: [], WAR: [], fWAR: [], rWAR: [] },
+      pitchingLeaders: { ERA: [], W: [], K: [], WHIP: [], SV: [], WAR: [] },
+      news: [],
+      seasonStats: {},
+      isLoading: false,
+      error: null,
+      stadiumMap: { 'team-1': 'Tiger Stadium', 'team-2': 'Sox Park' },
+      refresh: vi.fn(),
+    }) as unknown as ReturnType<typeof useFranchiseData>);
   });
 
   describe('Basic Rendering', () => {
+    test('runs persistence repair once across ordinary rerenders for one franchise season', async () => {
+      vi.mocked(useFranchiseData).mockImplementation(() => ({
+        teams: [],
+        standings: [],
+        leaders: { batting: [], pitching: [] },
+        battingLeaders: { AVG: [], HR: [], RBI: [], SB: [], OPS: [], WAR: [], fWAR: [], rWAR: [] },
+        pitchingLeaders: { ERA: [], W: [], K: [], WHIP: [], SV: [], WAR: [] },
+        news: [],
+        seasonStats: {},
+        isLoading: false,
+        error: null,
+        stadiumMap: {},
+        franchiseConfig: { league: 'league-1' },
+        refresh: vi.fn(async () => undefined),
+      }) as unknown as ReturnType<typeof useFranchiseData>);
+
+      render(<FranchiseHome />);
+      await waitFor(() => expect(mockRepairFranchisePersistence).toHaveBeenCalledTimes(1));
+
+      fireEvent.click(screen.getByRole('button', { name: /ROSTER & TRADES/i }));
+      fireEvent.click(screen.getByRole('button', { name: /TODAY'S GAME/i }));
+      await waitFor(() => expect(screen.getByTestId('franchise-v1-next-game-preview-gate')).toBeInTheDocument());
+
+      expect(mockRepairFranchisePersistence).toHaveBeenCalledTimes(1);
+    });
+
     test('renders without crashing', () => {
       render(<FranchiseHome />);
       // Component should render something

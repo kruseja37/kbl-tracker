@@ -141,7 +141,8 @@ describe('companion atomic persistence', () => {
       leagueId: 'companion-atomic',
       patch: (companions, fresh) => {
         const current = { ...fresh, snakeCompanions: companions };
-        const claim = current.snakeCompanions?.claims.find((row) => row.claimId === 'ipad-a-reclaim')!;
+        const claim = current.snakeCompanions?.claims.find((row) => row.claimId === 'ipad-a-reclaim');
+        if (!claim) throw new Error('Reclaimed companion claim was not found.');
         return approveCompanionClaim(
           current,
           companionClaimIdentity(claim),

@@ -41,7 +41,6 @@ import {
   seedFromMLBDatabase,
   isMLBDatabaseSeeded,
   type LeagueTemplate,
-  type LeagueAssignment,
   type Team,
   type Player,
   type RulesPreset,
@@ -383,7 +382,6 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
           missingTeamIds,
         });
       }
-      const originalTeamIds = new Set(originalTeams.map((team) => team.id));
       for (const division of original.divisions) {
         for (const teamId of division.teamIds) {
           if (!original.teamIds.includes(teamId)) {
@@ -431,6 +429,19 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
           rivalries: _rivalries,
           ...teamCopyInput
         } = originalTeam;
+        void [
+          _teamId,
+          _teamCreatedDate,
+          _teamLastModified,
+          _lineupWithDH,
+          _lineupWithoutDH,
+          _startingRotation,
+          _optimalLineupVsRHPWithDH,
+          _optimalLineupVsLHPWithDH,
+          _optimalLineupVsRHPWithoutDH,
+          _optimalLineupVsLHPWithoutDH,
+          _rivalries,
+        ];
         const copiedTeam = await saveTeam({
           ...teamCopyInput,
           id: undefined,
