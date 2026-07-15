@@ -66,6 +66,8 @@ function createMockHookReturn(overrides: Record<string, unknown> = {}) {
     isSMB4Seeded: vi.fn(() => Promise.resolve(false)),
     seedMLBData: vi.fn(() => Promise.resolve({ teams: 0, players: 0 })),
     isMLBSeeded: vi.fn(() => Promise.resolve(false)),
+    seedHistoricalLegendsData: vi.fn(() => Promise.resolve({ players: 835, playerGroups: 345, removedStaleCards: 0, sourceSha256: 'a'.repeat(64) })),
+    isHistoricalLegendsSeeded: vi.fn(() => Promise.resolve(false)),
     refresh: vi.fn(),
     ...overrides,
   };
@@ -175,6 +177,15 @@ describe('LeagueBuilder Component', () => {
     test('shows Setup for draft setup', () => {
       render(<LeagueBuilder />);
       expect(screen.getByText('Setup')).toBeInTheDocument();
+    });
+  });
+
+  describe('Historical Legends import', () => {
+    test('offers the verified Legends Library import', () => {
+      render(<LeagueBuilder />);
+      expect(screen.getByText('Historical Legends')).toBeInTheDocument();
+      expect(screen.getByText('Import the verified 345-player Legends Library')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /IMPORT LEGENDS/i })).toBeInTheDocument();
     });
   });
 

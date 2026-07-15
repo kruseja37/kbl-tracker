@@ -39,6 +39,28 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(selectedSnakePoolIds(groups, { [ruthGroup.groupId]: 'ruth-b' })).toEqual(['ruth-b', 'mays']);
   });
 
+  test('groups imported Career, Peak, and Draft cards by stable historical identity', () => {
+    const cards = (['Career', 'Peak', 'Draft Pool'] as const).map((historicalProfileType, index) => (
+      makePlayer(index + 1, {
+        id: `hl:aaroh101:${historicalProfileType.toLowerCase().replace(' pool', '')}`,
+        firstName: 'Hank',
+        lastName: 'Aaron',
+        sourceId: 'historical:aaroh101',
+        historicalSourceId: 'historical:aaroh101',
+        versionGroupId: 'historical:aaroh101',
+        historicalProfileType,
+      })
+    ));
+    const groups = deriveSnakeVersionGroups(cards);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ groupId: 'historical:aaroh101' });
+    expect(groups[0].cards.map((card) => card.historicalProfileType)).toEqual([
+      'Career',
+      'Peak',
+      'Draft Pool',
+    ]);
+  });
+
   test('uses the locked RegisteredPool IV even when the live player salary disagrees', () => {
     const players = makeLegalRosterPlayers(999_999);
     const locked = pool(players, 12_345);

@@ -539,6 +539,14 @@ export interface Player {
   lastModified: string;
   isCustom: boolean;
   sourceDatabase?: string;
+  /** Stable, name-independent identity shared by alternate historical cards. */
+  sourceId?: string;
+  historicalSourceId?: string;
+  versionGroupId?: string;
+  /** Human-readable card choice used by snake setup for multi-version legends. */
+  historicalProfileType?: 'Career' | 'Peak' | 'Draft Pool';
+  /** Evidence/lore payload retained with Historical Legends app imports. */
+  historicalLegend?: import('../data/historicalLegendsAppData').HistoricalLegendAppMetadata;
   hometown?: { city: string; state: string };
   editHistory?: EditHistoryEntry[];
 }

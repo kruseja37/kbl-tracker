@@ -6,27 +6,52 @@ import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
-  const { leagues, teams, players, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
+  const {
+    leagues,
+    teams,
+    players,
+    isLoading,
+    error,
+    seedSMB4Data,
+    isSMB4Seeded,
+    seedMLBData,
+    isMLBSeeded,
+    seedHistoricalLegendsData,
+    isHistoricalLegendsSeeded,
+  } = useLeagueBuilderData();
 
-  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
-  const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
+  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | 'legends' | null>(null);
+  const [seedResult, setSeedResult] = useState<{
+    source: string;
+    players: number;
+    teams?: number;
+    playerGroups?: number;
+  } | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
   const [isSMLSeeded, setIsSMLSeeded] = useState(false);
   const [isMLBSeededState, setIsMLBSeededState] = useState(false);
+  const [areLegendsSeeded, setAreLegendsSeeded] = useState(false);
 
   // Check if already seeded on mount
   useEffect(() => {
     isSMB4Seeded().then(setIsSMLSeeded);
     isMLBSeeded().then(setIsMLBSeededState);
-  }, [isSMB4Seeded, isMLBSeeded, players]);
+    isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
+  }, [isSMB4Seeded, isMLBSeeded, isHistoricalLegendsSeeded, players]);
 
-  const handleSeedDatabase = async (source: 'sml' | 'mlb') => {
+  const handleSeedDatabase = async (source: 'sml' | 'mlb' | 'legends') => {
     if (isSeeding) return;
 
-    const label = source === 'sml' ? 'Super Mega League (20 teams)' : 'Major League Baseball (30 teams)';
+    const label = source === 'sml'
+      ? 'Super Mega League (20 teams)'
+      : source === 'mlb'
+        ? 'Major League Baseball (30 teams)'
+        : 'Historical Legends (345 players / 835 cards)';
     const confirmed = window.confirm(
-      `This will import all ${label} teams and players into the League Builder database.\n\n` +
-      `Any existing ${source.toUpperCase()} teams/players will be refreshed. Other leagues are preserved.\n\n` +
+      `${source === 'legends'
+        ? `This will import all ${label} into the League Builder player database.`
+        : `This will import all ${label} teams and players into the League Builder database.`}\n\n` +
+      `Existing ${source === 'legends' ? 'Historical Legends cards' : `${source.toUpperCase()} teams/players`} will be refreshed. Other data is preserved.\n\n` +
       'Continue?'
     );
 
@@ -39,13 +64,17 @@ export function LeagueBuilder() {
     try {
       const result = source === 'sml'
         ? await seedSMB4Data(true)
-        : await seedMLBData(true);
+        : source === 'mlb'
+          ? await seedMLBData(true)
+          : await seedHistoricalLegendsData();
       setSeedResult({ source: label, ...result });
       if (source === 'sml') setIsSMLSeeded(true);
-      else setIsMLBSeededState(true);
-      // Re-check both since clearing replaces all data
+      else if (source === 'mlb') setIsMLBSeededState(true);
+      else setAreLegendsSeeded(true);
+      // Re-check all import states after storage changes.
       isSMB4Seeded().then(setIsSMLSeeded);
       isMLBSeeded().then(setIsMLBSeededState);
+      isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
     } catch (err) {
       console.error(`Failed to seed ${source} database:`, err);
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -59,7 +88,7 @@ export function LeagueBuilder() {
     <BallparkShell onBack={() => navigate("/")} title="LEAGUE BUILDER">
 
         {/* Database Import Banners */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
           {/* SML Import */}
           <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between gap-3">
@@ -133,6 +162,43 @@ export function LeagueBuilder() {
               </button>
             </div>
           </div>
+
+          {/* Historical Legends Import */}
+          <div className="bg-[#556B55] border-[4px] border-[#D4A020] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Database className="w-6 h-6 text-[#D4A020] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#E8E8D8]">Historical Legends</div>
+                  <div className="text-xs text-[#E8E8D8]/70">
+                    {areLegendsSeeded
+                      ? '345 players, 835 Career / Peak / Draft cards'
+                      : 'Import the verified 345-player Legends Library'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleSeedDatabase('legends')}
+                disabled={!!isSeeding}
+                className={`flex items-center gap-2 px-4 py-2 border-4 font-bold text-xs transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] shrink-0 ${
+                  isSeeding
+                    ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
+                    : areLegendsSeeded
+                      ? 'bg-[#4A6844] border-[#D4A020] text-[#E8E8D8] hover:bg-[#5A8352]'
+                      : 'bg-[#D4A020] border-[#E8E8D8] text-[#1A1A1A] hover:bg-[#E4B030]'
+                }`}
+              >
+                {isSeeding === 'legends' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> IMPORTING...</>
+                ) : areLegendsSeeded ? (
+                  <><CheckCircle className="w-4 h-4" /> REIMPORT</>
+                ) : (
+                  <><Download className="w-4 h-4" /> IMPORT LEGENDS</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Import status messages */}
@@ -140,7 +206,10 @@ export function LeagueBuilder() {
           <div className="mb-8 -mt-4">
             {seedResult && (
               <div className="bg-[#556B55] border-[2px] border-[#4CAF50] p-3 text-xs text-[#4CAF50]">
-                Successfully imported {seedResult.source}: {seedResult.teams} teams and {seedResult.players} players!
+                Successfully imported {seedResult.source}:{' '}
+                {seedResult.playerGroups !== undefined
+                  ? `${seedResult.players} cards across ${seedResult.playerGroups} players`
+                  : `${seedResult.teams ?? 0} teams and ${seedResult.players} players`}!
               </div>
             )}
             {seedError && (

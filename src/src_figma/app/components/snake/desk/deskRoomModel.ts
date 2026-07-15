@@ -27,9 +27,8 @@ function isTaxonomyPosition(position: Player['primaryPosition']): position is Ta
 }
 
 function sourceId(player: Player): string | undefined {
-  const carried = player as Player & { sourceId?: unknown; historicalSourceId?: unknown };
-  if (typeof carried.historicalSourceId === 'string' && carried.historicalSourceId.trim()) return carried.historicalSourceId.trim();
-  if (typeof carried.sourceId === 'string' && carried.sourceId.trim()) return carried.sourceId.trim();
+  if (typeof player.historicalSourceId === 'string' && player.historicalSourceId.trim()) return player.historicalSourceId.trim();
+  if (typeof player.sourceId === 'string' && player.sourceId.trim()) return player.sourceId.trim();
   return undefined;
 }
 
@@ -64,6 +63,7 @@ export function buildDeskRoomPlayer(input: {
   return {
     ...input.seating,
     sourceId: sourceId(input.player),
+    versionGroupId: input.player.versionGroupId,
     price: input.price,
     worth: input.price,
     archetypeWeights,

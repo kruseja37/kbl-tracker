@@ -30712,3 +30712,45 @@ site → STOP that site, report, finish the rest of T4 where linkable.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: HUNTFIX-TRACKER-1 ===== -->
+<!-- ===== CONTRACT: HL-LEGENDS-APP-PROFILE-READ-PATH ===== -->
+## CONTRACT HL-LEGENDS-APP-PROFILE-READ-PATH — retain and surface imported player context
+
+**ROUTE:** separate non-auditor Codex builder | high reasoning effort
+**DATE:** 2026-07-14 · **Auditor:** fresh independent non-builder required
+
+Finish the already-approved Historical Legends app import without redesigning the player database.
+Use the stable `historical:<playerId>` version-group identity already established by the importer.
+Prove that ratings, traits, positions, ages, Career/Peak/Draft identity, lore, rivalries, confidence,
+personality evidence, identity claims, and provenance survive the generated-payload to IndexedDB
+round trip. Extend the shared full player-profile popover only enough to surface the Legends version,
+overall confidence, backstory, and connected/rivalry context when present; ordinary players and farm
+fog behavior must remain unchanged.
+
+Allowed implementation files are the Historical Legends payload contract/generator/importer and
+their tests, the shared player-profile popover and its focused test, and any already-touched Player
+type/version-group adapters required to keep the read path typed. Do not change ratings, traits,
+draft economics, converter output, league schemas, DB version, living-season relationship state, or
+materialize historical rivalry seeds as active relationships. Do not import or pin a payload until
+the final independently examined 345-player artifact exists. Run focused tests, typecheck, build,
+and a real import/profile browser smoke with output redirected under `/private/tmp`. Do not audit
+your own work.
+
+Use high reasoning effort.
+
+### Independent-audit amendment (2026-07-14)
+
+The first independent architecture audit returned NOT VERIFIED with four bounded requirements that
+are now part of this contract:
+
+1. Implement and test the Legends-only popover read path described above.
+2. Pin and verify the generated app asset's own deterministic digest before parsing/import; retain
+   the source-artifact SHA-256 separately as provenance. A modified card with an unchanged embedded
+   source hash must be rejected.
+3. Preserve existing league assignments for matching Legends cards on reimport. Refuse to delete an
+   assigned stale Legends card unless an explicit safe replacement exists.
+4. Preflight every incoming card ID and reject a collision owned by any non-Legends source instead
+   of overwriting it.
+
+Add focused mutation-honest tests for all four cases. Keep the existing IndexedDB version and player
+store; the audit proved the additive metadata round-trips without a migration.
+<!-- ===== END CONTRACT: HL-LEGENDS-APP-PROFILE-READ-PATH ===== -->

@@ -54,6 +54,11 @@ import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegist
 import { copyLeaguePoolMembership } from '../../utils/leagueBuilderPoolBuilder';
 import { isMlbDraftComplete } from '../../utils/mlbDraftCompletion';
 import type { PlayerForSalary } from '../../engines/salaryCalculator';
+import {
+  isHistoricalLegendsDatabaseSeeded,
+  seedHistoricalLegendsDatabase,
+  type HistoricalLegendsImportResult,
+} from '../../utils/historicalLegendsImport';
 
 // Re-export types for convenience
 export type {
@@ -142,6 +147,10 @@ export interface UseLeagueBuilderDataReturn {
   // MLB Database Seeding
   seedMLBData: (clearExisting?: boolean) => Promise<{ teams: number; players: number }>;
   isMLBSeeded: () => Promise<boolean>;
+
+  // Historical Legends Database Import
+  seedHistoricalLegendsData: () => Promise<HistoricalLegendsImportResult>;
+  isHistoricalLegendsSeeded: () => Promise<boolean>;
 
   // Utility
   replaceLeagueLocal: (league: LeagueTemplate) => void;
@@ -785,6 +794,25 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     return isMLBDatabaseSeeded();
   }, []);
 
+  const seedHistoricalLegendsData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const result = await seedHistoricalLegendsDatabase();
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import Historical Legends data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
+  const isHistoricalLegendsSeeded = useCallback(async () => {
+    return isHistoricalLegendsDatabaseSeeded();
+  }, []);
+
   return {
     // State
     leagues,
@@ -838,6 +866,10 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // MLB Database Seeding
     seedMLBData,
     isMLBSeeded,
+
+    // Historical Legends Database Import
+    seedHistoricalLegendsData,
+    isHistoricalLegendsSeeded,
 
     // Utility
     replaceLeagueLocal,

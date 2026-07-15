@@ -93,4 +93,55 @@ describe("PlayerProfilePopover", () => {
     expect(screen.queryByText("91")).not.toBeInTheDocument();
     expect(screen.queryByText("POW")).not.toBeInTheDocument();
   });
+
+  test("Historical Legends profile surfaces version, confidence, backstory, and connections", () => {
+    render(
+      <PlayerProfilePopover
+        player={makePlayer({
+          sourceDatabase: "HISTORICAL_LEGENDS",
+          backstory: "A precise evidence-backed career story.",
+          historicalProfileType: "Career",
+          historicalLegend: {
+            playerId: "slatm001",
+            displayName: "Mara Slate",
+            profileType: "Career",
+            sourceCardId: "source:career",
+            sourceWindowId: "career",
+            sourceVersionClass: "career",
+            imageAge: 24,
+            lore: {},
+            rivalries: [{ rivalName: "June Vale", relationship: "Rivalry" }],
+            confidence: { overall: 94, fields: {} },
+            personalityEvidence: [],
+            researchFlags: [],
+            identityClaims: [],
+            provenance: {},
+          },
+        })}
+        revealFull
+      >
+        <span>Mara Slate</span>
+      </PlayerProfilePopover>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mara Slate" }));
+
+    expect(screen.getByText("Version: Career")).toBeInTheDocument();
+    expect(screen.getByText("Overall confidence: 94/99")).toBeInTheDocument();
+    expect(screen.getByText("A precise evidence-backed career story.")).toBeInTheDocument();
+    expect(screen.getByText("Rivalry: June Vale")).toBeInTheDocument();
+  });
+
+  test("ordinary revealed profiles do not gain Historical Legends context", () => {
+    render(
+      <PlayerProfilePopover player={makePlayer()} revealFull>
+        <span>Mara Slate</span>
+      </PlayerProfilePopover>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Mara Slate" }));
+
+    expect(screen.queryByLabelText("Historical Legend context")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Overall confidence:/)).not.toBeInTheDocument();
+  });
 });

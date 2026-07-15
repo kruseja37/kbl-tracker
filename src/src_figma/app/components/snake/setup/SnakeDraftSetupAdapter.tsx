@@ -59,15 +59,15 @@ function fullName(player: Player): string {
 }
 
 function historicalSourceId(player: Player): string | undefined {
-  const carried = player as Player & { sourceId?: unknown; historicalSourceId?: unknown };
-  if (typeof carried.historicalSourceId === 'string' && carried.historicalSourceId.trim()) {
-    return carried.historicalSourceId.trim();
+  if (typeof player.historicalSourceId === 'string' && player.historicalSourceId.trim()) {
+    return player.historicalSourceId.trim();
   }
-  if (typeof carried.sourceId === 'string' && carried.sourceId.trim()) return carried.sourceId.trim();
+  if (typeof player.sourceId === 'string' && player.sourceId.trim()) return player.sourceId.trim();
   return undefined;
 }
 
 function versionLabel(player: Player): string {
+  if (player.historicalProfileType) return player.historicalProfileType.toUpperCase();
   const source = historicalSourceId(player);
   if (source) return source.split(':').at(-1)?.toUpperCase() ?? source.toUpperCase();
   return player.nickname?.trim() || player.overallGrade || player.id;
@@ -91,7 +91,11 @@ function toConstructionPlayer(player: Player): SnakeSeatingPlayer['construction'
 export function deriveSnakeVersionGroups(poolPlayers: readonly Player[]): SnakeVersionGroup[] {
   const grouped = new Map<string, Player[]>();
   for (const player of poolPlayers) {
-    const groupId = deriveVersionGroupId({ playerId: player.id, sourceId: historicalSourceId(player) });
+    const groupId = deriveVersionGroupId({
+      playerId: player.id,
+      sourceId: historicalSourceId(player),
+      versionGroupId: player.versionGroupId,
+    });
     grouped.set(groupId, [...(grouped.get(groupId) ?? []), player]);
   }
   return [...grouped.entries()].map(([groupId, cards]) => ({ groupId, cards }));
@@ -125,6 +129,7 @@ export function buildLockedSnakeSeatingPlayers(input: {
     return {
       playerId: player.id,
       sourceId: historicalSourceId(player),
+      versionGroupId: player.versionGroupId,
       price: priced.iv,
       shape: toRosterSlotPlayer({
         primaryPosition: player.primaryPosition,

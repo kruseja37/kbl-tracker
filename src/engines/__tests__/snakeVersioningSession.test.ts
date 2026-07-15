@@ -62,6 +62,20 @@ describe('snake version identity and session v2', () => {
     ])).toBe(2);
   });
 
+  test('Career, Peak, and Draft cards from one imported legend count as one human', () => {
+    const cards = ['career', 'peak', 'draft'].map((version) => ({
+      playerId: `hl:aaroh101:${version}`,
+      sourceId: 'historical:aaroh101',
+      versionGroupId: 'historical:aaroh101',
+    }));
+    expect(cards.map(deriveVersionGroupId)).toEqual([
+      'historical:aaroh101',
+      'historical:aaroh101',
+      'historical:aaroh101',
+    ]);
+    expect(countUniqueVersionHumans(cards)).toBe(1);
+  });
+
   test('drafting one card retires the other cards in its version group', () => {
     const result = retireDraftedVersion({
       state: { draftedPlayerIdByGroupId: {}, retiredPlayerIdsByGroupId: {} },
