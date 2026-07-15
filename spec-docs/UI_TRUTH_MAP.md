@@ -25,6 +25,13 @@
 - 2026-07-15: `/snake-room` and `/snake-companion` show the same private cumulative
   `ARCHETYPE ALIGNMENT` grade, room rank, pick count, and fit score for the selected club. No
   hidden personality values or FARM talent ranks render.
+- 2026-07-15: production Snake Draft Setup exposes four pool-assembly choices from the selected
+  sources: `TIGHT`, `COMPETITIVE` (recommended), `LOOSE`, and exact `FULL SOURCES`. For eight
+  clubs the shaped counts are 212 / 238 / 264; the Full Sources count is the actual post-override
+  membership. Manual adds/removes persist across reload and reshaping.
+- 2026-07-15: the player shuttle is two columns only at 1280px and wider; it stacks on iPad to
+  prevent horizontal overflow. Explanations stay behind the Snake `HELP` control. Assistant GM
+  labels its archetype-first objective and 90%-of-frozen-IV guard directly in the private desk.
 
 ---
 

@@ -7312,3 +7312,34 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Live League Builder proof imported 835 cards across 345 people, rendered the three source
   libraries/version labels, logged zero console errors, and had no horizontal overflow at iPad Pro
   landscape size. **Pending / only acceptance gate:** JK's real Mac/iPad browser walk on port 5173.
+
+## 2026-07-15 (Codex, Snake pool assembly + optimizer truth close) — independently approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before implementation and again before final state claims; it
+  remained `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `498be692`.
+- Added two honest Snake assembly modes on the unified Draft Setup surface: exact `FULL SOURCES`
+  and team-shaped `TIGHT` / `COMPETITIVE` / `LOOSE`. Eight-club targets are exactly 212 / 238 /
+  264. Hand adds, hand removes, and pins are durable across reload, source changes, and reshapes.
+- Isolated saved pool preferences and generation knobs by draft format. Auction keeps its prior
+  generation semantics. Snake hydration now blocks early edits/bootstrap so saved manual intent
+  cannot be overwritten during mount.
+- Made the exact roster-local simultaneous seating proof Snake's sole lock authority. Count and the
+  legacy Auction salary-only diagnostic cannot veto a Snake room. Production-source simulations
+  proved all eight tested archetypes can finish legal tax-aware 22-player rosters at every preset.
+- Corrected the Assistant GM's advertised value guard to use literal frozen IV. Its objective is now
+  explicit: legality/solvency first, archetype identity next, then contextual value, while frozen IV
+  stays at least 90% of the best-IV legal build. My Board remains the GM's own order.
+- Verified current pitcher-tax canon without changing it: pitcher POW/CON/SPD/FLD enter the base
+  top-four rotation and bullpen rows; pitcher ARM is excluded; archetype shifts affect hitter rows
+  and pitcher VEL/JNK/ACC only.
+- Independent audit first halted on six correctness defects; all were repaired. Re-audit found one
+  incomplete source-player fingerprint; the final repair fingerprints every roster/IV adapter input
+  and a regression proves the stale visible verdict disappears before recomputation. Final verdict:
+  **APPROVE**.
+- Closing proof: focused 15 files / 252 tests; Playwright pool journey 2/2 on Mac 1440×1000 and iPad
+  1024×768; responsive room journey 16/16 across main/companion; changed-file ESLint, TypeScript,
+  2,728-module production build, and diff integrity green. The broader suite's one isolated FARM
+  fixture failure predates this lane and remains outside its scope.
+- **Pending / only acceptance gate:** JK walks the actual League Builder Snake setup and room on Mac
+  and iPad. The port-5173 dev server runs from `/private/tmp/kbl-snake-legends-integration`.

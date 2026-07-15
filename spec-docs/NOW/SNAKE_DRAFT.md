@@ -1,32 +1,33 @@
-# NOW — Snake Draft: unified setup and exact money/slot repair ready; JK walk is the gate
+# NOW — Snake Draft: exact and shaped pool assembly ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-15; latest code commit `00e7f09e`)
-- **Current thread move:** keep the frozen build running for JK's League Builder and Snake-room
-  browser walk. Auction and Snake now use the same setup surface for draft method, source leagues,
-  grouped Career/Peak/Draft player versions, manual pool membership, and each team's MLB/farm
-  archetypes. The room forks only after setup. Independent frozen-tree audit: **APPROVE**, zero
-  blocker/major/minor findings.
-- Pool locking is reversible without being destructive: unlock restores only versions retired by
-  the current lock, so repeated lock/unlock cycles cannot resurrect a player card the GM removed.
-  Duplicate legend nickname display is suppressed before those players reach setup or the room.
-- Snake seating and every board/room money decision share one signed, tolerance-aware money law.
-  Exact 22-slot feasibility proves `BLOCKED`; an exhausted bounded search remains `OPEN` rather
-  than inventing a hard rejection. Fit and tax use the full projected roster, exact before/after
-  tax, and the worst applicable pitching group for SP/RP players.
-- Assistant plans require a real backup catcher, place eligible catchers in catcher slots before
-  flex, and sort same-role C/SP/RP/flex slots by IV. Main and companion surfaces share the same
-  signed over-budget/refund copy. A compact 44px SMB icon returns to Home.
-- Final builder evidence: 23 focused files / 370 tests; TypeScript, changed-file ESLint,
-  2,724-module production build, and `git diff --check` green. Independent evidence: 22 files /
-  327 tests plus separate TypeScript, lint, build, and diff gates. Fresh `origin/main` was
-  `ea66830e`; this isolated branch was 54 ahead / 0 behind before the docs close.
-- **Pending / only gate:** JK walks Draft Setup with Auction and Snake, player-version/pool
-  edits, archetype persistence, then Snake My Board/Assistant/Player Pool on Mac and iPad. The
-  dev server is listening on port 5173 from `/private/tmp/kbl-snake-legends-integration`.
+## VERIFIED (git, 2026-07-15; latest code commit `498be692`)
+- **Current thread move:** keep the build running for JK's League Builder and Snake-room browser
+  walk. Snake setup now offers `TIGHT`, `COMPETITIVE`, `LOOSE`, and `FULL SOURCES` from the same
+  chosen source leagues, player-version groups, and hand-add/remove shuttle used by the shared
+  Draft Setup surface. The next move is browser acceptance, not more speculative hardening.
+- For eight clubs the shaped targets are exactly 212 / 238 / 264 players. `FULL SOURCES` is the
+  exact post-override source union. Hand adds, hand removes, and pins survive reload and reshape;
+  Auction's pool controls and saved preferences remain format-isolated.
+- Snake's only lock authority is the simultaneous exact 22-slot proof using each club's own cap and
+  archetype tax rows. Room size never rescales those economics. All three production-source shapes
+  built tax-aware legal finishes for all eight tested archetypes.
+- Assistant GM is explicit and enforced: legality/solvency first, archetype identity next, then
+  contextual value, while literal frozen IV stays at least 90% of the best-IV legal build. My Board
+  remains the GM's own order. Source-player roster/IV edits immediately retire stale advisor reads.
+- Pitcher POW/CON/SPD/FLD are not free bonuses under current canon: the base top-four rotation and
+  bullpen rows tax them. Pitcher ARM is excluded; archetypes shift hitter rows and pitcher
+  VEL/JNK/ACC only. This pass verified that law and did not change it.
+- Final builder evidence: 15 focused files / 252 tests, TypeScript, changed-file ESLint,
+  2,728-module production build, and diff integrity green. Playwright passed the pool-assembly
+  journey on Mac and iPad (2/2) and the full main/companion responsive room journey (16/16).
+  Independent audit repaired six initial defects plus one stale-fingerprint edge; final re-audit:
+  **APPROVE**. Fresh `origin/main` was `ea66830e`; branch was 57 ahead / 0 behind before commit.
+- **Pending / only gate:** JK walks actual Draft Setup and Snake Room on Mac/iPad. The dev server is
+  listening on port 5173 from `/private/tmp/kbl-snake-legends-integration`.
 
 ## PRIOR VERIFIED (git, 2026-07-14; code commit `6ae55543`)
 - **Current thread move:** keep the frozen preview running and hand the repaired build to JK for
