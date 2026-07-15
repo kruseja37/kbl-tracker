@@ -2,18 +2,18 @@
  * Historical Legends app-data contract.
  *
  * The generated JSON is deliberately served as a public asset instead of being
- * bundled into the main JavaScript chunk. The source hash remains unpinned until
- * the independently examined 345-player artifact is final.
+ * bundled into the main JavaScript chunk. Both the source artifact and generated
+ * public asset are pinned so every local origin imports identical verified bytes.
  */
 
 import type { Player } from '../utils/leagueBuilderStorage';
 
 export const HISTORICAL_LEGENDS_APP_DATA_URL = '/data/historical-legends-app-data.json';
 
-/** Filled only after the final independently examined source artifact exists. */
-export const EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256: string | null = null;
-/** Filled only after the final generated app asset is independently examined. */
-export const EXPECTED_HISTORICAL_LEGENDS_ASSET_SHA256: string | null = null;
+export const EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256 =
+  'b668309ec84449d6052c768c0c2d98e3bfdc3c8b5d14385588c8b1f56384c492';
+export const EXPECTED_HISTORICAL_LEGENDS_ASSET_SHA256 =
+  'b1cf848205b68f625ee603008ab6ef437de7455a181a7572a3a7a0e332a3de32';
 
 export const HISTORICAL_LEGENDS_SOURCE_DATABASE = 'HISTORICAL_LEGENDS';
 export const HISTORICAL_LEGENDS_EXPECTED_PLAYER_COUNT = 345;

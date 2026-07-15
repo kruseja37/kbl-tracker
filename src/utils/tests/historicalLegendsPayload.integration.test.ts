@@ -8,7 +8,7 @@ const payloadPath = resolve('public/data/historical-legends-app-data.json');
 const runWithFinalPayload = existsSync(payloadPath) ? test : test.skip;
 
 describe('final Historical Legends app payload', () => {
-  runWithFinalPayload('contains the approved replacement set and excludes the held cards', () => {
+  runWithFinalPayload('contains the frozen 345-player library without substituting later experiments', () => {
     const payload = JSON.parse(readFileSync(payloadPath, 'utf8')) as HistoricalLegendsAppPayload;
     const playerIds = new Set(payload.players.map((player) => player.historicalLegend.playerId));
 
@@ -17,10 +17,20 @@ describe('final Historical Legends app payload', () => {
       profileCount: 835,
       profileCounts: { Career: 245, Peak: 245, 'Draft Pool': 345 },
     });
-    for (const playerId of ['baezj001', 'johnj010', 'kolbd001', 'roget002']) {
+    for (const playerId of [
+      'mattd001',
+      'reesp101',
+      'rodra001',
+      'dibbr001',
+      'langw001',
+      'blauj001',
+      'hofft001',
+      'hollg001',
+      'vendp001',
+    ]) {
       expect(playerIds.has(playerId), `${playerId} should be present`).toBe(true);
     }
-    for (const playerId of ['blauj001', 'hofft001', 'hollg001', 'vendp001']) {
+    for (const playerId of ['benia001', 'charn001', 'bondb101']) {
       expect(playerIds.has(playerId), `${playerId} should be absent`).toBe(false);
     }
   });
