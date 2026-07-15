@@ -184,7 +184,7 @@ describe('LeagueBuilder Component', () => {
     test('offers the verified Legends Library import', () => {
       render(<LeagueBuilder />);
       expect(screen.getByText('Historical Legends')).toBeInTheDocument();
-      expect(screen.getByText('Import the verified 345-player Legends Library')).toBeInTheDocument();
+      expect(screen.getByText('Import Draft / Career / Peak Legends libraries')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /IMPORT LEGENDS/i })).toBeInTheDocument();
     });
   });

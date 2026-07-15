@@ -48,7 +48,7 @@ export function LeagueBuilder() {
       ? 'Super Mega League (20 teams)'
       : source === 'mlb'
         ? 'Major League Baseball (30 teams)'
-        : 'Historical Legends (345 players / 835 cards)';
+        : 'Historical Legends (345 players / 835 cards / 3 source libraries)';
     const confirmed = window.confirm(
       `${source === 'legends'
         ? `This will import all ${label} into the League Builder player database.`
@@ -174,8 +174,8 @@ export function LeagueBuilder() {
                   <div className="text-sm font-bold text-[#E8E8D8]">Historical Legends</div>
                   <div className="text-xs text-[#E8E8D8]/70">
                     {areLegendsSeeded
-                      ? '345 players, 835 Career / Peak / Draft cards'
-                      : 'Import the verified 345-player Legends Library'}
+                      ? '345 players · Draft / Career / Peak source libraries'
+                      : 'Import Draft / Career / Peak Legends libraries'}
                   </div>
                 </div>
               </div>

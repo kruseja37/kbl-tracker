@@ -162,7 +162,7 @@ describe('draftFreeze RB-7a pure freeze bridge', () => {
     expect(row.morale).toEqual(direct);
   });
 
-  test('D1 snake pay-class override replaces only the pay classification', () => {
+  test('Snake slot override replaces won-order slot while price is neutralized', () => {
     const withoutOverride = computeDraftFreeze([
       player({
         playerId: 'snake-override',
@@ -181,7 +181,8 @@ describe('draftFreeze RB-7a pure freeze bridge', () => {
         settledSalary: 100,
         scoutRange: { low: 90, high: 110 },
         personality: undefined,
-        payClassOverride: 'above',
+        slotClassOverride: 'late',
+        payClassOverride: 'within',
       }),
     ]);
 
@@ -189,8 +190,31 @@ describe('draftFreeze RB-7a pure freeze bridge', () => {
     expect(withOverride.players[0]).toMatchObject({
       wonOrderIndex: withoutOverride.players[0].wonOrderIndex,
       totalWonInTier: withoutOverride.players[0].totalWonInTier,
-      slotClass: withoutOverride.players[0].slotClass,
-      morale: { payBase: 10 },
+      slotClass: 'late',
+      morale: { slotBase: -15, payBase: 0 },
+    });
+  });
+
+  test('Snake fan morale uses supplied archetype alignment instead of payroll rank', () => {
+    const result = computeDraftFreeze([
+      player({ playerId: 'cheap-strong', teamId: 'strong', tier: 'MLB', settledSalary: 10 }),
+      player({ playerId: 'expensive-weak', teamId: 'weak', tier: 'MLB', settledSalary: 1_000 }),
+    ], {
+      snakeFanMoraleAlignment: [
+        { teamId: 'strong', fitMultipliers: [1.08] },
+        { teamId: 'weak', fitMultipliers: [0.92] },
+      ],
+    });
+
+    expect(teamById(result, 'strong')).toMatchObject({
+      payroll: 10,
+      startingFanMorale: 65,
+      fanMorale: { alignmentGrade: 'STRONG', delta: 15 },
+    });
+    expect(teamById(result, 'weak')).toMatchObject({
+      payroll: 1_000,
+      startingFanMorale: 35,
+      fanMorale: { alignmentGrade: 'WEAK', delta: -15 },
     });
   });
 

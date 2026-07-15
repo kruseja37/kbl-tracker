@@ -385,6 +385,41 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(deleteButtons.length).toBe(2);
     });
 
+    test('keeps system source libraries read-only and out of every draft-target action', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      const current = vi.mocked(useLeagueBuilderData).getMockImplementation()!();
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        ...current,
+        leagues: [
+          ...current.leagues,
+          {
+            id: 'legends-library-draft',
+            name: 'Legends Library — Draft',
+            description: 'System source library for Historical Legends draft-pool selection.',
+            teamIds: [],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'snake',
+            sourceLibrary: { kind: 'historical-legends', profileType: 'Draft Pool' },
+            color: '#C9A84C',
+            createdDate: '2026-07-15T00:00:00.000Z',
+          },
+        ],
+      });
+
+      render(<LeagueBuilderLeagues />);
+      await waitFor(() => {
+        expect(screen.getByText('Legends Library — Draft')).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByTitle('Draft setup')).toHaveLength(2);
+      expect(screen.getAllByTitle('Edit league')).toHaveLength(2);
+      expect(screen.getAllByTitle('Duplicate league')).toHaveLength(2);
+      expect(screen.getAllByTitle('Delete league')).toHaveLength(2);
+      expect(screen.getByTitle('System source library')).toHaveTextContent('SOURCE LIBRARY');
+    });
+
     test('draft route helper maps each format to its own draft entry', () => {
       expect(draftRouteForFormat('snake')).toBe('/snake-room');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');

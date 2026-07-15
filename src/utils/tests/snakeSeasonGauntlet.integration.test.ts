@@ -628,8 +628,9 @@ describe('S7 snake draft to season closing gauntlet', () => {
     });
     expect(freezeInputs).toHaveLength(176);
     expect(freezeInputs.every((input) => input.settledSalary === ivById.get(input.playerId))).toBe(true);
-    expect(freezeInputs.some((input) => input.payClassOverride === 'above')).toBe(true);
-    expect(freezeInputs.some((input) => input.payClassOverride === 'below')).toBe(true);
+    expect(freezeInputs.some((input) => input.slotClassOverride === 'early')).toBe(true);
+    expect(freezeInputs.some((input) => input.slotClassOverride === 'late')).toBe(true);
+    expect(freezeInputs.every((input) => input.payClassOverride === 'within')).toBe(true);
 
     await saveMlbDraftSession({
       ...storedMlbSession!,

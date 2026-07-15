@@ -533,6 +533,14 @@ export function LeagueBuilderLeagues() {
                     </div>
                   </div>
 
+                  {league.sourceLibrary ? (
+                    <div
+                      className="border-[3px] border-[#C9A84C] bg-[#26372C] px-3 py-2 text-xs font-bold text-[#F4E8BF]"
+                      title="System source library"
+                    >
+                      SOURCE LIBRARY
+                    </div>
+                  ) : (
                   <div className="flex items-center gap-2">
                     {/* Draft Setup */}
                     <button
@@ -590,6 +598,7 @@ export function LeagueBuilderLeagues() {
                       </button>
                     )}
                   </div>
+                  )}
                 </div>
               ))}
             </div>

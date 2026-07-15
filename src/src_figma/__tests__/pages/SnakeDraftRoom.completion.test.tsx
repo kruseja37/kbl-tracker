@@ -209,6 +209,11 @@ describe('snake draft durable completion and recap', () => {
       pool,
       session: { id: session.id, draftManifest: { phase: 'MLB', source: { sessionId: session.id } } },
     });
+    const mlbMorale = mocks.commitMlb.mock.calls[0][0].session.draftManifest.morale;
+    expect(Object.keys(mlbMorale.expectedTalentRankByPlayerId)).toHaveLength(pool.players.length);
+    expect(Object.keys(mlbMorale.playerByPlayerId)).toHaveLength(session.completedPicks.length);
+    expect(Object.keys(mlbMorale.fanByTeamId)).toHaveLength(teams.length);
+    expect(JSON.stringify(mlbMorale)).not.toMatch(/loyalty|ambition|resilience|charisma/i);
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitMlb.mock.invocationCallOrder[0]);
     expect(mocks.commitMlb).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/scout-hire?leagueId=${league.id}`);
@@ -323,6 +328,11 @@ describe('snake draft durable completion and recap', () => {
       pool: { prospects: expect.arrayContaining([expect.objectContaining({ id: 'f1' }), expect.objectContaining({ id: 'f2' })]) },
       session: { id: session.id, draftManifest: { phase: 'FARM', source: { sessionId: session.id } } },
     });
+    const farmMorale = mocks.commitFarm.mock.calls[0][0].session.draftManifest.morale;
+    expect(farmMorale.expectedTalentRankByPlayerId).toEqual({});
+    expect(Object.keys(farmMorale.playerByPlayerId)).toHaveLength(session.completedPicks.length);
+    expect(farmMorale.fanByTeamId).toBeNull();
+    expect(JSON.stringify(farmMorale)).not.toMatch(/loyalty|ambition|resilience|charisma/i);
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitFarm.mock.invocationCallOrder[0]);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/staff-hire?leagueId=${league.id}`);
   });

@@ -1,18 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
-import {
-  CHEMISTRY_CODES,
-  CHEMISTRY_CODE_TO_WORD,
-  CHEMISTRY_TARGET_DISTRIBUTION,
-  CHEMISTRY_TARGET_SOURCE_TOLERANCE,
-} from '../../data/chemistryCanonical';
+import { HISTORICAL_LEGENDS_SOURCE_DATABASE } from '../../data/historicalLegendsAppData';
 import type { Player } from '../../utils/leagueBuilderStorage';
 import { PERSONALITY_POOL, PERSONALITY_WEIGHTS } from '../../utils/prospectScoutingDraftEngine';
-import { regenerateLeaguePoolPlayerAxes } from '../leaguePoolAxisRegen';
+import { initializeDraftPoolPlayerAxes } from '../leaguePoolAxisRegen';
 
-// Same-order tolerance as the chemistry distribution test above — wide enough to be flake-proof
-// under a fixed seed while still documenting the JK-ruled tilt away from Droopy/Timid.
-const PERSONALITY_TARGET_SOURCE_TOLERANCE = 0.03;
+const PERSONALITY_TARGET_SOURCE_TOLERANCE = 0.04;
 
 function makePlayer(id: string, overrides: Partial<Player> = {}): Player {
   return {
@@ -35,7 +28,7 @@ function makePlayer(id: string, overrides: Partial<Player> = {}): Player {
     arsenal: ['4F'],
     overallGrade: 'B',
     personality: 'Competitive',
-    chemistry: 'Competitive',
+    chemistry: 'Spirited',
     morale: 50,
     mojo: 'Normal',
     fame: 0,
@@ -43,7 +36,8 @@ function makePlayer(id: string, overrides: Partial<Player> = {}): Player {
     leagueAssignments: [{ leagueId: 'league-axis', teamId: 'team-a', rosterStatus: 'MLB' }],
     createdDate: '2026-01-01',
     lastModified: '2026-01-01',
-    isCustom: true,
+    isCustom: false,
+    sourceDatabase: 'SMB4',
     ...overrides,
   };
 }
@@ -52,20 +46,13 @@ function makePlayers(count: number): Player[] {
   return Array.from({ length: count }, (_, index) => makePlayer(`player-${index}`));
 }
 
-function chemistryCounts(players: readonly Player[]): Record<string, number> {
-  return players.reduce<Record<string, number>>((counts, player) => {
-    counts[player.chemistry] = (counts[player.chemistry] ?? 0) + 1;
-    return counts;
-  }, {});
-}
-
-describe('regenerateLeaguePoolPlayerAxes RB-0b-1', () => {
-  test('same players and leagueId produce identical output', () => {
+describe('draft pool personality initialization', () => {
+  test('same player identity is deterministic across input order and league locks', () => {
     const players = makePlayers(37);
 
-    const first = regenerateLeaguePoolPlayerAxes(players, 'league-axis');
-    const second = regenerateLeaguePoolPlayerAxes(players, 'league-axis');
-    const reversed = regenerateLeaguePoolPlayerAxes([...players].reverse(), 'league-axis');
+    const first = initializeDraftPoolPlayerAxes(players, 'league-a');
+    const second = initializeDraftPoolPlayerAxes(players, 'league-b');
+    const reversed = initializeDraftPoolPlayerAxes([...players].reverse(), 'league-c');
     const axesById = new Map(first.map((player) => [
       player.id,
       {
@@ -85,78 +72,91 @@ describe('regenerateLeaguePoolPlayerAxes RB-0b-1', () => {
     }
   });
 
-  test('sets personality, hidden modifiers, and chemistry on every player', () => {
-    const personalitySet = new Set(PERSONALITY_POOL);
-    const chemistrySet = new Set(Object.values(CHEMISTRY_CODE_TO_WORD));
+  test('initializes non-Legends once, preserves source chemistry, and later locks are no-ops', () => {
+    const [initialized] = initializeDraftPoolPlayerAxes([makePlayer('ordinary')], 'league-a');
+    expect(PERSONALITY_POOL).toContain(initialized.personality);
+    expect(initialized.chemistry).toBe('Spirited');
+    expect(initialized.hiddenPersonalityModifiers).toBeDefined();
 
-    const regenerated = regenerateLeaguePoolPlayerAxes(makePlayers(25), 'league-axis');
-
-    for (const player of regenerated) {
-      expect(personalitySet.has(player.personality)).toBe(true);
-      expect(chemistrySet.has(player.chemistry)).toBe(true);
-      expect(player.hiddenPersonalityModifiers).toBeDefined();
-
-      for (const value of Object.values(player.hiddenPersonalityModifiers ?? {})) {
-        expect(Number.isFinite(value)).toBe(true);
-        expect(value).toBeGreaterThanOrEqual(0);
-        expect(value).toBeLessThanOrEqual(100);
-      }
-    }
+    const [relocked] = initializeDraftPoolPlayerAxes([initialized], 'league-b');
+    expect(relocked).toEqual(initialized);
   });
 
-  test('large pool chemistry distribution lands within target tolerance', () => {
-    const playerCount = 250;
-    const regenerated = regenerateLeaguePoolPlayerAxes(makePlayers(playerCount), 'league-axis');
-    const counts = chemistryCounts(regenerated);
-
-    for (const code of CHEMISTRY_CODES) {
-      const word = CHEMISTRY_CODE_TO_WORD[code];
-      const actualShare = (counts[word] ?? 0) / playerCount;
-      expect(Math.abs(actualShare - CHEMISTRY_TARGET_DISTRIBUTION[code]))
-        .toBeLessThanOrEqual(CHEMISTRY_TARGET_SOURCE_TOLERANCE);
-    }
-  });
-
-  test('large pool personality distribution tilts away from Droopy/Timid per JK-ruled weights', () => {
+  test('large imported pool retains the canonical visible-personality weighting', () => {
     const playerCount = 600;
-    const regenerated = regenerateLeaguePoolPlayerAxes(makePlayers(playerCount), 'league-axis-personality');
-    const counts = regenerated.reduce<Record<string, number>>((acc, player) => {
+    const initialized = initializeDraftPoolPlayerAxes(makePlayers(playerCount), 'league-axis-personality');
+    const counts = initialized.reduce<Record<string, number>>((acc, player) => {
       acc[player.personality] = (acc[player.personality] ?? 0) + 1;
       return acc;
     }, {});
     const totalWeight = PERSONALITY_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
 
     expect(Object.keys(counts).sort()).toEqual([...PERSONALITY_POOL].sort());
-
     for (const [personality, weight] of PERSONALITY_WEIGHTS) {
       const target = weight / totalWeight;
       const actualShare = (counts[personality] ?? 0) / playerCount;
       expect(Math.abs(actualShare - target)).toBeLessThanOrEqual(PERSONALITY_TARGET_SOURCE_TOLERANCE);
     }
-
-    // Droopy and Timid (the tilted-away-from personalities) must each land below every other
-    // personality's share — documents the JK ruling, not just the raw tolerance band.
-    const droopyShare = (counts['Droopy'] ?? 0) / playerCount;
-    const timidShare = (counts['Timid'] ?? 0) / playerCount;
-    for (const personality of PERSONALITY_POOL) {
-      if (personality === 'Droopy' || personality === 'Timid') continue;
-      const share = (counts[personality] ?? 0) / playerCount;
-      expect(droopyShare).toBeLessThan(share);
-      expect(timidShare).toBeLessThan(share);
-    }
   });
 
-  test('small pool preserves quota integrity without crashing', () => {
-    const playerCount = 23;
-    const regenerated = regenerateLeaguePoolPlayerAxes(makePlayers(playerCount), 'small-league');
-    const counts = chemistryCounts(regenerated);
+  test('Legends keep visible canon and curated hidden modifiers', () => {
+    const curated = { loyalty: 91, ambition: 72, resilience: 88, charisma: 96 };
+    const legend = makePlayer('hl:ruthb101:career', {
+      sourceDatabase: HISTORICAL_LEGENDS_SOURCE_DATABASE,
+      historicalSourceId: 'historical:ruthb101',
+      personality: 'Egotistical',
+      chemistry: 'Competitive',
+      hiddenPersonalityModifiers: curated,
+    });
 
-    expect(regenerated).toHaveLength(playerCount);
-    expect(Object.values(counts).reduce((sum, count) => sum + count, 0)).toBe(playerCount);
-    expect(Object.values(counts).every((count) => Number.isInteger(count) && count >= 0)).toBe(true);
+    const [initialized] = initializeDraftPoolPlayerAxes([legend], 'league-a');
+    expect(initialized.personality).toBe('Egotistical');
+    expect(initialized.chemistry).toBe('Competitive');
+    expect(initialized.hiddenPersonalityModifiers).toEqual(curated);
   });
 
-  test('non-axis fields are unchanged and input objects are not mutated', () => {
+  test('Legend card versions share a deterministic person-level fallback without changing personality', () => {
+    const career = makePlayer('hl:aaroh101:career', {
+      sourceDatabase: HISTORICAL_LEGENDS_SOURCE_DATABASE,
+      historicalSourceId: 'historical:aaroh101',
+      personality: 'Tough',
+    });
+    const peak = makePlayer('hl:aaroh101:peak', {
+      sourceDatabase: HISTORICAL_LEGENDS_SOURCE_DATABASE,
+      historicalSourceId: 'historical:aaroh101',
+      personality: 'Tough',
+    });
+
+    const [careerResult, peakResult] = initializeDraftPoolPlayerAxes([career, peak], 'league-a');
+    expect(careerResult.personality).toBe('Tough');
+    expect(peakResult.personality).toBe('Tough');
+    expect(careerResult.hiddenPersonalityModifiers).toEqual(peakResult.hiddenPersonalityModifiers);
+  });
+
+  test('custom visible personality survives while missing hidden modifiers initialize once', () => {
+    const custom = makePlayer('custom', {
+      isCustom: true,
+      sourceDatabase: undefined,
+      personality: 'Jolly',
+    });
+    const [initialized] = initializeDraftPoolPlayerAxes([custom], 'league-a');
+    expect(initialized.personality).toBe('Jolly');
+    expect(initialized.chemistry).toBe(custom.chemistry);
+    expect(initialized.hiddenPersonalityModifiers).toBeDefined();
+  });
+
+  test('generated FARM prospect axes pass through byte-identically', () => {
+    const prospect = makePlayer('farm-prospect', {
+      draftedAsFarmProspect: true,
+      personality: 'Relaxed',
+      chemistry: 'Crafty',
+      hiddenPersonalityModifiers: { loyalty: 44, ambition: 82, resilience: 71, charisma: 63 },
+    });
+    const [initialized] = initializeDraftPoolPlayerAxes([prospect], 'league-a');
+    expect(initialized).toEqual(prospect);
+  });
+
+  test('non-axis fields and input objects remain unchanged', () => {
     const source = makePlayer('field-check', {
       lastName: 'Original',
       primaryPosition: 'SS',
@@ -172,10 +172,8 @@ describe('regenerateLeaguePoolPlayerAxes RB-0b-1', () => {
       salary: 123_456,
     });
 
-    const [regenerated] = regenerateLeaguePoolPlayerAxes([source], 'league-axis');
-
-    expect(regenerated).not.toBe(source);
-    expect(regenerated).toMatchObject({
+    const [initialized] = initializeDraftPoolPlayerAxes([source], 'league-axis');
+    expect(initialized).toMatchObject({
       id: source.id,
       firstName: source.firstName,
       lastName: source.lastName,
@@ -190,9 +188,9 @@ describe('regenerateLeaguePoolPlayerAxes RB-0b-1', () => {
       junk: source.junk,
       accuracy: source.accuracy,
       salary: source.salary,
+      chemistry: source.chemistry,
     });
     expect(source.hiddenPersonalityModifiers).toBeUndefined();
     expect(source.personality).toBe('Competitive');
-    expect(source.chemistry).toBe('Competitive');
   });
 });

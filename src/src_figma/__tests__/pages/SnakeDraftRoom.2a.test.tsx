@@ -352,6 +352,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
 
     selectTeam('a');
     await revealSeatAndSettle('Club A');
+    expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ARCHETYPE ALIGNMENT · (STRONG|SOLID|WEAK)/);
+    expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ROOM \d+\/\d+ · FAN [+-]?\d+/);
     const committed = screen.getByRole('button', { name: /SELECT GONE-C PLAYER/ });
     expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'COMMITTED');
     expect(committed).toHaveTextContent('$10,700');

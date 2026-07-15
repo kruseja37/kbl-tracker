@@ -363,6 +363,9 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     const originalB = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.b);
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(screen.getByTestId('companion-private-roster-alignment')).toHaveTextContent(/ARCHETYPE ALIGNMENT · (STRONG|SOLID|WEAK)/);
+    expect(screen.getByTestId('companion-private-roster-alignment')).toHaveTextContent(/ROOM \d\/2 · FAN [+-]?\d/);
+    expect(document.body.textContent).not.toMatch(/loyalty|ambition|resilience|charisma|hidden personality/i);
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
     expect(screen.getByRole('heading', { name: 'OVERALL RANKINGS' })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);

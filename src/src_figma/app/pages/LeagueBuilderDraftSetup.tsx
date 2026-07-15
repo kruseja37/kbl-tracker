@@ -89,6 +89,7 @@ import {
   importRosteredPlayersToLeaguePool,
   isPlayerInLeaguePool,
   isPlayerInSourceUniverse,
+  resolveIncludeUnassignedSourcePlayers,
   resolveSourceLeagueIds,
   computePlayerIv,
   computePlayerGrade,
@@ -219,6 +220,13 @@ function draftabilityRecordFromRows(rows: readonly ArchetypeDraftability[]) {
 
 function playerName(player: Player): string {
   return `${player.firstName} ${player.lastName}`.trim();
+}
+
+function historicalProfileLabel(player: Player): string | null {
+  if (player.historicalProfileType === "Draft Pool") return "DRAFT";
+  if (player.historicalProfileType === "Career") return "CAREER";
+  if (player.historicalProfileType === "Peak") return "PEAK";
+  return null;
 }
 
 // Draftable primary positions only (JK ruling + DECISIONS_LOG: "DH removed ENTIRELY, DH is a
@@ -711,7 +719,7 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
 }
 
 function buildPoolExtractedBasis(
-  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds">,
+  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds" | "includeUnassignedSourcePlayers">,
   leagueTeams: readonly Team[],
   cap: number,
   shills: number,
@@ -738,6 +746,7 @@ function buildPoolExtractedBasis(
     // Absent (unfiltered) stays absent here too, so a pre-feature record and an untouched
     // post-feature record are indistinguishable — both mean "drawn from everything".
     ...(resolvedSources !== null ? { sourceLeagueIds: sortedIds(resolvedSources) } : {}),
+    includeUnassignedSourcePlayers: resolveIncludeUnassignedSourcePlayers(league),
   };
 }
 
@@ -776,6 +785,12 @@ function poolBasisStaleLines(
     if (previousSources !== currentSources) {
       lines.push("THE DRAFT POOL SOURCES CHANGED — RE-EXTRACT TO PULL FROM THE NEW SET.");
     }
+  }
+  if (
+    (extractedBasis.includeUnassignedSourcePlayers ?? true)
+    !== (liveBasis.includeUnassignedSourcePlayers ?? true)
+  ) {
+    lines.push("THE UNASSIGNED-PLAYER SOURCE CHANGED — RE-EXTRACT TO PULL FROM THE NEW SET.");
   }
   const teamsById = new Map(leagueTeams.map((team) => [team.id, team]));
   const identityKeys = sortedIds([
@@ -1530,6 +1545,10 @@ export function LeagueBuilderDraftSetup() {
   const requestedLeagueId = leagueIdFromSearch(location.search);
   const requestedShillCount = shillCountFromSearch(location.search);
   const requestedReservePriceK = reservePriceKFromSearch(location.search);
+  const draftTargetLeagues = useMemo(
+    () => leagues.filter((candidate) => !candidate.sourceLibrary),
+    [leagues],
+  );
   const [activeLeagueId, setActiveLeagueId] = useState<string>("");
   const [showHelp, setShowHelp] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
@@ -1539,13 +1558,13 @@ export function LeagueBuilderDraftSetup() {
 
   // Resolve the active league once leagues load (honoring ?leagueId=).
   useEffect(() => {
-    if (leagues.length === 0) return;
+    if (draftTargetLeagues.length === 0) return;
     setActiveLeagueId((current) =>
-      current && leagues.some((l) => l.id === current)
+      current && draftTargetLeagues.some((l) => l.id === current)
         ? current
-        : resolveInitialLeagueId(leagues, requestedLeagueId),
+        : resolveInitialLeagueId(draftTargetLeagues, requestedLeagueId),
     );
-  }, [leagues, requestedLeagueId]);
+  }, [draftTargetLeagues, requestedLeagueId]);
 
   const league = useMemo(
     () => leagues.find((l) => l.id === activeLeagueId) ?? null,
@@ -1802,11 +1821,19 @@ export function LeagueBuilderDraftSetup() {
     () => (league ? resolveSourceLeagueIds(league) : null),
     [league],
   );
+  const includeUnassignedSourcePlayers = useMemo(
+    () => (league ? resolveIncludeUnassignedSourcePlayers(league) : true),
+    [league],
+  );
   const universePlayers = useMemo(
     () => (league && explicitSourceLeagueIds !== null
-      ? players.filter((p) => isPlayerInSourceUniverse(p, explicitSourceLeagueIds))
+      ? players.filter((p) => isPlayerInSourceUniverse(
+          p,
+          explicitSourceLeagueIds,
+          includeUnassignedSourcePlayers,
+        ))
       : players),
-    [players, league, explicitSourceLeagueIds],
+    [players, league, explicitSourceLeagueIds, includeUnassignedSourcePlayers],
   );
   // New warn-don't-block gating exists ONLY for the explicitly curated state — the unfiltered
   // default must not introduce any behavior change vs pre-feature (even for a zero-player app).
@@ -1817,8 +1844,15 @@ export function LeagueBuilderDraftSetup() {
   // Audit Finding 3 honesty tweak (captain 2026-07-08): explicitly zero leagues checked, but
   // never-claimed free agents keep the universe alive — extraction stays enabled (warn-don't-block)
   // with an honest info line instead of silence.
-  const universeFreeAgentsOnly =
-    Boolean(league) && explicitSourceLeagueIds !== null && explicitSourceLeagueIds.length === 0 && universePlayers.length > 0;
+  const universeFreeAgentsOnly = Boolean(league)
+    && explicitSourceLeagueIds !== null
+    && explicitSourceLeagueIds.length === 0
+    && includeUnassignedSourcePlayers
+    && universePlayers.length > 0;
+  const unassignedPlayerCount = useMemo(
+    () => players.filter((player) => !player.leagueAssignments?.length).length,
+    [players],
+  );
   // Player-pool count per league, for the checkbox list (ruling 2026-07-08 #2: show every league
   // in the app with its count). Computed once over players+leagues, not per-row.
   const leaguePlayerCounts = useMemo(() => {
@@ -2486,7 +2520,7 @@ export function LeagueBuilderDraftSetup() {
   }, [league, replaceLeagueLocal, setupMutationBlockMessage]);
 
   const saveLeagueDraftSetup = useCallback(
-    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves" | "sourceLeagueIds">>) => {
+    async (patch: Partial<Pick<LeagueTemplate, "draftSeats" | "draftPoolMode" | "poolExtractedAt" | "poolExtractedBasis" | "poolSizeMultiplier" | "modeAExtractedIds" | "modeAHandAdds" | "modeAHandRemoves" | "sourceLeagueIds" | "includeUnassignedSourcePlayers">>) => {
       if (!league) return;
       const saved = await saveLeagueTemplate({ ...league, ...patch });
       replaceLeagueLocal(saved);
@@ -2519,6 +2553,17 @@ export function LeagueBuilderDraftSetup() {
         current.add(leagueId);
       }
       await saveLeagueDraftSetup({ sourceLeagueIds: sortedIds([...current]) });
+    }, { refreshData: false, refreshPool: false });
+
+  const handleToggleUnassignedSourcePlayers = () =>
+    runAction(async () => {
+      if (!league) return;
+      await saveLeagueDraftSetup({
+        includeUnassignedSourcePlayers: !includeUnassignedSourcePlayers,
+        ...(explicitSourceLeagueIds === null
+          ? { sourceLeagueIds: sortedIds(leagues.map((candidate) => candidate.id)) }
+          : {}),
+      });
     }, { refreshData: false, refreshPool: false });
 
   const handlePoolQualityCenterChange = (nextQualityCenter: PoolQualityCenter) => {
@@ -4210,6 +4255,19 @@ export function LeagueBuilderDraftSetup() {
         </HelpNote>
       ) : null}
       <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+        <label className="flex items-center gap-2 text-[11px] text-[var(--ballpark-chalk)] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includeUnassignedSourcePlayers}
+            disabled={poolEditingBlocked || busy}
+            onChange={handleToggleUnassignedSourcePlayers}
+            className="accent-[var(--ballpark-brass)]"
+          />
+          <span className="flex-1">Unassigned Players</span>
+          <span className="text-[var(--ballpark-chalk)]/55">
+            {unassignedPlayerCount} player{unassignedPlayerCount === 1 ? "" : "s"}
+          </span>
+        </label>
         {leagues.map((candidate) => {
           // Absent field (unfiltered default) renders every league checked — the on-screen
           // truth of "drawn from everything". An explicit array renders exactly its members.
@@ -4254,7 +4312,7 @@ export function LeagueBuilderDraftSetup() {
   ) : null;
 
   // ---- render ----
-  if (!isLoading && leagues.length === 0) {
+  if (!isLoading && draftTargetLeagues.length === 0) {
     return (
       <BallparkShell onBack={() => navigate("/league-builder")} title="Draft Room">
         <div className="ballpark-panel text-center">
@@ -4432,7 +4490,7 @@ export function LeagueBuilderDraftSetup() {
                 onChange={(event) => setActiveLeagueId(event.target.value)}
                 className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] text-[var(--ballpark-chalk)] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
               >
-                {leagues.map((candidate) => (
+                {draftTargetLeagues.map((candidate) => (
                   <option key={candidate.id} value={candidate.id}>
                     {candidate.name.toUpperCase()}
                   </option>
@@ -5724,6 +5782,10 @@ const Row = memo(function Row({
   onToggle: (playerId: string) => void;
   onFocus: (playerId: string) => void;
 }) {
+  const profileLabel = historicalProfileLabel(player);
+  const accessiblePlayerName = profileLabel
+    ? `${playerName(player)} — ${profileLabel}`
+    : playerName(player);
   return (
     <div
       className={`w-full flex items-center gap-2 px-2 py-1.5 text-left border-b border-[#4A6844] text-sm transition cursor-pointer ${
@@ -5738,7 +5800,7 @@ const Row = memo(function Row({
         }}
         disabled={disabled}
         aria-pressed={checked}
-        aria-label={`${checked ? "Deselect" : "Select"} ${playerName(player)}`}
+        aria-label={`${checked ? "Deselect" : "Select"} ${accessiblePlayerName}`}
         className={`w-4 h-4 border-2 flex items-center justify-center shrink-0 disabled:opacity-40 ${
           checked ? "bg-[#C4A853] border-[#E8E8D8]" : "border-[#E8E8D8]/50"
         }`}
@@ -5748,6 +5810,11 @@ const Row = memo(function Row({
       <PlayerProfilePopover player={player} revealFull>
         <span className="flex min-w-0 flex-1 items-center gap-2" onClick={() => onFocus(player.id)}>
           <span className="flex-1 truncate text-[#E8E8D8]">{playerName(player)}</span>
+          {profileLabel && (
+            <span className="shrink-0 border border-[#C9A84C] px-1 py-0.5 text-[9px] font-bold text-[#F4E8BF]">
+              {profileLabel}
+            </span>
+          )}
           <span className="w-10 text-xs text-[#E8E8D8]/60">{player.primaryPosition}</span>
           <span className="w-24 text-right text-xs font-bold text-[#E8E8D8]" title={rightTitle}>
             {rightLabel}

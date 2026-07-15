@@ -2,12 +2,16 @@ import {
   EXPECTED_HISTORICAL_LEGENDS_ASSET_SHA256,
   EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256,
   HISTORICAL_LEGENDS_APP_DATA_URL,
+  HISTORICAL_LEGENDS_EXPECTED_PLAYER_COUNT,
   HISTORICAL_LEGENDS_EXPECTED_PROFILE_COUNT,
   HISTORICAL_LEGENDS_SOURCE_DATABASE,
   type HistoricalLegendAppPlayer,
   type HistoricalLegendProfileType,
   type HistoricalLegendsAppPayload,
 } from '../data/historicalLegendsAppData';
+import { isHistoricalLegendsLibraryId } from '../data/historicalLegendsLibraries';
+import { provisionHistoricalLegendsLibraries } from './historicalLegendsLibraryProvisioner';
+import { generateHiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
 import {
   deletePlayer,
   getAllPlayers,
@@ -166,22 +170,66 @@ export async function importHistoricalLegendsPayload(
     player.sourceDatabase === HISTORICAL_LEGENDS_SOURCE_DATABASE && !nextIds.has(player.id)
   ));
   for (const player of stale) {
-    if ((player.leagueAssignments ?? []).length > 0) {
+    if ((player.leagueAssignments ?? []).some((assignment) => !isHistoricalLegendsLibraryId(assignment.leagueId))) {
       throw new Error(`Assigned stale Historical Legends card ${player.id} cannot be removed by reimport.`);
     }
+  }
+
+  const curatedHiddenByPersonId = new Map<string, HistoricalLegendAppPlayer['hiddenPersonalityModifiers']>();
+  for (const player of payload.players) {
+    if (!player.hiddenPersonalityModifiers) continue;
+    const personId = player.historicalSourceId;
+    const existingCurated = curatedHiddenByPersonId.get(personId);
+    if (existingCurated && JSON.stringify(existingCurated) !== JSON.stringify(player.hiddenPersonalityModifiers)) {
+      throw new Error(`Historical Legends payload has conflicting hidden personality evidence for ${personId}.`);
+    }
+    curatedHiddenByPersonId.set(personId, player.hiddenPersonalityModifiers);
   }
 
   const playersToSave = payload.players.map((player) => {
     const matchingLegend = existingById.get(player.id);
     return {
       ...player,
+      // Hidden personality truth is person-level for Legends: every card version shares curated
+      // evidence when it exists, otherwise every version receives the same stable fallback.
+      // Visible personality remains exactly as authored by the frozen source payload.
+      hiddenPersonalityModifiers: curatedHiddenByPersonId.get(player.historicalSourceId)
+        ?? generateHiddenPersonalityModifiers(`historical-legend:${player.historicalSourceId}`),
       leagueAssignments: (matchingLegend?.leagueAssignments ?? []).map((assignment) => ({ ...assignment })),
     } satisfies HistoricalLegendAppPlayer;
   });
 
+  const sameImportedLegend = (current: Player | undefined, incoming: HistoricalLegendAppPlayer): boolean => {
+    if (!current) return false;
+    const sourceId = incoming.historicalSourceId.trim();
+    const comparable = {
+      ...incoming,
+      sourceId,
+      versionGroupId: incoming.versionGroupId?.trim() || sourceId,
+      leagueAssignments: incoming.leagueAssignments ?? [],
+    } as Record<string, unknown>;
+    delete comparable.historicalSourceId;
+    delete comparable.createdDate;
+    delete comparable.lastModified;
+    return Object.entries(comparable).every(([key, value]) => (
+      JSON.stringify((current as unknown as Record<string, unknown>)[key] ?? null)
+      === JSON.stringify(value ?? null)
+    ));
+  };
+
   for (const player of stale) await deletePlayer(player.id);
   for (const player of playersToSave) {
+    if (sameImportedLegend(existingById.get(player.id), player)) continue;
     await savePlayer(player);
+  }
+
+  // Unit fixtures intentionally exercise partial payloads. Only the pinned full
+  // app asset owns the system source libraries and their complete 242-card core.
+  if (
+    payload.playerCount === HISTORICAL_LEGENDS_EXPECTED_PLAYER_COUNT
+    && payload.profileCount === HISTORICAL_LEGENDS_EXPECTED_PROFILE_COUNT
+  ) {
+    await provisionHistoricalLegendsLibraries();
   }
 
   const persisted = (await getAllPlayers()).filter((player) => (

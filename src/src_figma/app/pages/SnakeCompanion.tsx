@@ -8,6 +8,7 @@ import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
 import { evaluateSnakeLegalFinish, evaluateSnakePlan } from '../../../engines/snakeEconomics';
 import { applyCanonicalSnakeRiskTriggers, canonicalSnakeRoleDepth } from '../../../engines/snakeRationalRoom';
+import { buildSnakeDraftAlignmentInputs, computeSnakeDraftAlignment, snakeDraftAlignmentRoomRank } from '../../../engines/snakeDraftAlignment';
 import type { SimultaneousSnakeSeatingInput, SnakeSeatingPlayer } from '../../../engines/snakeSeatingProof';
 import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../engines/rosterNeed';
@@ -521,6 +522,13 @@ export default function SnakeCompanion() {
     setUndoWorking(false);
   }, [currentPrivateIdentityKey]);
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
+  const liveAlignment = useMemo(() => session
+    && session.completedPicks.every((pick) => playerById.has(pick.playerId))
+    ? computeSnakeDraftAlignment(buildSnakeDraftAlignmentInputs({ session, playersById: playerById }))
+    : [], [playerById, session]);
+  const teamAlignment = team
+    ? liveAlignment.find((row) => row.teamId === team.id) ?? null
+    : null;
   const activePoolRows = useMemo(() => {
     const selected = session?.snakeSetup?.poolPlayerIds;
     if (!selected?.length) return pool?.players ?? [];
@@ -1326,6 +1334,29 @@ export default function SnakeCompanion() {
             onClick={() => void undoBoardUpdate()}
           >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
         </div>
+      ) : null}
+      {teamAlignment ? (
+        <section
+          className="mb-3 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3"
+          aria-label="Private roster archetype alignment"
+          data-testid="companion-private-roster-alignment"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 font-black">
+            <span>ARCHETYPE ALIGNMENT · {teamAlignment.alignmentGrade}</span>
+            <span>
+              ROOM {snakeDraftAlignmentRoomRank(liveAlignment, teamAlignment.teamId) ?? '—'}/{liveAlignment.length}
+              {' · '}FAN {teamAlignment.delta >= 0 ? '+' : ''}{teamAlignment.delta}
+            </span>
+          </div>
+          <p className="mt-1 text-[10px] font-bold text-[var(--ballpark-chalk)]/70">
+            {teamAlignment.pickCount}/22 PICKS · FIT {teamAlignment.alignmentScore.toFixed(3)}
+          </p>
+          {showHelp ? (
+            <p className="mt-2 border-t border-[var(--ballpark-brass)]/40 pt-2 text-xs font-bold">
+              FAN IS THE LIVE SNAKE-DRAFT PROJECTION FROM THIS CLUB'S CUMULATIVE ARCHETYPE FIT.
+            </p>
+          ) : null}
+        </section>
       ) : null}
       <PrivateDesk
       candidates={deskState.candidates}

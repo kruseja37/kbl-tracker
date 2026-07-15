@@ -14,6 +14,7 @@ import {
   buildDraftFreezeInputs,
 } from '../draftFreezeInputs';
 import type { HiddenModifiers } from '../../types/game';
+import type { LeagueBuilderProspectPlayerDto } from '../prospectScoutingDraftEngine';
 
 const neutralModifiers: HiddenModifiers = {
   loyalty: 50,
@@ -21,6 +22,55 @@ const neutralModifiers: HiddenModifiers = {
   resilience: 50,
   charisma: 50,
 };
+
+function farmProspect(id: string, rating: number): LeagueBuilderProspectPlayerDto {
+  return {
+    id,
+    firstName: id,
+    lastName: 'Prospect',
+    gender: 'M',
+    jerseyNumber: 1,
+    age: 20,
+    bats: 'R',
+    throws: 'R',
+    armSlot: null,
+    primaryPosition: 'CF',
+    secondaryPosition: 'LF',
+    power: rating,
+    contact: rating,
+    speed: rating,
+    fielding: rating,
+    arm: rating,
+    velocity: 20,
+    junk: 20,
+    accuracy: 20,
+    arsenal: ['4F'],
+    overallGrade: 'B',
+    personality: 'Competitive',
+    chemistry: 'Spirited',
+    morale: 50,
+    mojo: 'Normal',
+    fame: 0,
+    salary: 0,
+    contractYears: 1,
+    leagueAssignments: [],
+    ratingRevealState: 'hidden',
+    isCustom: false,
+    sourceDatabase: 'league-builder-startup-prospect-draft',
+    hometown: { city: 'Test', state: 'CO' },
+    prospectProfile: {
+      scoutId: 'scout',
+      scoutName: 'Scout',
+      scoutedGrade: 'B',
+      trueGrade: 'B',
+      potentialGrade: 'B',
+      scoutAccuracy: 70,
+      scoutConfidence: 'medium',
+      reportText: 'test',
+    },
+    hiddenPersonalityModifiers: neutralModifiers,
+  };
+}
 
 function sold(
   playerId: string,
@@ -302,18 +352,18 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       mlbExcludedTeamIds: new Set(['team-a', 'team-b']),
     });
 
-    expect(inputs.map((input) => [input.playerId, input.payClassOverride])).toEqual([
-      ['rank-4', 'above'],
-      ['rank-2', 'within'],
-      ['rank-3', 'within'],
-      ['rank-1', 'below'],
-      ['rank-5', 'within'],
-      ['rank-6', 'within'],
+    expect(inputs.map((input) => [input.playerId, input.slotClassOverride, input.payClassOverride])).toEqual([
+      ['rank-4', 'early', 'within'],
+      ['rank-2', 'middle', 'within'],
+      ['rank-3', 'middle', 'within'],
+      ['rank-1', 'late', 'within'],
+      ['rank-5', 'middle', 'within'],
+      ['rank-6', 'middle', 'within'],
     ]);
     expect(inputs.map((input) => input.settledSalary)).toEqual([300, 500, 400, 600, 200, 100]);
     const freeze = computeDraftFreeze(inputs);
-    expect(freeze.players.find((player) => player.playerId === 'rank-4')?.morale.payBase).toBe(10);
-    expect(freeze.players.find((player) => player.playerId === 'rank-1')?.morale.payBase).toBe(-10);
+    expect(freeze.players.find((player) => player.playerId === 'rank-4')?.morale).toMatchObject({ slotBase: 15, payBase: 0 });
+    expect(freeze.players.find((player) => player.playerId === 'rank-1')?.morale).toMatchObject({ slotBase: -15, payBase: 0 });
   });
 
   test('S7 farm snake adapter uses absolute slot salary and slot-vs-talent rank without mutable ownership', () => {
@@ -334,6 +384,16 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       rounds: 6,
       draftPhase: 'FARM' as const,
       farmSlotSalaries: [600, 500, 400, 300, 200, 100],
+      farmProspectSnapshot: [
+        farmProspect('undrafted-1', 99),
+        farmProspect('undrafted-2', 98),
+        farmProspect('talent-1', 97),
+        farmProspect('talent-2', 80),
+        farmProspect('talent-3', 70),
+        farmProspect('talent-4', 60),
+        farmProspect('talent-5', 50),
+        farmProspect('talent-6', 40),
+      ],
       pickOrder,
       completedPicks: [
         { ...pickOrder[3], playerId: 'talent-1' },
@@ -347,18 +407,9 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       createdDate: '2026-01-01',
       lastModified: '2026-01-01',
     };
-    const talentIvById = new Map([
-      ['talent-1', 600],
-      ['talent-2', 500],
-      ['talent-3', 400],
-      ['talent-4', 300],
-      ['talent-5', 200],
-      ['talent-6', 100],
-    ]);
-    const metaByPlayerId = new Map([...talentIvById].map(([playerId, iv]) => [playerId, {
+    const metaByPlayerId = new Map(farmSnakeSession.completedPicks.map(({ playerId }) => [playerId, {
       personality: 'Competitive',
       modifiers: neutralModifiers,
-      iv,
     }]));
 
     const inputs = buildDraftFreezeInputs({
@@ -376,13 +427,13 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       ['talent-5', 'team-a', 200],
       ['talent-6', 'team-b', 100],
     ]);
-    expect(inputs.map((input) => input.payClassOverride)).toEqual([
-      'below',
-      'above',
-      'within',
-      'within',
-      'within',
-      'within',
+    expect(inputs.map((input) => [input.slotClassOverride, input.payClassOverride])).toEqual([
+      ['middle', 'within'],
+      ['early', 'within'],
+      ['middle', 'within'],
+      ['middle', 'within'],
+      ['middle', 'within'],
+      ['middle', 'within'],
     ]);
     expect(inputs.every((input) => input.tier === 'FARM')).toBe(true);
   });

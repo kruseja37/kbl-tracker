@@ -1,6 +1,7 @@
 import type {
   LeagueBuilderMlbDraftSession,
   SnakeDraftManifest,
+  SnakeDraftManifestMoraleSnapshot,
   SnakeDraftManifestPick,
   SnakeRosterHandoff,
 } from './leagueBuilderStorage';
@@ -14,6 +15,8 @@ export interface BuildSnakeDraftManifestInput {
   /** MLB RegisteredPool IV by player. FARM salaries come only from the frozen slot table. */
   salaryByPlayerId?: ReadonlyMap<string, number>;
   frozenAt: string;
+  /** Final public morale outputs. Hidden personality inputs never enter the manifest. */
+  moraleSnapshot?: SnakeDraftManifestMoraleSnapshot;
 }
 
 export interface SnakeDraftTruth {
@@ -210,6 +213,7 @@ export function buildSnakeDraftManifest(input: BuildSnakeDraftManifestInput): Sn
     completedPicks,
     versionState: cloneVersionState(session),
     pool: { identity: snakePoolIdentity(poolPlayerIds), playerIds: poolPlayerIds, mlbIvByPlayerId },
+    ...(input.moraleSnapshot ? { morale: structuredClone(input.moraleSnapshot) } : {}),
   }, { expectedPhase: input.expectedPhase });
 }
 
@@ -294,6 +298,52 @@ export function validateSnakeDraftManifest(
     }
   }
   if (seenPickNumbers.size !== orderByPick.size) throw new Error('Snake draft manifest is missing completed pick coverage.');
+  if (manifest.morale) {
+    const expectedRankIds = Object.keys(manifest.morale.expectedTalentRankByPlayerId).sort();
+    if (manifest.phase === 'FARM' && expectedRankIds.length > 0) {
+      throw new Error('Farm snake draft morale snapshot cannot expose hidden prospect talent ranks.');
+    }
+    if (manifest.phase === 'MLB' && canonicalJson(expectedRankIds) !== canonicalJson([...poolSet].sort())) {
+      throw new Error('MLB snake draft morale snapshot must rank every frozen source-pool player exactly once.');
+    }
+    for (const rank of Object.values(manifest.morale.expectedTalentRankByPlayerId)) {
+      if (!Number.isInteger(rank) || rank < 1 || rank > poolSet.size) {
+        throw new Error('Snake draft morale snapshot has an invalid expected talent rank.');
+      }
+    }
+    const playerMoraleIds = Object.keys(manifest.morale.playerByPlayerId).sort();
+    if (canonicalJson(playerMoraleIds) !== canonicalJson([...seenPlayerIds].sort())) {
+      throw new Error('Snake draft morale snapshot must cover every completed pick exactly once.');
+    }
+    for (const morale of Object.values(manifest.morale.playerByPlayerId)) {
+      if (!['early', 'middle', 'late'].includes(morale.slotClass)
+        || !Number.isFinite(morale.startingMorale)
+        || !Number.isFinite(morale.slotBase)
+        || !Number.isFinite(morale.payBase)
+        || !Number.isFinite(morale.totalDelta)) {
+        throw new Error('Snake draft morale snapshot has invalid player morale output.');
+      }
+    }
+    if (manifest.phase === 'FARM' && manifest.morale.fanByTeamId !== null) {
+      throw new Error('Farm snake draft morale snapshot cannot own MLB fan alignment.');
+    }
+    if (manifest.morale.fanByTeamId) {
+      const fanTeamIds = Object.keys(manifest.morale.fanByTeamId).sort();
+      if (canonicalJson(fanTeamIds) !== canonicalJson([...clubTeamIds].sort())) {
+        throw new Error('Snake draft morale snapshot must cover every locked club exactly once.');
+      }
+      for (const fan of Object.values(manifest.morale.fanByTeamId)) {
+        if (!Number.isInteger(fan.pickCount) || fan.pickCount < 0
+          || !Number.isFinite(fan.alignmentScore)
+          || !['STRONG', 'SOLID', 'WEAK'].includes(fan.alignmentGrade)
+          || !Number.isFinite(fan.normalizedRank)
+          || !Number.isFinite(fan.delta)
+          || !Number.isFinite(fan.startingFanMorale)) {
+          throw new Error('Snake draft morale snapshot has invalid fan-alignment output.');
+        }
+      }
+    }
+  }
   return manifest;
 }
 

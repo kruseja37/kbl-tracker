@@ -51,6 +51,7 @@ import {
   type LeagueTemplate,
 } from './leagueBuilderStorage';
 import { computeDraftFreeze } from '../engines/draftFreeze';
+import { buildSnakeDraftAlignmentInputs } from '../engines/snakeDraftAlignment';
 import {
   TRUE_VALUE_CALCULATION_VERSION,
   normalizeTrueValuePosition,
@@ -89,7 +90,6 @@ import {
 } from './franchisePersistenceContract';
 import { buildDraftFreezeInputs, type DraftFreezePlayerMeta } from './draftFreezeInputs';
 import { FARM_SNAKE_SESSION_NUMBER } from '../engines/snakeFarmSlots';
-import { priceFarmAuctionProspect } from './farmAuctionPool';
 import { deriveShillTeamIds } from '../engines/cpuTeamRoles';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import {
@@ -948,18 +948,6 @@ export async function initializeFranchise(
           storedFarmSnakeSession.draftManifest?.phase === 'FARM'
           || storedFarmSnakeSession.draftPhase === 'FARM'
         ) ? storedFarmSnakeSession : null;
-        const frozenFarmPicks = farmSnakeSession
-          ? readSnakeDraftTruth(farmSnakeSession, 'FARM').completedPicks
-          : [];
-        for (const pick of frozenFarmPicks) {
-          const player = playerById.get(pick.playerId);
-          const meta = metaByPlayerId.get(pick.playerId);
-          if (!player || !meta) continue;
-          metaByPlayerId.set(pick.playerId, {
-            ...meta,
-            iv: priceFarmAuctionProspect(player as Parameters<typeof priceFarmAuctionProspect>[0]),
-          });
-        }
         inputs = buildDraftFreezeInputs({
           mlbSession: null,
           mlbSnakeSession: mlbCompletion.snakeSession,
@@ -994,7 +982,24 @@ export async function initializeFranchise(
           farmExcludedTeamIds: farmShillIds,
         });
       }
-      const freeze = computeDraftFreeze(inputs);
+      const frozenFanMorale = useSnake
+        ? mlbCompletion.snakeSession?.draftManifest?.morale?.fanByTeamId
+        : null;
+      const freeze = computeDraftFreeze(inputs, useSnake && mlbCompletion.snakeSession
+        ? frozenFanMorale
+          ? {
+              snakeFanMoraleResults: Object.entries(frozenFanMorale).map(([teamId, fan]) => ({
+                teamId,
+                ...fan,
+              })),
+            }
+          : {
+              snakeFanMoraleAlignment: buildSnakeDraftAlignmentInputs({
+                session: mlbCompletion.snakeSession,
+                playersById: playerById,
+              }),
+            }
+        : undefined);
       const scope = {
         franchiseId,
         seasonId: initialSeasonId,

@@ -51,7 +51,7 @@ describe('S6 farm fog', () => {
 
     expect(screen.getByText(/YOUR SCOUT · JO SCOUT:/i)).toBeInTheDocument();
     expect(screen.getByText(/YOUR SCOUT LIKES MARA DIAZ/)).toBeInTheDocument();
-    expect(container.textContent).not.toMatch(/POWER 97|CONTACT 96|SPEED 95|FIELDING 94|ARM 93|999,999|\bIV\b|TRUE COST|SAFE TO WAIT|LIKELY GONE/);
+    expect(container.textContent).not.toMatch(/POWER 97|CONTACT 96|SPEED 95|FIELDING 94|ARM 93|999,999|\bIV\b|TRUE COST|SAFE TO WAIT|LIKELY GONE|loyalty|ambition|resilience|charisma|hidden personality/i);
     fireEvent.click(screen.getByRole('button', { name: /Mara Diaz/i }));
     expect(onChoose).toHaveBeenCalledWith('diaz');
   });

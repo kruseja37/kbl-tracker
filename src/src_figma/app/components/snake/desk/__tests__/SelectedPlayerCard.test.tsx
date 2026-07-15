@@ -13,6 +13,7 @@ const player = {
   primaryPosition: 'SP', secondaryPosition: 'SP/RP', power: 0, contact: 14, speed: 21, fielding: 62, arm: 71,
   velocity: 91, junk: 84, accuracy: 79, arsenal: ['4F', 'SL', 'CH'], overallGrade: 'A-',
   personality: 'Competitive', chemistry: 'Scholarly', trait1: 'Big Hack', trait2: 'Tough Out', morale: 50,
+  hiddenPersonalityModifiers: { loyalty: 97, ambition: 13, resilience: 86, charisma: 24 },
   mojo: 'Normal', fame: 0, salary: 90_000, leagueAssignments: [], createdDate: '2026-01-01',
   lastModified: '2026-01-01', isCustom: true,
 } as Player;
@@ -118,6 +119,7 @@ describe('SelectedPlayerCard', () => {
     expect(onKeep).toHaveBeenCalledOnce();
     expect(onTradeDecision).toHaveBeenCalledOnce();
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b|pronouns?/i);
+    expect(document.body.textContent).not.toMatch(/loyalty|ambition|resilience|charisma|hidden personality/i);
     for (const control of container.querySelectorAll('button')) {
       expect(control).toHaveClass('min-h-11');
     }

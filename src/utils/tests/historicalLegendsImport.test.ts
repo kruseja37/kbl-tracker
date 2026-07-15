@@ -198,6 +198,23 @@ describe('Historical Legends app import', () => {
     expect((await getAllPlayers())[0].leagueAssignments).toEqual([assignment]);
   });
 
+  test('system-library assignment does not block removal of a stale Legends card', async () => {
+    const stale = {
+      ...card('Career', 'career'),
+      id: 'hl:aaroh101:legacy-career',
+      leagueAssignments: [{
+        leagueId: 'legends-library-career',
+        teamId: 'legends-library-career:team:boomers',
+        rosterStatus: 'MLB' as const,
+      }],
+    };
+    await savePlayer(stale);
+
+    const refreshed = await importHistoricalLegendsPayload(payload([card('Peak', 'peak')]), SOURCE_SHA);
+    expect(refreshed.removedStaleCards).toBe(1);
+    expect((await getAllPlayers()).map((player) => player.id)).toEqual(['hl:aaroh101:peak']);
+  });
+
   test('refuses every assigned stale Legends card before changing players or team rosters', async () => {
     const stale = {
       ...card('Career', 'career'),

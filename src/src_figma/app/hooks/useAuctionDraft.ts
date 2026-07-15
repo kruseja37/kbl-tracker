@@ -49,21 +49,18 @@ import {
   saveAuctionSession,
 } from "../../../utils/leagueBuilderStorage";
 import {
-  buildAuctionPlayers,
   buildAuctionPlayersWithPositions,
   buildAuctionTeams,
   commitCompletedMlbAuctionSessionToLeagueRosters,
-  computeIvPercentiles,
   MLB_AUCTION_SEASON,
 } from "../../../utils/leagueBuilderAuctionPipeline";
-import { regenerateAndPersistLeaguePoolAxes } from "../../../utils/leaguePoolAxisRegenPersist";
+import { initializeAndPersistDraftPoolPlayerAxes } from "../../../utils/leaguePoolAxisRegenPersist";
 import {
   toConstructionPlayer,
   useLeagueBuilderData,
   type Player,
   type RegisteredPool,
   type Team,
-  type TeamRoster,
   type UseLeagueBuilderDataReturn,
 } from "../../hooks/useLeagueBuilderData";
 
@@ -594,7 +591,7 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
       nextLeagueTeams,
     );
     return resumed;
-  }), [autoAdvanceCpu, leagueData, runAction]);
+  }), [autoAdvanceCpu, leagueData, persist, runAction]);
 
   const initAuction = useCallback(async (
     leagueId: string,
@@ -612,9 +609,9 @@ export function useAuctionDraft(options: UseAuctionDraftOptions = {}): UseAuctio
     // re-registering. Unlocked (legacy/direct-entry) → register now, as before.
     const existingPool = await leagueData.getRegisteredPool(leagueId);
     if (existingPool?.locked) {
-      await regenerateAndPersistLeaguePoolAxes(leagueId, existingPool.players.map((p) => p.id));
+      await initializeAndPersistDraftPoolPlayerAxes(leagueId, existingPool.players.map((p) => p.id));
     } else {
-      await regenerateAndPersistLeaguePoolAxes(leagueId);
+      await initializeAndPersistDraftPoolPlayerAxes(leagueId);
     }
     const pool = existingPool?.locked
       ? existingPool

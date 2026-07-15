@@ -416,12 +416,12 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
 
   const initialRosterPlayerIds = new Set(Object.values(initialRosterPlayerIdsByTeamId).flat());
   const allRealPlayers = (await getAllPlayers())
-    .filter((player) => player.sourceDatabase === 'SMB4')
+    .filter((player) => player.sourceDatabase === 'MLB')
     .filter((player) => !initialRosterPlayerIds.has(player.id))
     .sort((left, right) => right.salary - left.salary || left.id.localeCompare(right.id));
   const [addedFreeAgent, removedCuratedPlayer] = allRealPlayers;
   if (!addedFreeAgent || !removedCuratedPlayer) {
-    throw new Error('At least two non-roster real SMB4 players are required for pool curation.');
+    throw new Error('At least two non-roster real MLB players are required for pool curation.');
   }
 
   expect(initialRosterPlayerIds.has(addedFreeAgent.id)).toBe(false);
@@ -1598,12 +1598,14 @@ describe('draft pipeline integration', () => {
         mlbExcludedTeamIds: new Set(),
         farmExcludedTeamIds: new Set(),
       });
-      expect(freezeInputs[0].payClassOverride).toBe('above');
-      expect(freezeInputs[4].payClassOverride).toBe('below');
-      expect(freezeInputs.slice(1, 4).every((input) => input.payClassOverride === 'within')).toBe(true);
+      expect(freezeInputs[0]).toMatchObject({ slotClassOverride: 'early', payClassOverride: 'within' });
+      expect(freezeInputs[4]).toMatchObject({ slotClassOverride: 'late', payClassOverride: 'within' });
+      expect(freezeInputs.slice(1, 4).every((input) => (
+        input.slotClassOverride === 'middle' && input.payClassOverride === 'within'
+      ))).toBe(true);
       const expectedFreeze = computeDraftFreeze(freezeInputs);
-      expect(expectedFreeze.players[0].morale.payBase).toBe(10);
-      expect(expectedFreeze.players[4].morale.payBase).toBe(-10);
+      expect(expectedFreeze.players[0].morale).toMatchObject({ slotBase: 15, payBase: 0 });
+      expect(expectedFreeze.players[4].morale).toMatchObject({ slotBase: -15, payBase: 0 });
 
       const unspentByTeamId = deriveSnakeMlbUnspentByTeamId({ session: snakeSession, pool, salaryCap });
       for (const teamId of teamIds) {

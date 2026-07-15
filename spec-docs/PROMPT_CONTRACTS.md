@@ -31296,3 +31296,83 @@ are now part of this contract:
 Add focused mutation-honest tests for all four cases. Keep the existing IndexedDB version and player
 store; the audit proved the additive metadata round-trips without a migration.
 <!-- ===== END CONTRACT: HL-LEGENDS-APP-PROFILE-READ-PATH ===== -->
+
+<!-- ===== CONTRACT: SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26 ===== -->
+# SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26 — SOURCE LIBRARIES AND DRAFT-TO-SEASON SOUL HANDOFF
+
+**ROUTE:** Codex 5.6 SOL | extra-high reasoning effort
+**Date:** 2026-07-15 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND PHASE
+The root Codex agent is the builder and local verifier. A separate read-only tracer owns the
+personality/morale pipeline report; a fresh non-builder owns the skeptical final verdict. JK's
+Mac/iPad browser walk remains the only product-acceptance gate.
+
+Current slice: an explicitly approved Snake walkthrough extension that prepares the Snake MLB and
+FARM results for the Living Season. It does not change GameTracker, Auction draft behavior, season
+simulation, awards, relationships, or offseason logic.
+
+## REQUIRED OUTCOME
+1. Historical Legends import idempotently provisions three selectable League Builder source
+   libraries: Draft Pool, Career, and Peak. Each library contains every current card of its version.
+2. The original 242-player cohort is rostered identically by identity across all three libraries:
+   the eight source teams remain Boomers, Empire, Joyriders, Mammotanks, Originators, Rakers,
+   Spirit, and Thrillers; the second 66 occupy three stable 22-player fictional source teams.
+   Later additions remain named free agents inside the correct version library until a complete
+   cohort exists. These are source libraries, not claims of legal playable 22-player teams.
+3. Draft Setup can select any combination of the three libraries and can explicitly include or
+   exclude globally unassigned players. The default remains backward-compatible (unassigned
+   players included); changing the switch invalidates a previously extracted pool just like any
+   other source-universe change. Manual per-player add/remove remains available.
+4. A Legend's imported primary personality is never randomized. Existing evidence-derived hidden
+   modifiers are preserved. A Legend missing hidden modifiers receives one stable person-seeded
+   fallback during the approved import/draft initialization boundary; the fallback never changes
+   on reload or franchise creation.
+5. A non-Legend entering a draft receives one stable seeded primary personality and hidden-modifier
+   set unless already initialized for draft use. It is persisted once and does not change on board
+   recalculation, reload, companion access, draft correction, recap, or franchise creation.
+6. Hidden personality modifiers never cross a Snake main/companion render model, worker request,
+   room log, manifest, recap, or draft-profile surface. Only the visible primary personality may
+   render. Authenticated owner storage/sync remains engine-internal truth and is not treated as a
+   browser security boundary; JK explicitly ruled against expanding this slice into broad sync hardening.
+7. Snake MLB and FARM player starting morale has exactly one substantive draft driver: actual
+   overall pick versus the player's frozen expected talent rank. Earlier-than-expected is positive,
+   later-than-expected is negative, and within the expectation band is neutral; personality and
+   hidden modifiers may scale that one delta. Auction retains its existing slot-plus-bid behavior.
+8. Snake team-fan starting morale is based on relative team-archetype alignment, not payroll. Each
+   completed pick updates a cumulative Strong/Solid/Weak alignment score for every club through one
+   shared scoring law. The best-aligned club gets the largest boost, the least-aligned gets the
+   largest penalty, ties share the same rank, and middle clubs follow a bounded curve. The room may
+   show a team's private grade/rank without exposing another club's archetype or board.
+9. Franchise initialization seeds the resulting player and team-fan baselines idempotently from the
+   frozen Snake manifests. Auction output and initialization remain behaviorally unchanged.
+
+## HARD BOUNDARIES
+- No hidden FARM truth or hidden personality modifiers in UI, logs, workers, manifests, recap copy,
+  or any main/companion draft render model. Internal authenticated storage/sync rows are out of this
+  UI-secrecy boundary and must never be printed or rendered.
+- No mutation from render/effect loops. Randomization is seeded, one-time, and written only at a
+  draft lifecycle boundary.
+- No Auction bidding, morale formula, route, copy, or golden-output change. The shared pre-draft
+  personality initializer intentionally applies the user-approved Legend/non-Legend rule to both
+  draft formats.
+- No GameTracker morale write, score-only player morale, relationship mutation, awards, salary
+  movement, generated schedule, Mode 3/offseason behavior, or historical rivalry activation.
+- No explanatory paragraphs on the room/setup surface. Help-button law and density corollary apply.
+- Do not treat the library team rosters as legal franchise rosters; they are organization/source
+  shelves only.
+
+## PROOF
+- Red-first tests for the three library counts/cohorts, idempotent refresh, stale library-card
+  cleanup, source-only extraction, and the explicit unassigned switch.
+- Red-first tests proving Legend primary personality preservation, evidence-derived modifier
+  preservation, deterministic fallback, non-Legend one-time initialization, and zero hidden-field
+  render/worker/log/manifest leakage.
+- Red-first engine/integration tests proving Snake expectation-only player morale for MLB and FARM,
+  relative alignment fan morale including ties/2-team/8-team rooms, live cumulative alignment, and
+  idempotent franchise baselines.
+- Existing Auction morale/freeze goldens remain unchanged.
+- Focused suites, strict changed-file ESLint, TypeScript, production build, `git diff --check`,
+  worker/privacy greps, and a real local setup/room browser precheck. Then independent audit and
+  repairs before JK's browser handoff.
+<!-- ===== END CONTRACT: SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26 ===== -->

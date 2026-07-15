@@ -171,6 +171,8 @@ export interface LeagueTemplate {
      * record or an untouched post-feature default — the two are equivalent, so legacy records
      * never retro-nag). */
     sourceLeagueIds?: string[];
+    /** Whether globally unassigned players were part of the extracted source universe. */
+    includeUnassignedSourcePlayers?: boolean;
     /** CONTRACT_STALEPARITY_2026-07-09: the numeric quality-curve dial and the pool-first-only
      * balance-shape dial at basis-capture time — a basis input like cap/dial/shills/identity, so a
      * live move must trip the same staleness signal. Both optional and undefined-guarded on
@@ -193,6 +195,13 @@ export interface LeagueTemplate {
    * including their own — resolves to unclaimed free agents only) and must NOT be treated as
    * "absent" / defaulted back. */
   sourceLeagueIds?: string[];
+  /** Backward-compatible default true; false makes checked source leagues exact. */
+  includeUnassignedSourcePlayers?: boolean;
+  /** System-owned source shelves may feed Draft Setup but are not draft targets themselves. */
+  sourceLibrary?: {
+    kind: 'historical-legends';
+    profileType: 'Career' | 'Peak' | 'Draft Pool';
+  };
   tier?: TierKey;
   salaryCap?: number;
   poolSizeMultiplier?: number;
@@ -453,6 +462,32 @@ export interface SnakeDraftManifestPick {
   salarySource: 'pick' | 'pool-legacy' | 'farm-slot';
 }
 
+export interface SnakeDraftManifestPlayerMorale {
+  slotClass: 'early' | 'middle' | 'late';
+  startingMorale: number;
+  slotBase: number;
+  payBase: number;
+  totalDelta: number;
+}
+
+export interface SnakeDraftManifestFanMorale {
+  pickCount: number;
+  alignmentScore: number;
+  alignmentGrade: 'STRONG' | 'SOLID' | 'WEAK';
+  normalizedRank: number;
+  delta: number;
+  startingFanMorale: number;
+}
+
+export interface SnakeDraftManifestMoraleSnapshot {
+  /** MLB-only public IV expectation. FARM keeps this empty so hidden prospect order cannot leak. */
+  expectedTalentRankByPlayerId: Record<string, number>;
+  /** Final personality-scaled player morale output; no hidden inputs are serialized. */
+  playerByPlayerId: Record<string, SnakeDraftManifestPlayerMorale>;
+  /** MLB-only relative alignment result. FARM keeps this null. */
+  fanByTeamId: Record<string, SnakeDraftManifestFanMorale> | null;
+}
+
 export interface SnakeDraftManifest {
   formatVersion: 'snake-draft-manifest-v1';
   phase: 'MLB' | 'FARM';
@@ -480,6 +515,8 @@ export interface SnakeDraftManifest {
     /** MLB-only public IV snapshot for complete active-pool provenance. FARM must stay null. */
     mlbIvByPlayerId: Record<string, number> | null;
   };
+  /** Additive for legacy manifests; required on every newly confirmed production Snake draft. */
+  morale?: SnakeDraftManifestMoraleSnapshot;
 }
 
 /**
@@ -4297,7 +4334,7 @@ function convertPlayer(player: PlayerData, leagueId = 'sml'): Omit<Player, 'crea
           rosterStatus: 'MLB',
         }],
     isCustom: false,
-    sourceDatabase: 'SMB4',
+    sourceDatabase: leagueId === 'mlb' ? 'MLB' : 'SMB4',
     hometown: generateHometown(),
   };
 }

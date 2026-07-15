@@ -7,6 +7,7 @@ import {
 } from '../../../engines/auctionLuxuryTax';
 import { snakeLuxuryCaps } from '../../../engines/snakeLuxuryTax';
 import { computeOwnValue } from '../../../engines/auctionMarketModel';
+import { computeDraftFreeze } from '../../../engines/draftFreeze';
 import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
 import {
@@ -30,6 +31,7 @@ import {
 } from '../../../engines/snakeSeatingProof';
 import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { applyCanonicalSnakeRiskTriggers, canonicalSnakeRoleDepth } from '../../../engines/snakeRationalRoom';
+import { buildSnakeDraftAlignmentInputs, computeSnakeDraftAlignment, snakeDraftAlignmentRoomRank } from '../../../engines/snakeDraftAlignment';
 import {
   appendSnakeRoomLog,
   closeSnakeTradeOffer,
@@ -135,6 +137,7 @@ import {
   saveMlbDraftRoomSession,
   updateMlbDraftSessionAtomically,
   resolveLeagueSalaryCap,
+  type Player,
   type LeagueBuilderMlbDraftSession,
   type LeagueBuilderScoutProfile,
 } from '../../../utils/leagueBuilderStorage';
@@ -156,6 +159,13 @@ import {
   snakePlayerVersionGroupId,
 } from '../../../utils/snakePlayerIdentity';
 import { snakeRoomMissingLegCopy } from '../components/snake/snakeRoomCopy';
+import { normalizeTrueValuePosition } from '../../../engines/salaryCalculator';
+import {
+  buildDraftFreezeInputs,
+  buildSnakeDraftMoraleSnapshot,
+  rankExpectedTalentByIv,
+  type DraftFreezePlayerMeta,
+} from '../../../utils/draftFreezeInputs';
 
 const SEASON_NUMBER = 1;
 const PRACTICE_SEASON_NUMBER = 99;
@@ -195,6 +205,20 @@ function fullName(firstName: string, lastName: string): string {
 const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
 const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 const RECAP_CONFIRMATION_ERROR = 'THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.';
+const NEUTRAL_DRAFT_MODIFIERS = { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 } as const;
+
+function draftFreezeMeta(players: readonly {
+  id: string;
+  personality: string;
+  hiddenPersonalityModifiers?: Player['hiddenPersonalityModifiers'];
+  primaryPosition: string;
+}[]): Map<string, DraftFreezePlayerMeta> {
+  return new Map(players.map((player) => [player.id, {
+    personality: player.personality,
+    modifiers: player.hiddenPersonalityModifiers ?? NEUTRAL_DRAFT_MODIFIERS,
+    position: normalizeTrueValuePosition(player.primaryPosition),
+  }]));
+}
 
 function hotseatPassName(
   session: { snakeSetup?: { clubs: Array<{ teamId: string; gmName?: string; hotseat: boolean }> } } | null,
@@ -497,11 +521,27 @@ function FarmSnakeRoom() {
       if (!freshSession.draftManifest && freshSession.currentPickIndex < freshSession.pickOrder.length) {
         throw new Error('THE FARM DRAFT IS NOT COMPLETE.');
       }
+      const farmMeta = draftFreezeMeta(farmPool.prospects);
+      const farmFreeze = computeDraftFreeze(buildDraftFreezeInputs({
+        mlbSession: null,
+        farmSession: null,
+        farmSnakeSession: freshSession,
+        metaByPlayerId: farmMeta,
+      }));
+      const farmExpectedRanks = rankExpectedTalentByIv(
+        farmPool.auctionPlayers.map((player) => ({ id: player.playerId, iv: player.iv })),
+      );
       const frozen = freezeSnakeDraftSession({
         session: freshSession,
         expectedPhase: 'FARM',
         poolPlayerIds: farmPool.prospects.map((prospect) => prospect.id),
         frozenAt: new Date().toISOString(),
+        moraleSnapshot: buildSnakeDraftMoraleSnapshot({
+          freeze: farmFreeze,
+          expectedTalentRankByPlayerId: farmExpectedRanks,
+          includeFan: false,
+          includeExpectedTalentRanks: false,
+        }),
       });
       const persisted = frozen === freshSession
         ? freshSession
@@ -900,6 +940,13 @@ function MlbSnakeDraftRoom() {
   const currentLocked = useMemo(() => deskTeam && session
     ? resolveLockedSeat({ team: deskTeam, session })
     : null, [deskTeam, session]);
+  const liveAlignment = useMemo(() => {
+    if (!session || session.completedPicks.some((pick) => !playerById.has(pick.playerId))) return [];
+    return computeSnakeDraftAlignment(buildSnakeDraftAlignmentInputs({ session, playersById: playerById }));
+  }, [playerById, session]);
+  const deskAlignment = deskTeam
+    ? liveAlignment.find((row) => row.teamId === deskTeam.id) ?? null
+    : null;
   const currentBoard = deskTeam ? session?.seatBoards?.[deskTeam.id] : null;
   const defaultCandidateId = useMemo(() => {
     const ranked = [
@@ -2103,12 +2150,34 @@ function MlbSnakeDraftRoom() {
       if (!freshSession.draftManifest && freshSession.currentPickIndex < freshSession.pickOrder.length) {
         throw new Error('THE DRAFT IS NOT COMPLETE.');
       }
+      const mlbMeta = draftFreezeMeta(players);
+      const mlbInputs = buildDraftFreezeInputs({
+        mlbSession: null,
+        mlbSnakeSession: freshSession,
+        mlbRegisteredPool: pool,
+        farmSession: null,
+        metaByPlayerId: mlbMeta,
+      });
+      const mlbAlignment = buildSnakeDraftAlignmentInputs({
+        session: freshSession,
+        playersById: new Map(players.map((player) => [player.id, player])),
+      });
+      const mlbFreeze = computeDraftFreeze(mlbInputs, { snakeFanMoraleAlignment: mlbAlignment });
+      const activeMlbIds = new Set(freshSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id));
+      const mlbExpectedRanks = rankExpectedTalentByIv(
+        pool.players.filter((player) => activeMlbIds.has(player.id)),
+      );
       const frozen = freezeSnakeDraftSession({
         session: freshSession,
         expectedPhase: 'MLB',
         poolPlayerIds: freshSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
         salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
         frozenAt: new Date().toISOString(),
+        moraleSnapshot: buildSnakeDraftMoraleSnapshot({
+          freeze: mlbFreeze,
+          expectedTalentRankByPlayerId: mlbExpectedRanks,
+          includeFan: true,
+        }),
       });
       const persisted = frozen === freshSession ? freshSession : await freezeMlbDraftRoomSessionWithRegisteredPool({
         session: frozen,
@@ -2135,7 +2204,7 @@ function MlbSnakeDraftRoom() {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
     }
-  }, [getMlbDraftSession, league, navigate, pool, session, sessionSeasonNumber]);
+  }, [getMlbDraftSession, league, navigate, players, pool, session, sessionSeasonNumber]);
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
@@ -2343,6 +2412,29 @@ function MlbSnakeDraftRoom() {
               onClick={() => void undoBoardUpdate()}
             >{undoWorking ? 'UNDOING…' : 'UNDO BOARD UPDATE'}</button>
           </div>
+        ) : null}
+        {deskAlignment ? (
+          <section
+            className="mb-3 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3"
+            aria-label="Private roster archetype alignment"
+            data-testid="private-roster-alignment"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 font-black">
+              <span>ARCHETYPE ALIGNMENT · {deskAlignment.alignmentGrade}</span>
+              <span>
+                ROOM {snakeDraftAlignmentRoomRank(liveAlignment, deskAlignment.teamId) ?? '—'}/{liveAlignment.length}
+                {' · '}FAN {deskAlignment.delta >= 0 ? '+' : ''}{deskAlignment.delta}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] font-bold text-[var(--ballpark-chalk)]/70">
+              {deskAlignment.pickCount}/22 PICKS · FIT {deskAlignment.alignmentScore.toFixed(3)}
+            </p>
+            {showHelp ? (
+              <p className="mt-2 border-t border-[var(--ballpark-brass)]/40 pt-2 text-xs font-bold">
+                FAN IS THE LIVE SNAKE-DRAFT PROJECTION FROM THIS CLUB'S CUMULATIVE ARCHETYPE FIT.
+              </p>
+            ) : null}
+          </section>
         ) : null}
         <PrivateDesk
           candidates={deskState.candidates}

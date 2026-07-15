@@ -14,6 +14,7 @@ import {
   isPlayerInLeaguePool,
   isPlayerInSourceUniverse,
   removePlayersFromLeaguePool,
+  resolveIncludeUnassignedSourcePlayers,
   resolveSourceLeagueIds,
 } from '../leagueBuilderPoolBuilder';
 import {
@@ -86,6 +87,23 @@ describe('resolveSourceLeagueIds', () => {
   test('explicit set (including a mix of own + other leagues) is returned as-is', () => {
     expect(resolveSourceLeagueIds({ sourceLeagueIds: [OTHER_LEAGUE_ID] }))
       .toEqual([OTHER_LEAGUE_ID]);
+  });
+});
+
+describe('unassigned-player source switch', () => {
+  test('defaults on for old and untouched league records', () => {
+    expect(resolveIncludeUnassignedSourcePlayers({ includeUnassignedSourcePlayers: undefined })).toBe(true);
+  });
+
+  test('can produce an exact source-only universe', () => {
+    const players = [
+      makePlayer('career-card', [OTHER_LEAGUE_ID]),
+      makePlayer('unassigned-stock', []),
+    ];
+    expect(players.filter((player) => isPlayerInSourceUniverse(player, [OTHER_LEAGUE_ID], false))
+      .map((player) => player.id)).toEqual(['career-card']);
+    expect(players.filter((player) => isPlayerInSourceUniverse(player, [OTHER_LEAGUE_ID], true))
+      .map((player) => player.id)).toEqual(['career-card', 'unassigned-stock']);
   });
 });
 
@@ -214,6 +232,21 @@ describe('sourceLeagueIds persistence (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 ยง7/ย
     const reloadedUnchecked = await getLeagueTemplate(OWN_LEAGUE_ID);
     expect(reloadedUnchecked?.sourceLeagueIds).toEqual([]);
     expect(resolveSourceLeagueIds(reloadedUnchecked!)).toEqual([]);
+  });
+
+  test('the explicit unassigned-player switch round-trips without changing legacy defaults', async () => {
+    await saveLeagueTemplate({
+      id: OWN_LEAGUE_ID,
+      name: 'Own League',
+      teamIds: [],
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      includeUnassignedSourcePlayers: false,
+    });
+    const reloaded = await getLeagueTemplate(OWN_LEAGUE_ID);
+    expect(reloaded?.includeUnassignedSourcePlayers).toBe(false);
+    expect(resolveIncludeUnassignedSourcePlayers(reloaded!)).toBe(false);
   });
 });
 

@@ -147,6 +147,30 @@ describe('immutable snake draft manifest', () => {
     })).toThrow(/slot salary/i);
   });
 
+  test('farm morale freezes drafted outcomes without serializing hidden prospect talent order', () => {
+    const manifest = buildSnakeDraftManifest({
+      session: completedSession('FARM'),
+      expectedPhase: 'FARM',
+      poolPlayerIds: ['p1', 'p2'],
+      frozenAt: '2026-07-12T12:00:00.000Z',
+      moraleSnapshot: {
+        expectedTalentRankByPlayerId: {},
+        playerByPlayerId: {
+          p1: { slotClass: 'early', startingMorale: 65, slotBase: 15, payBase: 0, totalDelta: 15 },
+          p2: { slotClass: 'late', startingMorale: 35, slotBase: -15, payBase: 0, totalDelta: -15 },
+        },
+        fanByTeamId: null,
+      },
+    });
+    expect(manifest.morale?.expectedTalentRankByPlayerId).toEqual({});
+    expect(validateSnakeDraftManifest(manifest, { expectedPhase: 'FARM' })).toBe(manifest);
+
+    const leaked = structuredClone(manifest);
+    leaked.morale!.expectedTalentRankByPlayerId = { p1: 1, p2: 2 };
+    expect(() => validateSnakeDraftManifest(leaked, { expectedPhase: 'FARM' }))
+      .toThrow(/cannot expose hidden prospect talent ranks/i);
+  });
+
   test('runtime validation rejects missing pick coverage, invalid clubs, and forged salary-source relationships', () => {
     const duplicatePick = structuredClone(build());
     duplicatePick.completedPicks[1].pick = 1;

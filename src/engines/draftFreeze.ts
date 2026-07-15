@@ -8,6 +8,11 @@ import {
   type DraftSlotClass,
 } from './draftMorale';
 import { computeDraftFanMorale, type DraftFanMoraleResult } from './draftFanMorale';
+import {
+  computeSnakeDraftAlignment,
+  type SnakeDraftAlignmentResult,
+  type SnakeDraftAlignmentTeamInput,
+} from './snakeDraftAlignment';
 
 // RB-7a measurement defaults:
 // D-7a-1: Slot order is global-within-tier won order, not per-team won order.
@@ -28,8 +33,11 @@ export interface DraftFreezePlayerInput {
   scoutRange: { low: number; high: number };
   personality: string | undefined;
   modifiers: HiddenModifiers;
-  /** D1 snake-only seam. Auction inputs omit this and retain classifyDraftPay unchanged. */
+  /** Snake-only seam. Auction inputs omit both overrides and retain legacy behavior unchanged. */
+  slotClassOverride?: DraftSlotClass;
   payClassOverride?: DraftPayClass;
+  /** Frozen Snake output. Auction and legacy Snake inputs omit it and compute normally. */
+  moraleOverride?: DraftMoraleResult;
 }
 
 export interface DraftFreezePlayerResult {
@@ -50,13 +58,17 @@ export interface DraftFreezeTeamResult {
   teamId: string;
   payroll: number;
   startingFanMorale: number;
-  fanMorale: DraftFanMoraleResult;
+  fanMorale: DraftFanMoraleResult | SnakeDraftAlignmentResult;
 }
 
 export interface DraftFreezeOptions {
   /** which tiers' winning bids count toward the per-team payroll fed to fan morale.
    *  DEFAULT 'mlb' (§7 win-now/relocation-risk intent = the MLB competitive spend). */
   fanMoralePayrollScope?: 'mlb' | 'mlb+farm';
+  /** Snake-only team fan-morale basis. Auction omits this and retains payroll ranking unchanged. */
+  snakeFanMoraleAlignment?: readonly SnakeDraftAlignmentTeamInput[];
+  /** Frozen Snake alignment output. Preferred over recomputation when a manifest owns it. */
+  snakeFanMoraleResults?: readonly SnakeDraftAlignmentResult[];
 }
 
 export interface DraftFreezeResult {
@@ -90,7 +102,8 @@ export function computeDraftFreeze(
     const wonOrderIndex = nextWonIndexByTier[player.tier];
     nextWonIndexByTier[player.tier] += 1;
     const totalWonInTier = totalWonByTier[player.tier];
-    const morale = computeDraftMoraleFromRaw(
+    const slotClass = player.slotClassOverride ?? classifyDraftSlot(wonOrderIndex, totalWonInTier);
+    const morale = player.moraleOverride ?? computeDraftMoraleFromRaw(
       wonOrderIndex,
       totalWonInTier,
       player.settledSalary,
@@ -98,6 +111,7 @@ export function computeDraftFreeze(
       player.personality,
       player.modifiers,
       player.payClassOverride,
+      player.slotClassOverride,
     );
 
     return {
@@ -109,7 +123,7 @@ export function computeDraftFreeze(
       position: player.position ?? null,
       wonOrderIndex,
       totalWonInTier,
-      slotClass: classifyDraftSlot(wonOrderIndex, totalWonInTier),
+      slotClass,
       startingMorale: morale.startingMorale,
       morale,
     };
@@ -135,8 +149,12 @@ export function computeDraftFreeze(
     teamId,
     payroll: payrollByTeamId.get(teamId) ?? 0,
   }));
-  const fanMoraleByTeamId = new Map(
-    computeDraftFanMorale(teamPayrolls).map((fanMorale) => [fanMorale.teamId, fanMorale]),
+  const fanMoraleByTeamId = new Map<string, DraftFanMoraleResult | SnakeDraftAlignmentResult>(
+    (options?.snakeFanMoraleResults
+      ?? (options?.snakeFanMoraleAlignment
+      ? computeSnakeDraftAlignment(options.snakeFanMoraleAlignment)
+      : computeDraftFanMorale(teamPayrolls)
+      )).map((fanMorale) => [fanMorale.teamId, fanMorale]),
   );
 
   return {
