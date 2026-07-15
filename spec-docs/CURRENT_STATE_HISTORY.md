@@ -1223,3 +1223,12 @@ home navigation. This close supersedes that header with independently approved c
 `00e7f09e`: one shared setup surface, exact signed roster-local money and slot proof, corrected
 Assistant plan structure/IV ordering, duplicate nickname suppression, and the SMB home button.
 JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 Legends libraries and Snake soul handoff close
+
+The prior live header recorded code commit `00e7f09e` after unified Draft Setup and exact
+Snake money/slot repair. JK then approved version-grouped Legends source libraries and asked
+for distinct Legend/non-Legend personality initialization plus Snake MLB/FARM player morale
+and roster-archetype fan morale for Living Season launch. This close supersedes that header
+with independently approved code commit `2efcef63`; JK's League Builder and Mac/iPad Snake
+walk remains the sole acceptance gate.

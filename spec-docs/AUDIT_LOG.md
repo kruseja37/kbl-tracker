@@ -1232,3 +1232,17 @@ Final repair evidence: builder gate 23 files / 370 tests, typecheck, changed-fil
 production build 2,724 modules, and diff integrity clean. Independent frozen-tree audit:
 APPROVE, 22 files / 327 tests, zero blocker/major/minor findings. Freshly fetched
 `origin/main`: `ea66830e`. JK's browser walk remains the sole product-acceptance gate.
+
+### 2026-07-15 Legends libraries, draft personality, and Snake soul handoff — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-206 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Historical Legends source libraries | Career/Draft/Peak become stable selectable source cohorts instead of one unassigned player dump. |
+| FINDING-207 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Draft personality lifecycle | Legends preserve authored/person-level truth; non-Legends initialize once; hidden values stay off draft surfaces. |
+| FINDING-208 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake player morale | MLB/FARM use pick versus frozen full-pool expectation with pay neutral and frozen public outcomes. |
+| FINDING-209 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake fan morale | Cumulative relative team-archetype alignment drives one shared private live/frozen result. |
+| FINDING-210 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | FARM fog / manifest | Full 3× hidden ranking drives the calculation but no prospect rank enters the manifest. |
+
+Contract: `PROMPT_CONTRACTS.md` section `SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26`.
+Code commit: `2efcef63`. Independent final verdict: **APPROVE**. JK's browser walk remains
+the sole product-acceptance gate.

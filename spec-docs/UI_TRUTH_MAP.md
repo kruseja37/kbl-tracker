@@ -19,6 +19,12 @@
   appears only when automatic safety or legacy persisted state has actually stopped the room.
 - Companion GM pick submission is intent only; the Hotseat must approve the exact live request.
   Explanatory copy remains behind Help under the ratified Help-button law.
+- 2026-07-15: `/league-builder` imports Historical Legends into three read-only Career/Draft/Peak
+  source libraries. `/league-builder/draft-setup` exposes those libraries plus an explicit
+  Unassigned Players source and keeps manual add/remove; Legend rows carry version badges.
+- 2026-07-15: `/snake-room` and `/snake-companion` show the same private cumulative
+  `ARCHETYPE ALIGNMENT` grade, room rank, pick count, and fit score for the selected club. No
+  hidden personality values or FARM talent ranks render.
 
 ---
 

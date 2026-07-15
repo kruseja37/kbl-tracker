@@ -7285,3 +7285,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Dev server PID 77758 is listening on port 5173 from
   `/private/tmp/kbl-snake-legends-integration`. **Pending / only acceptance gate:** JK's real
   League Builder and Snake-room Mac/iPad browser walk. No push or merge was performed.
+
+## 2026-07-15 (Codex, Legends libraries + Snake soul handoff) — independently approved; JK walk next
+
+- Fetched current `origin/main` before state claims and again before freeze; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration` and was committed as `2efcef63`.
+- Historical Legends import now provisions read-only Career, Draft, and Peak source libraries.
+  The original 242 identities use the same eleven stable 22-player cohorts in all three; later
+  additions remain free agents in their matching library. Draft Setup supports source-level
+  selection, explicit unassigned-player inclusion, manual player edits, and visible version badges.
+- Legends preserve authored primary personality and person-level curated hidden modifiers; missing
+  Legend hidden truth gets a stable fallback shared across versions. Other non-Legends initialize a
+  seeded visible personality and hidden modifiers once at draft-pool registration. Hidden modifier
+  values do not render or enter Snake workers, logs, recaps, or manifests.
+- Snake MLB and FARM morale now uses actual pick versus frozen expected talent rank with pay neutral.
+  FARM ranks the complete frozen 3× source pool, but stores only drafted-player morale outputs.
+  MLB fan morale uses cumulative relative roster-to-archetype alignment, updates privately after
+  every pick, and freezes the same final result into franchise initialization.
+- The independent auditor rejected the first repair because the FARM manifest exposed exact hidden
+  prospect ranks. The bounded repair removed those ranks and made validation reject their presence;
+  delta re-audit returned **APPROVE** with no residual findings.
+- Builder proof: 303 focused/auction regression tests across the changed paths, including the real
+  8-club MLB→FARM→Franchise gauntlet; strict changed-file ESLint, TypeScript, production build, and
+  diff integrity green. Auditor proof: 120 focused tests, 49 Auction tests, then a 25-test repair delta.
+- Live League Builder proof imported 835 cards across 345 people, rendered the three source
+  libraries/version labels, logged zero console errors, and had no horizontal overflow at iPad Pro
+  landscape size. **Pending / only acceptance gate:** JK's real Mac/iPad browser walk on port 5173.

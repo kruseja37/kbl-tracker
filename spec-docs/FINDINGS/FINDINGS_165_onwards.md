@@ -295,3 +295,38 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** Independent adversarial cases found multiple affordability seams using stricter `0` or `1e-9` comparisons than the canonical nonlinear settlement tolerance. The drift could falsely block a signed tax-refund finish, hide a rational candidate, reject setup board seeding, label an Assistant board unavailable, or show companion-only `$0 over budget` copy.
 **Impact:** Identical legal money truth could disagree across seating, Assistant GM, strategy, setup, main, and companion surfaces.
 **Action:** A cycle-free `snakeMoney` module now owns the shared `1e-6` affordability law, signed overage, and harmless residual normalization. Every Snake affordability gate and verifier consumes it; main and companion share one over-budget copy helper. Exact `-5e-7`/`+5e-7` boundaries and signed TAXSWING refunds are regression-covered. Final independent audit: APPROVE, zero blocker/major/minor findings.
+
+### FINDING-206
+**Date:** 2026-07-15 | **Phase:** Legends draft-source walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `historicalLegendsLibraries.ts`, `historicalLegendsLibraryProvisioner.ts`, `historicalLegendsImport.ts`, `LeagueBuilderDraftSetup.tsx`, `LeagueBuilderLeagues.tsx`
+**Evidence:** Historical Legends existed as hundreds of unassigned version cards. Draft Setup could distinguish versions card by card but could not select a complete Career, Draft, or Peak cohort as a source.
+**Impact:** Building a historical draft pool required meticulous one-player-at-a-time work and made the original roster groupings unusable.
+**Action:** Import now provisions read-only Career/Draft/Peak source libraries. The original 242 identities occupy the same eleven deterministic 22-player cohorts in every version; later additions stay selectable free agents in their matching library. Draft Setup can combine libraries, unassigned players, and manual add/remove without making source shelves playable leagues. Reimport is operationally idempotent.
+
+### FINDING-207
+**Date:** 2026-07-15 | **Phase:** personality pipeline audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `leaguePoolAxisRegen.ts`, `leaguePoolAxisRegenPersist.ts`, `historicalLegendsImport.ts`, draft-pool registration paths
+**Evidence:** Draft registration had no explicit Legend/non-Legend personality contract. Re-randomizing a Legend would erase authored identity; leaving ordinary imports untouched would prevent the approved draft-specific personality initialization.
+**Impact:** Living Season personality truth could be inconsistent across card versions, drafts, reloads, or player sources.
+**Action:** Legends keep authored visible personality and person-level curated hidden modifiers; missing hidden truth gets one stable person-seeded fallback shared by all versions. Other non-Legends without draft initialization receive a seeded visible personality and hidden-modifier set once. Custom visible choices and already-complete FARM prospects are preserved. Hidden modifier values never enter Snake UI, workers, logs, recaps, or manifests.
+
+### FINDING-208
+**Date:** 2026-07-15 | **Phase:** Snake draft-to-season morale audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `draftFreezeInputs.ts`, `draftFreeze.ts`, `SnakeDraftRoom.tsx`, `snakeDraftManifest.ts`, `franchiseInitializer.ts`
+**Evidence:** Snake players inherited auction-oriented draft morale assumptions even though Snake salary is set rather than bid. The first FARM repair ranked only drafted prospects and franchise launch could recompute from mutable state instead of the completed room truth.
+**Impact:** MLB/FARM player morale could respond to a nonexistent bid-price signal, misread draft expectations, or change between recap and Living Season launch.
+**Action:** Both Snake phases classify actual overall pick against frozen full-source-pool talent rank, keep pay neutral, then freeze only the final personality-scaled player outcome. FARM expectation uses the complete frozen 3× prospect pool. Franchise initialization consumes the signed result idempotently.
+
+### FINDING-209
+**Date:** 2026-07-15 | **Phase:** Snake fan-morale design/wiring audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeDraftAlignment.ts`, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `draftFreeze.ts`, `franchiseInitializer.ts`
+**Evidence:** Auction fan morale is spend-based, but Snake has no comparable bidding signal and exposed no cumulative room-relative team-archetype draft grade.
+**Impact:** Snake clubs received no draft-specific fan consequence and GMs could not see whether their drafted roster was aligning with the club identity relative to the room.
+**Action:** One shared role-aware fit law averages every club's completed picks, grades Strong/Solid/Weak, competition-ranks ties identically, and maps best-to-worst alignment onto a bounded fan-morale curve. Main and companion show only the selected club's private grade/rank; the final public outcome is frozen for franchise launch.
+
+### FINDING-210
+**Date:** 2026-07-15 | **Phase:** independent FARM fog audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoom.tsx`, `draftFreezeInputs.ts`, `snakeDraftManifest.ts`, `leagueBuilderStorage.ts`
+**Evidence:** The first correct full-pool FARM expectation repair serialized an exact `prospectId → true talent rank` map for every prospect in the immutable manifest.
+**Impact:** A draft artifact exposed the hidden ordering that FARM scouting fog is designed to protect.
+**Action:** Completion still calculates against the frozen full 3× pool, but the FARM manifest stores only drafted-player `slotClass` and final morale outputs. FARM validation rejects any nonempty talent-rank map. Independent delta audit: **APPROVE**, no residual findings.
