@@ -7230,3 +7230,33 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   their exact solo subsets (8/8) and were not widened into this repair.
 - **Pending / next start:** JK walks the frozen build. Browser acceptance remains JK's only gate;
   physical companion sign-in waits on the external Supabase project connection.
+
+## 2026-07-14 (Codex, companion/economy/responsive continuation) — second Snake repair wave closed
+
+- Fresh-fetched `origin/main` before state rulings and before code freeze; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work remains isolated on
+  `codex/snake-mock-draft-ready`; code commit `6ae55543` is not on main until merged.
+- Closed JK's physical-device feedback without widening into generic hardening. Recurring main/companion
+  refresh is serialized and narrow, calculation labels are limited to actually requested players, and
+  Assistant GM worker transport now has an equivalent validated local fallback rather than hanging or
+  displaying unavailable.
+- Made Snake tax explicitly roster-local. My Board and Assistant GM Board each calculate their own live
+  22-player salary/tax/all-in/money-left truth from the team's exact archetype; identical rosters are invariant
+  across 2-, 8-, and 20-team rooms. Role-aware exact archetype fit restores strong high-velocity relief fit for
+  Nasty Boys and preserves distinct eight-team boards through one systematic engine.
+- Added safe companion pick submission: an approved on-clock GM may send intent, but the Hotseat owns the
+  authoritative pick and atomically revalidates the request, live pick/player/team, device, claim, approval,
+  and revision. FARM remains without companion picks or draft-pick trades.
+- Wide fine-pointer Mac/laptop layouts now use one page scroll; iPad retains bounded touch panes. The room has
+  no normal Pause control because it has no clock. A contextual `RESUME ROOM` appears only for automatic or
+  legacy saved stopped state, preserving recovery without advertising a purposeless action.
+- The independent auditor's first pass rejected five details: stopped-room recovery, stale companion approval,
+  unequal Assistant fallback behavior, destructive cloud replacement without rollback, and stale auction-size
+  tax test input. All five were repaired. Delta re-audit: **APPROVE**, zero blocker/major/minor findings, 5 files
+  / 168 tests independently green.
+- Final builder evidence: full Snake/companion 54 files / 499 tests; sync/SyncModal 112/112; production build
+  2,720 modules; `git diff --check` clean. Live 1440x1000 preview: no normal Pause/Resume, false `CALCULATING`,
+  Assistant-unavailable state, or horizontal overflow. JK's browser walk remains the sole acceptance gate.
+- **Pending / next start:** JK tests the actual League Builder Snake path on Mac plus a physical iPad companion,
+  including board editing, Assistant GM, projected 22-player tax/fit, and submit-choice→Hotseat approval. The
+  dev server remains running on port 5173. Automated proof is not product acceptance.

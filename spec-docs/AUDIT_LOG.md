@@ -15,14 +15,15 @@
 
 ---
 
-## Current Phase: Snake browser-walk repair COMPLETE — JK re-walk next
+## Current Phase: Snake companion/economy/responsive repair COMPLETE — JK re-walk next
 
-JK's reported loop, Assistant GM/archetype, drafted-player, pick-log, and LAN companion
-defects are repaired on code commit `00fd64fe`. Final proof: 9 files / 133 focused tests,
-17/17 exact-tree browser journeys, strict lint, TypeScript, production build, and diff
-integrity. Independent audit rejected one committed-player tax double-count and approved
-the regression-pinned repair. Real companion login still needs an active external Supabase
-project connection. Next action: JK's hands-on browser re-walk; it remains the sole product gate.
+JK's companion-lag, false-calculation, roster-tax, fit, Assistant GM, companion-pick, and
+desktop-scroll findings are repaired on code commit `6ae55543`. Normal Pause is retired because
+the room has no clock; stopped-state recovery remains contextual. Full Snake/companion proof is
+54 files / 499 tests, sync/SyncModal is 112/112, production build is green at 2,720 modules, and
+live 1440x1000 proof has no false calculation, Assistant-unavailable state, Pause, or horizontal
+overflow. Independent delta audit: APPROVE, zero blocker/major/minor findings, 168/168 focused.
+Next action: JK's hands-on Mac/iPad companion re-walk; it remains the sole product gate.
 
 ---
 
@@ -1186,3 +1187,20 @@ production build, and diff integrity green. JK's browser walk remains the sole a
 Full text: `FINDINGS/FINDINGS_165_onwards.md`. Code commit: `00fd64fe`. Final focused gate:
 133/133; exact-tree Playwright: 17/17; independent re-audit: APPROVE. JK's re-walk remains
 the acceptance gate.
+
+### 2026-07-14 Snake companion/economy/responsive repair — append-only finding index
+
+| Finding | Date | Status | Surface | Resolution |
+|---------|------|--------|---------|------------|
+| FINDING-191 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Companion refresh | Serialized minimal refresh and scoped calculation states remove lag/churn. |
+| FINDING-192 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake roster tax | One roster-local tax authority is invariant across 2/8/20-seat rooms. |
+| FINDING-193 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Archetype fit | Exact raw shifts and role-aware need restore team-specific relief fit. |
+| FINDING-194 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Assistant GM fallback | Worker and local paths share validation, pin baseline proof, and fail-closed behavior. |
+| FINDING-195 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Companion picks | GM intent requires exact atomic Hotseat reauthorization before a pick records. |
+| FINDING-196 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Mac/iPad layout | Fine-pointer desktop uses one page scroll; touch devices retain bounded panes. |
+| FINDING-197 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | No-clock controls | Normal Pause removed; contextual Resume exists only for an actual stopped state. |
+| FINDING-198 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Cloud replacement | Explicit replacement snapshots and restores prior cloud data on pre-verification failure. |
+
+Full text: `FINDINGS/FINDINGS_165_onwards.md`. Code commit: `6ae55543`. Full Snake/companion
+gate: 499/499; sync/SyncModal: 112/112; build: 2,720 modules; independent delta re-audit:
+APPROVE, 168/168. JK's re-walk remains the acceptance gate.

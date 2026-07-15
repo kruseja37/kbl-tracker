@@ -3935,3 +3935,25 @@ On companion, order and recent activity become one compact live strip, active-de
 and `FORGET ROOM` is limited to covered/recovery screens. On the shared room, correction is absent when
 unavailable and recent picks are a compact/collapsed rail. Existing KBL palette and club primary/secondary
 colors, 44px touch targets, keyboard operation, privacy cover, and Help-only explanation remain mandatory.
+
+## 2026-07-14 — Snake tax is roster-local; room size is irrelevant
+
+My Board and Assistant GM Board each represent one team's independent live 22-player roster projection.
+Salary and luxury tax are computed from that roster's players, ratings, position groups, and the team's exact
+archetype cap identity. The number of clubs in the draft room never normalizes or otherwise changes these
+thresholds. A candidate's displayed tax effect is marginal to the current projected 22, so it can change when
+the board changes or another club removes a player from the pool. Fit remains the early warning for future
+roster-tax risk. All teams use the same algorithm with different team-owned inputs.
+
+## 2026-07-14 — Companion picks are requests; Hotseat remains authoritative
+
+An approved companion seat may submit one MLB player choice only when its club is on the clock. Submission
+does not advance the draft. The shared Hotseat device must approve the exact request, and the atomic pick
+transaction must revalidate player, pick, team, device, claim, approval state, and session revision. Any drift
+makes the request stale. FARM companion pick submission remains absent.
+
+## 2026-07-14 — No clock means no normal Pause control
+
+The Snake room has no draft clock, so a normal Pause button has no user job and is removed. Automatic
+plan-broken safety stops and old saved paused sessions remain recoverable through a contextual `RESUME ROOM`
+control that appears only while the persisted room is actually stopped.

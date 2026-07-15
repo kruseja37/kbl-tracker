@@ -1,6 +1,6 @@
 # KBL Tracker Subsystem Map
-**Last updated:** 2026-02-18
-**Status:** Tier 1 + Tier 2 COMPLETE — all rows closed
+**Last updated:** 2026-07-14
+**Status:** Core map plus current Snake Draft wiring
 
 ## Legend
 - ✅ WIRED — active app imports and uses
@@ -34,3 +34,4 @@
 | 19 | Career Stats | careerStorage.ts, useCareerStats.ts | ⚠️ PARTIAL | FINDING-078: careerStorage wired (FranchiseHome + milestones); useCareerStats hook orphaned in inactive path |
 | 20 | UI Pages | 16 pages in src_figma/app/pages/ | ✅ WIRED | FINDING-093: full page→hook map complete. PostGameSummary + WorldSeries have zero app-level hooks — data gap risk |
 | 21 | Trait System | smb4_traits_reference.md, player types | ❌ MISSING | FINDING-055/056: no traits in active type system; field in legacy unifiedPlayerStorage only |
+| 23 | Snake Draft room | SnakeDraftRoom.tsx, SnakeCompanion.tsx, snakeAssistantBoard.ts, snakeLuxuryTax.ts | ✅ WIRED | FINDING-186-198: canonical setup/room path, private boards, roster-local tax/fit, companion intent + Hotseat authority, no-trade FARM, responsive Mac/iPad layouts; JK acceptance walk pending |

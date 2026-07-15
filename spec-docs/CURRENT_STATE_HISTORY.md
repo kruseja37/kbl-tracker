@@ -1203,3 +1203,13 @@ found the board recalculation loop, unavailable/weak Assistant GM state, incorre
 drafted-player board/pool handling, an incomplete unnumbered pick log, and a companion
 address/auth failure. This close supersedes that header with the independently approved
 repair at `00fd64fe`; JK's browser walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake companion/economy/responsive close
+
+The prior live header recorded code commit `00fd64fe` as ready for JK's re-walk after
+closing the board loop, archetype fallback, drafted-player truth, numbered log, and LAN
+address repairs. JK's physical companion pass then found lag, false permanent calculation,
+missing Assistant boards, incorrect zero projected tax, suspect team fit, and desktop
+nested-scroll friction; he also approved companion pick intent with Hotseat confirmation
+and questioned the no-clock Pause action. This close supersedes that header with the
+independently approved repair at `6ae55543`. JK's Mac/iPad walk remains the sole acceptance gate.

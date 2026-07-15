@@ -1,15 +1,28 @@
-# NOW — Snake Draft: certified mock-draft build ready; JK walk is the gate
+# NOW — Snake Draft: companion/economy/responsive repair ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-14; browser-repair code commit `00fd64fe`)
+## VERIFIED (git, 2026-07-14; latest code commit `6ae55543`)
 - **Current thread move:** keep the frozen preview running and hand the repaired build to JK for
-  his browser walk. The reported loop, Assistant GM/archetype, drafted-player, Recent Picks, and
-  LAN companion-address defects are fixed. Independent audit rejected one committed-player tax
-  double-count; its narrow repair is regression-pinned and the re-audit is **APPROVE**. No design
-  decision is waiting on JK before the walk.
+  his Mac/iPad browser walk. The reported companion lag, false `CALCULATING`, team-specific fit,
+  projected board tax, Assistant GM availability, and desktop scroll defects are fixed. Companion
+  GMs can submit intent for the on-clock player; only the Hotseat's fresh atomic approval records
+  the pick. The no-clock room has no normal Pause control; `RESUME ROOM` exists only for a real
+  automatic/legacy stopped state. Independent delta re-audit is **APPROVE** with zero findings.
+- Snake tax is roster-local. My Board and Assistant GM Board each construct an independent live
+  22-player projection using the selected team's archetype, salary, exact cap shifts, position
+  groups, and ratings. The same roster produces the same tax in a 2-, 8-, or 20-club room; room
+  size is not an input. Candidate tax/fit remains contextual and updates when a board changes or a
+  drafted player leaves the pool.
+- Main/companion refresh no longer overlaps or rereads the entire League Builder data graph every
+  cycle. Calculation state is limited to the players actually requested. Missing/failed Assistant
+  workers fall back to the same validated local engine and the same Optimize Around baseline proof.
+- Mac/laptop fine-pointer layouts use one document scroll; iPad retains bounded touch panes. Live
+  1440x1000 proof: no horizontal overflow, false calculation state, Assistant-unavailable state,
+  normal Pause, or normal-state Resume. Full Snake/companion gate: 54 files / 499 tests; sync and
+  SyncModal: 112/112; production build: 2,720 modules; independent focused re-audit: 168/168.
 - The production route is shared Draft Setup → `/snake-room`; the retired
   `LeagueBuilderSnakeDraft.tsx` page and `snakeDraftPoc` engine are deleted. Legacy snake URLs
   redirect into the canonical setup/room flow.

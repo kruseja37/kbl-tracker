@@ -7,6 +7,19 @@
 
 **Style rubric applied:** NEW-CANON (chalk-and-ash Fenway: fen-*/fenway classes, ballpark greens #243028/#3d4a42 family, ash #CBB89C, brass #C4A853, Moms/Tox Typewriter, hard offset shadows) · OLD-DIALECT (army-green league-builder, black/blue generic, old FranchiseHome shell, pixel type outside `/`) · CARTRIDGE (Press Start 2P menu — legitimate only at `/`) · DEV (developer-facing / `__preview`). Where a screen is transitional (ballpark-green ground but system-ui type — the "Draft-Room register"), it is classed OLD-DIALECT with the sub-dialect noted, per UX_NORTH_STAR §1.2 which lists the Draft-Room register among the dialects that migrate to canon.
 
+## 2026-07-14 Snake route addendum (supersedes this map for the draft path)
+
+- Production Snake is shared `/league-builder/draft-setup` → `/snake-room`; companion is
+  `/snake-companion`. The retired POC/setup routes are not current UI authority.
+- The private room uses one team-first My Board / Assistant GM Board / Player Pool / MLB Trade Picks
+  desk. Every team uses the same system with its own archetype, roster, money, and private rankings.
+- Mac/laptop fine-pointer screens use the document as the one vertical scroll. iPad/touch layouts
+  retain bounded selected-player and board panes. Live 1440x1000 proof has no horizontal overflow.
+- There is no normal Pause control because there is no draft clock. A contextual `RESUME ROOM`
+  appears only when automatic safety or legacy persisted state has actually stopped the room.
+- Companion GM pick submission is intent only; the Hotseat must approve the exact live request.
+  Explanatory copy remains behind Help under the ratified Help-button law.
+
 ---
 
 ## THE TABLE (62 rows)

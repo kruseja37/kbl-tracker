@@ -190,3 +190,59 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** The displayed companion address was stale/manual, Vite was not reliably advertised for LAN use, room codes were not URL-prefilled, and Safari surfaced raw `Load failed`. The configured Supabase hostname does not resolve; the connected account exposes no project.
 **Impact:** iPad/iPhone could load a black page or fail login with a false local diagnosis.
 **Action:** Bind Vite on all interfaces, discover/publish the actual network origin, include/prefill room code, and map network auth failure to honest UI. Real account login remains blocked until an active Supabase project URL/key exists.
+
+### FINDING-191
+**Date:** 2026-07-14 | **Phase:** JK Snake companion walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeRoomFreshness.ts`, `companionFreshness.ts`, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`
+**Evidence:** Main and companion refresh cycles could overlap, reread more storage than the room needed, and mark every visible player `CALCULATING` even when the expensive advice request did not include that player.
+**Impact:** Physical companion devices felt laggy and player rows could display a permanent false calculation state.
+**Action:** Serialize refreshes, reread only live session truth on the recurring path, preserve semantic snapshot identity, and limit calculation status to player ids actually requested. Focused and full Snake suites plus a live Mac preview show zero false `CALCULATING` rows.
+
+### FINDING-192
+**Date:** 2026-07-14 | **Phase:** Snake roster-economy audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeLuxuryTax.ts`, `snakeEconomics.ts`, `snakeAssistantBoard.ts`, `SnakeDraftRoom.tsx`, Snake production-shape tests
+**Evidence:** Snake tax paths still normalized rating caps by draft-room team count, even though luxury tax is a property of one team's projected roster. My Board could consequently show zero or different projected tax solely because the room had 2, 8, or 20 clubs.
+**Impact:** Team salary, projected tax, true cost, and player fit risk could be wrong for the same 22-player roster.
+**Action:** Give Snake one explicit roster-local cap authority, use it for My Board, Assistant GM Board, candidate consequences, setup, seating proof, and rational-room economics, and prove identical results for the same roster at 2/8/20 seats plus a positive-tax production-shaped roster.
+
+### FINDING-193
+**Date:** 2026-07-14 | **Phase:** Snake archetype-fit audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `archetypeIdentity.ts`, `archetypeBalanceSimulator.ts`, `SnakeDraftRoom.tsx`, fit tests
+**Evidence:** Fit classification did not consistently consume the team's exact `rawShift` identity or role-aware rotation/bullpen need. Nasty Boys could therefore classify high-velocity RP/CP cards below strong fit.
+**Impact:** A team's player pool and both 22-player boards could give misleading fit and future-tax warnings.
+**Action:** Resolve exact archetype band weights from the saved team identity, apply pitcher-role need to the fit score, and regression-pin a high-velocity relief arm as a Nasty Boys strong fit while preserving one systematic algorithm for every team.
+
+### FINDING-194
+**Date:** 2026-07-14 | **Phase:** Assistant GM availability audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `useSnakeAssistantBoard.ts`, `snakeAssistantBoard.ts`, Assistant hook/production tests
+**Evidence:** A missing or failed Web Worker made the Assistant GM Board unavailable even though the same deterministic engine was locally callable. The first fallback proposal also omitted the worker path's unpinned baseline proof for ambiguous Optimize Around failures.
+**Impact:** Valid teams could lose their optimized 22-player board or remain stuck in a calculation state depending on browser/device worker transport.
+**Action:** Run the same validated engine locally when worker transport is absent or fails, perform the same conditional unpinned baseline proof, catch all local failures, and fail closed. Eight distinct private archetype seats now return independent, valid boards through one system.
+
+### FINDING-195
+**Date:** 2026-07-14 | **Phase:** Companion pick-authority audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `leagueBuilderStorage.ts`, `SnakeCompanion.tsx`, `CompanionApprovalCard.tsx`, `SnakeDraftRoom.tsx`
+**Evidence:** Companion desks had no pick-submission path. A safe implementation required that companion action remain intent only and that Hotseat approval not trust a claim or draft revision that had changed after submission.
+**Impact:** GMs had to repeat their choice on the shared device, while a naive direct-pick design could advance the authoritative room from stale private-device state.
+**Action:** Add one seat-bound pending request, permit submission only for the approved on-clock MLB seat, and require the Hotseat's atomic pick transaction to revalidate request, player, pick, team, device, claim id, approval status, and exact revision. Decline clears intent only; FARM remains no-trade/no-companion-pick.
+
+### FINDING-196
+**Date:** 2026-07-14 | **Phase:** Snake responsive-layout audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoomView.tsx`, `SnakeCompanionFrame.tsx`, `ballpark-kit.css`, responsive tests
+**Evidence:** The iPad-oriented nested pane scrollers remained active on fine-pointer Mac/laptop screens, creating a trackpad maze despite enough vertical page space.
+**Impact:** Desktop GMs had to hunt through multiple independent scroll areas to compare a profile, board, and roster.
+**Action:** Use one document scroll on wide fine-pointer devices while retaining bounded touch panes for iPad. Live 1440x1000 proof has no horizontal overflow and no nested desktop pane scrolling; the iPad contract remains regression-covered.
+
+### FINDING-197
+**Date:** 2026-07-14 | **Phase:** no-clock room-control audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoomView.tsx`, `SnakeDraftRoom.tsx`, room view tests
+**Evidence:** The room exposed a normal Pause/Resume button despite having no draft clock. Removing it outright would have stranded automatic plan-broken stops and old saved paused sessions.
+**Impact:** The normal Pause action was purposeless, while a blanket deletion would make safety-stopped rooms unrecoverable.
+**Action:** Remove ordinary Pause from every active room. Render only a contextual `RESUME ROOM` when persisted safety state is actually stopped; keep automatic stop behavior and prove an active room has neither Pause nor Resume.
+
+### FINDING-198
+**Date:** 2026-07-14 | **Phase:** independent sync safety audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SyncModal.tsx`, `useSyncStatus.ts`, `syncEngine.ts`, sync replacement tests
+**Evidence:** Full `UPLOAD TO CLOUD` could replace non-empty cloud data without an explicit replacement choice, and the confirmed replacement path deleted cloud rows before upload without retaining a recoverable prior snapshot.
+**Impact:** A failed replacement upload could leave the account's cloud state partially erased.
+**Action:** Require an explicit confirmed replacement, preflight local reads, snapshot prior cloud store/localStorage rows, keep that snapshot until cloud verification succeeds, and restore it on pre-verification failure. Independent audit and a forced upload-failure test confirm rollback.
