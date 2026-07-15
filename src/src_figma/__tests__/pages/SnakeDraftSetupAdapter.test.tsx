@@ -16,6 +16,7 @@ import {
 } from '../../app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
 import { SnakeDraftSetupPanels } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
 import type { Player } from '../../hooks/useLeagueBuilderData';
+import { snakePlayerVersionLabel } from '../../../utils/snakePlayerIdentity';
 import { makeLegalRosterPlayerSet, makeLegalRosterPlayers, makePlayer, makeTeam } from './LeagueBuilderDraftSetup.testUtils';
 
 function pool(players: Player[], iv = 1_000): RegisteredPool {
@@ -97,6 +98,11 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]).toMatchObject({ groupId: 'historical:aaroh101' });
     expect(groups[0].cards.map((card) => card.historicalProfileType)).toEqual([
+      'Career',
+      'Peak',
+      'Draft Pool',
+    ]);
+    expect(cards.map((card) => snakePlayerVersionLabel(card, cards))).toEqual([
       'Career',
       'Peak',
       'Draft Pool',
