@@ -203,6 +203,16 @@ describe('Batch 4B sparse decision resolver', () => {
     } as SelectedPlayerConsequence;
     expect(buildSnakeDecisionCandidateFacts({ playerId: 'selected', candidate, consequence }))
       .toMatchObject({ playerId: 'selected', contextualWorth: 101, trueCost: 90, fit: 3 });
+    const epsilonConsequence = {
+      ...consequence,
+      after: {
+        ...(consequence as Extract<SelectedPlayerConsequence, { status: 'ready' }>).after,
+        ledger: { rosterCount: 22, salary: 80, tax: 10, allIn: 90, moneyLeft: -0.0000005 },
+        legalFinish: { feasible: true, moneyLeft: -0.0000005, affordability: 'AFFORDABLE' },
+      },
+    } as SelectedPlayerConsequence;
+    expect(buildSnakeDecisionCandidateFacts({ playerId: 'selected', candidate, consequence: epsilonConsequence }))
+      .toMatchObject({ playerId: 'selected', solvent: true });
     expect(buildSnakeDecisionCandidateFacts({ playerId: 'other', candidate, consequence })).toBeNull();
     expect(buildSnakeDecisionCandidateFacts({
       playerId: 'selected', candidate,

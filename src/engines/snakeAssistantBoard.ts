@@ -14,6 +14,7 @@ import {
   type DesignSlot,
 } from './rosterDesignFeasibility';
 import { evaluateSnakePlan, type SnakePlanBill } from './snakeEconomics';
+import { snakeMoneyNonnegative } from './snakeMoney';
 import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import type { SnakeSeatingPlayer } from './snakeSeatingProof';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from './snakeVersioning';
@@ -344,7 +345,8 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
       ? shiftLuxuryCaps(snakeLuxuryCaps([...input.baseCaps]), input.capIdentity)
       : snakeLuxuryCaps([...input.baseCaps]);
     target = buildBest22Target(optimizer.slots, simPool, classifiedById, input.archetype, input.tier,
-      input.budget, input.realTeamCount, pins, optimizer.ranks, taxCaps);
+      input.budget, input.realTeamCount, pins, optimizer.ranks, taxCaps,
+      new Map(universe.map((player) => [player.playerId, player.frozenIv])), 'snake-money');
   } catch {
     return unavailable('INCOMPLETE_BOARD');
   }
@@ -384,7 +386,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     return unavailable('ILLEGAL_BOARD');
   }
   if (!allNumbersFinite(plan)) return unavailable('INVALID_NUMERIC_INPUT');
-  if (!target.feasible || plan.planCushion < -1e-9) return unavailable('INSOLVENT_BOARD');
+  if (!target.feasible || !snakeMoneyNonnegative(plan.planCushion)) return unavailable('INSOLVENT_BOARD');
 
   return {
     status: 'ready',

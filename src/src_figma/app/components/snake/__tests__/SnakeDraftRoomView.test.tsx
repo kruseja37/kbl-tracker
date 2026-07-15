@@ -44,6 +44,18 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
 }
 
 describe('SnakeDraftRoomView', () => {
+  it('renders the compact SMB mark as a touch-safe app-home control', () => {
+    const onHome = vi.fn();
+    render(<SnakeDraftRoomView {...props({ onHome })} />);
+
+    const home = screen.getByRole('button', { name: 'APP HOME' });
+    expect(home).toHaveClass('min-h-11', 'min-w-11');
+    expect(home).toHaveTextContent('SUPER MEGA');
+    expect(home).toHaveTextContent('BASEBALL');
+    fireEvent.click(home);
+    expect(onHome).toHaveBeenCalledOnce();
+  });
+
   it('uses exact neutral team copy without exposing a missing order team id anywhere in the DOM', () => {
     const missingTeamId = 'internal-team-key-42';
     render(<SnakeDraftRoomView {...props({

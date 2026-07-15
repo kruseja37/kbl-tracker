@@ -11,6 +11,23 @@ import type { DraftSetupSeat } from '../../hooks/useLeagueBuilderData';
 export const BOARD_POSITION_DEPTH = 5;
 export const BOARD_RANK_SAVE_DEBOUNCE_MS = 500;
 
+export function retiredSnakeVersionIdsForLock(
+  displayedPoolIds: readonly string[],
+  selectedPoolIds: readonly string[],
+): string[] {
+  const selectedIds = new Set(selectedPoolIds);
+  return [...new Set(displayedPoolIds.filter((id) => !selectedIds.has(id)))]
+    .sort((left, right) => left.localeCompare(right));
+}
+
+export function snakeVersionRestoreIds(
+  currentPoolIds: readonly string[],
+  retiredVersionIds: readonly string[],
+): string[] {
+  const currentIds = new Set(currentPoolIds);
+  return retiredVersionIds.filter((id) => !currentIds.has(id));
+}
+
 type IdentityAutoFillSlot = 'mlb' | 'farm';
 type IdentityAutoFillMode = 'fill-empty' | 'reroll-team';
 export type IdentityAutoFilledSlotKey = `${string}:${IdentityAutoFillSlot}`;

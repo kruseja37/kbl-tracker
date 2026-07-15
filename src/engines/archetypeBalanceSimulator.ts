@@ -26,6 +26,7 @@ import {
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
 import { normalizeAuctionLuxuryCapsForLeagueSize } from './auctionLuxuryTax';
+import { snakeMoneyNonnegative } from './snakeMoney';
 import {
   LEGAL_ROSTER,
   canCover,
@@ -754,6 +755,8 @@ export interface BuildIdentityOptions {
   realTeamCount: number;
   /** Optional already-resolved team tax caps. Snake uses this roster-local seam. */
   taxCaps?: readonly LuxuryCapRow[];
+  /** Snake rooms use the shared sub-cent affordability law; other builders remain strict. */
+  affordabilityLaw?: 'strict' | 'snake-money';
   posture?: RosterPosture;
   /** Override the posture's value floor (fraction of the value-max baseline). */
   valueFloorOverride?: number;
@@ -861,7 +864,9 @@ export function buildIdentityRoster(
       totalIv,
       totalSalary,
       totalTax,
-      solvent: totalSalary + totalTax <= budget,
+      solvent: options.affordabilityLaw === 'snake-money'
+        ? snakeMoneyNonnegative(budget - totalSalary - totalTax)
+        : totalSalary + totalTax <= budget,
       floorMet: totalIv >= floorIv - 1e-9,
       fit: players.reduce((s, p) => s + fitScore(p), 0),
     };

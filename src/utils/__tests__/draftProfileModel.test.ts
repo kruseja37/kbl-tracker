@@ -151,4 +151,16 @@ describe('buildDraftProfileModel', () => {
     expect(model.fullRatings?.power).toBe(91);
     expect(model.scoutBands).toBeNull();
   });
+
+  test('suppresses a nickname that repeats the full name while preserving a real nickname', () => {
+    const repeated = buildDraftProfileModel(makePlayer({
+      firstName: 'Eric',
+      lastName: 'Gagne',
+      nickname: '  Éric Gagné  ',
+    }), { revealFull: true });
+    const real = buildDraftProfileModel(makePlayer({ nickname: 'The Slate' }), { revealFull: true });
+
+    expect(repeated.name).toBe('Eric Gagne');
+    expect(real.name).toBe('Mara Slate "The Slate"');
+  });
 });

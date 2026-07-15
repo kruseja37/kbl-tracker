@@ -10,6 +10,7 @@ import {
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
 import { snakeLuxuryCaps } from './snakeLuxuryTax';
+import { snakeMoneyAffordable, snakeMoneyNonnegative } from './snakeMoney';
 import { computeOwnValue } from './auctionMarketModel';
 import {
   luxuryTax,
@@ -554,7 +555,7 @@ function rankedCandidates(input: {
       - input.seat.committedSpent
       - player.price
       - taxAfterCandidate;
-    if (!Number.isFinite(budgetAfterCandidate) || budgetAfterCandidate < 0) continue;
+    if (!Number.isFinite(budgetAfterCandidate) || !snakeMoneyNonnegative(budgetAfterCandidate)) continue;
     const fitWorth = computeOwnValue({
       iv: player.worth,
       archetypeWeights: player.archetypeWeights,
@@ -743,7 +744,7 @@ function economicAssessmentForAskingClub(input: {
     - input.askingSeat.committedSpent
     - input.player.price
     - taxAfterCandidate;
-  if (!Number.isFinite(budgetAfterCandidate) || budgetAfterCandidate < 0) return null;
+  if (!Number.isFinite(budgetAfterCandidate) || !snakeMoneyNonnegative(budgetAfterCandidate)) return null;
   const marginalTax = taxAfterCandidate - context.currentTax;
   const trueCost = input.player.price + marginalTax;
   const contextualWorth = computeOwnValue({
@@ -890,7 +891,7 @@ function cheapNonviabilityWitness(input: {
     .sort((left, right) => left.price - right.price || left.playerId.localeCompare(right.playerId))
     .slice(0, openSlots)
     .reduce((sum, player) => sum + player.price, 0);
-  if (salaryFloor > askingClub.budgetRemaining + 1e-9) {
+  if (!snakeMoneyAffordable(salaryFloor, askingClub.budgetRemaining)) {
     return {
       kind: 'AFFORDABILITY',
       budgetRemaining: askingClub.budgetRemaining,
@@ -1278,13 +1279,13 @@ function validateConstructiveAssignmentDeltaAgainstRoot(input: {
         'taxed',
       ).charged;
       const salaryCost = players.reduce((sum, player) => sum + player.price, 0);
-      const addedTax = Math.max(0, finalTax - currentTax);
+      const addedTax = finalTax - currentTax;
       const allInCost = salaryCost + addedTax;
       if (!Number.isFinite(allInCost)
         || Math.abs(assignment.salaryCost - salaryCost) > 1e-6
         || Math.abs(assignment.addedTax - addedTax) > 1e-6
         || Math.abs(assignment.allInCost - allInCost) > 1e-6
-        || allInCost > club.budgetRemaining + 1e-9) return false;
+        || !snakeMoneyAffordable(allInCost, club.budgetRemaining)) return false;
     }
     return true;
   } catch {

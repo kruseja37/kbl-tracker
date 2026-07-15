@@ -47,14 +47,16 @@ function HelpNote({ children }: { children: ReactNode }) {
   );
 }
 
-export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDisabled = false, showHelp = false, poolControls, onLock, onUnlock }: {
+export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDisabled = false, showHelp = false, poolSources, poolControls, clubControls, onLock, onUnlock }: {
   adapter: SnakeDraftSetupAdapterState;
   teams: readonly Team[];
   locked: boolean;
   disabled: boolean;
   lockDisabled?: boolean;
   showHelp?: boolean;
+  poolSources?: ReactNode;
   poolControls?: ReactNode;
+  clubControls?: ReactNode;
   onLock?: () => void;
   onUnlock?: () => void;
 }) {
@@ -69,6 +71,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
         <div className="ballpark-panel-strip"><strong>1 · POOL</strong></div>
         <div className="space-y-3 p-4">
           {showHelp ? <HelpNote>Pick one card for each real person before you lock the pool. Choose each player version, then LOCK POOL. The room check runs on those locked players and prices.</HelpNote> : null}
+          {poolSources}
           {adapter.groups.filter(({ cards }) => cards.length > 1).map(({ groupId, cards }) => (
             <label key={groupId} className="grid gap-2 sm:grid-cols-[1fr_240px] sm:items-center">
               <span className="font-bold">{fullName(cards[0]).toUpperCase()}</span>
@@ -84,7 +87,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
             </label>
           ))}
           {adapter.groups.every(({ cards }) => cards.length === 1) ? <p className="text-sm">No duplicate player versions in this pool.</p> : null}
-          {!locked ? poolControls : null}
+          {poolControls}
           {locked ? <p className="font-bold text-[var(--ballpark-brass)]">UNLOCK THE POOL TO CHANGE VERSIONS.</p> : null}
           <button type="button" disabled={disabled || (!locked && lockDisabled)} onClick={locked ? onUnlock : onLock} className="ballpark-press-button ballpark-press-md ballpark-press-gold">
             {locked ? 'UNLOCK POOL' : 'LOCK POOL'}
@@ -94,6 +97,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
 
       <section className="ballpark-panel" aria-label="Snake club extras">
         <div className="ballpark-panel-strip"><strong>2 · CLUBS</strong></div>
+        {clubControls ? <div className="p-4 pb-0">{clubControls}</div> : null}
         <div className="grid gap-3 p-4 md:grid-cols-2">
           {teams.map((team) => (
             <div key={team.id} className="grid gap-2 border-4 border-[var(--ballpark-panel-border)] p-3">

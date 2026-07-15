@@ -1204,3 +1204,31 @@ the acceptance gate.
 Full text: `FINDINGS/FINDINGS_165_onwards.md`. Code commit: `6ae55543`. Full Snake/companion
 gate: 499/499; sync/SyncModal: 112/112; build: 2,720 modules; independent delta re-audit:
 APPROVE, 168/168. JK's re-walk remains the acceptance gate.
+
+### 2026-07-15 Snake tax/fit/slot walkthrough — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-199 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Legal finish | Exact all-in completion search; only completed proof may block, bounded uncertainty stays OPEN. |
+| FINDING-200 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Fit truth | Full-cap pressure plus exact 22-player before/after tax. |
+| FINDING-201 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Asst GM board | Canonical backup-C seam, IV depth order, shared affordability law. |
+| FINDING-202 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Player profile | Full-name duplicate nicknames suppressed at display time. |
+| FINDING-203 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Room navigation | Compact SMB home control is live. |
+| FINDING-205 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake money law | Seating, Assistant, strategy, setup, main, and companion share one signed sub-cent affordability rule. |
+
+Contract: `contracts/CONTRACT_SNAKE_TAX_SLOT_REPAIR_2026-07-15.md`. JK's browser walk
+remains the sole acceptance gate.
+
+### 2026-07-15 Unified draft setup — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-204 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | League Builder Draft Setup | Method, sources, player edits, versions, and identities are one shared setup truth; repeated unlock cannot resurrect a GM removal. |
+
+Contract: `contracts/CONTRACT_UNIFIED_DRAFT_SETUP_2026-07-15.md`. JK's browser walk
+remains the sole acceptance gate.
+
+Final repair evidence: builder gate 23 files / 370 tests, typecheck, changed-file ESLint,
+production build 2,724 modules, and diff integrity clean. Independent frozen-tree audit:
+APPROVE, 22 files / 327 tests, zero blocker/major/minor findings. Freshly fetched
+`origin/main`: `ea66830e`. JK's browser walk remains the sole product-acceptance gate.

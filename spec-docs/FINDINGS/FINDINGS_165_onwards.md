@@ -246,3 +246,52 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** Full `UPLOAD TO CLOUD` could replace non-empty cloud data without an explicit replacement choice, and the confirmed replacement path deleted cloud rows before upload without retaining a recoverable prior snapshot.
 **Impact:** A failed replacement upload could leave the account's cloud state partially erased.
 **Action:** Require an explicit confirmed replacement, preflight local reads, snapshot prior cloud store/localStorage rows, keep that snapshot until cloud verification succeeds, and restore it on pre-verification failure. Independent audit and a forced upload-failure test confirm rollback.
+
+### FINDING-199
+**Date:** 2026-07-15 | **Phase:** JK Snake tax walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeEconomics.ts`, legal-finish tests
+**Evidence:** The legal-finish engine constructs the salary-cheapest legal membership first and only then calculates that roster's nonlinear tax. It never searches a slightly more expensive salary completion whose lower tax produces a cheaper all-in 22.
+**Impact:** A first-round candidate can be marked `BLOCKED` even though a legal, affordable finish exists in the live pool.
+**Action:** Legal finish now searches exact roster membership against all-in salary plus signed tax, canonical legality, version uniqueness, and roster-local caps. A hard `BLOCKED` result is emitted only when the exact search completes without an affordable finish; a bounded production search that cannot finish returns `OPEN`, never a false rejection. Adversarial local-minimum, floating-boundary, and TAXSWING-refund cases are permanent regressions.
+
+### FINDING-200
+**Date:** 2026-07-15 | **Phase:** JK Snake fit walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `archetypeIdentity.ts`, `deskRoomModel.ts`, `snakeDeskIntelligenceModel.ts`
+**Evidence:** `STRONG FIT` consumes only ratings named by the archetype's raw shift plus role need. Ratings in unshifted tax rows do not affect the label, even when the projected 22-player board pays tax for them.
+**Impact:** A card can look safely aligned with one archetype lever while quietly creating tax pressure elsewhere.
+**Action:** Pool labels now include the worst applicable full-cap pressure across every taxed rating group, including the correct rotation/bullpen treatment for swing arms. Selected-player consequences use exact before/after 22-player tax and downgrade a superficially aligned card when its full roster cost is harmful.
+
+### FINDING-201
+**Date:** 2026-07-15 | **Phase:** JK Assistant GM walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeDeskIntelligenceModel.ts`, `best22Target.ts`, Assistant GM tests
+**Evidence:** Default design output calls the backup catcher slot `BACKUPC`; the canonical board renderer reads `BACKUP_C`. Assistant slot ordering also uses the optimizer's adjusted advice value rather than frozen IV.
+**Impact:** A ready 22 can visibly show `BACKUP_C MISSING`, and SP/RP/C depth can display out of objective-value order.
+**Action:** The desk boundary normalizes `BACKUPC`/`BACKUP_C`, and equivalent legal depth slots are presentation-sorted by frozen IV across catcher, SP, RP, and same-position starter/flex groups without changing membership, pins, or money. Assistant engine, worker validation, and display all use the same Snake money law, so an affordable sub-cent boundary cannot become `ASST GM UNAVAILABLE`.
+
+### FINDING-202
+**Date:** 2026-07-15 | **Phase:** integrated Legends/Snake walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `draftProfileModel.ts`, profile-model tests
+**Evidence:** The shared profile display always appends a nonempty nickname, even when the imported nickname normalizes to the player's full name.
+**Impact:** Cards render redundant names such as `Eric Gagne \"Eric Gagne\"` throughout the draft.
+**Action:** The shared profile model suppresses only a normalized full-name duplicate at display time; stored records and real distinct nicknames are preserved.
+
+### FINDING-203
+**Date:** 2026-07-15 | **Phase:** JK Snake navigation walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoom.tsx`, `SnakeDraftRoomView.tsx`, room-view tests
+**Evidence:** The shared room header has Help, sound, correction, trade, and companion controls but no route back to app home.
+**Impact:** The user can enter the draft room but cannot leave it through the visible interface.
+**Action:** The shared header exposes the established compact Super Mega Baseball mark as a 44px home control wired by the route-owning page.
+
+### FINDING-204
+**Date:** 2026-07-15 | **Phase:** unified draft setup walkthrough | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `LeagueBuilderDraftSetup.tsx`, `SnakeDraftSetupAdapter.tsx`, unified setup tests
+**Evidence:** Draft method can only be changed outside Draft Setup. The Snake branch then bypasses the Auction branch's source-league and club-archetype controls even though both methods consume the same pool and saved teams. Snake exposes a local version picker and manual shuttle, but the user must leave and re-enter setup to assemble the complete input state.
+**Impact:** A user can build the right player universe or club identities in one method and still have no direct, visible way to finish the same setup for Snake. The backtracking makes shared data look disconnected and invites stale or missing archetype inputs.
+**Action:** Draft Setup now saves AUCTION/SNAKE in place and shares source leagues, the unrestricted manual player shuttle, grouped Career/Peak/Draft versions, and canonical MLB/farm `ArchetypePicker` controls. Pool lock freezes method and shared inputs. Unlock restores only versions retired by the current lock, so a later explicit GM removal is never resurrected across repeated lock/unlock cycles.
+
+### FINDING-205
+**Date:** 2026-07-15 | **Phase:** independent Snake money-law audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `snakeMoney.ts`, `snakeSeatingProof.ts`, `snakeAssistantBoard.ts`, `snakeRationalRoom.ts`, main/companion desk and setup validators
+**Evidence:** Independent adversarial cases found multiple affordability seams using stricter `0` or `1e-9` comparisons than the canonical nonlinear settlement tolerance. The drift could falsely block a signed tax-refund finish, hide a rational candidate, reject setup board seeding, label an Assistant board unavailable, or show companion-only `$0 over budget` copy.
+**Impact:** Identical legal money truth could disagree across seating, Assistant GM, strategy, setup, main, and companion surfaces.
+**Action:** A cycle-free `snakeMoney` module now owns the shared `1e-6` affordability law, signed overage, and harmless residual normalization. Every Snake affordability gate and verifier consumes it; main and companion share one over-budget copy helper. Exact `-5e-7`/`+5e-7` boundaries and signed TAXSWING refunds are regression-covered. Final independent audit: APPROVE, zero blocker/major/minor findings.

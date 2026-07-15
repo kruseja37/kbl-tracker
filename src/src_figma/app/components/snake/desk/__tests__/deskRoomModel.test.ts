@@ -22,6 +22,7 @@ import {
   resolveLockedSeat,
   updateSessionSeatBoard,
 } from '../deskRoomModel';
+import { snakeBoardOverBudgetReason } from '../snakeDeskMoneyCopy';
 
 function storedPlayer(id: string, ratings: Partial<Player> = {}): Player {
   return {
@@ -169,6 +170,11 @@ function canonicalBackfillFixture(prefix: string): {
 }
 
 describe('private desk room assembly', () => {
+  it('shares one sub-cent over-budget copy law between main and companion', () => {
+    expect(snakeBoardOverBudgetReason(-0.0000005)).toBeNull();
+    expect(snakeBoardOverBudgetReason(-1)).toBe('YOUR 22-MAN BOARD IS $1 OVER BUDGET.');
+  });
+
   it('backfills every existing seat board in one next session without revealing a private seat', () => {
     const fixtures = Object.fromEntries(['a', 'b', 'c'].map((teamId) => [teamId, canonicalBackfillFixture(teamId)]));
     const sourceBoards = Object.fromEntries(['a', 'b', 'c'].map((teamId) => {
@@ -396,6 +402,50 @@ describe('private desk room assembly', () => {
       .toBe('STRONG FIT');
     expect(fitWord({ player: lowRow, priorities: locked.priorities, capIdentity: locked.capIdentity, need: null, openSlots: 22 }))
       .toBe('WEAK FIT');
+  });
+
+  it('refuses STRONG FIT when unshifted rating rows create material tax pressure', () => {
+    const locked = resolveLockedSeat({ team: { id: 'a' } as Team, session: session('junkball-surgeons') });
+    const hitterShape = { isPitcher: false, position: 'CF' } as const;
+    const hitter = storedPlayer('one-lever-fit', {
+      power: 5,
+      contact: 99,
+      speed: 99,
+      fielding: 99,
+      arm: 99,
+    });
+    const row = buildDeskRoomPlayer({
+      player: hitter,
+      price: 50_000,
+      seating: {
+        playerId: hitter.id,
+        price: 50_000,
+        shape: hitterShape,
+        construction: {
+          id: hitter.id,
+          isPitcher: false,
+          bat: { POW: 5, CON: 99, SPD: 99, FLD: 99, ARM: 99 },
+        },
+      },
+    })!;
+    const caps = [{
+      group: 'hitters' as const,
+      stat: 'CON' as const,
+      topN: 8,
+      cap: 400,
+      penaltyCurve: 1,
+      penaltyPer100: 100_000,
+      minAdder: 0,
+    }];
+
+    expect(fitWord({
+      player: row,
+      priorities: locked.priorities,
+      capIdentity: locked.capIdentity,
+      baseCaps: caps,
+      need: null,
+      openSlots: 22,
+    })).toBe('WEAK FIT');
   });
 
   it('keys exact settled public prices and uses them instead of frozen card prices', () => {

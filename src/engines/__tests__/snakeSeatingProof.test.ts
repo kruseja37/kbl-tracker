@@ -363,4 +363,37 @@ describe('simultaneous snake seating proof', () => {
     expect(result.assignments[0].allInCost).toBeLessThanOrEqual(500);
     expect(result.assignments[0].playerIds.some((playerId) => playerId.startsWith('z-low-tax'))).toBe(true);
   });
+
+  test('credits a TAXSWING refund when a pure starter demotes a taxed swing arm', () => {
+    const pricedArm = (playerId: string, price: number, role: 'SP' | 'SP/RP' | 'RP' | 'CP', velocity: number) => ({
+      ...card(playerId, { isPitcher: true, position: role, role }),
+      price,
+      construction: {
+        ...construction(playerId, { isPitcher: true, position: role, role }),
+        pit: { VEL: velocity, JNK: 0, ACC: 0 },
+      },
+    });
+    const current = pricedArm('taxed-swing', 0, 'SP/RP', 99);
+    const future = [
+      ...oneClubPool('refund').filter((player) => !player.shape.isPitcher).map((player) => ({ ...player, price: 0 })),
+      ...Array.from({ length: 3 }, (_, index) => pricedArm(`refund-SP${index}`, 0, 'SP', 1)),
+      ...Array.from({ length: 3 }, (_, index) => pricedArm(`refund-RP${index}`, 0, 'RP', 0)),
+      pricedArm('refund-CP', 0, 'CP', 0),
+      pricedArm('refund-fourth-SP', 6_000, 'SP', 1),
+    ];
+    const result = proveSimultaneousSnakeSeating({
+      clubs: [{
+        teamId: 'refund-club',
+        roster: [current],
+        committedConstruction: [current.construction],
+        budgetRemaining: 99.9999995,
+      }],
+      pool: future,
+      baseCaps: [{ group: 'rotation', stat: 'VEL', topN: 4, cap: 98, penaltyCurve: 1, penaltyPer100: 590_000, minAdder: 0 }],
+      realTeamCount: 1,
+    });
+
+    expect(result.feasible, result.message).toBe(true);
+    expect(result.assignments[0]).toMatchObject({ addedTax: -5_900, allInCost: 100 });
+  });
 });

@@ -5,7 +5,10 @@ import type {
   SnakeAssistantBoardRequest,
   SnakeAssistantBoardRunResult,
 } from './snakeDeskIntelligenceModel';
-import { runSnakeAssistantBoardRequest } from './snakeDeskIntelligenceModel';
+import {
+  canonicalSnakeAssistantSlotId,
+  runSnakeAssistantBoardRequest,
+} from './snakeDeskIntelligenceModel';
 import type { SnakeAssistantUnavailableReason } from '../../../../../engines/snakeAssistantBoard';
 import {
   CHEMISTRY_CODES,
@@ -14,6 +17,7 @@ import {
 } from '../../../../../data/chemistryCanonical';
 import { isLegalRoster } from '../../../../../data/rosterConstruction';
 import { evaluateSnakePlan } from '../../../../../engines/snakeEconomics';
+import { snakeMoneyNonnegative } from '../../../../../engines/snakeMoney';
 import { isDesignPlayerEligibleForSlot } from '../../../../../engines/rosterDesignFeasibility';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from '../../../../../engines/snakeVersioning';
 import { buildChemistryStrip } from './draftTruthModel';
@@ -139,9 +143,9 @@ function readyBoardMatchesRequest(
   const selectedGroups = currentPlayers.map((player) => deriveVersionGroupId(playerVersionIdentity(player)));
   if (new Set(selectedGroups).size !== selectedGroups.length
     || !isLegalRoster(currentPlayers.map((player) => player.seating.shape))) return false;
-  const designById = new Map(input.slots.map((slot) => [slot.slotId, slot]));
+  const designById = new Map(input.slots.map((slot) => [canonicalSnakeAssistantSlotId(slot.slotId), slot]));
   if (designById.size !== 22 || board.slots.some((slot) => {
-    const design = designById.get(slot.slotId);
+    const design = designById.get(canonicalSnakeAssistantSlotId(slot.slotId));
     const player = poolById.get(slot.playerId);
     return !design || !player || !isDesignPlayerEligibleForSlot(design, {
       profile: {
@@ -185,7 +189,7 @@ function readyBoardMatchesRequest(
   } catch {
     return false;
   }
-  if (plan.playerIds.length !== 22 || plan.planCushion < -1e-9
+  if (plan.playerIds.length !== 22 || !snakeMoneyNonnegative(plan.planCushion)
     || !sameFinite(board.ledger.salary, plan.planCost)
     || !sameFinite(board.ledger.tax, plan.planTax)
     || !sameFinite(board.ledger.allIn, plan.planCost + plan.planTax)
@@ -208,7 +212,7 @@ function finiteLedger(board: DerivedSnakeAssistantBoard): boolean {
   return values.every((value) => typeof value === 'number' && Number.isFinite(value))
     && board.ledger.rosterCount === 22
     && Math.abs(board.ledger.allIn! - (board.ledger.salary! + board.ledger.tax!)) < 1e-9
-    && board.ledger.moneyLeft! >= -1e-9;
+    && snakeMoneyNonnegative(board.ledger.moneyLeft!);
 }
 
 function validReadyBoard(value: unknown, request: SnakeAssistantBoardRequest): value is DerivedSnakeAssistantBoard {
@@ -223,16 +227,21 @@ function validReadyBoard(value: unknown, request: SnakeAssistantBoardRequest): v
   const slotIds = new Set<string>();
   const slotPlayers = new Set<string>();
   for (const slot of board.slots) {
+    const canonicalSlotId = slot && typeof slot === 'object' && typeof slot.slotId === 'string'
+      ? canonicalSnakeAssistantSlotId(slot.slotId)
+      : '';
     if (!slot || typeof slot !== 'object' || !hasExactKeys(slot, ['slotId', 'playerId', 'pinned'])
       || typeof slot.slotId !== 'string' || !slot.slotId
       || typeof slot.playerId !== 'string' || !slot.playerId
       || typeof slot.pinned !== 'boolean'
-      || slotIds.has(slot.slotId) || slotPlayers.has(slot.playerId)) return false;
-    slotIds.add(slot.slotId);
+      || slotIds.has(canonicalSlotId) || slotPlayers.has(slot.playerId)) return false;
+    slotIds.add(canonicalSlotId);
     slotPlayers.add(slot.playerId);
   }
   const recommendationOrder = new Set(board.recommendationOrder);
-  const requestSlotIds = new Set(request.input.slots?.map((slot) => slot.slotId) ?? []);
+  const requestSlotIds = new Set(request.input.slots?.map((slot) => (
+    canonicalSnakeAssistantSlotId(slot.slotId)
+  )) ?? []);
   if (requestSlotIds.size !== 22 || [...requestSlotIds].some((slotId) => !slotIds.has(slotId))
     || new Set(board.playerIds).size !== 22
     || board.playerIds.some((playerId) => typeof playerId !== 'string' || !slotPlayers.has(playerId))

@@ -218,6 +218,33 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(new Set(board.rankings.global.slice(0, 22))).toEqual(new Set(Object.values(board.slots)));
   });
 
+  test('seeds a certificate accepted within the canonical sub-cent money tolerance', () => {
+    const players = rosterLocalTaxFixture([
+      ...makeLegalRosterPlayerSet('epsilon-first', 1_000),
+      ...makeLegalRosterPlayerSet('epsilon-second', 1_000),
+      makePlayer(401, { id: 'epsilon-floor-c', primaryPosition: 'C' }),
+      makePlayer(402, { id: 'epsilon-floor-lf', primaryPosition: 'LF' }),
+      makePlayer(403, { id: 'epsilon-floor-cf', primaryPosition: 'CF' }),
+      makePlayer(404, { id: 'epsilon-floor-rf', primaryPosition: 'RF' }),
+      makePlayer(405, { id: 'epsilon-floor-cp', primaryPosition: 'CP' }),
+    ]);
+    const widePool = pool(players, 1_000);
+    const certificate = proveSimultaneousSnakeSeating(
+      buildSnakeSetupProofInput({ teams: [makeTeam('team-a')], players, pool: widePool }),
+    );
+    expect(certificate.feasible, certificate.message).toBe(true);
+    const allInCost = certificate.assignments[0].allInCost;
+    const locked = { ...widePool, tierCap: allInCost - 0.0000005 };
+    const boards = buildInitialSnakeSeatBoards({
+      teams: [makeTeam('team-a')],
+      players,
+      pool: locked,
+      certificate,
+    });
+
+    expect(Object.values(boards['team-a'].slots)).toHaveLength(22);
+  });
+
   test('blocks unclaimable companion setup before the room can be created', () => {
     const teams = [makeTeam('team-a'), makeTeam('team-b'), makeTeam('team-c'), makeTeam('team-d')];
     expect(validateSnakeCompanionSeats({

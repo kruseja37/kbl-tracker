@@ -46,6 +46,24 @@ const consequence = {
 } as SelectedPlayerConsequence;
 
 describe('SelectedPlayerCard', () => {
+  it('renders an unproved bounded finish as OPEN instead of NO', () => {
+    render(<SelectedPlayerCard
+      player={player}
+      candidate={candidate}
+      consequence={{
+        ...consequence,
+        after: {
+          ...consequence.after,
+          legalFinish: { feasible: false, moneyLeft: -1, affordability: 'OPEN' },
+        },
+      }}
+      teamName="Beewolves"
+    />);
+
+    expect(screen.getByText('OPEN')).toBeInTheDocument();
+    expect(screen.queryByText('NO')).not.toBeInTheDocument();
+  });
+
   it('renders the complete compact profile and exact consequences without visible pronouns or zero ratings', () => {
     const onOptimizeAround = vi.fn();
     const onKeep = vi.fn();

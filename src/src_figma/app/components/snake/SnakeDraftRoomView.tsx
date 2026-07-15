@@ -83,6 +83,7 @@ export interface SnakeDraftRoomViewProps {
   writeNotice?: string | null;
   onReloadRoom?: () => void | Promise<void>;
   onDismissWriteNotice?: () => void;
+  onHome?: () => void;
   onPauseChange: (paused: boolean) => void | Promise<void>;
   onPracticeFastForwardChange?: (enabled: boolean) => void;
   onRecordPick: (candidateId: string) => void | Promise<void>;
@@ -407,6 +408,17 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           <h1 className="ballpark-title text-3xl">THE ROOM</h1>
         </div>
         <div className="flex flex-wrap gap-2" aria-label="Commissioner controls">
+          {props.onHome ? <button
+            type="button"
+            aria-label="APP HOME"
+            className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 min-w-11 bg-white px-2"
+            onClick={props.onHome}
+          >
+            <span className="flex flex-col items-center justify-center border-2 border-[#0066FF] bg-white px-1 py-0.5 font-['Press_Start_2P'] shadow-[1px_1px_0_#DD0000]">
+              <span className="text-[5px] leading-tight text-[#DD0000]">SUPER MEGA</span>
+              <span className="mt-0.5 text-[7px] leading-tight text-[#0066FF]">BASEBALL</span>
+            </span>
+          </button> : null}
           <PressButton
             size="sm"
             variant="default"

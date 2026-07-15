@@ -15,7 +15,12 @@ import {
   FARM_SNAKE_SESSION_NUMBER,
   farmPickSalary,
 } from '../../../engines/snakeFarmSlots';
-import { evaluateSnakeLegalFinish, evaluateSnakePlan, type SnakeLegalFinishBill } from '../../../engines/snakeEconomics';
+import {
+  evaluateSnakeLegalFinish,
+  evaluateSnakePlan,
+  snakeMoneyNonnegative,
+  type SnakeLegalFinishBill,
+} from '../../../engines/snakeEconomics';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../../engines/snakeSession';
 import { primeSnakeGuideSeatingProof, seedSnakeGuideSeatingProof } from '../../../engines/snakeGuideTrade';
 import {
@@ -72,6 +77,7 @@ import {
   type SelectedPlayerConsequence,
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
+import { snakeBoardOverBudgetReason } from '../components/snake/desk/snakeDeskMoneyCopy';
 import {
   buildSnakeDecisionCandidateFacts,
   buildSnakeGuideRecommendationRequest,
@@ -580,6 +586,7 @@ function FarmSnakeRoom() {
   />;
   const farmDraftComplete = session.currentPickIndex >= session.pickOrder.length;
   return <SnakeDraftRoomView
+    onHome={() => navigate('/')}
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     order={session.pickOrder.map((slot, index, all) => ({ pick: slot.pick, teamId: slot.teamId, endpoint: all[index - 1]?.teamId === slot.teamId || all[index + 1]?.teamId === slot.teamId }))}
     currentPickIndex={session.currentPickIndex}
@@ -1125,12 +1132,14 @@ function MlbSnakeDraftRoom() {
     }
     const blockReason = !bill.feasible
       ? 'THIS PICK LEAVES NO LEGAL 22.'
-      : bill.legalFinishCushion < 0
+      : !snakeMoneyNonnegative(bill.legalFinishCushion) && bill.affordability === 'BLOCKED'
         ? `YOU NEED $${Math.abs(Math.round(bill.legalFinishCushion)).toLocaleString()} MORE TO FINISH A LEGAL 22.`
         : !simultaneous?.feasible
           ? simultaneous?.message ?? 'THIS PICK BREAKS THE SHARED DRAFT PLAN.'
         : null;
-    const line = blockReason ?? `AFTER THIS PICK AND A LEGAL FINISH: $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`;
+    const line = blockReason ?? (bill.affordability === 'OPEN'
+      ? 'FINISH COST CHECK OPEN.'
+      : `AFTER THIS PICK AND A LEGAL FINISH: $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`);
     return {
       id: player.id,
       name: fullName(player.firstName, player.lastName),
@@ -1349,7 +1358,14 @@ function MlbSnakeDraftRoom() {
         marginalTax,
         trueCost: displayedSalary + marginalTax,
         archetypeChip: locked.archetypeName,
-        fitWord: fitWord({ player, priorities: locked.priorities, capIdentity: locked.capIdentity, need, openSlots }),
+        fitWord: fitWord({
+          player,
+          priorities: locked.priorities,
+          capIdentity: locked.capIdentity,
+          baseCaps: pool.luxuryCaps,
+          need,
+          openSlots,
+        }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
         riskPending: askedRiskIds.has(player.playerId) && (rationalRiskState.status === 'pending'
           || (rationalRiskState.status === 'ready' && !risk)),
@@ -1423,11 +1439,10 @@ function MlbSnakeDraftRoom() {
         ...candidate,
         risk: canonicalRisk,
         riskPending: candidate.riskPending && canonicalRisk === 'SAFE_TO_WAIT',
-        riskReason: planBill && planBill.planCushion < 0
-          ? `YOUR 22-MAN BOARD IS $${Math.abs(Math.round(planBill.planCushion)).toLocaleString()} OVER BUDGET.`
-          : (cheapestFinishDepthByPlayerId.get(candidate.id) ?? Number.POSITIVE_INFINITY) <= 2
+        riskReason: snakeBoardOverBudgetReason(planBill?.planCushion ?? null)
+          ?? ((cheapestFinishDepthByPlayerId.get(candidate.id) ?? Number.POSITIVE_INFINITY) <= 2
             ? `ONLY ${cheapestFinishDepthByPlayerId.get(candidate.id)} CANONICAL ROLE OPTIONS REMAIN FOR THE CHEAPEST LEGAL FINISH.`
-            : candidate.riskReason,
+            : candidate.riskReason),
       };
     });
     const candidateById = new Map(displayCandidates.map((candidate) => [candidate.id, candidate]));
@@ -1464,7 +1479,7 @@ function MlbSnakeDraftRoom() {
         text: `ONLY ${depth} AVAILABLE NAME${depth === 1 ? '' : 'S'} REMAIN FOR ${slotId}.`,
         actionable: true,
       }] : []),
-      ...(planBill && planBill.planCushion < 0 ? [{
+      ...(planBill && !snakeMoneyNonnegative(planBill.planCushion) ? [{
         key: 'plan:over-budget',
         text: `YOUR 22-MAN PLAN IS $${Math.abs(Math.round(planBill.planCushion)).toLocaleString()} OVER THE SAFE FINISH LINE.`,
         actionable: true,
@@ -1942,7 +1957,8 @@ function MlbSnakeDraftRoom() {
       realTeamCount: leagueTeams.length,
       capIdentity: resolveLockedSeat({ team: draftingTeam, session }).capIdentity,
     });
-    if (!finish.feasible || finish.legalFinishCushion < 0) {
+    if (!finish.feasible
+      || (!snakeMoneyNonnegative(finish.legalFinishCushion) && finish.affordability === 'BLOCKED')) {
       throw new Error('THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.');
     }
     const existing = teamPicks.flatMap((pick) => {
@@ -2254,6 +2270,7 @@ function MlbSnakeDraftRoom() {
 
   return (
     <SnakeDraftRoomView
+      onHome={() => navigate('/')}
       teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
       order={session.pickOrder.map((slot, index, all) => ({
         pick: slot.pick,
@@ -2296,7 +2313,11 @@ function MlbSnakeDraftRoom() {
           <div className="mt-3">{draftAction}</div>
         </section>
       )) : undefined}
-      selectedFitLabel={deskState?.selectedCandidate ? `FIT · ${deskState.selectedCandidate.fitWord}` : null}
+      selectedFitLabel={deskState?.selectedCandidate
+        ? `FIT · ${selectedConsequence?.status === 'ready'
+          ? selectedConsequence.after.fitWord
+          : deskState.selectedCandidate.fitWord}`
+        : null}
       draftActionLabel="DRAFT PLAYER"
       paused={Boolean(session.paused)}
       soundsEnabled={soundsEnabled}

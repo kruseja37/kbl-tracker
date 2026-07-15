@@ -14,7 +14,11 @@ import {
   type SnakeAssistantBoardInput,
   type SnakeAssistantUnavailableReason,
 } from '../../../../../engines/snakeAssistantBoard';
-import { evaluateSnakeLegalFinish, evaluateSnakePlan } from '../../../../../engines/snakeEconomics';
+import {
+  evaluateSnakeLegalFinish,
+  evaluateSnakePlan,
+  snakeMoneyNonnegative,
+} from '../../../../../engines/snakeEconomics';
 import type { SnakeSeatingPlayer } from '../../../../../engines/snakeSeatingProof';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from '../../../../../engines/snakeVersioning';
 import {
@@ -65,6 +69,7 @@ export type SelectedPlayerConsequencePlayer = SnakeAssistantBoardInput['activePo
 export interface SelectedPlayerLegalFinish {
   feasible: boolean;
   moneyLeft: number | null;
+  affordability?: 'AFFORDABLE' | 'BLOCKED' | 'OPEN';
 }
 
 export interface SelectedPlayerConsequenceReady {
@@ -183,6 +188,13 @@ export function resolveAssistantDesignSlots(savedSlots?: readonly DesignSlot[] |
   return buildDefaultDesignSlots();
 }
 
+export function canonicalSnakeAssistantSlotId(slotId: string): string {
+  const normalized = slotId.replace(/_/g, '').toUpperCase();
+  return SNAKE_BOARD_SLOT_IDS.find((candidate) => (
+    candidate.replace(/_/g, '').toUpperCase() === normalized
+  )) ?? slotId;
+}
+
 export function buildSnakeAssistantBoardRequest(input: {
   identity: SnakeAssistantPrivateIdentity;
   frozenPoolIdentity: string;
@@ -206,6 +218,10 @@ export function buildSnakeAssistantBoardRequest(input: {
 export function runSnakeAssistantBoardRequest(request: SnakeAssistantBoardRequest): SnakeAssistantBoardRunResult {
   const result = buildSnakeAssistantBoard(request.input);
   if (result.status === 'unavailable') return result;
+  const slots = result.slots.map((slot) => ({
+    ...slot,
+    slotId: canonicalSnakeAssistantSlotId(slot.slotId),
+  }));
   const storedById = new Map(request.input.activePool.map((player) => [player.playerId, player.stored]));
   const storedPlayers = result.playerIds.map((playerId) => storedById.get(playerId));
   if (storedPlayers.some((player) => !player)) return { status: 'unavailable', reason: 'INVALID_POOL' };
@@ -214,7 +230,7 @@ export function runSnakeAssistantBoardRequest(request: SnakeAssistantBoardReques
     board: {
       kind: 'snake-assistant-board',
       teamId: result.teamId,
-      slots: result.slots,
+      slots,
       playerIds: result.playerIds,
       recommendationOrder: result.recommendationOrder,
       ledger: buildPlanLedger(result.plan),
@@ -252,9 +268,25 @@ function seatingPlayer(player: SelectedPlayerConsequencePlayer, price: number): 
 
 function legalFinish(value: ReturnType<typeof evaluateSnakeLegalFinish>): SelectedPlayerLegalFinish {
   return {
-    feasible: value.feasible && value.legalFinishCushion >= 0,
+    feasible: value.feasible && snakeMoneyNonnegative(value.legalFinishCushion),
     moneyLeft: Number.isFinite(value.legalFinishCushion) ? value.legalFinishCushion : null,
+    affordability: value.affordability,
   };
+}
+
+function planAwareFitWord(
+  rawFitWord: string,
+  before: ReturnType<typeof evaluateSnakePlan>,
+  after: ReturnType<typeof evaluateSnakePlan>,
+  playerValue: number,
+): string {
+  if (!snakeMoneyNonnegative(after.planCushion) && snakeMoneyNonnegative(before.planCushion)) return 'WEAK FIT';
+  const taxDelta = after.planTax - before.planTax;
+  const materialTax = Math.max(1_000, playerValue * 0.1);
+  if (taxDelta > materialTax) return 'WEAK FIT';
+  if (rawFitWord === 'STRONG FIT' && taxDelta > Math.max(1_000, playerValue * 0.03)) return 'SOLID FIT';
+  if (rawFitWord === 'SOLID FIT' && taxDelta < -materialTax) return 'STRONG FIT';
+  return rawFitWord;
 }
 
 function positionRank(
@@ -595,13 +627,13 @@ export function buildSelectedPlayerConsequence(input: SelectedPlayerConsequenceI
         ledger: buildPlanLedger(beforePlan),
         chemistry: buildChemistryStrip(originalPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
         legalFinish: legalFinish(beforeFinish),
-        fitWord: displaced.fitWord,
+        fitWord: planAwareFitWord(displaced.fitWord, afterPlan, beforePlan, displaced.frozenIv),
       },
       after: {
         ledger: buildPlanLedger(afterPlan),
         chemistry: buildChemistryStrip(afterPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
         legalFinish: legalFinish(afterFinish),
-        fitWord: selected.fitWord,
+        fitWord: planAwareFitWord(selected.fitWord, beforePlan, afterPlan, selected.frozenIv),
       },
     };
   } catch {

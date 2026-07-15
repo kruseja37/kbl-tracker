@@ -191,6 +191,8 @@ import {
   draftSetupSolvencyBannerText,
   formatMoney,
   identityAutoFilledSlotKey,
+  retiredSnakeVersionIdsForLock,
+  snakeVersionRestoreIds,
   type IdentityAutoAssignment,
   type IdentityAutoFilledSlotKey,
 } from "./LeagueBuilderDraftSetup.helpers";
@@ -1261,7 +1263,6 @@ function samePlayerIds(left: readonly string[], right: readonly string[]): boole
     && sortedLeft.every((id, index) => id === sortedRight[index]);
 }
 
-
 /** ROOMFIX wholesale adapter: exact picked membership is locked before the session can exist. */
 async function registerPickedSnakePool(leagueId: string, pickedPlayerIds: readonly string[]): Promise<void> {
   const picked = [...new Set(pickedPlayerIds)];
@@ -1283,10 +1284,13 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
   const { league, teams, players, poolPlayers, pool, runProof = proveSimultaneousSnakeSeating } = input;
   const groups = useMemo(() => deriveSnakeVersionGroups(poolPlayers), [poolPlayers]);
   const versionLedgerGroups = useMemo(() => {
-    const sourceIds = new Set(league?.snakeVersionSourcePlayerIds ?? []);
+    const sourceIds = new Set([
+      ...poolPlayers.map((player) => player.id),
+      ...(league?.snakeVersionSourcePlayerIds ?? []),
+    ]);
     if (sourceIds.size === 0) return groups;
     return deriveSnakeVersionGroups(players.filter((player) => sourceIds.has(player.id)));
-  }, [groups, league?.snakeVersionSourcePlayerIds, players]);
+  }, [groups, league?.snakeVersionSourcePlayerIds, players, poolPlayers]);
   const [versionSelections, setVersionSelections] = useState<Record<string, string>>({});
   const [gmNameEdits, setGmNames] = useState<Record<string, string>>({});
   const [seatModeEdits, setSeatModes] = useState<Record<string, 'hotseat' | 'companion'>>({});
@@ -1322,6 +1326,9 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
       ? { ...pool, players: selectedPlayers }
       : null;
   }, [pool, selectedPoolIds]);
+  const lockedPoolMatchesSelection = useMemo(() => (
+    !pool?.locked || samePlayerIds(pool.players.map((player) => player.id), selectedPoolIds)
+  ), [pool, selectedPoolIds]);
 
   const companionSeatReasons = useMemo(() => validateSnakeCompanionSeats({
     teams,
@@ -1359,6 +1366,7 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
     if (input.hasSavedDraft) return [];
     if (companionSeatReasons.length > 0) return companionSeatReasons;
     if (!pool) return [];
+    if (!lockedPoolMatchesSelection) return ['Unlock the pool and choose one card for each player.'];
     if (pool && !proofPool) return ['The selected player versions do not match the priced pool.'];
     if (checking) return ['Checking every club\'s legal, affordable 22.'];
     if (!proof) return ['The snake room check did not finish.'];
@@ -1367,13 +1375,14 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
     if (!seed.trim()) return ['Enter a draft seed.'];
     if (order.length !== teams.length) return ['Finish the draft order before entering the room.'];
     return [];
-  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, order.length, pool, proof, proofPool, seed, teams.length]);
+  }, [checking, companionSeatReasons, input.hasSavedDraft, input.savedDraftChecked, input.savedDraftLookupError, lockedPoolMatchesSelection, order.length, pool, proof, proofPool, seed, teams.length]);
 
   const lockProofBlocked = Boolean(pool && !pool.locked && (
     !proofPool || checking || !proof?.feasible
   ));
 
   const ready = Boolean(pool?.locked
+    && lockedPoolMatchesSelection
     && proof?.feasible
     && !checking
     && Boolean(seed.trim())
@@ -1408,9 +1417,9 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
     navigate: (leagueId: string) => void;
   }) => {
     if (!league) return;
-    if (!pool?.locked || !proof?.feasible || checking || companionSeatReasons.length > 0 || !seed.trim()) return;
+    if (!pool?.locked || !lockedPoolMatchesSelection || !proof?.feasible || checking || companionSeatReasons.length > 0 || !seed.trim()) return;
     const draftSeed = seed.trim();
-    const lockedIds = pool.players.map((row) => row.id);
+    const lockedIds = [...selectedPoolIds];
     await registerPickedSnakePool(league.id, lockedIds);
     const rankedTeams = await input.flushBoardRankings();
     const now = new Date().toISOString();
@@ -2777,6 +2786,15 @@ export function LeagueBuilderDraftSetup() {
     if (hasCompletedDraft) throw new Error(COMPLETED_DRAFT_POOL_LOCK_MESSAGE);
   }, [hasCompletedDraft, hasSavedDraft, savedDraftChecked, savedDraftLookupError]);
 
+  const handleDraftFormatChange = (draftFormat: 'auction' | 'snake') =>
+    runAction(async () => {
+      if (!league || (league.draftFormat ?? 'auction') === draftFormat) return;
+      if (!setupCanMutate()) return;
+      if (locked) throw new Error('Unlock the player pool before changing the draft method.');
+      const saved = await saveLeagueTemplate({ ...league, draftFormat });
+      replaceLeagueLocal(saved);
+    }, { refreshData: false, refreshPool: false });
+
   const handlePoolModeChange = (nextMode: DraftPoolMode) =>
     runAction(async () => {
       if (!league || nextMode === poolMode) return;
@@ -3254,18 +3272,13 @@ export function LeagueBuilderDraftSetup() {
       const expectedIds = isSnakeFormat ? snakeAdapter.selectedPoolIds : displayedPoolIds;
       let leagueForLock = league;
       if (isSnakeFormat) {
-        const versionSourceIds = sortedIds([
-          ...(league?.snakeVersionSourcePlayerIds ?? []),
-          ...displayedPoolIds,
-        ]);
+        const versionSourceIds = retiredSnakeVersionIdsForLock(displayedPoolIds, expectedIds);
         if (league && JSON.stringify(versionSourceIds) !== JSON.stringify(league.snakeVersionSourcePlayerIds ?? [])) {
           leagueForLock = await saveLeagueTemplate({ ...league, snakeVersionSourcePlayerIds: versionSourceIds });
           replaceLeagueLocal(leagueForLock);
         }
-        const selectedIds = new Set(expectedIds);
-        const unpickedVersionIds = displayedPoolIds.filter((id) => !selectedIds.has(id));
-        if (unpickedVersionIds.length > 0) {
-          const changedPlayers = await removePlayersFromLeaguePool(unpickedVersionIds, activeLeagueId);
+        if (versionSourceIds.length > 0) {
+          const changedPlayers = await removePlayersFromLeaguePool(versionSourceIds, activeLeagueId);
           replacePlayersLocal(changedPlayers);
         }
       }
@@ -3292,8 +3305,7 @@ export function LeagueBuilderDraftSetup() {
       assertPoolCanMutate();
       let refreshedPool = await unlockLeaguePool(activeLeagueId);
       if (isSnakeFormat && league?.snakeVersionSourcePlayerIds?.length) {
-        const currentIds = new Set(displayedPoolIds);
-        const restoreIds = league.snakeVersionSourcePlayerIds.filter((id) => !currentIds.has(id));
+        const restoreIds = snakeVersionRestoreIds(displayedPoolIds, league.snakeVersionSourcePlayerIds);
         if (restoreIds.length > 0) {
           replacePlayersLocal(await addPlayersToLeaguePool(restoreIds, activeLeagueId));
           // Restored versions need fresh RegisteredPool rows/IVs before the exact pre-lock proof
@@ -4119,6 +4131,69 @@ export function LeagueBuilderDraftSetup() {
     </div>
   ) : null;
 
+  const draftMethodControl = league ? (
+    <div
+      className="flex border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]"
+      role="group"
+      aria-label="DRAFT METHOD"
+    >
+      {(['auction', 'snake'] as const).map((method) => {
+        const active = (league.draftFormat ?? 'auction') === method;
+        return <button
+          key={method}
+          type="button"
+          aria-pressed={active}
+          disabled={locked || Boolean(setupMutationBlockMessage) || busy}
+          onClick={() => handleDraftFormatChange(method)}
+          className={`min-h-11 px-4 py-2 text-sm font-bold disabled:opacity-45 ${active
+            ? 'bg-[var(--ballpark-brass)] text-[#1A1A1A]'
+            : 'text-[var(--ballpark-chalk)] hover:bg-[var(--ballpark-action-green)]'}`}
+        >{method === 'auction' ? 'AUCTION DRAFT' : 'SNAKE DRAFT'}</button>;
+      })}
+    </div>
+  ) : null;
+
+  const snakeClubIdentityControls = selectedTeam && selectedTeamConfig ? (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {leagueTeams.map((team) => {
+          const selected = team.id === selectedTeam.id;
+          const mlb = archetypeByKey(team.mlbArchetypeKey)?.name ?? '—';
+          const farm = archetypeByKey(team.farmArchetypeKey)?.name ?? '—';
+          return <button
+            key={team.id}
+            type="button"
+            aria-label={`EDIT ${team.name.toUpperCase()} IDENTITIES`}
+            aria-pressed={selected}
+            onClick={() => {
+              setSelectedTeamId(team.id);
+              setClubEditorMode('identity');
+            }}
+            className={`min-h-11 border-4 p-3 text-left font-bold ${selected
+              ? 'border-[var(--ballpark-brass)] bg-[var(--ballpark-card-active)]'
+              : 'border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]'}`}
+          >
+            <span className="block">{team.name.toUpperCase()}</span>
+            <span className="block text-[10px] text-[var(--ballpark-chalk)]/65">MLB · {mlb}</span>
+            <span className="block text-[10px] text-[var(--ballpark-chalk)]/65">FARM · {farm}</span>
+          </button>;
+        })}
+      </div>
+      <div className="border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4">
+        <ArchetypePicker
+          teamLabel={selectedTeam.name}
+          mlbKey={selectedTeamConfig.mlbKey}
+          farmKey={selectedTeamConfig.farmKey}
+          draftability={draftability ?? {}}
+          onPick={handlePick}
+          disabled={Boolean(setupMutationBlockMessage) || busy}
+          disabledReason={setupMutationBlockMessage ?? undefined}
+          showHelp={showHelp}
+        />
+      </div>
+    </div>
+  ) : null;
+
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): the league checkbox
   // list. Flat list of EVERY league in the app (JK ruling 2026-07-08 #2), own league included and
   // NOT locked (ruling #1) — default state (nothing ever touched) is own-league-only, byte-
@@ -4196,6 +4271,7 @@ export function LeagueBuilderDraftSetup() {
         title={`Snake Draft — ${league.name}`}
       >
         {(error || actionError || savedDraftLookupError) ? <div className="mb-4 border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{actionError ?? savedDraftLookupError ?? error}</div> : null}
+        <div className="mb-6">{draftMethodControl}</div>
         <SnakeDraftSetupPanels
           adapter={snakeAdapter}
           teams={leagueTeams}
@@ -4203,6 +4279,7 @@ export function LeagueBuilderDraftSetup() {
           disabled={Boolean(setupMutationBlockMessage) || busy}
           lockDisabled={inPoolPlayers.length === 0 || poolFirstLegalCompletionBlocked || snakeAdapter.lockProofBlocked}
           showHelp={showHelp}
+          poolSources={sourceLeaguesPanel}
           poolControls={<>
             <div className="mb-4 flex flex-wrap gap-3">
               <PressButton
@@ -4216,6 +4293,7 @@ export function LeagueBuilderDraftSetup() {
             </div>
             {poolShuttle}
           </>}
+          clubControls={snakeClubIdentityControls}
           onLock={() => void handleLock()}
           onUnlock={() => void handleUnlock()}
         />
@@ -4360,6 +4438,7 @@ export function LeagueBuilderDraftSetup() {
                   </option>
                 ))}
               </select>
+              {draftMethodControl}
               <div className="flex border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]">
                 {(["pool-first", "design-first"] as const).map((mode) => (
                   <button

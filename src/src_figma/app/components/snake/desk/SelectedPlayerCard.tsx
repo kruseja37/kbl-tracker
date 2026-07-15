@@ -4,7 +4,10 @@ import type { Player } from '../../../../../utils/leagueBuilderStorage';
 import type { DeskCandidate } from './deskModel';
 import { fitToneForWord } from './draftTruthModel';
 import type { SnakeDraftDecision } from './snakeDraftDecisionModel';
-import type { SelectedPlayerConsequence } from './snakeDeskIntelligenceModel';
+import type {
+  SelectedPlayerConsequence,
+  SelectedPlayerLegalFinish,
+} from './snakeDeskIntelligenceModel';
 
 const RATINGS: readonly [keyof Omit<DraftProfileFullRatings, 'arsenal'>, string][] = [
   ['power', 'POW'], ['contact', 'CON'], ['speed', 'SPD'], ['fielding', 'FLD'], ['arm', 'ARM'],
@@ -13,6 +16,11 @@ const RATINGS: readonly [keyof Omit<DraftProfileFullRatings, 'arsenal'>, string]
 
 function money(value: number | null): string {
   return value === null ? '—' : `$${Math.round(value).toLocaleString()}`;
+}
+
+function legalFinishLabel(value: SelectedPlayerLegalFinish): string {
+  if (value.affordability === 'OPEN') return 'OPEN';
+  return value.feasible ? money(value.moneyLeft) : 'NO';
 }
 
 const FIT_TONE_CLASS = {
@@ -40,7 +48,10 @@ export function SelectedPlayerCard(props: {
 }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const profile = buildDraftProfileModel(props.player, { revealFull: true });
-  const fitTone = fitToneForWord(props.candidate.fitWord);
+  const displayedFitWord = props.consequence?.status === 'ready'
+    ? props.consequence.after.fitWord
+    : props.candidate.fitWord;
+  const fitTone = fitToneForWord(displayedFitWord);
   const positions = profile.secondaryPosition
     ? `${profile.primaryPosition} · ${profile.secondaryPosition}`
     : profile.primaryPosition;
@@ -82,7 +93,7 @@ export function SelectedPlayerCard(props: {
           <p className="text-[10px] font-bold">AGE {profile.age} · B/T {profile.bats}/{profile.throws}{profile.armSlot ? ` · ${profile.armSlot} SLOT` : ''}</p>
         </div>
         </div>
-        <span className={`mt-2 inline-block max-w-full border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>FIT · {props.candidate.fitWord}</span>
+        <span className={`mt-2 inline-block max-w-full border-2 px-2 py-1 text-[10px] font-black ${FIT_TONE_CLASS[fitTone]}`}>FIT · {displayedFitWord}</span>
         {props.actionConsequence ? <p className={`mt-2 border-2 p-2 text-xs font-black ${props.blockReason ? 'border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] text-[var(--ballpark-warn-text)]' : 'border-[var(--ballpark-panel-border)]'}`}>{props.actionConsequence}</p> : null}
         <div className="mt-2 flex flex-wrap gap-2">
           {props.draftAction}
@@ -138,7 +149,7 @@ export function SelectedPlayerCard(props: {
           <span>TAX</span><strong>{money(consequence.before.ledger.tax)}</strong><strong>{money(consequence.after.ledger.tax)}</strong>
           <span>ALL-IN</span><strong>{money(consequence.before.ledger.allIn)}</strong><strong>{money(consequence.after.ledger.allIn)}</strong>
           <span>LEFT</span><strong>{money(consequence.before.ledger.moneyLeft)}</strong><strong>{money(consequence.after.ledger.moneyLeft)}</strong>
-          <span>LEGAL FINISH</span><strong>{consequence.before.legalFinish.feasible ? money(consequence.before.legalFinish.moneyLeft) : 'NO'}</strong><strong>{consequence.after.legalFinish.feasible ? money(consequence.after.legalFinish.moneyLeft) : 'NO'}</strong>
+          <span>LEGAL FINISH</span><strong>{legalFinishLabel(consequence.before.legalFinish)}</strong><strong>{legalFinishLabel(consequence.after.legalFinish)}</strong>
         </div>
         <div className="mt-2 grid grid-cols-1 gap-1 text-[10px] sm:grid-cols-5" aria-label="Selected player chemistry consequences">
           {consequence.before.chemistry.map((row, index) => {

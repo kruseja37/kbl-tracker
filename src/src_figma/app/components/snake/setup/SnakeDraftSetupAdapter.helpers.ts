@@ -2,7 +2,8 @@
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import { isLegalRoster } from '../../../../../data/rosterConstruction';
-import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool } from '../../../../../engines/leagueConstruction';
+import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool, type TeamCapIdentity } from '../../../../../engines/leagueConstruction';
+import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import { archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
 import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
@@ -10,6 +11,7 @@ import {
   auctionSinglePlayerTaxWithShiftedCaps,
 } from '../../../../../engines/auctionLuxuryTax';
 import { snakeLuxuryCaps } from '../../../../../engines/snakeLuxuryTax';
+import { snakeMoneyAffordable } from '../../../../../engines/snakeMoney';
 import {
   proveSimultaneousSnakeSeating,
   type SimultaneousSnakeSeatingInput,
@@ -169,6 +171,8 @@ function boardCandidate(input: {
   iv: number;
   priorities: BandPriorities;
   archetypeName: string;
+  capIdentity?: TeamCapIdentity;
+  baseCaps: readonly LuxuryCapRow[];
   shiftedCaps: ReturnType<typeof snakeLuxuryCaps>;
 }): DeskCandidate | null {
   if (!isTaxonomyPosition(input.player.primaryPosition)) return null;
@@ -190,7 +194,14 @@ function boardCandidate(input: {
     marginalTax,
     trueCost: input.iv + marginalTax,
     archetypeChip: input.archetypeName,
-    fitWord: deskFitWord({ player: input.roomPlayer, priorities: input.priorities, need, openSlots: 22 }),
+    fitWord: deskFitWord({
+      player: input.roomPlayer,
+      priorities: input.priorities,
+      capIdentity: input.capIdentity,
+      baseCaps: input.baseCaps,
+      need,
+      openSlots: 22,
+    }),
     risk: 'SAFE_TO_WAIT',
     legalFinishLine: 'SETUP BOARD SNAPSHOT',
     construction: input.roomPlayer.construction,
@@ -226,7 +237,16 @@ export function buildInitialSnakeSeatBoards(input: {
       const player = playerById.get(priced.id);
       const roomPlayer = roomPlayerById.get(priced.id);
       if (!player || !roomPlayer) return [];
-      const candidate = boardCandidate({ player, roomPlayer, iv: priced.iv, priorities, archetypeName, shiftedCaps });
+      const candidate = boardCandidate({
+        player,
+        roomPlayer,
+        iv: priced.iv,
+        priorities,
+        archetypeName,
+        capIdentity,
+        baseCaps: input.pool.luxuryCaps,
+        shiftedCaps,
+      });
       return candidate ? [candidate] : [];
     });
     const certifiedAssignment = input.certificate?.feasible
@@ -252,12 +272,12 @@ export function buildInitialSnakeSeatBoards(input: {
       if (certifiedAssignment) {
         const certifiedIds = new Set(certifiedAssignment.playerIds);
         if (selected.every((player) => certifiedIds.has(player.playerId))) {
-          return certifiedAssignment.allInCost <= input.pool.tierCap + 1e-9;
+          return snakeMoneyAffordable(certifiedAssignment.allInCost, input.pool.tierCap);
         }
       }
       const salary = selected.reduce((sum, row) => sum + row.price, 0);
       const tax = luxuryTax(selected.map((row) => row.construction), shiftedCaps, 'taxed').charged;
-      return salary + tax <= input.pool.tierCap + 1e-9;
+      return snakeMoneyAffordable(salary + tax, input.pool.tierCap);
     };
     let seeded = buildSeededSeatBoard(completionCandidates);
     if (!affordable(seeded.board)) {

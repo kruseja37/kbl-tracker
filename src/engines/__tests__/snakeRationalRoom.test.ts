@@ -114,6 +114,19 @@ function withShapes(prefix: string, mutate: (shape: RosterSlotPlayer, index: num
 }
 
 describe('deterministic rational-room ensemble', () => {
+  test('keeps canonical sub-cent solvent candidates in ranking and economic assessment', () => {
+    const result = playSnakeRationalRoom(room({
+      seats: [
+        seat('asker', legalTwentyOne('asker-epsilon'), 30.9999995),
+        seat('rival-z', legalTwentyOne('rival-z-epsilon'), 30.9999995),
+        seat('rival-a', legalTwentyOne('rival-a-epsilon'), 30.9999995),
+      ],
+    }));
+
+    expect(result.status).toBe('ready');
+    expect(result.risks.some((row) => row.playerId === 'target')).toBe(true);
+  });
+
   test('emits one exact decision and continues scarcity from the same proof and ensemble', () => {
     const cloneSpy = vi.spyOn(globalThis, 'structuredClone');
     const onDecision = vi.fn();

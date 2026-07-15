@@ -125,6 +125,14 @@ describe('shared snake assistant board core', () => {
     expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps a sub-cent-negative plan ready under the canonical Snake money law', () => {
+    const result = buildSnakeAssistantBoard(engineInput({ budget: 2_136.9999995 }));
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.plan.planCost).toBe(2_137);
+    expect(result.plan.planCushion).toBeCloseTo(-0.0000005, 9);
+  });
+
   it('uses settled salary for drafted players and frozen IV for available players, never stored salary', () => {
     const result = buildSnakeAssistantBoard(engineInput());
     expect(result.status).toBe('ready');

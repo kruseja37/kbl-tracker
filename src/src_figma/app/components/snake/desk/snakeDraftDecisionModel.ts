@@ -1,5 +1,6 @@
 import { validateTrade, type PickValue } from '../../../../../engines/leagueConstruction';
 import type { SnakeAssistantUnavailableReason } from '../../../../../engines/snakeAssistantBoard';
+import { snakeMoneyNonnegative } from '../../../../../engines/snakeMoney';
 import type { SnakeGuidePackage } from '../../../../../engines/snakeGuideTrade';
 import { searchSnakeGuidePackage } from '../../../../../engines/snakeGuideTrade';
 import type { SnakeRiskRow, SnakeScarcityRow } from '../../../../../engines/snakeRationalRoom';
@@ -124,11 +125,12 @@ export function buildSnakeDecisionCandidateFacts(input: {
     || !consequence || consequence.status !== 'ready'
     || consequence.selectedPlayerId !== input.playerId
     || !finite(candidate.advisorWorth) || !finite(candidate.trueCost)
+    || consequence.after.legalFinish.affordability === 'OPEN'
     || !consequence.after.legalFinish.feasible
     || !finite(consequence.after.legalFinish.moneyLeft)
-    || consequence.after.legalFinish.moneyLeft < 0
+    || !snakeMoneyNonnegative(consequence.after.legalFinish.moneyLeft)
     || !finite(consequence.after.ledger.moneyLeft)
-    || consequence.after.ledger.moneyLeft < 0) return null;
+    || !snakeMoneyNonnegative(consequence.after.ledger.moneyLeft)) return null;
   const fit = FIT_SCORE[consequence.after.fitWord];
   const chemistry = completeChemistry(consequence.after.chemistry);
   if (!fit || !chemistry) return null;

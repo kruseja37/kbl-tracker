@@ -231,6 +231,18 @@ describe('snake assistant board worker hook', () => {
     expect(screen.getByText('team-a')).toBeInTheDocument();
   });
 
+  it('accepts a canonical READY board with sub-cent-negative money left', () => {
+    const value = request('money-epsilon-ready');
+    value.input.budget = 109.9999995;
+    const response = ready(value.key);
+    if (response.result.status !== 'ready') throw new Error('Expected ready fixture.');
+    response.result.board.ledger.moneyLeft = -0.0000005;
+
+    render(<Harness value={value} />);
+    act(() => FakeWorker.instances[0].onmessage?.({ data: response } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+  });
+
   it('clears prior private truth and recomputes even when cover re-enters with the exact same key object', () => {
     const sameRequest = request('a');
     const view = render(<Harness value={sameRequest} />);

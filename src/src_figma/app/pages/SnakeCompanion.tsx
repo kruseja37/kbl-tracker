@@ -17,7 +17,6 @@ import { syncEngine } from '../../../utils/syncEngine';
 import {
   getAllLeagueTemplates,
   getMlbDraftSession as readMlbDraftSession,
-  getRegisteredPool as readRegisteredPool,
   patchApprovedCompanionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
   postApprovedCompanionTradeOffer,
@@ -85,6 +84,7 @@ import {
   type SelectedPlayerConsequence,
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
+import { snakeBoardOverBudgetReason } from '../components/snake/desk/snakeDeskMoneyCopy';
 import {
   buildSnakeDecisionCandidateFacts,
   buildSnakeGuideRecommendationRequest,
@@ -665,7 +665,14 @@ export default function SnakeCompanion() {
         marginalTax,
         trueCost: entry.price + marginalTax,
         archetypeChip: locked.archetypeName,
-        fitWord: fitWord({ player: entry, priorities: locked.priorities, capIdentity: locked.capIdentity, need, openSlots }),
+        fitWord: fitWord({
+          player: entry,
+          priorities: locked.priorities,
+          capIdentity: locked.capIdentity,
+          baseCaps: pool.luxuryCaps,
+          need,
+          openSlots,
+        }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
         riskPending: askedRiskIds.has(entry.playerId) && (rationalRiskState.status === 'pending'
           || (rationalRiskState.status === 'ready' && !risk)),
@@ -720,11 +727,10 @@ export default function SnakeCompanion() {
         ...candidate,
         risk: canonicalRisk,
         riskPending: candidate.riskPending && canonicalRisk === 'SAFE_TO_WAIT',
-        riskReason: planBill && planBill.planCushion < 0
-          ? `YOUR 22-MAN BOARD IS $${Math.abs(Math.round(planBill.planCushion)).toLocaleString()} OVER BUDGET.`
-          : (cheapestDepthByPlayerId.get(candidate.id) ?? Number.POSITIVE_INFINITY) <= 2
+        riskReason: snakeBoardOverBudgetReason(planBill?.planCushion ?? null)
+          ?? ((cheapestDepthByPlayerId.get(candidate.id) ?? Number.POSITIVE_INFINITY) <= 2
             ? `ONLY ${cheapestDepthByPlayerId.get(candidate.id)} CANONICAL ROLE OPTIONS REMAIN FOR THE CHEAPEST LEGAL FINISH.`
-            : candidate.riskReason,
+            : candidate.riskReason),
       };
     });
     const truthPlayersById = new Map(deskPlayers.map((entry) => [

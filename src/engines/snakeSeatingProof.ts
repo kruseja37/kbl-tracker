@@ -23,6 +23,11 @@ import {
 } from './leagueConstruction';
 import { poolDemandModel } from './auctionPoolSizing';
 import {
+  snakeMoneyAffordable,
+  snakeMoneyOverage,
+  snakeMoneyRemaining,
+} from './snakeMoney';
+import {
   deriveHardPositionSupplyFloorTargets,
   derivePositionSupplyFloorTargets,
   matchesPositionSupplyFloor,
@@ -217,7 +222,7 @@ export function proveSnakePickKeepsAllClubsSeated(input: {
     clubs: input.current.clubs.map((club) => club.teamId === input.teamId ? {
       ...club,
       roster: [...club.roster, input.player],
-      budgetRemaining: club.budgetRemaining - input.allInCost,
+      budgetRemaining: snakeMoneyRemaining(club.budgetRemaining, input.allInCost),
       committedConstruction: [...(club.committedConstruction ?? club.roster.map((row) => row.construction)), input.player.construction],
     } : club),
     pool: input.current.pool.filter((candidate) => deriveVersionGroupId(candidate) !== groupId),
@@ -342,13 +347,13 @@ export function validateConstructiveSnakeSeatingProof(
         'taxed',
       ).charged;
       const salaryCost = players.reduce((sum, player) => sum + player.price, 0);
-      const addedTax = Math.max(0, finalTax - currentTax);
+      const addedTax = finalTax - currentTax;
       const allInCost = salaryCost + addedTax;
       if (!Number.isFinite(allInCost)
         || Math.abs(assignment.salaryCost - salaryCost) > 1e-6
         || Math.abs(assignment.addedTax - addedTax) > 1e-6
         || Math.abs(assignment.allInCost - allInCost) > 1e-6
-        || allInCost > club.budgetRemaining + 1e-9) return false;
+        || !snakeMoneyAffordable(allInCost, club.budgetRemaining)) return false;
     }
     return true;
   } catch {
@@ -442,7 +447,7 @@ function directTrustedAdvance(input: {
     clubs: current.clubs.map((club, index) => index === clubIndex ? {
       ...club,
       roster: [...club.roster, selected],
-      budgetRemaining: club.budgetRemaining - exactCost,
+      budgetRemaining: snakeMoneyRemaining(club.budgetRemaining, exactCost),
       committedConstruction: [
         ...(club.committedConstruction ?? club.roster.map((player) => player.construction)),
         selected.construction,
@@ -509,7 +514,7 @@ function directTrustedAdvance(input: {
       'taxed',
     ).charged;
     const salaryCost = future.reduce((sum, player) => sum + player.price, 0);
-    const addedTax = Math.max(0, finalTax - context.currentTax);
+    const addedTax = finalTax - context.currentTax;
     return { salaryCost, addedTax, allInCost: salaryCost + addedTax };
   };
 
@@ -566,7 +571,7 @@ function directTrustedAdvance(input: {
           return { club, clubIndex, future, bill };
         })
         .filter((row): row is NonNullable<typeof row> => Boolean(row))
-        .filter((row) => row.bill.allInCost > row.club.budgetRemaining + 1e-9)
+        .filter((row) => !snakeMoneyAffordable(row.bill.allInCost, row.club.budgetRemaining))
         .sort((left, right) => (
           (right.bill.allInCost - right.club.budgetRemaining)
           - (left.bill.allInCost - left.club.budgetRemaining)
@@ -706,7 +711,7 @@ function directTrustedAdvance(input: {
           break;
         }
         const bill = billFor(index, players);
-        if (!Number.isFinite(bill.allInCost) || bill.allInCost > club.budgetRemaining + 1e-9) {
+        if (!Number.isFinite(bill.allInCost) || !snakeMoneyAffordable(bill.allInCost, club.budgetRemaining)) {
           fastValid = false;
           break;
         }
@@ -745,7 +750,7 @@ function directTrustedAdvance(input: {
       rosterSeeds.push(fullRoster);
       const bill = billFor(index, players);
       if (!Number.isFinite(bill.allInCost)) return null;
-      if (bill.allInCost > club.budgetRemaining + 1e-9) requiresBudgetRepair = true;
+      if (!snakeMoneyAffordable(bill.allInCost, club.budgetRemaining)) requiresBudgetRepair = true;
       assignments.push({ teamId: club.teamId, playerIds: [...playerIds], ...bill });
     }
     if (requiresBudgetRepair) {
@@ -874,7 +879,7 @@ export function advanceTrustedSnakeSeatingCertificate(input: {
     clubs: current.clubs.map((club, index) => index === clubIndex ? {
       ...club,
       roster: [...club.roster, selected],
-      budgetRemaining: club.budgetRemaining - exactCost,
+      budgetRemaining: snakeMoneyRemaining(club.budgetRemaining, exactCost),
       committedConstruction: [
         ...(club.committedConstruction ?? club.roster.map((player) => player.construction)),
         selected.construction,
@@ -1157,11 +1162,11 @@ function repairMatchedRosters(
       'taxed',
     ).charged;
     const salaryCost = future.reduce((sum, player) => sum + player.price, 0);
-    const addedTax = Math.max(0, finalTax - currentTax);
+    const addedTax = finalTax - currentTax;
     return { salaryCost, addedTax, allInCost: salaryCost + addedTax };
   };
   const overage = (clubIndex: number, roster: readonly SnakeSeatingPlayer[]) => (
-    Math.max(0, bill(clubIndex, roster).allInCost - input.clubs[clubIndex].budgetRemaining)
+    snakeMoneyOverage(bill(clubIndex, roster).allInCost, input.clubs[clubIndex].budgetRemaining)
   );
   const taxExposure = (player: SnakeSeatingPlayer) => {
     const bat = player.construction.bat;
@@ -1184,7 +1189,7 @@ function repairMatchedRosters(
     const bills = fastRosters.map((roster, clubIndex) => bill(clubIndex, roster).allInCost);
     const overClubIndex = bills
       .map((amount, clubIndex) => ({ amount, clubIndex }))
-      .filter(({ amount, clubIndex }) => amount > input.clubs[clubIndex].budgetRemaining + 1e-9)
+      .filter(({ amount, clubIndex }) => !snakeMoneyAffordable(amount, input.clubs[clubIndex].budgetRemaining))
       .sort((left, right) => (
         (right.amount - input.clubs[right.clubIndex].budgetRemaining)
         - (left.amount - input.clubs[left.clubIndex].budgetRemaining)
@@ -1284,7 +1289,7 @@ function repairMatchedRosters(
         nextOverRoster[outgoingIndex] = incoming;
         if (!isLegalRoster(nextOverRoster.map((player) => player.shape))) continue;
         const nextOverBill = bill(overClubIndex, nextOverRoster).allInCost;
-        const nextOverage = Math.max(0, nextOverBill - input.clubs[overClubIndex].budgetRemaining);
+        const nextOverage = snakeMoneyOverage(nextOverBill, input.clubs[overClubIndex].budgetRemaining);
         const improvement = oldOverage - nextOverage;
         const exposureImprovement = taxExposure(outgoing) - taxExposure(incoming);
         if (improvement < -1e-9 || (improvement <= 1e-9 && exposureImprovement <= 1e-9)) continue;
@@ -1318,8 +1323,8 @@ function repairMatchedRosters(
             || !isLegalRoster(nextOtherRoster.map((player) => player.shape))) continue;
           const nextOverBill = bill(overClubIndex, nextOverRoster).allInCost;
           const nextOtherBill = bill(otherClubIndex, nextOtherRoster).allInCost;
-          const nextOverage = Math.max(0, nextOverBill - input.clubs[overClubIndex].budgetRemaining);
-          const nextOtherOverage = Math.max(0, nextOtherBill - input.clubs[otherClubIndex].budgetRemaining);
+          const nextOverage = snakeMoneyOverage(nextOverBill, input.clubs[overClubIndex].budgetRemaining);
+          const nextOtherOverage = snakeMoneyOverage(nextOtherBill, input.clubs[otherClubIndex].budgetRemaining);
           const improvement = oldOverage + oldOtherOverage - nextOverage - nextOtherOverage;
           if (improvement <= 1e-9) continue;
           consider({
@@ -1363,7 +1368,7 @@ function repairMatchedRosters(
     || new Set(assignedIds).size !== assignedIds.length
     || new Set(assignedGroups).size !== assignedGroups.length
     || assignments.some((assignment, index) => (
-      assignment.allInCost > input.clubs[index].budgetRemaining + 1e-9
+      !snakeMoneyAffordable(assignment.allInCost, input.clubs[index].budgetRemaining)
     ))) return null;
   return assignments;
 }
@@ -1723,10 +1728,10 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
       'taxed',
     ).charged;
     const salaryCost = picked.reduce((sum, player) => sum + player.price, 0);
-    const addedTax = Math.max(0, finalTax - currentTax);
+    const addedTax = finalTax - currentTax;
     const allInCost = salaryCost + addedTax;
-    if (allInCost > club.budgetRemaining + 1e-9) {
-      const missing = Math.ceil(allInCost - club.budgetRemaining);
+    if (!snakeMoneyAffordable(allInCost, club.budgetRemaining)) {
+      const missing = Math.ceil(snakeMoneyOverage(allInCost, club.budgetRemaining));
       const shortfall: SnakeSeatingShortfall = {
         kind: 'affordability', position: 'MONEY', label: 'BUDGET ROOM', minimumPerTeam: 0,
         teams: input.clubs.length, slack: 0, needed: Math.ceil(allInCost),

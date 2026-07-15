@@ -17,7 +17,7 @@ vi.mock('../../../../../../engines/snakeAssistantBoard', async (loadOriginal) =>
     buildSnakeAssistantBoard: vi.fn(() => ({
       status: 'ready',
       teamId: 'team-a',
-      slots: playerIds.map((playerId, index) => ({ slotId: `slot-${index}`, playerId, pinned: index === 0 })),
+      slots: playerIds.map((playerId, index) => ({ slotId: index === 8 ? 'backupC' : `slot-${index}`, playerId, pinned: index === 0 })),
       playerIds,
       recommendationOrder: [...playerIds].reverse(),
       plan: { planCost: 2200, planTax: 50, planCushion: 750, playerIds },
@@ -235,7 +235,36 @@ describe('snake assistant board serializable adapter', () => {
     ]);
     expect(result.board).not.toHaveProperty('revision');
     expect(result.board.slots).toBeInstanceOf(Array);
+    expect(result.board.slots[8].slotId).toBe('BACKUP_C');
     expect(result.board.kind).toBe('snake-assistant-board');
+  });
+
+  it('downgrades a raw strong fit when the exact replacement materially raises 22-player tax', () => {
+    const selected = consequencePlayer({ id: 'new-ss-tax-heavy', position: 'SS', price: 50 });
+    selected.seating.construction.bat.POW = 99;
+    selected.simPlayer.bat.POW = 99;
+    selected.stored.power = 99;
+    const fixture = consequenceFixture(selected);
+    const result = buildSelectedPlayerConsequence({
+      identity,
+      selectedPlayerId: selected.playerId,
+      teamId: 'team-a',
+      board: fixture.board,
+      designSlots: buildDefaultDesignSlots(),
+      players: fixture.players,
+      completedPicks: [],
+      budget: 1_000_000,
+      baseCaps: [{
+        group: 'hitters', stat: 'POW', topN: 1, cap: 0,
+        penaltyCurve: 1, penaltyPer100: 100_000, minAdder: 0,
+      }],
+      realTeamCount: 2,
+    });
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.after.ledger.tax).toBeGreaterThan(result.before.ledger.tax);
+    expect(result.after.fitWord).toBe('WEAK FIT');
   });
 
   it('produces identical request and derived output for main and companion adapters with identical inputs', () => {
@@ -269,8 +298,12 @@ describe('snake assistant board serializable adapter', () => {
     expect(result.before.chemistry).toHaveLength(5);
     expect(result.after.chemistry).toHaveLength(5);
     expect(result.after.chemistry.find((row) => row.family === 'SCH')?.count).toBe(1);
-    expect(result.before.legalFinish).toEqual({ feasible: true, moneyLeft: 997_750 });
-    expect(result.after.legalFinish).toEqual({ feasible: true, moneyLeft: 997_750 });
+    expect(result.before.legalFinish).toEqual({
+      feasible: true, moneyLeft: 997_750, affordability: 'AFFORDABLE',
+    });
+    expect(result.after.legalFinish).toEqual({
+      feasible: true, moneyLeft: 997_750, affordability: 'AFFORDABLE',
+    });
     expect(result.before.fitWord).toBe('SOLID FIT');
     expect(result.after.fitWord).toBe('STRONG FIT');
     expect(new Set(Object.values(result.board.slots)).size).toBe(22);

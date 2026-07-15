@@ -6,6 +6,7 @@ import {
   evaluateSnakeLegalFinish,
   evaluateSnakeBills,
   evaluateSnakePlan,
+  snakeMoneyNonnegative,
 } from '../snakeEconomics';
 import {
   executeSnakeGuidePackage,
@@ -57,6 +58,57 @@ function legalPlayers(prefix: string, price: number): SnakeSeatingPlayer[] {
     ...Array.from({ length: 4 }, (_, i) => player(`${prefix}-SP${i}`, price, { isPitcher: true, position: 'SP', role: 'SP' })),
     ...Array.from({ length: 3 }, (_, i) => player(`${prefix}-RP${i}`, price, { isPitcher: true, position: 'RP', role: 'RP' })),
     player(`${prefix}-CP`, price, { isPitcher: true, position: 'CP', role: 'CP' }),
+  ];
+}
+
+function precisionArm(
+  playerId: string,
+  price: number,
+  role: 'SP' | 'SP/RP' | 'RP' | 'CP',
+  [VEL, JNK, ACC]: readonly [number, number, number],
+): SnakeSeatingPlayer {
+  return {
+    playerId,
+    sourceId: `stock:${playerId}`,
+    price,
+    shape: { isPitcher: true, position: role, role },
+    construction: {
+      id: playerId,
+      isPitcher: true,
+      role,
+      bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+      pit: { VEL, JNK, ACC },
+    },
+  };
+}
+
+function precisionCurrentRoster(): SnakeSeatingPlayer[] {
+  const hitter = (playerId: string, position: string, secondaryPosition?: string): SnakeSeatingPlayer => ({
+    playerId,
+    sourceId: `stock:${playerId}`,
+    price: 0,
+    shape: { isPitcher: false, position, secondaryPosition },
+    construction: {
+      id: playerId,
+      isPitcher: false,
+      bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+    },
+  });
+  return [
+    hitter('precision-C', 'C'),
+    hitter('precision-1B', '1B'),
+    hitter('precision-2B', '2B'),
+    hitter('precision-3B', '3B'),
+    hitter('precision-SS', 'SS'),
+    hitter('precision-LF', 'LF', 'C'),
+    hitter('precision-CF', 'CF'),
+    hitter('precision-RF', 'RF'),
+    ...Array.from({ length: 5 }, (_, index) => hitter(`precision-B${index}`, 'CF')),
+    precisionArm('precision-sp-0', 0, 'SP', [36, 81, 16]),
+    precisionArm('precision-sp-1', 0, 'SP', [80, 55, 99]),
+    precisionArm('precision-sp-2', 0, 'SP', [13, 23, 43]),
+    precisionArm('precision-rp', 0, 'RP', [94, 91, 54]),
+    precisionArm('precision-cp', 0, 'CP', [72, 82, 22]),
   ];
 }
 
@@ -112,6 +164,45 @@ function legalSeating() {
 }
 
 describe('snake two-bills economics and guide packages', () => {
+  test('shared money tolerance treats sub-cent floating residue as affordable', () => {
+    expect(snakeMoneyNonnegative(-1.8189894035458565e-12)).toBe(true);
+    expect(snakeMoneyNonnegative(-0.01)).toBe(false);
+  });
+
+  test('an exact tax-boundary roster is AFFORDABLE despite floating residue', () => {
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster: precisionCurrentRoster(),
+      committedSpent: 0,
+      availablePool: [
+        precisionArm('t19-p0', 1_389, 'RP', [8, 97, 29]),
+        precisionArm('t19-p1', 427, 'SP', [79, 18, 46]),
+        precisionArm('t19-p2', 58, 'SP/RP', [60, 12, 98]),
+        precisionArm('t19-p3', 7, 'SP', [46, 15, 8]),
+        precisionArm('t19-p4', 1_477, 'SP/RP', [26, 52, 21]),
+        precisionArm('t19-p5', 282, 'SP', [5, 57, 75]),
+        precisionArm('t19-p6', 1_622, 'RP', [36, 25, 50]),
+        precisionArm('t19-p7', 1_047, 'SP/RP', [18, 9, 38]),
+        precisionArm('t19-p8', 1_836, 'SP/RP', [80, 65, 9]),
+        precisionArm('t19-p9', 2_081, 'RP', [62, 5, 48]),
+      ],
+      budget: 21_285.189,
+      baseCaps: [
+        { group: 'rotation', stat: 'VEL', topN: 4, cap: 119, penaltyCurve: 2, penaltyPer100: 42_502, minAdder: 0 },
+        { group: 'rotation', stat: 'JNK', topN: 4, cap: 262, penaltyCurve: 1, penaltyPer100: 154_021, minAdder: 0 },
+        { group: 'rotation', stat: 'ACC', topN: 4, cap: 245, penaltyCurve: 1, penaltyPer100: 115_386, minAdder: 0 },
+        { group: 'bullpen', stat: 'VEL', topN: 4, cap: 230, penaltyCurve: 2, penaltyPer100: 14_843, minAdder: 0 },
+        { group: 'bullpen', stat: 'JNK', topN: 4, cap: 135, penaltyCurve: 2, penaltyPer100: 26_198, minAdder: 0 },
+        { group: 'bullpen', stat: 'ACC', topN: 4, cap: 202, penaltyCurve: 1, penaltyPer100: 173_114, minAdder: 0 },
+      ],
+      realTeamCount: 8,
+    });
+
+    expect([...finish.completionPlayerIds].sort()).toEqual(['t19-p5', 't19-p6', 't19-p7', 't19-p9']);
+    expect(finish.completionCost).toBe(5_032);
+    expect(finish.legalFinishCushion).toBeCloseTo(0, 9);
+    expect(finish.affordability).toBe('AFFORDABLE');
+  });
+
   test('rejects every guide and offer operation at the FARM engine boundary', () => {
     const session = {
       ...sessionWithOwners({
@@ -232,6 +323,206 @@ describe('snake two-bills economics and guide packages', () => {
     expect(finish.completionCost).toBe(10);
     expect(finish.completionTax).toBe(-267);
     expect(finish.legalFinishCushion).toBe(0);
+  });
+
+  test('legal finish chooses a lower all-in roster instead of blocking on the salary-cheapest taxed roster', () => {
+    const taxCaps = [{
+      group: 'hitters' as const,
+      stat: 'POW' as const,
+      topN: 8,
+      cap: 0,
+      penaltyCurve: 1,
+      penaltyPer100: 100,
+      minAdder: 0,
+    }];
+    const salaryCheap = legalPlayers('salary-cheap-tax-heavy', 1).map((row) => ({
+      ...row,
+      construction: {
+        ...row.construction,
+        bat: { POW: 99, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+        ...(row.shape.isPitcher ? { pit: { VEL: 0, JNK: 0, ACC: 0 } } : {}),
+      },
+    }));
+    const allInCheap = legalPlayers('all-in-cheap', 2).map((row) => ({
+      ...row,
+      construction: {
+        ...row.construction,
+        bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+        ...(row.shape.isPitcher ? { pit: { VEL: 0, JNK: 0, ACC: 0 } } : {}),
+      },
+    }));
+
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster: [],
+      committedSpent: 0,
+      availablePool: [...salaryCheap, ...allInCheap],
+      budget: 100,
+      baseCaps: taxCaps,
+      realTeamCount: 2,
+    });
+
+    expect(finish.feasible).toBe(true);
+    expect(finish.legalFinishCushion).toBeGreaterThanOrEqual(0);
+    expect(finish.completionTax).toBe(0);
+    expect(finish.completionPlayerIds.filter((id) => id.startsWith('all-in-cheap'))).toHaveLength(14);
+  });
+
+  test('legal finish exact settlement sees a pure starter demote a taxed swing arm', () => {
+    const exactPlayer = (
+      playerId: string,
+      price: number,
+      shape: RosterSlotPlayer,
+      velocity = 0,
+    ): SnakeSeatingPlayer => ({
+      playerId,
+      sourceId: `stock:${playerId}`,
+      price,
+      shape,
+      construction: {
+        id: playerId,
+        isPitcher: shape.isPitcher,
+        role: shape.role as 'SP' | 'SP/RP' | 'RP' | 'CP' | undefined,
+        bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+        ...(shape.isPitcher ? { pit: { VEL: velocity, JNK: 0, ACC: 0 } } : {}),
+      },
+    });
+    const fixed = [
+      exactPlayer('fixed-C', 0, { isPitcher: false, position: 'C' }),
+      exactPlayer('fixed-1B', 0, { isPitcher: false, position: '1B' }),
+      exactPlayer('fixed-2B', 0, { isPitcher: false, position: '2B' }),
+      exactPlayer('fixed-3B', 0, { isPitcher: false, position: '3B' }),
+      exactPlayer('fixed-SS', 0, { isPitcher: false, position: 'SS' }),
+      exactPlayer('fixed-LF', 0, { isPitcher: false, position: 'LF', secondaryPosition: 'C' }),
+      exactPlayer('fixed-CF', 0, { isPitcher: false, position: 'CF' }),
+      exactPlayer('fixed-RF', 0, { isPitcher: false, position: 'RF' }),
+      ...Array.from({ length: 5 }, (_, index) => exactPlayer(`fixed-B${index}`, 0, { isPitcher: false, position: 'CF' })),
+      ...Array.from({ length: 3 }, (_, index) => exactPlayer(`fixed-SP${index}`, 0, { isPitcher: true, position: 'SP', role: 'SP' }, 1)),
+      ...Array.from({ length: 3 }, (_, index) => exactPlayer(`fixed-RP${index}`, 0, { isPitcher: true, position: 'RP', role: 'RP' })),
+      exactPlayer('fixed-CP', 0, { isPitcher: true, position: 'CP', role: 'CP' }),
+    ];
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster: [exactPlayer('tax-swing', 0, { isPitcher: true, position: 'SP/RP', role: 'SP/RP' }, 99)],
+      committedSpent: 0,
+      availablePool: [
+        ...fixed,
+        exactPlayer('affordable-pure-sp', 10, { isPitcher: true, position: 'SP', role: 'SP' }, 1),
+        exactPlayer('cheap-salary-taxed', 5, { isPitcher: true, position: 'SP/RP', role: 'SP/RP' }, 1),
+      ],
+      budget: 100,
+      baseCaps: [{ group: 'rotation', stat: 'VEL', topN: 4, cap: 101, penaltyCurve: 1, penaltyPer100: 590_000, minAdder: 0 }],
+      realTeamCount: 8,
+    });
+
+    expect(finish.completionPlayerIds).toContain('affordable-pure-sp');
+    expect(finish.completionPlayerIds).not.toContain('cheap-salary-taxed');
+    expect(finish.legalFinishCushion).toBe(90);
+  });
+
+  test('legal finish escapes a two-swap tax local minimum before declaring BLOCKED', () => {
+    const exactArm = (
+      playerId: string,
+      price: number,
+      role: 'SP' | 'SP/RP' | 'RP' | 'CP',
+      [VEL, JNK, ACC]: readonly [number, number, number],
+    ): SnakeSeatingPlayer => ({
+      playerId,
+      sourceId: `stock:${playerId}`,
+      price,
+      shape: { isPitcher: true, position: role, role },
+      construction: {
+        id: playerId,
+        isPitcher: true,
+        role,
+        bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+        pit: { VEL, JNK, ACC },
+      },
+    });
+    const zeroHitter = (
+      playerId: string,
+      position: RosterSlotPlayer['position'],
+      secondaryPosition?: string,
+    ): SnakeSeatingPlayer => ({
+      playerId,
+      sourceId: `stock:${playerId}`,
+      price: 0,
+      shape: { isPitcher: false, position, secondaryPosition },
+      construction: {
+        id: playerId,
+        isPitcher: false,
+        bat: { POW: 0, CON: 0, SPD: 0, FLD: 0, ARM: 0 },
+      },
+    });
+    const currentRoster = [
+      zeroHitter('t27-C', 'C'),
+      zeroHitter('t27-1B', '1B'),
+      zeroHitter('t27-2B', '2B'),
+      zeroHitter('t27-3B', '3B'),
+      zeroHitter('t27-SS', 'SS'),
+      zeroHitter('t27-LF', 'LF', 'C'),
+      zeroHitter('t27-CF', 'CF'),
+      zeroHitter('t27-RF', 'RF'),
+      ...Array.from({ length: 5 }, (_, index) => zeroHitter(`t27-B${index}`, 'CF')),
+      exactArm('cur-sp-0', 0, 'SP', [36, 81, 16]),
+      exactArm('cur-sp-1', 0, 'SP', [80, 55, 99]),
+      exactArm('cur-sp-2', 0, 'SP', [13, 23, 43]),
+      exactArm('cur-rp', 0, 'RP', [94, 91, 54]),
+      exactArm('cur-cp', 0, 'CP', [72, 82, 22]),
+    ];
+    const availablePool = [
+      exactArm('t27-p0', 1_537, 'SP/RP', [0, 74, 9]),
+      exactArm('t27-p1', 965, 'SP/RP', [8, 85, 66]),
+      exactArm('t27-p2', 1_461, 'RP', [95, 99, 53]),
+      exactArm('t27-p3', 1_454, 'SP/RP', [73, 20, 58]),
+      exactArm('t27-p4', 584, 'SP', [9, 83, 2]),
+      exactArm('t27-p5', 1_067, 'SP', [43, 88, 8]),
+      exactArm('t27-p6', 792, 'RP', [57, 5, 98]),
+      exactArm('t27-p7', 702, 'SP', [24, 13, 52]),
+      exactArm('t27-p8', 2_124, 'SP/RP', [76, 52, 67]),
+      exactArm('t27-p9', 313, 'RP', [64, 19, 33]),
+    ];
+    const baseCaps = [
+      { group: 'rotation' as const, stat: 'VEL' as const, topN: 4, cap: 183, penaltyCurve: 1, penaltyPer100: 58_520, minAdder: 0 },
+      { group: 'rotation' as const, stat: 'JNK' as const, topN: 4, cap: 82, penaltyCurve: 1, penaltyPer100: 30_488, minAdder: 0 },
+      { group: 'rotation' as const, stat: 'ACC' as const, topN: 4, cap: 115, penaltyCurve: 2, penaltyPer100: 73_089, minAdder: 0 },
+      { group: 'bullpen' as const, stat: 'VEL' as const, topN: 4, cap: 203, penaltyCurve: 2, penaltyPer100: 50_628, minAdder: 0 },
+      { group: 'bullpen' as const, stat: 'JNK' as const, topN: 4, cap: 242, penaltyCurve: 1, penaltyPer100: 170_841, minAdder: 0 },
+      { group: 'bullpen' as const, stat: 'ACC' as const, topN: 4, cap: 227, penaltyCurve: 2, penaltyPer100: 192_512, minAdder: 0 },
+    ];
+    const budget = 110_697.6689;
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster,
+      committedSpent: 0,
+      availablePool,
+      budget,
+      baseCaps,
+      realTeamCount: 8,
+    });
+
+    expect([...finish.completionPlayerIds].sort()).toEqual(['t27-p0', 't27-p4', 't27-p5', 't27-p6']);
+    expect(finish.completionCost).toBe(3_980);
+    expect(budget - finish.legalFinishCushion).toBeCloseTo(110_697.6689, 3);
+    expect(finish.legalFinishCushion).toBeGreaterThanOrEqual(-1e-3);
+  });
+
+  test('a bounded early-draft search stays OPEN instead of turning an unproved tax gap into BLOCKED', () => {
+    const finish = evaluateSnakeLegalFinish({
+      currentRoster: [],
+      committedSpent: 0,
+      availablePool: [
+        ...legalPlayers('global-open-a', 1),
+        ...legalPlayers('global-open-b', 1),
+      ],
+      budget: 0,
+      baseCaps: [{
+        group: 'hitters', stat: 'POW', topN: 8, cap: 0,
+        penaltyCurve: 1, penaltyPer100: 10_000, minAdder: 0,
+      }],
+      realTeamCount: 8,
+    });
+
+    expect(finish.feasible).toBe(true);
+    expect(finish.legalFinishCushion).toBeLessThan(0);
+    expect(finish.affordability).toBe('OPEN');
   });
 
   test('slot reassignment never changes plan tax because membership is unchanged', () => {
