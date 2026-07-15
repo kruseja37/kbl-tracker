@@ -5,15 +5,20 @@ import type { SnakeSeatingPlayer } from '../../../../../../engines/snakeSeatingP
 import type {
   LeagueBuilderMlbDraftSession,
   Player,
+  SnakeBoardSlotId,
   SnakeSeatBoardRecord,
   Team,
 } from '../../../../../../utils/leagueBuilderStorage';
+import type { DeskEligibilityCandidate } from '../deskModel';
 import {
   buildDeskRoomPlayer,
+  buildRationalSeats,
   __resetRationalRiskCacheForTests,
   fitWord,
+  rationalRiskCacheKey,
   rationalRisksForRoom,
   rationalRisksForRoomUncached,
+  reconcileExistingSeatBoards,
   resolveLockedSeat,
   updateSessionSeatBoard,
 } from '../deskRoomModel';
@@ -77,6 +82,21 @@ function legalTwentyOne(prefix: string): SnakeSeatingPlayer[] {
   }));
 }
 
+function rationalSeat(
+  teamId: string,
+  roster: SnakeSeatingPlayer[],
+  lockedArchetype = { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 },
+) {
+  return {
+    teamId,
+    roster,
+    settledRosterPrices: roster.map((player) => ({ playerId: player.playerId, settledPrice: player.price })),
+    committedSpent: roster.reduce((sum, player) => sum + player.price, 0),
+    budget: 1_000,
+    lockedArchetype,
+  };
+}
+
 function session(archetypeId = 'murderers-row'): LeagueBuilderMlbDraftSession {
   return {
     id: 'mlb:league:1', leagueId: 'league', seasonNumber: 1, seed: 'seed',
@@ -99,12 +119,200 @@ function board(playerId: string): SnakeSeatBoardRecord {
   };
 }
 
+function canonicalBackfillFixture(prefix: string): {
+  board: SnakeSeatBoardRecord;
+  candidates: DeskEligibilityCandidate[];
+} {
+  const slotRows: Array<[SnakeBoardSlotId, DeskEligibilityCandidate['position'], RosterSlotPlayer]> = [
+    ['C', 'C', { isPitcher: false, position: 'C' }],
+    ['1B', '1B', { isPitcher: false, position: '1B' }],
+    ['2B', '2B', { isPitcher: false, position: '2B' }],
+    ['3B', '3B', { isPitcher: false, position: '3B' }],
+    ['SS', 'SS', { isPitcher: false, position: 'SS' }],
+    ['LF', 'LF', { isPitcher: false, position: 'LF' }],
+    ['CF', 'CF', { isPitcher: false, position: 'CF' }],
+    ['RF', 'RF', { isPitcher: false, position: 'RF' }],
+    ['BACKUP_C', 'C', { isPitcher: false, position: 'C' }],
+    ['SP1', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP2', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP3', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['SP4', 'SP', { isPitcher: true, position: 'SP', role: 'SP' }],
+    ['RP1', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['RP2', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['RP3', 'RP', { isPitcher: true, position: 'RP', role: 'RP' }],
+    ['CP', 'CP', { isPitcher: true, position: 'CP', role: 'CP' }],
+    ['FLEX1', '1B', { isPitcher: false, position: '1B' }],
+    ['FLEX2', '2B', { isPitcher: false, position: '2B' }],
+    ['FLEX3', '3B', { isPitcher: false, position: '3B' }],
+    ['FLEX4', 'SS', { isPitcher: false, position: 'SS' }],
+    ['SWING', 'CF', { isPitcher: false, position: 'CF' }],
+  ];
+  const candidates = slotRows.map(([slotId, position, rosterShape]) => ({
+    id: `${prefix}-${slotId}`,
+    position,
+    eligiblePositions: [position],
+    rosterShape,
+    versionGroupId: `${prefix}-human-${slotId}`,
+  }));
+  return {
+    board: {
+      slots: Object.fromEntries(slotRows.map(([slotId]) => [slotId, `${prefix}-${slotId}`])) as SnakeSeatBoardRecord['slots'],
+      rankings: {
+        global: candidates.map((candidate) => candidate.id),
+        byPosition: {},
+        frozenPlayerIds: [`${prefix}-frozen`],
+      },
+      revision: 2,
+    },
+    candidates,
+  };
+}
+
 describe('private desk room assembly', () => {
+  it('backfills every existing seat board in one next session without revealing a private seat', () => {
+    const fixtures = Object.fromEntries(['a', 'b', 'c'].map((teamId) => [teamId, canonicalBackfillFixture(teamId)]));
+    const sourceBoards = Object.fromEntries(['a', 'b', 'c'].map((teamId) => {
+      const source = fixtures[teamId].board;
+      return [teamId, {
+        ...source,
+        slots: { ...source.slots, C: 'drafted-catcher' },
+        rankings: {
+          global: [`${teamId}-replacement`],
+          byPosition: { C: ['drafted-catcher', `${teamId}-replacement`] },
+          frozenPlayerIds: [`${teamId}-frozen`],
+        },
+      }];
+    })) as Record<string, SnakeSeatBoardRecord>;
+    const source = { ...session(), seatBoards: sourceBoards };
+    const replacements = ['a', 'b', 'c'].map((teamId): DeskEligibilityCandidate => ({
+      id: `${teamId}-replacement`,
+      position: 'C',
+      eligiblePositions: ['C'],
+      rosterShape: { isPitcher: false, position: 'C' },
+      versionGroupId: `${teamId}-replacement-human`,
+    }));
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...Object.values(fixtures).flatMap((fixture) => fixture.candidates), ...replacements],
+      unavailablePlayerIds: new Set(['drafted-catcher']),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.revision).toBe(source.revision + 1);
+    expect(result.eventsByTeamId).toEqual({
+      a: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'a-replacement' }],
+      b: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'b-replacement' }],
+      c: [{ slotId: 'C', gonePlayerId: 'drafted-catcher', promotedPlayerId: 'c-replacement' }],
+    });
+    for (const teamId of ['a', 'b', 'c']) {
+      expect(result.session.seatBoards?.[teamId].slots.C).toBe(`${teamId}-replacement`);
+      expect(result.session.seatBoards?.[teamId].rankings).toBe(sourceBoards[teamId].rankings);
+      expect(sourceBoards[teamId].slots.C).toBe('drafted-catcher');
+    }
+  });
+
+  it("locks a team's own drafted player into its board while removing that player from every rival board", () => {
+    const own = canonicalBackfillFixture('own');
+    const rival = canonicalBackfillFixture('rival');
+    const punchie: DeskEligibilityCandidate = {
+      id: 'punchie-patterson',
+      position: 'SP',
+      eligiblePositions: ['SP'],
+      rosterShape: { isPitcher: true, position: 'SP', role: 'SP' },
+      versionGroupId: 'punchie-patterson-human',
+    };
+    const rivalBoard: SnakeSeatBoardRecord = {
+      ...rival.board,
+      slots: { ...rival.board.slots, SP1: punchie.id },
+      rankings: {
+        ...rival.board.rankings,
+        global: [punchie.id, ...rival.board.rankings.global],
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: punchie.id,
+        versionGroupId: punchie.versionGroupId!, settledSalary: 37, marginalTax: 0,
+      }],
+      seatBoards: { a: own.board, b: rivalBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...own.candidates, ...rival.candidates, punchie],
+      unavailablePlayerIds: new Set([punchie.id]),
+    });
+
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).toContain(punchie.id);
+    expect(Object.values(result.session.seatBoards?.b.slots ?? {})).not.toContain(punchie.id);
+    expect(result.eventsByTeamId.a).toBeUndefined();
+    expect(result.eventsByTeamId.b).toContainEqual({
+      slotId: 'SP1',
+      gonePlayerId: punchie.id,
+      promotedPlayerId: rival.board.slots.SP1,
+    });
+  });
+
+  it('only marks an existing board changed when automatic FLEX backfill can prove canonical version-unique truth', () => {
+    const fixture = canonicalBackfillFixture('automatic');
+    const gonePlayerId = fixture.board.slots.FLEX1;
+    const catcherId = fixture.board.slots.C;
+    const catcher = fixture.candidates.find((candidate) => candidate.id === catcherId)!;
+    const duplicateCatcher: DeskEligibilityCandidate = {
+      id: 'automatic-catcher-alt',
+      position: 'C',
+      eligiblePositions: ['C'],
+      rosterShape: { isPitcher: false, position: 'C' },
+      versionGroupId: catcher.versionGroupId,
+    };
+    const safeHitter: DeskEligibilityCandidate = {
+      id: 'automatic-safe-flex',
+      position: '1B',
+      eligiblePositions: ['1B'],
+      rosterShape: { isPitcher: false, position: '1B' },
+      versionGroupId: 'automatic-safe-flex-human',
+    };
+    const boardWithAttack = {
+      ...fixture.board,
+      rankings: {
+        ...fixture.board.rankings,
+        global: [duplicateCatcher.id, safeHitter.id, ...fixture.board.rankings.global],
+      },
+    };
+    const source = { ...session(), seatBoards: { a: boardWithAttack } };
+    const safe = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, duplicateCatcher, safeHitter],
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+
+    expect(safe.changed).toBe(true);
+    expect(safe.session.seatBoards?.a.slots.FLEX1).toBe(safeHitter.id);
+    expect(source.seatBoards.a).toBe(boardWithAttack);
+
+    const unresolved = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, duplicateCatcher],
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+    expect(unresolved.changed).toBe(false);
+    expect(unresolved.session).toBe(source);
+    expect(unresolved.session.seatBoards?.a).toBe(boardWithAttack);
+    expect(unresolved.eventsByTeamId.a).toEqual([{
+      slotId: 'FLEX1',
+      gonePlayerId,
+      promotedPlayerId: null,
+    }]);
+  });
+
   it('uses the canonical player bands so rival locked archetypes materially change the risk read', () => {
     const powerStored = storedPlayer('power', { power: 99, contact: 1, speed: 1, fielding: 1, arm: 1 });
     const speedStored = storedPlayer('speed', { power: 1, contact: 1, speed: 99, fielding: 1, arm: 1 });
+    const neutralStored = storedPlayer('neutral');
     const power = buildDeskRoomPlayer({ player: powerStored, price: 50, seating: seating(powerStored) })!;
     const speed = buildDeskRoomPlayer({ player: speedStored, price: 50, seating: seating(speedStored) })!;
+    const neutral = buildDeskRoomPlayer({ player: neutralStored, price: 50, seating: seating(neutralStored) })!;
     expect(power.archetypeWeights.Power).toBe(1);
     expect(power.archetypeWeights.Speed).toBeCloseTo(1 / 99);
 
@@ -112,14 +320,14 @@ describe('private desk room assembly', () => {
       session: { ...session(), pickOrder: [{ pick: 1, teamId: 'asker' }, { pick: 2, teamId: 'rival' }, { pick: 3, teamId: 'asker' }] },
       askingTeamId: 'asker',
       askedPlayerIds: ['power'],
-      availablePlayers: [power, speed],
+      availablePlayers: [power, speed, neutral],
       baseCaps: [],
       realTeamCount: 2,
     };
-    const asker = { teamId: 'asker', roster: legalTwentyOne('a'), committedSpent: 21, budget: 1_000, lockedArchetype: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 } };
-    const powerRoom = rationalRisksForRoom({ ...base, seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne('p'), lockedArchetype: { Power: 5, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 } }] });
-    const speedRoom = rationalRisksForRoom({ ...base, seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne('s'), lockedArchetype: { Power: 0, Contact: 0, Speed: 5, Defense: 0, Rotation: 0, Bullpen: 0 } }] });
-    expect(powerRoom[0].risk).toBe('LIKELY_GONE');
+    const asker = rationalSeat('asker', legalTwentyOne('a'));
+    const powerRoom = rationalRisksForRoom({ ...base, seats: [asker, rationalSeat('rival', legalTwentyOne('p'), { Power: 5, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 })] });
+    const speedRoom = rationalRisksForRoom({ ...base, seats: [asker, rationalSeat('rival', legalTwentyOne('s'), { Power: 0, Contact: 0, Speed: 5, Defense: 0, Rotation: 0, Bullpen: 0 })] });
+    expect(powerRoom[0].risk).toBe('AT_RISK');
     expect(speedRoom[0].risk).toBe('SAFE_TO_WAIT');
   });
 
@@ -153,6 +361,83 @@ describe('private desk room assembly', () => {
     expect(locked.priorities.Power).toBeGreaterThan(locked.priorities.Speed);
   });
 
+  it('inherits the team archetype when an older snake setup has no locked archetype', () => {
+    const source = session('BALANCED');
+    source.snakeSetup!.clubs = [{ teamId: 'a', hotseat: true }];
+    const locked = resolveLockedSeat({
+      team: { id: 'a', mlbArchetypeKey: 'whiteyball' } as Team,
+      session: source,
+    });
+    expect(locked.archetypeName).toBe('WHITEYBALL');
+    expect(locked.priorities.Speed).toBeGreaterThan(locked.priorities.Power);
+  });
+
+  it('scores high-velocity relievers against the Nasty Boys exact bullpen identity', () => {
+    const locked = resolveLockedSeat({ team: { id: 'a' } as Team, session: session('nasty-boys') });
+    const pitcherShape = { isPitcher: true, position: 'RP', role: 'RP' } as const;
+    const highVelocity = storedPlayer('high-velocity', {
+      primaryPosition: 'RP', velocity: 95, junk: 50, accuracy: 55,
+    });
+    const lowVelocity = storedPlayer('low-velocity', {
+      primaryPosition: 'RP', velocity: 25, junk: 50, accuracy: 85,
+    });
+    const highRow = buildDeskRoomPlayer({
+      player: highVelocity,
+      price: 50,
+      seating: { playerId: highVelocity.id, price: 50, shape: pitcherShape, construction: construction(highVelocity.id, pitcherShape, 50) },
+    })!;
+    const lowRow = buildDeskRoomPlayer({
+      player: lowVelocity,
+      price: 50,
+      seating: { playerId: lowVelocity.id, price: 50, shape: pitcherShape, construction: construction(lowVelocity.id, pitcherShape, 50) },
+    })!;
+
+    expect(fitWord({ player: highRow, priorities: locked.priorities, capIdentity: locked.capIdentity, need: null, openSlots: 22 }))
+      .toBe('STRONG FIT');
+    expect(fitWord({ player: lowRow, priorities: locked.priorities, capIdentity: locked.capIdentity, need: null, openSlots: 22 }))
+      .toBe('WEAK FIT');
+  });
+
+  it('keys exact settled public prices and uses them instead of frozen card prices', () => {
+    const drafted = storedPlayer('drafted');
+    const deskPlayer = buildDeskRoomPlayer({ player: drafted, price: 50, seating: seating(drafted, 50) })!;
+    const source = {
+      ...session(),
+      revision: 9,
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: drafted.id,
+        versionGroupId: `player:${drafted.id}`, settledSalary: 37, marginalTax: 0,
+      }],
+    } as LeagueBuilderMlbDraftSession;
+    const seats = buildRationalSeats({
+      teams: [{ id: 'a' } as Team],
+      session: source,
+      playersById: new Map([[drafted.id, deskPlayer]]),
+      budget: 1_000,
+    });
+    expect(seats[0].committedSpent).toBe(37);
+    expect(seats[0].settledRosterPrices).toEqual([{ playerId: drafted.id, settledPrice: 37 }]);
+
+    const keyInput = {
+      session: source,
+      askingTeamId: 'a',
+      askedPlayerIds: [drafted.id],
+      availablePlayers: [deskPlayer],
+      seats,
+      baseCaps: [],
+      realTeamCount: 1,
+    };
+    const original = rationalRiskCacheKey(keyInput);
+    expect(rationalRiskCacheKey({
+      ...keyInput,
+      seats: [{ ...seats[0], settledRosterPrices: [{ playerId: drafted.id, settledPrice: 38 }] }],
+    })).not.toBe(original);
+    expect(rationalRiskCacheKey({
+      ...keyInput,
+      session: { ...source, revision: 10 },
+    })).not.toBe(original);
+  });
+
   it('memoized risk reads are byte-identical to uncached reads across 30 deterministic fixtures', () => {
     let state = 0xc0ffee;
     const randomRating = () => {
@@ -177,13 +462,13 @@ describe('private desk room assembly', () => {
           { pick: 3, teamId: 'asker' },
         ],
       };
-      const asker = { teamId: 'asker', roster: legalTwentyOne(`pa-${fixtureIndex}`), committedSpent: 21, budget: 1_000, lockedArchetype: { Power: 1, Contact: 1, Speed: 1, Defense: 1, Rotation: 1, Bullpen: 1 } };
+      const asker = rationalSeat('asker', legalTwentyOne(`pa-${fixtureIndex}`));
       const input = {
         session: baseSession,
         askingTeamId: 'asker',
         askedPlayerIds: availablePlayers.map((player) => player.playerId),
         availablePlayers,
-        seats: [asker, { ...asker, teamId: 'rival', roster: legalTwentyOne(`pr-${fixtureIndex}`) }],
+        seats: [asker, rationalSeat('rival', legalTwentyOne(`pr-${fixtureIndex}`))],
         baseCaps: [],
         realTeamCount: 2,
       };

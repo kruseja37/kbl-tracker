@@ -178,7 +178,7 @@ function SyncControls({
     try {
       await sync.replaceCloudWithLocal((db, store, sent, total) => {
         setProgress(`${db}.${store}: ${sent}/${total}`);
-      });
+      }, { replaceExisting: true });
       // Initialize sync engine after first upload
       syncEngine.init();
       await handleDiagnostics();

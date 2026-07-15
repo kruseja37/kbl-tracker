@@ -6,9 +6,19 @@ const engineProfile = vi.hoisted(() => ({
   rationalRoom: 0,
   legalFinish: 0,
   seatingProof: 0,
+  pickProof: 0,
   seatingProofResult: null as unknown,
 }));
 const useLeagueBuilderDataMock = vi.hoisted(() => vi.fn());
+const directStorage = vi.hoisted(() => ({
+  leagues: [] as LeagueTemplate[],
+  teams: [] as Team[],
+  players: [] as Player[],
+  pull: vi.fn(async () => undefined),
+  getAllLeagueTemplates: vi.fn(async () => directStorage.leagues),
+  getAllTeams: vi.fn(async () => directStorage.teams),
+  getAllPlayers: vi.fn(async () => directStorage.players),
+}));
 
 vi.mock('../../../engines/snakeRationalRoom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../engines/snakeRationalRoom')>();
@@ -45,6 +55,10 @@ vi.mock('../../../engines/snakeSeatingProof', async (importOriginal) => {
       }
       return engineProfile.seatingProofResult as ReturnType<typeof actual.proveSimultaneousSnakeSeating>;
     },
+    proveSnakePickKeepsAllClubsSeated: (...args: Parameters<typeof actual.proveSnakePickKeepsAllClubsSeated>) => {
+      engineProfile.pickProof += 1;
+      return actual.proveSnakePickKeepsAllClubsSeated(...args);
+    },
   };
 });
 
@@ -52,6 +66,20 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../hooks/useLeagueBuilderData')>();
   return { ...actual, useLeagueBuilderData: useLeagueBuilderDataMock };
 });
+
+vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
+  return {
+    ...actual,
+    getAllLeagueTemplates: directStorage.getAllLeagueTemplates,
+    getAllTeams: directStorage.getAllTeams,
+    getAllPlayers: directStorage.getAllPlayers,
+  };
+});
+
+vi.mock('../../../utils/syncEngine', () => ({
+  syncEngine: { pull: directStorage.pull },
+}));
 
 vi.mock('../../../utils/franchisePhase2Flags', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/franchisePhase2Flags')>();
@@ -70,6 +98,7 @@ import type { RegisteredPool } from '../../../engines/leagueConstruction';
 import { searchSnakeGuidePackage } from '../../../engines/snakeGuideTrade';
 import type {
   LeagueBuilderMlbDraftSession,
+  LeagueTemplate,
   Player,
   SnakeBoardSlotId,
   SnakeSeatBoardRecord,
@@ -142,6 +171,11 @@ function board(): SnakeSeatBoardRecord {
 function fixture(): UseLeagueBuilderDataReturn {
   const players = Array.from({ length: 250 }, (_, index) => player(index));
   const teams = TEAM_IDS.map(team);
+  const leagues: LeagueTemplate[] = [{
+    id: LEAGUE_ID, name: 'Performance League', teamIds: TEAM_IDS, conferences: [], divisions: [],
+    defaultRulesPreset: 'standard', draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed',
+    salaryCap: TIER_CAPS.standard.tierCap, createdDate: '2026-07-11', lastModified: '2026-07-11',
+  }];
   const pickOrder = buildSnakeOrder(TEAM_IDS, 22);
   const session: LeagueBuilderMlbDraftSession = {
     id: `mlb-draft:${LEAGUE_ID}:1`, leagueId: LEAGUE_ID, seasonNumber: 1, seed: 'perfroom-seed',
@@ -162,17 +196,17 @@ function fixture(): UseLeagueBuilderDataReturn {
   };
   profileSession = session;
   profilePool = pool;
+  directStorage.leagues = leagues;
+  directStorage.teams = teams;
+  directStorage.players = players;
   const saveMlbDraftSession = vi.fn(async (next: LeagueBuilderMlbDraftSession) => next);
   return {
-    leagues: [{
-      id: LEAGUE_ID, name: 'Performance League', teamIds: TEAM_IDS, conferences: [], divisions: [],
-      defaultRulesPreset: 'standard', draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed',
-      salaryCap: TIER_CAPS.standard.tierCap, createdDate: '2026-07-11', lastModified: '2026-07-11',
-    }],
+    leagues,
     teams, players, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => pool),
     getMlbDraftSession: vi.fn(async () => session),
     saveMlbDraftSession,
+    refresh: vi.fn(async () => undefined),
   } as unknown as UseLeagueBuilderDataReturn;
 }
 
@@ -180,6 +214,7 @@ function resetProfile(): void {
   engineProfile.rationalRoom = 0;
   engineProfile.legalFinish = 0;
   engineProfile.seatingProof = 0;
+  engineProfile.pickProof = 0;
   engineProfile.seatingProofResult = null;
 }
 
@@ -187,6 +222,7 @@ function resetCallCounts(): void {
   engineProfile.rationalRoom = 0;
   engineProfile.legalFinish = 0;
   engineProfile.seatingProof = 0;
+  engineProfile.pickProof = 0;
 }
 
 describe('PERFROOM production-scale call profile', () => {
@@ -219,9 +255,11 @@ describe('PERFROOM production-scale call profile', () => {
       initialRationalRoomCalls: afterInitial.rationalRoom,
       initialLegalFinishCalls: afterInitial.legalFinish,
       initialSeatingProofCalls: afterInitial.seatingProof,
+      initialPickProofCalls: afterInitial.pickProof,
       pureRerenderRationalRoomCalls: engineProfile.rationalRoom - afterInitial.rationalRoom,
       pureRerenderLegalFinishCalls: engineProfile.legalFinish - afterInitial.legalFinish,
       pureRerenderSeatingProofCalls: engineProfile.seatingProof - afterInitial.seatingProof,
+      pureRerenderPickProofCalls: engineProfile.pickProof - afterInitial.pickProof,
     };
     console.info('PERFROOM_PROFILE render', JSON.stringify(profile));
     expect(profile.initialRationalRoomCalls).toBe(0);
@@ -230,6 +268,8 @@ describe('PERFROOM production-scale call profile', () => {
     expect(profile.pureRerenderRationalRoomCalls).toBe(0);
     expect(profile.pureRerenderLegalFinishCalls).toBe(0);
     expect(profile.pureRerenderSeatingProofCalls).toBe(0);
+    expect(profile.initialPickProofCalls).toBeLessThanOrEqual(1);
+    expect(profile.pureRerenderPickProofCalls).toBe(0);
 
     resetCallCounts();
     const revealStart = performance.now();
@@ -241,7 +281,9 @@ describe('PERFROOM production-scale call profile', () => {
       legalFinishCalls: engineProfile.legalFinish,
       seatingProofCalls: engineProfile.seatingProof,
     }));
-    expect(engineProfile.rationalRoom).toBe(1);
+    // JSDOM has no Worker. The desk must stay interactive without ever running
+    // the future-pick playout synchronously on React's UI thread.
+    expect(engineProfile.rationalRoom).toBe(0);
     expect(engineProfile.legalFinish).toBeLessThanOrEqual(22);
   }, 60_000);
 
@@ -251,20 +293,24 @@ describe('PERFROOM production-scale call profile', () => {
       session: profileSession,
       buyerTeamId: TEAM_IDS[0],
       targetPick: 2,
-      pickValueChart: derivePickValueChart(profilePool.players.map((row) => row.iv)).slice(0, 176),
+      pickValueChart: derivePickValueChart(profilePool.players.map((row) => row.iv), 176, 8),
       seatingProofInput: { clubs: [], pool: [], baseCaps: [], realTeamCount: 8 },
     });
     const directSearchMs = performance.now() - directStart;
+    resetCallCounts();
     render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${LEAGUE_ID}`]}><SnakeDraftRoom /></MemoryRouter>);
     await screen.findByTestId('snake-draft-room', {}, { timeout: 30_000 });
     await waitFor(() => expect(engineProfile.seatingProof).toBe(1), { timeout: 30_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'REVEAL PERFORMANCE CLUB 1 SEAT' }));
+    await screen.findByTestId('private-draft-desk', {}, { timeout: 30_000 });
+    fireEvent.click(screen.getByRole('button', { name: 'I HAVE THE ROOM' }));
     resetCallCounts();
 
-    fireEvent.click(screen.getByRole('button', { name: 'THE GUIDE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     fireEvent.change(screen.getByLabelText('WHAT WOULD IT COST TO REACH PICK N?'), { target: { value: '2' } });
     const start = performance.now();
     fireEvent.click(screen.getByRole('button', { name: 'CHECK PICK 2' }));
-    await waitFor(() => expect(screen.getByLabelText('Shared trade guide').textContent).toMatch(/OFFER|NO LEGAL GUIDE TRADE/i), { timeout: 60_000 });
+    await waitFor(() => expect(screen.getByLabelText('The trade guide').textContent).toMatch(/OFFER|NO LEGAL GUIDE TRADE/i), { timeout: 60_000 });
     const guideMs = performance.now() - start;
     console.info('PERFROOM_PROFILE guide', JSON.stringify({
       directSearchMs: Math.round(directSearchMs),

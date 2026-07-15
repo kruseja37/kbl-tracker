@@ -27,7 +27,6 @@ import {
   isFranchisePhase2MoraleEnabled,
   isFranchisePhase2StadiumRecordsEnabled,
   isFranchisePhase2TraitsEnabled,
-  isSnakeDraftPocEnabled,
   setFranchisePhase2CheckpointEnabledForTests,
   setFranchisePhase2FameEnabledForTests,
   setFranchisePhase2FlashpointEnabledForTests,
@@ -41,7 +40,6 @@ import {
   setFranchisePhase2TraitsEnabledForTests,
   setFranchiseLivingSeasonContext,
   setAuctionAdvisorColorEnabledForTests,
-  setSnakeDraftPocEnabledForTests,
   setSnakeDraftV1EnabledForTests,
 } from '../franchisePhase2Flags';
 
@@ -82,7 +80,6 @@ const resetTestSetters = () => {
   setFranchisePhase2L14EnabledForTests(null);
   setFranchisePhase2StadiumRecordsEnabledForTests(null);
   setAuctionAdvisorColorEnabledForTests(null);
-  setSnakeDraftPocEnabledForTests(null);
   setSnakeDraftV1EnabledForTests(null);
 };
 
@@ -113,7 +110,6 @@ describe('franchise Phase-2 activation', () => {
       'l12', 'l13', 'l14', 'stadiumRecords',
     ]);
     expect(LIVING_SEASON_FLAG_FAMILY).not.toContain('auctionAdvisorColor');
-    expect(LIVING_SEASON_FLAG_FAMILY).not.toContain('snakeDraftPoc');
   });
 
   test('creation stamps the immutable living-season provenance only when enabled', async () => {
@@ -136,7 +132,6 @@ describe('franchise Phase-2 activation', () => {
 
     expect(getters.map((getter) => getter())).toEqual(Array(getters.length).fill(true));
     expect(isAuctionAdvisorColorEnabled()).toBe(true);
-    expect(isSnakeDraftPocEnabled()).toBe(false);
   });
 
   test('console per-flag overrides win in both directions over the franchise switch', async () => {
@@ -166,19 +161,6 @@ describe('franchise Phase-2 activation', () => {
 
     expect(isFranchisePhase2FameEnabled()).toBe(false);
     expect(isFranchisePhase2L13Enabled()).toBe(true);
-  });
-
-  test('snake draft POC follows the house activation pattern and compiles OFF (retired from view; the real snake draft shipped)', async () => {
-    expect(isSnakeDraftPocEnabled()).toBe(false);
-
-    await saveFranchisePhase2ActivationRecord({
-      globalEnabled: null,
-      flagOverrides: { snakeDraftPoc: true },
-    });
-    expect(isSnakeDraftPocEnabled()).toBe(true);
-
-    setSnakeDraftPocEnabledForTests(false);
-    expect(isSnakeDraftPocEnabled()).toBe(false);
   });
 
   test('a persisted global activation record flips getters after hydrate', async () => {

@@ -30712,6 +30712,548 @@ site → STOP that site, report, finish the rest of T4 where linkable.
 
 Use xhigh reasoning effort. Think step-by-step.
 <!-- ===== END CONTRACT: HUNTFIX-TRACKER-1 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-1A ===== -->
+# SNAKE-MOCK-1A — CHOOSE, INSPECT, DRAFT
+
+**Date:** 2026-07-12 | **Base:** `origin/main` `ea66830e0305d999f4140a101d452417f7d9152e`
+
+The complete binding builder contract is
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_1A_2026-07-12.md`. It authorizes only
+the first mock-draft slice: choose any available MLB player from the live board,
+inspect the shared full profile, explicitly `DRAFT PLAYER`, then confirm the exact
+selection with the existing gavel ritual without candidate changes triggering the
+privacy cover. Separate builder and auditor are mandatory. No farm, completion,
+recap, franchise, schedule, chemistry, ledger, auction, or schema work is in scope.
+<!-- ===== END CONTRACT: SNAKE-MOCK-1A ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-1B ===== -->
+# SNAKE-MOCK-1B — FINAL RECAP AND DURABLE HANDOFF
+
+**Date:** 2026-07-12 | **Base checkpoint:** `809a8212`
+
+The complete binding contract is
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_1B_2026-07-12.md`. It covers only
+automatic non-final advance, final-pick recap, reload recovery, explicit MLB/farm
+roster commit, and the existing Scout Hire -> farm -> Staff Hire -> Franchise Setup
+route chain. Schedule presence is never a gate; franchise initialization remains
+zero-row and Living Season remains the CSV/manual entry owner. Separate builder
+and auditor are mandatory.
+<!-- ===== END CONTRACT: SNAKE-MOCK-1B ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2A ===== -->
+# SNAKE-MOCK-2A — ONE BOARD, SECONDARY ELIGIBILITY, ALL-SEAT BACKFILL
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2A_2026-07-12.md`. One persisted
+overall board and position views share secondary-position eligibility; either
+reorder refits the 22-slot plan and recalculates existing consequences; every
+saved team board backfills after picks without requiring private reveal. No
+team-first selector, chemistry/ledger, farm redesign, manifest, franchise,
+schedule, staffing, auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2A ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2B ===== -->
+# SNAKE-MOCK-2B — TEAM-FIRST PRIVATE SEATS AND OFF-CLOCK BOARDS
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2B_2026-07-12.md`. The public room
+stays tied to the live pick while the covered private desk can select any club;
+off-clock clubs may edit only their own persisted board but cannot draft. The
+approved companion gains Slice 2A overall/position/refit parity under its
+existing own-board and freshness guards. No chemistry, new money ledger, farm
+redesign, manifest, franchise, schedule, transport, auth, auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2B ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2C ===== -->
+# SNAKE-MOCK-2C — MONEY, TAX, CHEMISTRY, AND SELECTED-PLAYER TRUTH
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2C_2026-07-12.md`. Keep the
+22-player plan and drafted roster as separate canonical ledgers; show salary,
+tax, all-in, cap left, five chemistry families, selected-player chemistry delta,
+team-fit status, full compact profile, and existing Assistant-GM shape/chemistry
+status. No new calculations, farm redesign, manifest, franchise, schedule,
+auction, or schema work.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2C ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2D ===== -->
+# SNAKE-MOCK-2D — FARM BOARD PARITY UNDER SCOUTING FOG
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_MOCK_2D_2026-07-12.md`. Add a persisted,
+team-specific fog-safe farm overall board, position views, planned class,
+team-first off-clock editing, frozen-slot money truth, and all-seat backfill.
+No true prospect ratings/IV, farm tax, chemistry claim, companion expansion,
+manifest, franchise, schedule, or auction change.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2D ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MOCK-2E ===== -->
+# SNAKE-MOCK-2E — IMMUTABLE DRAFT MANIFEST AND FRANCHISE LAUNCH
+
+Full binding contract: `spec-docs/contracts/CONTRACT_SNAKE_MOCK_2E_2026-07-12.md`.
+Confirmation freezes one validated manifest consumed by recap/commit/freeze/launch;
+retry is idempotent; franchise launches with zero schedule rows and CSV/manual entry
+inside Living Season. No auction, formula, staffing, or auto-schedule change.
+<!-- ===== END CONTRACT: SNAKE-MOCK-2E ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-CRAWL ===== -->
+# SNAKE-FINAL-CRAWL — STATIC STATE/WIRING + UI/UX/ORPHAN AUDIT
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_FINAL_CRAWL_2026-07-12.md`. Two independent
+read-only lanes attack the complete production snake/farm/launch path: one for
+state, persistence, wiring, provenance, and dead routes; one for iPad UX,
+privacy, Help law, player selection, hierarchy, and orphaned design. No edits.
+<!-- ===== END CONTRACT: SNAKE-FINAL-CRAWL ===== -->
+
+<!-- ===== CONTRACTS: SNAKE-FINAL-REPAIR ===== -->
+# SNAKE-FINAL-REPAIR — STATE, ROOM, COMPANION, AND JOURNEY
+
+Binding repair contracts:
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_STATE_2026-07-12.md`,
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_ROOM_2026-07-12.md`,
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_COMPANION_2026-07-12.md`, and
+`spec-docs/contracts/CONTRACT_SNAKE_REPAIR_JOURNEY_2026-07-12.md`.
+Each builder owns only its named files/findings and may not audit its own diff.
+<!-- ===== END CONTRACTS: SNAKE-FINAL-REPAIR ===== -->
+
+<!-- ===== CONTRACT: SNAKE-INTELLIGENCE ===== -->
+# SNAKE-INTELLIGENCE — MY BOARD, ASST GM BOARD, AND FAIR TRADES
+
+**Date:** 2026-07-13 | **Base checkpoint:** `99d13080` | **Finding:** FINDING-152
+
+Full binding contract:
+`spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`. The approved build repairs
+main/companion ranking-to-plan refits, replaces the strategically empty trade search with fair
+balancing-return packages, and composes the repo's existing fit/money/chemistry/scarcity/rival
+intelligence into a separate live Asst GM Board with selected-player opportunity cost and
+actionable TAKE / WAIT / TRADE / PASS reads. My Board remains the GM's persisted board; the
+assistant never overwrites it, drafts, or executes a trade. Work proceeds in verified batches with
+separate builder/auditor roles; Help-Button Law and JK browser acceptance remain binding.
+<!-- ===== END CONTRACT: SNAKE-INTELLIGENCE ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-PRODUCTION-INTEGRITY-11 ===== -->
+# SNAKE-FINAL-PRODUCTION-INTEGRITY-11 — FARM ECONOMICS, AUTHORITY, SYNC FRESHNESS, AND TRUE UNDO
+
+**ROUTE:** Codex 5.6 SOL | xhigh reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the production-integrity builder. You may implement but may not audit your own diff.
+
+## GOAL
+Close FINDING-166 through FINDING-169 and FINDING-173 without changing MLB trade behavior, auction behavior, canonical roster law, schedule ownership, or persisted schema versions.
+
+## SOURCE OF TRUTH
+- `spec-docs/FINDINGS/FINDINGS_165_onwards.md`, FINDING-166/167/168/169/173.
+- Ratified user ruling: FARM drafts have no trades; MLB trades remain.
+- Existing immutable Snake manifest/session and exact-transaction undo laws.
+- Help-Button UI Law in `spec-docs/SESSION_RULES.md`.
+
+## ALLOWED PRODUCTION FILES
+- `src/engines/snakeFarmSlots.ts`
+- `src/engines/snakeGuideTrade.ts`
+- `src/engines/snakeTradeOffers.ts`
+- `src/utils/leagueBuilderStorage.ts`
+- `src/utils/syncConfig.ts`
+- `src/utils/syncEngine.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/pages/SnakeCompanion.tsx`
+- `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`
+
+## ALLOWED TEST FILES
+- Existing focused tests for those modules/pages.
+- `src/engines/__tests__/snakeFarmSlots.test.ts`
+- Existing focused `snakeGuideTrade` and `snakeTradeOffers` tests.
+- `src/utils/tests/draftFreezeInputs.test.ts` only to replace the retired FARM-trade fixture with rejection or ownership-independent absolute-slot proof.
+- `src/utils/tests/draftPipeline.integration.test.ts` for FINDING-175 real-storage 9+1 and 10+0 transition/freeze/atomic-commit/handoff/retry proof, plus fixture-only migration of older direct season-2 FARM creation: where a canonical MLB authority already exists, pass the sanctioned `{ phaseTransition: 'MLB_TO_FARM' }`; where it does not, seed the canonical completed MLB authority first. Do not relax transition-only production enforcement.
+- `src/utils/tests/snakeRoomPersistence.test.ts`
+- `src/utils/tests/snakeSeasonGauntlet.integration.test.ts` only to repair the stale manifest-dominance fixture: keep the already-frozen session in FARM, prove `pickOrder`/`farmSlotSalaries` envelope mutation is rejected byte-unchanged, then continue the manifest/initializer assertions from the unmutated stored row. Do not relax FARM phase or envelope immutability or restore any FARM trade.
+- `src/utils/tests/syncEngine.snakeManifestInvariant.test.ts`
+- One adjacent `syncConfig` registry test if no existing test owns that invariant.
+- Existing `SnakeDraftRoom.farm`, `SnakeDraftRoom.2a`, `SnakeCompanion.2b`, and `SelectedPlayerCard` tests.
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.completion.test.tsx` only to give the existing storage/hook harness a discriminating successful `syncEngine.pull` mock after the mandatory pull-before-reread repair. Do not weaken or conditionalize production freshness.
+
+## DO NOT TOUCH
+- `SnakeDraftRoomView.tsx`, responsive preview/fixture/journey files, FARM public-copy wording, audit/status/contract docs, auction code/tests, schedule/franchise-launch code, schema/database versions, canonical roster constants, or Legends files.
+
+## EXECUTION ORDER — ONE CRITICAL BATCH AT A TIME
+1. FINDING-169: make every FARM start use a club-local 75% curve, including pristine 10-slot clubs. Preserve deterministic absolute slot assignment and 3x within each club's own turns. Prove unequal pristine budgets and the full 0–10 vector/property set.
+2. FINDING-166 + 173: preserve existing session phase; reject phase erasure and all FARM trade state at guide, offer, storage, room, and sync boundaries; freeze the entire FARM creation envelope across generic save, atomic update, room save, and inbound sync. Rejection is byte-unchanged. Only sanctioned MLB→FARM creation may change phase/envelope. Retire the remaining FARM-trade freeze fixture without weakening absolute-slot salary proof.
+3. FINDING-167: add `scoutProfiles` and `startupDraftSessions` to full replacement sync, then re-read every authoritative player/team/scout/session dependency after pull before room or recurring companion derivation. Prove stale-before/fresh-after behavior.
+4. FINDING-168: production may not label consequence dismissal as REVERT. Render REVERT only when a real exact prior board transaction exists with matching seat/private identity and expected revision; otherwise remove/rename the non-undo dismissal. Preserve the preview's true undo API.
+5. FINDING-175 closing proof: add real-storage 9+1 and 10+0 boundary integrations; preserve all existing IDs/assignments byte-for-byte, make zero-pick commit touch no player rows, keep every club in manifest/handoff, and prove retry idempotence.
+
+## VERIFICATION
+After each numbered batch: red-first test, focused suite, `NODE_ENV= npx tsc -b --pretty false`, and `git diff --check`. After all batches: all named focused suites, Snake matrix relevant to touched pages, exact changed-file ESLint with `--no-inline-config`, TypeScript, and production build. Do not weaken assertions, add skips, raise timeouts, or add lint suppressions.
+
+## STOP IF
+Stop and report if a fix requires `SnakeDraftRoomView.tsx`, preview files, auction changes, a schema/version bump, new product math beyond the club-local 75% ruling, or any file outside the allowlist. Do not stage, commit, or edit docs.
+
+## REPORT
+List every changed path, behavior per finding, exact test counts/output, and either `SNAKE-FINAL-PRODUCTION-INTEGRITY-11 complete` or `BLOCKED: <reason>`.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-FINAL-PRODUCTION-INTEGRITY-11 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-RESPONSIVE-12 ===== -->
+# SNAKE-FINAL-RESPONSIVE-12 — TRUTHFUL PREVIEW, FARM COPY, AND IPAD STICKY WORKSPACE
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the responsive-preview builder. You may implement but may not audit your own diff.
+
+## GOAL
+Close FINDING-165, FINDING-170, FINDING-171, and FINDING-172 while preserving production Snake engines, privacy, Help law, companion parity, and MLB trade behavior.
+
+## SOURCE OF TRUTH
+`spec-docs/FINDINGS/FINDINGS_165_onwards.md` plus the live-crawl contract and the real guide/execution engines already in the repo.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/SnakeResponsivePreview.tsx`
+- `src/src_figma/__tests__/pages/SnakeResponsivePreview.test.tsx`
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+- `src/src_figma/app/components/snake/__tests__/SnakeDraftRoomView.test.tsx`
+- `test-utils/journeys/12-snake-draft-responsive.spec.ts`
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.farm.test.tsx` only for FARM no-trade/copy assertions.
+
+## DO NOT TOUCH
+Production pages, storage/sync files, engines, SelectedPlayerCard, companion components, audit/status/contract docs, auction, schedule, franchise launch, schema, or Legends files.
+
+## REQUIRED OUTCOMES
+1. Finish the interrupted preview edit so TypeScript is green. Seed the opening offer from the real guide, revalidate it through the real execution engine, and derive ownership, status, totals, messages, and receipts from that exact package.
+2. Derive selected-player trade target, Activity copy, and prefill from current live order/ownership plus a currently legal guide package. After a pick completes or ownership changes, no stale `TRADE TO` or availability signal may remain.
+3. At 1024x768 and 768x1024 the selected-player identity/action strip remains visible while selecting/reordering at least three players; board scroll position stays stable and there is no horizontal overflow.
+4. FARM shows `REMAINING PICKS`, pick-only correction wording, and no trade/tradeable language or controls. MLB wording and trade behavior stay unchanged.
+
+## VERIFICATION
+Red-first focused component tests; full preview component suite; the responsive Playwright journey at both iPad orientations including multi-selection and terminal stale-signal absence; FARM page suite; exact changed-file ESLint `--no-inline-config`; TypeScript; production build; `git diff --check`.
+
+## STOP IF
+Stop if production engine/storage/page changes are required, the real guide cannot produce an executable package from the fixture, or fixing the sticky workspace would remove the team-first privacy cover. Do not stage, commit, or edit docs.
+
+## REPORT
+List every changed path, exact proof, and either `SNAKE-FINAL-RESPONSIVE-12 complete` or `BLOCKED: <reason>`.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-FINAL-RESPONSIVE-12 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-HOSTILE-REPO-AUDIT-13 ===== -->
+# SNAKE-FINAL-HOSTILE-REPO-AUDIT-13 — INDEPENDENT FULL REPOSITORY CRAWL
+
+**ROUTE:** Codex 5.6 SOL | xhigh reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the independent hostile repository auditor. You did not build this diff. Read-only: do not edit, stage, commit, or weaken any proof.
+
+## GOAL
+Try to reject the complete Snake Draft branch after the production-integrity and responsive repair lanes land. Audit the full user path and every backend seam it relies on, not merely the newest hunks.
+
+## AUTHORITIES
+- Current fetched `origin/main` and the complete branch diff.
+- `spec-docs/NOW/SNAKE_DRAFT.md`, the signed Snake vision/program, current findings, and the Help-Button UI Law.
+- Current rulings: FARM draft-pick trades are retired; MLB pick trades remain; in-season player trades are separate; zero-schedule Franchise launch is valid; JK's browser walk is the only acceptance gate.
+
+## REQUIRED ATTACKS
+1. Ranking → My Board and Asst GM Board truth; exact undo; availability/backfill; fit, tax, salary, five chemistries, scarcity, rival pressure, opportunity cost, and trade nudges.
+2. MLB pick-value/package/execution/revalidation/correction truth, including uneven packages and live-pick ownership changes.
+3. FARM 0–10 open-slot boundaries, per-club 75%/3x salary law, immutable order/salaries/envelope, no trade state or phase-erasure bypass, fog, atomic commit/handoff/retry.
+4. Cross-device privacy/freshness/field-patch behavior for players, teams, salaries, scouts, startup sessions, boards, covers, and companion claims.
+5. Setup → room → recap → Scout Hire → FARM → recap → staffing → Franchise Setup → launch with zero schedule; no orphaned routes, dead controls, canned preview truth, misleading copy, placeholder data, or auction regression.
+6. Test adequacy: call out any assertion that merely mirrors implementation, any missing real-storage boundary, skips/timeouts/suppressions, and any mismatch between docs, tests, and code.
+
+## VERDICT
+Report only evidence-backed findings with severity, exact file:line citations, reproduction/reasoning, user impact, and the smallest repair boundary. Separate confirmed bugs from risks/test gaps. If none survive, say `VERIFIED — zero findings` and list the proof inspected. You are not the product-acceptance gate.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-FINAL-HOSTILE-REPO-AUDIT-13 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-HOSTILE-UI-AUDIT-14 ===== -->
+# SNAKE-FINAL-HOSTILE-UI-AUDIT-14 — INDEPENDENT LIVE IPAD AND PRODUCTION-JOURNEY CRAWL
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the independent live UI auditor. You did not build the responsive or production journey changes. Read-only: do not edit source, tests, docs, or configuration.
+
+## GOAL
+Use the repo's `ui-flow-crawler` and `user-journey-verifier` protocols to try to reject the live Snake Draft at 1024×768 and 1180×820, plus companion width. Inspect actual state after clicks; screenshots alone are insufficient.
+
+## REQUIRED JOURNEYS
+- Preview: privacy cover/team switch, full player pool/search/profile, overall and position reorder, My Board update, Asst GM optimize/pin, keep and exact revert, roster and plan money/tax/fit/five-chemistry truth, dynamic trade nudge, both nods, real commissioner execution, receipt/order/ownership change, pick recording, drafted-player removal/backfill, terminal dead-action absence, and 1024 selected-action stickiness.
+- Production lifecycle: League Builder Snake persistence and resume, room registration, MLB picks/trade/correction/recap, Scout Hire, FARM with no trade UI or copy, FARM recap/commit/retry, staffing, compact Franchise Setup, launch with zero schedule, later schedule entry affordances.
+- Companion: covered by default, only selected team's private data after reveal, no insider carryover on team/identity/epoch changes, board edits without clobbering live picks.
+- Ruthless UX: no clipped primary action, horizontal overflow, dead/duplicated action, stale pick number, fake receipt, leaked private information, orphaned explainer text, or touch target below the established law.
+
+## VERDICT
+Report exact URL, viewport, action sequence, observed/expected state, console/page errors, and source/test pointer where identifiable. Separate confirmed bugs from environmental limitations. If none survive, say `VERIFIED — zero findings`. JK's browser walk remains the only product-acceptance gate.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-FINAL-HOSTILE-UI-AUDIT-14 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-PREVIEW-PRIVACY-REPAIR-15 ===== -->
+# SNAKE-PREVIEW-PRIVACY-REPAIR-15 — CLEAR PRIVATE CHOICES ON COMPANION COVER
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow preview-privacy repair builder. The independent Audit-14 agent—not you—owns the closing verdict.
+
+## GOAL
+Close FINDING-176 without changing production companion behavior or clearing durable team boards.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/SnakeResponsivePreview.tsx`
+- `src/src_figma/__tests__/pages/SnakeResponsivePreview.test.tsx`
+- `test-utils/journeys/12-snake-draft-responsive.spec.ts`
+
+## REQUIRED BEHAVIOR
+On `COVER THIS DEVICE`, create a new private epoch and clear every old-epoch transient/private choice: selected player, assistant pin/optimization request, last keep/revert transaction, trade prefill, and any equivalent private signal. Preserve the team's durable My Board and public draft state. Returning to the desk must open a neutral/default selection derived for the new epoch, never the prior GM's Taylor/pin state.
+
+## PROOF
+Red-first component assertion plus a 430x932 live sequence: reveal → choose Taylor → optimize → cover → return. Taylor and the optimization label must not carry into the new epoch; board durability, cover privacy, team switch, iPad layouts, and the existing 15 responsive journeys must remain green. Run focused tests, responsive Playwright, strict allowed-file ESLint, TypeScript, build, and `git diff --check`. Do not edit docs, production pages, engines, storage, auction, or generated result artifacts; do not stage or commit.
+
+## REPORT
+Return exact paths and counts, or `BLOCKED`. Do not self-audit.
+
+Use high reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-PREVIEW-PRIVACY-REPAIR-15 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FARM-SYNC-BOOTSTRAP-REPAIR-18 ===== -->
+# SNAKE-FARM-SYNC-BOOTSTRAP-REPAIR-18 — CANONICAL CLEAN-DEVICE FARM AUTHORITY
+
+**ROUTE:** Codex 5.6 SOL | xhigh reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow data-integrity repair builder. The independent Audit-13 agent—not you—owns the verdict.
+
+## GOAL
+Close FINDING-178 without weakening valid same-account clean-device/replacement sync, local MLB→FARM creation, existing FARM progress sync, auction sync, or schema compatibility.
+
+## ALLOWED FILES
+- `src/utils/syncEngine.ts`
+- `src/utils/leagueBuilderStorage.ts` only if required to extract/reuse the canonical transition validator; do not change save behavior
+- one new cycle-neutral pure module under `src/utils/` if that is the smallest way to share canonical transition semantics without a circular runtime import
+- `src/utils/tests/syncEngine.snakeManifestInvariant.test.ts`
+- `src/utils/tests/syncEngine.dynamicElimination.test.ts` only to replace orphan season-2 cold-restore acceptance with canonical paired/deferred bootstrap plus noncanonical rejection, and to create the FARM tombstone fixture through the real MLB→FARM authority path
+- one adjacent `src/utils/tests/syncEngine.snakeFarmBootstrap.test.ts` if real `applyPage` coverage does not belong cleanly in the existing file
+- directly affected existing storage/session tests only if validator extraction requires import migration; assertions may not weaken
+
+## REQUIRED INVARIANTS
+1. Every season-2 FARM authority row is protected, including current-null clean-device rows.
+2. A FARM row is stored only when it is canonical relative to the matching completed season-1 manifest and roster handoff. Use one shared/cycle-neutral canonical contract; do not create a looser sync-only approximation.
+3. FARM-first arrival is deferred without local storage mutation. When its matching canonical MLB/pool authority arrives later, the deferred FARM row is revalidated and applied. Same-page canonical rows work in either record order.
+4. Orphan or noncanonical FARM rows never become local authority. Rejection/defer is byte-unchanged and must not advance the row into trusted state.
+5. Existing FARM progress updates remain allowed only with unchanged creation envelope, phase, manifest, and no trade state. MLB and auction behavior remain unchanged.
+
+## PROOF
+Red-first real IndexedDB/apply-page reproduction for the confirmed bad row. Add actual apply-path tests for: same-page canonical pair in both record orders; FARM-first defer then later MLB/pool completion; orphan/noncanonical row not stored; canonical existing FARM progress update; phase/trade/envelope rejection. Run focused sync/storage/Snake suites, auction sync/shared regression, strict changed-file ESLint, TypeScript, production build, and `git diff --check`. Do not edit pages/UI/docs/generated results, stage, or commit.
+
+## REPORT
+List exact paths, red-first evidence, proof counts, and `SNAKE-FARM-SYNC-BOOTSTRAP-REPAIR-18 complete` or `BLOCKED`. Do not self-audit.
+
+Use xhigh reasoning effort. Think step-by-step.
+<!-- ===== END CONTRACT: SNAKE-FARM-SYNC-BOOTSTRAP-REPAIR-18 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-SUITE-INTEGRITY-REPAIR-19 ===== -->
+# SNAKE-FINAL-SUITE-INTEGRITY-REPAIR-19 — VERSION-10 BACKUP AUTHORITY
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow storage-integrity builder. A separate auditor owns the verdict.
+
+## GOAL
+Close FINDING-180 without weakening backup payload validation or changing League Builder save behavior.
+
+## ALLOWED FILES
+- `src/utils/backupRestore.ts`
+- `src/utils/tests/backupRestore.elimination.test.ts` only for version-10 synchronized-store proof if required
+- `src/src_figma/__tests__/leagueBuilder/leagueBuilderStorage.editorialSchema.test.ts`
+
+## REQUIRED OUTCOME
+Manual backup/restore and editorial migration use the current League Builder version-10 authority; the synchronized scout/startup/draft stores remain declared and restored; missing required payloads still fail closed.
+
+## PROOF
+Isolated backup/restore and editorial suites, adjacent backup/schema tests, strict changed-file lint, TypeScript, and diff check. Do not edit product UI, sync behavior, docs, stage, or commit.
+<!-- ===== END CONTRACT: SNAKE-FINAL-SUITE-INTEGRITY-REPAIR-19 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-SUITE-HARNESS-REPAIR-20 ===== -->
+# SNAKE-FINAL-SUITE-HARNESS-REPAIR-20 — FRESH-READ TEST HONESTY
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow test-harness builder. A separate auditor owns the verdict.
+
+## GOAL
+Close FINDING-179 while preserving production pull-plus-fresh-storage rereads.
+
+## ALLOWED FILES
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.performance.test.tsx`
+- `src/src_figma/app/components/snake/companion/__tests__/CompanionAuthFlow.test.tsx`
+
+## REQUIRED OUTCOME
+Both harnesses provide direct storage reads backed by their existing fixture/device state, reach their owned performance/auth/privacy assertions, and never require real IndexedDB.
+
+## PROOF
+Performance 2/2, companion auth 3/3, adjacent room/companion suites, strict changed-file lint, TypeScript, and diff check. Do not edit production code, docs, stage, or commit.
+<!-- ===== END CONTRACT: SNAKE-FINAL-SUITE-HARNESS-REPAIR-20 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-SUITE-HANDOFF-REPAIR-21 ===== -->
+# SNAKE-FINAL-SUITE-HANDOFF-REPAIR-21 — EXPLICIT FARM SEASON TEST SEAM
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+The root builder owns this one-file test repair; a separate auditor owns the verdict.
+
+## GOAL
+Close FINDING-181 without weakening the two-leg Franchise Setup gate.
+
+## ALLOWED FILE
+- `src/src_figma/__tests__/franchiseMode/FranchiseSetup.test.tsx`
+
+## REQUIRED OUTCOME
+The storage mock exports the shared FARM season number and the completed-Snake badge test explicitly proves a season-2 read. No production file changes.
+
+## PROOF
+Full Franchise Setup suite, strict file lint, TypeScript, and independent re-audit.
+<!-- ===== END CONTRACT: SNAKE-FINAL-SUITE-HANDOFF-REPAIR-21 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-BACKUP-CANONICAL-MIGRATION-REPAIR-22 ===== -->
+# SNAKE-BACKUP-CANONICAL-MIGRATION-REPAIR-22 — ONE OWNER FOR VERSION-10 CONTENT MIGRATION
+
+**ROUTE:** Codex 5.6 SOL | xhigh reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow storage-integrity builder. Audit-13 owns the adversarial verdict.
+
+## GOAL
+Close FINDING-182 without weakening backup validation, the canonical stock-closer migration, or current version-10 backup behavior.
+
+## ALLOWED FILES
+- `src/utils/backupRestore.ts`
+- `src/utils/leagueBuilderStorage.ts` only if a cycle-safe exported canonical open/migration seam is required
+- `src/utils/tests/backupRestore.elimination.test.ts`
+- one adjacent League Builder migration test only if needed
+
+## REQUIRED INVARIANTS
+1. Backup export/restore cannot independently consume a content-bearing League Builder version upgrade.
+2. A real v9 exact stock SMB4 closer row passes through backup-open/export/restore and canonical open as the corrected v10 row.
+3. Canonical League Builder storage remains the single migration authority, or the exact content migration is shared by both paths from one cycle-safe source.
+4. The seven synchronized stores still round-trip at v10; missing required and malformed payloads remain rejected.
+
+## PROOF
+Red-first real IndexedDB v9→backup-open→canonical-open reproduction, all backup/schema/migration suites, strict changed-file lint, TypeScript, production build, and diff check. Do not edit UI/docs, stage, commit, or self-audit.
+<!-- ===== END CONTRACT: SNAKE-BACKUP-CANONICAL-MIGRATION-REPAIR-22 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-BACKUP-CONNECTION-LIFECYCLE-REPAIR-23 ===== -->
+# SNAKE-BACKUP-CONNECTION-LIFECYCLE-REPAIR-23 — CANONICAL MIGRATION WITHOUT A RETAINED SINGLETON
+
+**ROUTE:** Codex 5.6 SOL | xhigh reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow storage-lifecycle builder. Audit-13 owns the adversarial verdict.
+
+## GOAL
+Close FINDING-183 while preserving the content-migration closure from FINDING-182.
+
+## ALLOWED FILES
+- `src/utils/backupRestore.ts`
+- `src/utils/leagueBuilderStorage.ts` only for one shared canonical upgrade/open implementation and an uncached migration seam
+- `src/utils/tests/backupRestore.elimination.test.ts`
+- one adjacent League Builder migration test only if needed
+
+## REQUIRED INVARIANTS
+1. Canonical League Builder code remains the only owner of version-10 shape and content migration.
+2. Backup opens an uncached, backup-owned connection, awaits all canonical post-open migration work, and always closes it.
+3. Backup never closes, replaces, or mutates ownership of the app's cached singleton connection.
+4. The exact valid-v9 stock-closer attack remains green in the full backup file, not only in isolation.
+5. Version-10 seven-store round-trip and fail-closed validation remain green.
+
+## PROOF
+Full backup suite in one worker without timeouts, exact adversarial alone, adjacent backup/schema/migration matrix, strict changed-file lint, TypeScript, production build, and diff check. Do not edit UI/docs beyond this booked contract, stage, commit, or self-audit.
+<!-- ===== END CONTRACT: SNAKE-BACKUP-CONNECTION-LIFECYCLE-REPAIR-23 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-GUIDE-WORKER-BUILD-REPAIR-24 ===== -->
+# SNAKE-GUIDE-WORKER-BUILD-REPAIR-24 — SHIPPABLE ASSISTANT GUIDE WORKER
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow Snake worker-build builder. Audit-13 owns the final repository verdict.
+
+## GOAL
+Close FINDING-184 without weakening assistant-guide calculation, response validation, privacy identity fencing, or unrelated worker builds.
+
+## ALLOWED FILES
+- `src/src_figma/app/components/snake/desk/useSnakeGuideRecommendation.ts`
+- `src/src_figma/app/workers/snakeGuideRecommendation.worker.ts`
+- `src/engines/snakeGuideTrade.ts` only to remove the two proven runtime storage edges from the worker graph
+- `src/engines/snakeCorrection.ts` as a new cycle-neutral owner of the existing latest-correction helper, if required
+- `src/engines/snakeSession.ts` only to re-export/use that shared correction helper without duplication
+- the worker's focused test only if required
+- `vite.config.ts` only if source/import-graph repair cannot solve the issue and evidence supports a scoped worker-format setting
+
+## REQUIRED INVARIANTS
+1. The guide still runs off the main thread through a module worker.
+2. Only public request facts cross `postMessage`; private identity remains a render-time fence.
+3. Malformed, stale, or wrong-key worker responses still fail closed.
+4. Existing assistant/rational/scarcity workers remain buildable.
+5. The real production build completes.
+
+## PROOF
+Red-first production build evidence, focused guide hook/worker tests, adjacent assistant/rational worker tests, strict changed-file lint, TypeScript, successful production build, and diff check. Do not edit storage, product layout, docs beyond this booked contract, stage, commit, or self-audit.
+<!-- ===== END CONTRACT: SNAKE-GUIDE-WORKER-BUILD-REPAIR-24 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FINAL-LINT-HONESTY-REPAIR-25 ===== -->
+# SNAKE-FINAL-LINT-HONESTY-REPAIR-25 — TYPED LIFECYCLE FIXTURE
+
+**ROUTE:** Codex 5.6 SOL | high reasoning effort
+**Date:** 2026-07-14 | **Branch:** `codex/snake-mock-draft-ready`
+
+## ROLE
+You are the narrow test-quality builder. Audit-13 owns the final verdict.
+
+## GOAL
+Close FINDING-185 without weakening any lifecycle assertion or production type contract.
+
+## ALLOWED FILES
+- `src/utils/tests/draftPipeline.integration.test.ts`
+- `test-utils/journeys/13-snake-production-lifecycle.spec.ts`
+
+## REQUIRED INVARIANTS
+1. The retry snapshot still excludes only `lastModified` and compares every other player field.
+2. Team and player seed objects are checked against the real imported `saveTeam` and `savePlayer` parameter types; no `any`, `unknown`, lint suppression, or widened production signature.
+3. The complete zero-schedule lifecycle browser journey remains unchanged and green.
+
+## PROOF
+Exact integration suite, production lifecycle Playwright journey, strict two-file lint, TypeScript, production build, and diff check. Do not edit production code/docs beyond this booked contract, stage, commit, or self-audit.
+<!-- ===== END CONTRACT: SNAKE-FINAL-LINT-HONESTY-REPAIR-25 ===== -->
+
+## SNAKE FINAL CONTRACT CLOSE — 2026-07-14
+
+Repair contracts through `SNAKE-FINAL-LINT-HONESTY-REPAIR-25` are complete and
+independently VERIFIED on code commit `f8ca392d`. Final serial repository proof:
+686 passed files / 10,227 passed tests / zero failures. Final responsive and
+production-lifecycle browser proof: 17/17. Strict changed-file lint, TypeScript,
+production build, and diff integrity are green. No automated verdict replaces
+JK's browser walk; it remains the sole product-acceptance gate.
+
 <!-- ===== CONTRACT: HL-LEGENDS-APP-PROFILE-READ-PATH ===== -->
 ## CONTRACT HL-LEGENDS-APP-PROFILE-READ-PATH — retain and surface imported player context
 

@@ -8,7 +8,6 @@ import {
   farmDraftRouteForLeague,
   franchiseSetupRouteForLeague,
   leagueIdFromSearch,
-  resolveInitialLeagueId,
 } from "../utils/draftRouting";
 import {
   isHumanControlledTeam,
@@ -20,6 +19,9 @@ import {
   type ReporterPersonaOption,
 } from "../utils/draftStaffingPersistence";
 import type { ReporterAvatarEra } from "../../../types/reporter";
+import { getMlbDraftSession } from "../../../utils/leagueBuilderStorage";
+import { FARM_SNAKE_SESSION_NUMBER } from "../../../engines/snakeFarmSlots";
+import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
 
 interface StaffForm {
   managerName: string;
@@ -76,7 +78,7 @@ function reporterAvatarFromValue(value: string): ReporterAvatarEra {
 export function EndOfDraftStaffing() {
   const navigate = useNavigate();
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
-  const { leagues, teams, isLoading, error } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, refresh } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [formsByTeamId, setFormsByTeamId] = useState<Record<string, StaffForm | undefined>>({});
   const [saving, setSaving] = useState(false);
@@ -85,10 +87,18 @@ export function EndOfDraftStaffing() {
   // (journey-wide placement) so the instruction banner can gate behind it instead of always
   // rendering.
   const [showHelp, setShowHelp] = useState(false);
+  const [handoffState, setHandoffState] = useState<"checking" | "ready" | "blocked">("checking");
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffRevision, setHandoffRevision] = useState(0);
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
-      setActiveLeagueId(resolveInitialLeagueId(leagues, requestedLeagueId));
+      const nextLeagueId = requestedLeagueId === null
+        ? leagues[0]?.id ?? ""
+        : leagues.some((league) => league.id === requestedLeagueId)
+          ? requestedLeagueId
+          : "";
+      setActiveLeagueId(nextLeagueId);
     }
   }, [activeLeagueId, leagues, requestedLeagueId]);
 
@@ -106,6 +116,33 @@ export function EndOfDraftStaffing() {
     () => leagueTeams.filter((team) => isHumanControlledTeam(team)),
     [leagueTeams],
   );
+
+  useEffect(() => {
+    if (!activeLeague) return;
+    if (activeLeague.draftFormat !== "snake") {
+      setHandoffState("ready");
+      setHandoffError(null);
+      return;
+    }
+    let cancelled = false;
+    setHandoffState("checking");
+    setHandoffError(null);
+    void getMlbDraftSession(activeLeague.id, 1)
+      .then(async (mlbSession) => {
+        if (!mlbSession) throw new Error("THE MLB SNAKE DRAFT HANDOFF IS MISSING.");
+        await assertSnakeRosterHandoffReady(mlbSession, "MLB");
+        const farmSession = await getMlbDraftSession(activeLeague.id, FARM_SNAKE_SESSION_NUMBER);
+        if (!farmSession) throw new Error("THE FARM SNAKE DRAFT HANDOFF IS MISSING.");
+        await assertSnakeRosterHandoffReady(farmSession, "FARM");
+        if (!cancelled) setHandoffState("ready");
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setHandoffError(caught instanceof Error ? caught.message : "THE FARM DRAFT HANDOFF IS NOT READY.");
+        setHandoffState("blocked");
+      });
+    return () => { cancelled = true; };
+  }, [activeLeague, handoffRevision]);
 
   useEffect(() => {
     setFormsByTeamId((current) => {
@@ -146,7 +183,7 @@ export function EndOfDraftStaffing() {
   });
 
   const continueToFreeze = async (): Promise<void> => {
-    if (!activeLeague || !staffReady) return;
+    if (!activeLeague || !staffReady || handoffState !== "ready") return;
     setSaving(true);
     setSaveError(null);
     try {
@@ -186,7 +223,17 @@ export function EndOfDraftStaffing() {
   if (error) {
     return (
       <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
-        <div className="text-xl text-[var(--ballpark-sacrifice-red)] font-bold">Error: {error}</div>
+        <div className="max-w-lg border-4 border-[var(--ballpark-sacrifice-red)] bg-[var(--ballpark-panel)] p-6 text-center">
+          <div className="mb-5 text-xl text-[var(--ballpark-sacrifice-red)] font-bold">Error: {error}</div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <PressButton type="button" onClick={() => void refresh()}>
+              <RefreshCw className="h-4 w-4" /> TRY AGAIN
+            </PressButton>
+            <PressButton type="button" variant="default" onClick={() => navigate("/league-builder") }>
+              <ArrowLeft className="h-4 w-4" /> BACK TO LEAGUE BUILDER
+            </PressButton>
+          </div>
+        </div>
       </div>
     );
   }
@@ -194,7 +241,17 @@ export function EndOfDraftStaffing() {
   if (!activeLeague) {
     return (
       <div className="min-h-screen bg-[var(--ballpark-page-bg)] text-[var(--ballpark-chalk)] p-8 flex items-center justify-center">
-        <div className="text-xl font-bold">No league found for staff hire.</div>
+        <div className="max-w-lg border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-6 text-center">
+          <div className="mb-5 text-xl font-bold">No league found for staff hire.</div>
+          <div className="flex flex-wrap justify-center gap-3">
+            <PressButton type="button" onClick={() => void refresh()}>
+              <RefreshCw className="h-4 w-4" /> TRY AGAIN
+            </PressButton>
+            <PressButton type="button" variant="default" onClick={() => navigate("/league-builder") }>
+              <ArrowLeft className="h-4 w-4" /> BACK TO LEAGUE BUILDER
+            </PressButton>
+          </div>
+        </div>
       </div>
     );
   }
@@ -230,6 +287,13 @@ export function EndOfDraftStaffing() {
         {showHelp ? (
           <div className="mb-5 bg-[var(--ballpark-panel)] border-4 border-[var(--ballpark-panel-border)] p-4 text-sm text-[var(--ballpark-chalk)]/75">
             Hire one manager and one beat reporter for each human-controlled club before the franchise freeze. CPU clubs keep the existing auto-fill path.
+          </div>
+        ) : null}
+
+        {handoffState === "blocked" ? (
+          <div className="mb-5 flex flex-wrap items-center gap-3 border-4 border-[var(--ballpark-warn-border)] bg-[var(--ballpark-warn-panel)] p-4 font-bold text-[var(--ballpark-warn-text)]">
+            <span>FARM DRAFT HANDOFF NOT READY · {handoffError}</span>
+            <PressButton type="button" size="sm" className="ml-auto" onClick={() => setHandoffRevision((value) => value + 1)}>RETRY</PressButton>
           </div>
         ) : null}
 
@@ -320,7 +384,7 @@ export function EndOfDraftStaffing() {
 
         <button
           type="button"
-          disabled={!staffReady || saving || humanTeams.length === 0}
+          disabled={!staffReady || saving || humanTeams.length === 0 || handoffState !== "ready"}
           onClick={() => void continueToFreeze()}
           className="flex items-center gap-2 bg-[var(--ballpark-brass)] hover:bg-[#D4B863] disabled:opacity-40 text-[#1A1A1A] border-[5px] border-[var(--ballpark-chalk)] px-6 py-3 font-bold tracking-wide shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] active:scale-95"
         >

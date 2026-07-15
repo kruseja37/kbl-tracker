@@ -59,6 +59,9 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     teamRosters: 'teamId',
     registeredPools: 'leagueId',
     mlbDraftSessions: 'id',
+    scoutProfiles: 'id',
+    startupDraftSessions: 'id',
+    snakeSeatBoards: 'id',
     auctionSessions: 'id',
   },
   'kbl-event-log': {

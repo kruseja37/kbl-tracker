@@ -45,16 +45,12 @@ function legalPlayers(prefix: string): SnakeSeatingPlayer[] {
 }
 
 function context(): SnakeTradeGuideContext {
-  const values = Array.from({ length: 70 }, (_, index) => 200 - index).sort((left, right) => right - left);
-  const pickValueChart = derivePickValueChart(values);
-  pickValueChart[8].value = 150;
-  pickValueChart[13].value = 120;
-  pickValueChart[40].value = 60;
-  pickValueChart[61].value = 30;
-  const pickOrder = Array.from({ length: 70 }, (_, index) => ({
-    round: Math.floor(index / 2) + 1,
+  const values = Array.from({ length: 32 }, (_, index) => Math.round(1_000 * (0.91 ** index)));
+  const pickValueChart = derivePickValueChart(values, 20, 4);
+  const pickOrder = Array.from({ length: 20 }, (_, index) => ({
+    round: index + 1,
     pick: index + 1,
-    teamId: [14, 41].includes(index + 1) ? 'buyer' : [9, 62].includes(index + 1) ? 'seller' : `other-${index}`,
+    teamId: [4, 12].includes(index + 1) ? 'buyer' : [2, 20].includes(index + 1) ? 'seller' : `other-${index}`,
   }));
   const session: LeagueBuilderMlbDraftSession = {
     id: 'guide', leagueId: 'league', seasonNumber: 1, seed: 'guide', workflowVersion: 'v2',
@@ -74,14 +70,35 @@ function context(): SnakeTradeGuideContext {
   };
 }
 
+function integrityContext(): SnakeTradeGuideContext {
+  const pickValueChart = [110, 100, 80, 70, 60, 50, 40, 30, 25, 20, 20, 10]
+    .map((value, index) => ({ pick: index + 1, value }));
+  const pickOrder = Array.from({ length: 12 }, (_, index) => ({
+    round: index + 1,
+    pick: index + 1,
+    teamId: [4, 5, 12].includes(index + 1) ? 'buyer' : [2, 10, 11].includes(index + 1) ? 'seller' : `other-${index}`,
+  }));
+  return {
+    ...context(),
+    pickValueChart,
+    session: {
+      ...context().session,
+      id: 'integrity',
+      seed: 'integrity',
+      rounds: 12,
+      pickOrder,
+    },
+  };
+}
+
 describe('S4 posted-price trade guide model', () => {
   it('answers only the GM asked pick and returns the engine message verbatim', () => {
-    const result = guideForAskedPick({ ...context(), buyerTeamId: 'buyer', targetPick: 9 });
-    expect(result.message).toBe('OFFER 14+41; RECEIVE 9+62 — guide-matched and legal now.');
-    expect(result.proposal?.targetPick).toBe(9);
+    const result = guideForAskedPick({ ...context(), buyerTeamId: 'buyer', targetPick: 2 });
+    expect(result.message).toBe('OFFER 4+12; RECEIVE 2+20 — guide-matched and legal now.');
+    expect(result.proposal?.targetPick).toBe(2);
     expect(result.nextPickMoves).toEqual([
-      { teamId: 'buyer', before: 14, after: 9 },
-      { teamId: 'seller', before: 9, after: 14 },
+      { teamId: 'buyer', before: 4, after: 2 },
+      { teamId: 'seller', before: 2, after: 4 },
     ]);
     expect(Object.keys(result)).not.toContain('targets');
     expect(Object.keys(result)).not.toContain('recommendations');
@@ -93,10 +110,10 @@ describe('S4 posted-price trade guide model', () => {
       ...base,
       seatingProofInput: { ...base.seatingProofInput, pool: [] },
       buyerTeamId: 'buyer',
-      targetPick: 9,
+      targetPick: 2,
     });
     expect(result).toEqual({
-      message: 'No legal guide trade reaches pick 9.',
+      message: 'No legal guide trade reaches pick 2.',
       proposal: null,
       nextPickMoves: [],
     });
@@ -104,16 +121,16 @@ describe('S4 posted-price trade guide model', () => {
 
   it('revalidates the current revision, moves ownership without geometry, writes fact-only receipts, and corrects byte-identically', () => {
     const base = context();
-    const guide = guideForAskedPick({ ...base, buyerTeamId: 'buyer', targetPick: 9 });
+    const guide = guideForAskedPick({ ...base, buyerTeamId: 'buyer', targetPick: 2 });
     const executed = executeAskedPickTrade({ ...base, proposal: guide.proposal! });
     expect(executed.valid).toBe(true);
     expect(executed.session?.pickOrder.map(({ round, pick }) => ({ round, pick })))
       .toEqual(base.session.pickOrder.map(({ round, pick }) => ({ round, pick })));
-    expect(executed.session?.pickOrder.find((slot) => slot.pick === 9)?.teamId).toBe('buyer');
+    expect(executed.session?.pickOrder.find((slot) => slot.pick === 2)?.teamId).toBe('buyer');
     expect(executed.livePickMoved).toBe(false);
     expect(executed.receipts.map((entry) => entry.text)).toEqual([
-      'YOU TRADED PICKS 14+41 FOR 9+62 — YOUR NEXT PICK: #9.',
-      'YOU TRADED PICKS 9+62 FOR 14+41 — YOUR NEXT PICK: #14.',
+      'YOU TRADED PICKS 4+12 FOR 2+20 — YOUR NEXT PICK: #2.',
+      'YOU TRADED PICKS 2+20 FOR 4+12 — YOUR NEXT PICK: #4.',
     ]);
     expect(executed.receipts.map((entry) => entry.text).join(' ')).not.toMatch(/suggest|best|recommend|%/i);
     expect(restoreLatestSnakeCorrection(executed.session!)).toEqual(base.session);
@@ -128,11 +145,92 @@ describe('S4 posted-price trade guide model', () => {
 
   it('reports a live-pick ownership move so the existing room cancel seam fires', () => {
     const base = context();
-    const guide = guideForAskedPick({ ...base, buyerTeamId: 'buyer', targetPick: 9 });
-    const liveSession = { ...base.session, currentPickIndex: 8 };
-    const refreshed = guideForAskedPick({ ...base, session: liveSession, buyerTeamId: 'buyer', targetPick: 9 });
+    const guide = guideForAskedPick({ ...base, buyerTeamId: 'buyer', targetPick: 2 });
+    const liveSession = { ...base.session, currentPickIndex: 1 };
+    const refreshed = guideForAskedPick({ ...base, session: liveSession, buyerTeamId: 'buyer', targetPick: 2 });
     const executed = executeAskedPickTrade({ ...base, session: liveSession, proposal: refreshed.proposal ?? guide.proposal! });
     expect(executed.valid).toBe(true);
     expect(executed.livePickMoved).toBe(true);
+  });
+
+  it('rejects caller-tampered totals instead of writing them to the receipt record', () => {
+    const base = context();
+    const guide = guideForAskedPick({ ...base, buyerTeamId: 'buyer', targetPick: 2 });
+    const result = executeAskedPickTrade({
+      ...base,
+      proposal: { ...guide.proposal!, offerValue: guide.proposal!.offerValue + 1 },
+    });
+    expect(result).toMatchObject({ valid: false, session: null, receipts: [] });
+  });
+
+  it('rejects duplicate picks before ownership is changed', () => {
+    const base = integrityContext();
+    expect(executeAskedPickTrade({
+      ...base,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 2,
+        offerPickNumbers: [4, 4], receivePickNumbers: [2, 10], offerValue: 140, receiveValue: 120,
+        sessionRevision: 7,
+      },
+    })).toMatchObject({ valid: false, session: null, receipts: [] });
+  });
+
+  it('rejects a proposal that omits its named target pick', () => {
+    const base = integrityContext();
+    expect(executeAskedPickTrade({
+      ...base,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 11,
+        offerPickNumbers: [4, 5], receivePickNumbers: [2, 10], offerValue: 130, receiveValue: 120,
+        sessionRevision: 7,
+      },
+    })).toMatchObject({ valid: false, session: null, receipts: [] });
+  });
+
+  it('rejects a self-trade before ownership is changed', () => {
+    const base = integrityContext();
+    expect(executeAskedPickTrade({
+      ...base,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'buyer', targetPick: 5,
+        offerPickNumbers: [4], receivePickNumbers: [5], offerValue: 70, receiveValue: 60,
+        sessionRevision: 7,
+      },
+    })).toMatchObject({ valid: false, session: null, receipts: [] });
+  });
+
+  it('rejects a pick that appears on both sides', () => {
+    const base = integrityContext();
+    const overlapping: SnakeTradeGuideContext = {
+      ...base,
+      session: {
+        ...base.session,
+        pickOrder: [
+          ...base.session.pickOrder,
+          { round: 13, pick: 4, teamId: 'seller' },
+        ],
+      },
+    };
+    expect(executeAskedPickTrade({
+      ...overlapping,
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 4,
+        offerPickNumbers: [4], receivePickNumbers: [4], offerValue: 70, receiveValue: 70,
+        sessionRevision: 7,
+      },
+    })).toMatchObject({ valid: false, session: null, receipts: [] });
+  });
+
+  it('rejects stale future ownership', () => {
+    const base = integrityContext();
+    expect(executeAskedPickTrade({
+      ...base,
+      session: { ...base.session, currentPickIndex: 5 },
+      proposal: {
+        buyerTeamId: 'buyer', sellerTeamId: 'seller', targetPick: 2,
+        offerPickNumbers: [4, 5], receivePickNumbers: [2, 10], offerValue: 130, receiveValue: 120,
+        sessionRevision: 7,
+      },
+    })).toMatchObject({ valid: false, session: null, receipts: [] });
   });
 });

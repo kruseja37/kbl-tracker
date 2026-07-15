@@ -1,6 +1,7 @@
 export type SnakeRoomPhase = 'REVIEW' | 'ARM' | 'ANNOUNCE' | 'RECORDED' | 'CORRECTION';
 
 export interface SnakeRecordedPick {
+  pick: number;
   playerId: string;
   playerName: string;
   teamId: string;

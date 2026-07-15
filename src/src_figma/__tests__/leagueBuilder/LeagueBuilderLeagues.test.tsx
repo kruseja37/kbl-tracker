@@ -386,7 +386,7 @@ describe('LeagueBuilderLeagues Component', () => {
     });
 
     test('draft route helper maps each format to its own draft entry', () => {
-      expect(draftRouteForFormat('snake')).toBe('/snake-setup');
+      expect(draftRouteForFormat('snake')).toBe('/snake-room');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
       expect(farmDraftRouteForFormat('snake')).toBe('/snake-room');
@@ -396,7 +396,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
     test('per-league Draft action opens Draft Setup threading leagueId; snake leagues route to the snake setup', async () => {
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/snake-setup?leagueId=league-2',
+        '/snake-room?leagueId=league-2',
       );
       expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/snake-room?leagueId=league-2&phase=farm',
@@ -421,6 +421,21 @@ describe('LeagueBuilderLeagues Component', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Edit League')).toBeInTheDocument();
+      });
+    });
+
+    test('hydrates and preserves a saved snake draft format when editing', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      const editButtons = screen.getAllByTitle('Edit league');
+      fireEvent.click(editButtons[1]);
+
+      expect(await screen.findByLabelText('Draft format')).toHaveValue('snake');
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'league-2', draftFormat: 'snake' }),
+        );
       });
     });
 

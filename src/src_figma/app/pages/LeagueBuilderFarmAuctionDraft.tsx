@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
 
@@ -20,7 +20,6 @@ import {
   resolveInitialLeagueId,
   staffHireRouteForLeague,
 } from "../utils/draftRouting";
-import { normalizeToChemistryCode, type ChemistryCode } from "../../../data/chemistryCanonical";
 import {
   getTeamAuctionMaxBid,
   lotOpeningAsk,
@@ -56,6 +55,7 @@ import {
   type LeagueBuilderProspectPlayerDto,
 } from "../../../utils/prospectScoutingDraftEngine";
 import type { Player, Team } from "../../hooks/useLeagueBuilderData";
+import { buildFarmBridgeHeadline } from "./LeagueBuilderFarmAuctionDraft.helpers";
 
 const DEFAULT_FARM_AUCTION_SEED = "farm-auction-v1";
 const DRAFT_BOARD_GAP_KINDS = new Set([
@@ -134,19 +134,6 @@ function toBridgeRosterShape(entry: {
 // whisper's SEAT team in RESOLVE state (pending-claim team). The whisper is a private, seat-only
 // read -- another club's gaps must never render in it, so the headline is suppressed on any
 // source/seat mismatch. Exported for its unit test.
-export function buildFarmBridgeHeadline(
-  gaps: readonly BoardPriorityGap[],
-  sourceTeamId: string | null | undefined,
-  seatTeamId: string | null | undefined,
-): string | null {
-  if (!sourceTeamId || !seatTeamId || sourceTeamId !== seatTeamId) return null;
-  if (gaps.length === 0) return null;
-  // "·" mirrors the separator the existing PRIORITY GAPS needline already uses (buildFarmNeedLine
-  // above) -- one visual language for gap lists across the farm floor.
-  const top = gaps.slice(0, 2).map((gap) => gap.label.replace(/\.$/, "")).join(" · ");
-  return `Board flags: ${top} — work the farm floor there first.`;
-}
-
 // WT-D: a farm prospect (LeagueBuilderProspectPlayerDto) is a *different* DTO shape from the
 // league's `Player` type -- PlayerProfilePopover/buildDraftProfileModel need `Player`. This is a
 // presentational-only adapter (page-local, never persisted, never fed back into any engine): a
@@ -383,18 +370,15 @@ export function LeagueBuilderFarmAuctionDraft() {
   const navigate = useNavigate();
   const auction = useFarmAuctionDraft();
   const { leagueData, loadFarmAuction, session } = auction;
-  const [activeLeagueId, setActiveLeagueId] = useState("");
-  const [bidAmount, setBidAmount] = useState("");
   const loadedKeyRef = useRef<string | null>(null);
   const startedKeyRef = useRef<string | null>(null);
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedDevSeed = useMemo(() => devSeedFromSearch(window.location.search), []);
 
-  useEffect(() => {
-    if (!activeLeagueId && leagueData.leagues.length > 0) {
-      setActiveLeagueId(resolveInitialLeagueId(leagueData.leagues, requestedLeagueId));
-    }
-  }, [activeLeagueId, leagueData.leagues, requestedLeagueId]);
+  const activeLeagueId = useMemo(
+    () => resolveInitialLeagueId(leagueData.leagues, requestedLeagueId),
+    [leagueData.leagues, requestedLeagueId],
+  );
 
   const activeLeague = useMemo(
     () => leagueData.leagues.find((league) => league.id === activeLeagueId) ?? null,
@@ -409,7 +393,7 @@ export function LeagueBuilderFarmAuctionDraft() {
   }, [activeLeague, leagueData.teams]);
 
   useEffect(() => {
-    if (!activeLeagueId || leagueTeams.length === 0) return;
+    if (!activeLeagueId || activeLeague?.draftFormat === "snake" || leagueTeams.length === 0) return;
     const key = `${activeLeagueId}:farm:1`;
     if (loadedKeyRef.current === key) return;
     loadedKeyRef.current = key;
@@ -423,7 +407,7 @@ export function LeagueBuilderFarmAuctionDraft() {
         excludeFromLeague: true,
       });
     });
-  }, [activeLeagueId, auction, leagueTeams.length, loadFarmAuction, requestedDevSeed]);
+  }, [activeLeague?.draftFormat, activeLeagueId, auction, leagueTeams.length, loadFarmAuction, requestedDevSeed]);
 
   const teamById = useMemo(() => new Map(leagueData.teams.map((team) => [team.id, team])), [leagueData.teams]);
   const playerById = useMemo(() => new Map(leagueData.players.map((player) => [player.id, player])), [leagueData.players]);
@@ -451,6 +435,22 @@ export function LeagueBuilderFarmAuctionDraft() {
     seed: activeSeed,
   });
   const minBid = session ? minimumBid(session) : null;
+  const bidLotKey = session?.currentLot
+    ? `${session.results.length}:${session.currentLot.playerId}`
+    : null;
+  const [bidAmountDraft, setBidAmountDraft] = useState<{
+    lotKey: string | null;
+    minimum: number | null;
+    value: string;
+  } | null>(null);
+  const bidAmount = bidAmountDraft?.lotKey === bidLotKey && bidAmountDraft.minimum === minBid
+    ? bidAmountDraft.value
+    : minBid === null
+      ? ""
+      : String(Math.ceil(minBid));
+  const setBidAmount = useCallback((value: string) => {
+    setBidAmountDraft({ lotKey: bidLotKey, minimum: minBid, value });
+  }, [bidLotKey, minBid]);
   const pendingClaimTeam = session?.pendingClaim ? teamById.get(session.pendingClaim.teamId) : null;
   const currentBidderTeamState = auction.currentBidderTeamId ? teamStateById.get(auction.currentBidderTeamId) : null;
   const currentBidderMaxBid = session && auction.currentBidderTeamId
@@ -708,17 +708,13 @@ export function LeagueBuilderFarmAuctionDraft() {
 
   const latestResult = session?.results.at(-1) ?? null;
 
-  useEffect(() => {
-    if (minBid !== null) setBidAmount(String(Math.ceil(minBid)));
-  }, [minBid]);
-
-  const clampBidAmount = (amount: number): number | null => {
+  const clampBidAmount = useCallback((amount: number): number | null => {
     if (minBid === null || currentBidderMaxBid === null || !Number.isFinite(amount)) return null;
     const lower = Math.ceil(minBid);
     const upper = Math.floor(currentBidderMaxBid);
     if (upper < lower) return null;
     return Math.min(Math.max(Math.round(amount), lower), upper);
-  };
+  }, [currentBidderMaxBid, minBid]);
 
   const nowAction =
     session?.state === "NOMINATION" ? "surface next lot" :
@@ -745,10 +741,11 @@ export function LeagueBuilderFarmAuctionDraft() {
   const blockers = useMemo(() => {
     const messages: string[] = [];
     if (!activeLeagueId) messages.push("Select a league to load the farm auction.");
+    if (activeLeague?.draftFormat === "snake") messages.push("This league is configured for a snake draft.");
     if (activeLeagueId && leagueTeams.length === 0) messages.push("Selected league has no teams.");
     if (session?.state === "NOMINATION" && availablePoolCandidates.length === 0) messages.push("No nominatable prospects remain.");
     return messages;
-  }, [activeLeagueId, availablePoolCandidates.length, leagueTeams.length, session?.state]);
+  }, [activeLeague, activeLeagueId, availablePoolCandidates.length, leagueTeams.length, session?.state]);
 
   const stageFocusTeamState = currentBidderTeamState ?? (
     session?.pendingClaim ? teamStateById.get(session.pendingClaim.teamId) ?? null : null
@@ -1030,6 +1027,10 @@ export function LeagueBuilderFarmAuctionDraft() {
         </div>
       </div>
     );
+  }
+
+  if (activeLeague?.draftFormat === "snake") {
+    return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">FARM AUCTION BLOCKED</h1><p>THIS LEAGUE IS CONFIGURED FOR A SNAKE DRAFT.</p></div></main>;
   }
 
   return (

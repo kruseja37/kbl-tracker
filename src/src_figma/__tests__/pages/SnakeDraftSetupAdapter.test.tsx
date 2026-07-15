@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { describe, expect, test, vi } from 'vitest';
 
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
@@ -9,8 +10,11 @@ import {
   buildLockedSnakeSeatingPlayers,
   buildSnakeSetupProofInput,
   deriveSnakeVersionGroups,
+  lockedSnakeVersionSelections,
   selectedSnakePoolIds,
-} from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
+  validateSnakeCompanionSeats,
+} from '../../app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import { SnakeDraftSetupPanels } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
 import type { Player } from '../../hooks/useLeagueBuilderData';
 import { makeLegalRosterPlayerSet, makeLegalRosterPlayers, makePlayer, makeTeam } from './LeagueBuilderDraftSetup.testUtils';
 
@@ -29,7 +33,42 @@ function pool(players: Player[], iv = 1_000): RegisteredPool {
   };
 }
 
+function rosterLocalTaxFixture(players: Player[]): Player[] {
+  return players.map((player) => (
+    player.primaryPosition === 'SP'
+    || player.primaryPosition === 'SP/RP'
+    || player.primaryPosition === 'RP'
+    || player.primaryPosition === 'CP'
+      ? { ...player, power: 20, contact: 20, speed: 20 }
+      : player
+  ));
+}
+
 describe('SnakeDraftSetupAdapter', () => {
+  test('an absent order team uses exact neutral copy without exposing the internal id', () => {
+    const missingTeamId = 'setup-internal-team-key-51';
+    const adapter = {
+      groups: [],
+      versionSelections: {},
+      setVersionSelections: vi.fn(),
+      gmNames: {},
+      setGmNames: vi.fn(),
+      seatModes: {},
+      setSeatModes: vi.fn(),
+      seed: 'test',
+      setSeed: vi.fn(),
+      order: [missingTeamId],
+      swapFirst: null,
+      shuffleOrder: vi.fn(),
+      tapOrder: vi.fn(),
+    } as unknown as Parameters<typeof SnakeDraftSetupPanels>[0]['adapter'];
+    render(<SnakeDraftSetupPanels adapter={adapter} teams={[]} locked={false} disabled={false} />);
+
+    expect(screen.getByText('1. UNKNOWN TEAM')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(missingTeamId);
+    expect(document.body.innerHTML).not.toContain(missingTeamId);
+  });
+
   test('chooses exactly one historical version before lock', () => {
     const ruthA = makePlayer(1, { id: 'ruth-a', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);
     const ruthB = makePlayer(2, { id: 'ruth-b', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);
@@ -37,6 +76,9 @@ describe('SnakeDraftSetupAdapter', () => {
     const groups = deriveSnakeVersionGroups([ruthA, ruthB, mays]);
     const ruthGroup = groups.find(({ cards }) => cards.length === 2)!;
     expect(selectedSnakePoolIds(groups, { [ruthGroup.groupId]: 'ruth-b' })).toEqual(['ruth-b', 'mays']);
+    expect(lockedSnakeVersionSelections(groups, ['ruth-b', 'mays'])).toEqual({
+      [ruthGroup.groupId]: 'ruth-b',
+    });
   });
 
   test('groups imported Career, Peak, and Draft cards by stable historical identity', () => {
@@ -138,14 +180,54 @@ describe('SnakeDraftSetupAdapter', () => {
   });
 
   test('snapshots setup rankings into each initial seat board', () => {
-    const players = [
+    const players = rosterLocalTaxFixture([
       ...makeLegalRosterPlayerSet('first', 10_000),
       ...makeLegalRosterPlayerSet('second', 10_000),
-    ];
+      makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
+      makePlayer(302, { id: 'floor-lf', primaryPosition: 'LF' }),
+      makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
+      makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
+      makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
+    ]);
     const handRanked = players.at(-1)!;
     const team = makeTeam('team-a', { boardRankOverrides: { global: [handRanked.id] } });
     const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: pool(players) });
     expect(boards['team-a'].rankings.global?.[0]).toBe(handRanked.id);
     expect(boards['team-a'].rankings.frozenPlayerIds).toContain(handRanked.id);
+  });
+
+  test('starts the default overall ranking with the same 22 players as the roster plan', () => {
+    const players = rosterLocalTaxFixture([
+      ...makeLegalRosterPlayerSet('first', 10_000),
+      ...makeLegalRosterPlayerSet('second', 10_000),
+      makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
+      makePlayer(302, { id: 'floor-lf', primaryPosition: 'LF' }),
+      makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
+      makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
+      makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
+    ]);
+    const boards = buildInitialSnakeSeatBoards({ teams: [makeTeam('team-a')], players, pool: pool(players) });
+    const board = boards['team-a'];
+
+    expect(new Set(board.rankings.global.slice(0, 22))).toEqual(new Set(Object.values(board.slots)));
+  });
+
+  test('blocks unclaimable companion setup before the room can be created', () => {
+    const teams = [makeTeam('team-a'), makeTeam('team-b'), makeTeam('team-c'), makeTeam('team-d')];
+    expect(validateSnakeCompanionSeats({
+      teams,
+      gmNames: { 'team-a': '', 'team-b': 'Alex', 'team-c': ' alex ', 'team-d': 'Dana' },
+      seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'companion' },
+    })).toEqual([
+      'Choose no more than 3 companion seats.',
+      `Add a GM name for ${teams[0].name}.`,
+      'Give every companion seat a unique GM name.',
+    ]);
+
+    expect(validateSnakeCompanionSeats({
+      teams,
+      gmNames: { 'team-a': 'Alex', 'team-b': 'Blair', 'team-c': 'Casey' },
+      seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'hotseat' },
+    })).toEqual([]);
   });
 });

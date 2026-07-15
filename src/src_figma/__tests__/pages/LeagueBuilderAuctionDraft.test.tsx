@@ -1,12 +1,13 @@
 import "fake-indexeddb/auto";
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
   createAuctionSessionId,
+  getAuctionSession,
   saveAuctionSession,
   savePlayer,
   saveTeamRoster,
@@ -16,10 +17,8 @@ import {
   initAuctionSession,
   seededNominationOrder,
   surfaceNextPlayer,
-  type AuctionSession,
 } from "../../../engines/auctionStateMachine";
 import {
-  cpuBidOnLot,
   type CpuShillAuctionSession,
   type CpuShillProfile,
 } from "../../../engines/cpuShillBidding";
@@ -41,7 +40,11 @@ import * as auctionLuxuryTax from "../../../engines/auctionLuxuryTax";
 import { buildAuctionPlayersWithPositions } from "../../../utils/leagueBuilderAuctionPipeline";
 
 const mockNavigate = vi.fn();
-const mockEmitAuctionAdvisorMoment = vi.hoisted(() => vi.fn(async (payload: { fallback: string }) => ({
+const mockEmitAuctionAdvisorMoment = vi.hoisted(() => vi.fn(async (payload: {
+  draftId?: string;
+  fallback: string;
+  seatTeamId?: string;
+}) => ({
   text: payload.fallback,
   source: "template" as const,
   rejected: false,
@@ -678,98 +681,6 @@ async function saveNormwireTaxHeavyOpenLotForPage(): Promise<{
   };
 }
 
-function cpuDecisionSeedForTest(session: AuctionSession, kind: "bid" | "claim", teamId: string): string {
-  const lot = session.currentLot;
-  return [
-    session.config.nominationOrderSeed,
-    "preview",
-    kind,
-    session.results.length,
-    teamId,
-    lot?.playerId ?? session.pendingClaim?.playerId ?? "no-player",
-    lot?.highBid ?? "open",
-    lot?.stillIn.join("-") ?? "resolve",
-  ].join(":");
-}
-
-function seedWhereFirstShillBids(players: readonly Player[]): string {
-  const teamIds = ["team-a", "team-b", TEST_SHILL_ID];
-  const auctionPlayers = buildAuctionPlayers(makePool([...players]));
-
-  for (let index = 0; index < 2000; index += 1) {
-    const seed = `page-shill-win-seed-${index}`;
-    const sessionSeed = deriveAuctionSessionNominationSeed({
-      sessionId: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
-      launchNonce: TEST_SESSION_LAUNCH_NONCE,
-      baseSeed: seed,
-    });
-    if (seededNominationOrder(teamIds, sessionSeed)[0] !== TEST_SHILL_ID) continue;
-    const initialized = initAuctionSession({
-      teams: [
-        { teamId: "team-a", budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
-        { teamId: "team-b", budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
-        { teamId: TEST_SHILL_ID, budgetRemaining: 1_000_000, rosterSlotsRemaining: 22, minSalary: 3_000, projectedTax: 0 },
-      ],
-      players: auctionPlayers,
-      config: {
-        nominationOrderSeed: sessionSeed,
-        bidIncrement: 5_000,
-        nominationWeightExponent: 2,
-      },
-    }) as CpuShillAuctionSession;
-    const surfaced = surfaceNextPlayer(initialized);
-    if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
-    const session = {
-      ...surfaced.session,
-      cpuShills: { [TEST_SHILL_ID]: TEST_SHILL_PROFILE },
-    } as CpuShillAuctionSession;
-    const decision = cpuBidOnLot(session, TEST_SHILL_ID, cpuDecisionSeedForTest(session, "bid", TEST_SHILL_ID));
-    if (decision.kind === "bid") return seed;
-  }
-
-  throw new Error("No deterministic shill-bid seed found.");
-}
-
-function seedWhereCpuTeamBids(players: readonly Player[], teamId: string): string {
-  const teamIds = ["team-a", "team-b"];
-  const auctionPlayers = buildAuctionPlayers(makePool([...players]));
-
-  for (let index = 0; index < 2000; index += 1) {
-    const seed = `page-cpu-bid-seed-${index}`;
-    const sessionSeed = deriveAuctionSessionNominationSeed({
-      sessionId: createAuctionSessionId("league-page", MLB_AUCTION_SEASON),
-      launchNonce: TEST_SESSION_LAUNCH_NONCE,
-      baseSeed: seed,
-    });
-    if (seededNominationOrder(teamIds, sessionSeed)[0] !== teamId) continue;
-    const initialized = initAuctionSession({
-      teams: teamIds.map((candidateTeamId) => ({
-        teamId: candidateTeamId,
-        budgetRemaining: 1_000_000,
-        rosterSlotsRemaining: 22,
-        minSalary: 3_000,
-        projectedTax: 0,
-      })),
-      players: auctionPlayers,
-      config: {
-        nominationOrderSeed: sessionSeed,
-        bidIncrement: 5_000,
-        nominationWeightExponent: 2,
-      },
-    }) as CpuShillAuctionSession;
-    const surfaced = surfaceNextPlayer(initialized);
-    if (!surfaced.ok || surfaced.session.state !== "OPEN_BIDDING") continue;
-    // The test's $70,000 pins anchor on player-a's 100th-percentile ask — pin the lot too so
-    // the seed search stays deterministic at any fixture pool size (FABLE-C3-FIX-2 F6).
-    if (surfaced.session.currentLot?.playerId !== "player-a") continue;
-    const session = surfaced.session as CpuShillAuctionSession;
-    const decision = cpuBidOnLot(session, teamId, cpuDecisionSeedForTest(session, "bid", teamId));
-    if (decision.kind === "bid") return seed;
-  }
-
-  throw new Error(`No deterministic CPU bid seed found for ${teamId}.`);
-}
-
 describe("LeagueBuilderAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -834,6 +745,112 @@ describe("LeagueBuilderAuctionDraft", () => {
     expect(screen.getByLabelText("Public market price band")).toBeInTheDocument();
     expect(screen.queryByText(/Scout Insight:/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Let the bid stand/i })).toBeInTheDocument();
+  });
+
+  test("nominates the exact non-default player selected in the atomic nomination draft", async () => {
+    const players = makePlayers();
+    mockLeagueData({ players, pool: makePool(players) });
+    const seed = seedForOpeningLot(players);
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
+
+    render(<LeagueBuilderAuctionDraft />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /BEGIN AUCTION DRAFT/i }));
+    const playerSelect = await screen.findByLabelText("Nomination player");
+    expect(playerSelect).not.toHaveValue("player-b");
+    fireEvent.change(playerSelect, { target: { value: "player-b" } });
+    expect(playerSelect).toHaveValue("player-b");
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal Page Caps assistant GM read/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /NOMINATE ·/i }));
+
+    await waitFor(async () => {
+      const persisted = await getAuctionSession("league-page", MLB_AUCTION_SEASON);
+      expect(persisted?.session.currentLot?.playerId).toBe("player-b");
+    });
+  });
+
+  test("starts consecutive same-minimum MLB lots with independent bid drafts", async () => {
+    const players = makePlayers();
+    mockLeagueData({ players, pool: makePool(players) });
+    const seed = seedForOpeningLot(players);
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
+
+    render(<LeagueBuilderAuctionDraft />);
+    await beginAndCommitHumanNomination("player-a");
+
+    const initialBidText = screen.getByText(/your bid · \$[\d,]+/i).textContent;
+    fireEvent.click(screen.getByRole("button", { name: /Reveal Page Keys assistant GM read/ }));
+    fireEvent.click(screen.getByRole("button", { name: "+2x" }));
+    expect(screen.getByText(/your bid · \$[\d,]+/i).textContent).not.toBe(initialBidText);
+    fireEvent.click(screen.getByRole("button", { name: "Let the bid stand" }));
+    fireEvent.click(await screen.findByRole("button", { name: "NEXT LOT" }));
+
+    const secondPlayerSelect = await screen.findByLabelText("Nomination player");
+    fireEvent.change(secondPlayerSelect, { target: { value: "player-b" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Reveal Page Keys assistant GM read/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /NOMINATE ·/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/your bid · \$[\d,]+/i).textContent).toBe(initialBidText);
+    });
+  });
+
+  test("ignores a deferred advisor response after the active draft switches", async () => {
+    const players = makePlayers();
+    const leagueData = mockLeagueData({ players, pool: makePool(players) });
+    leagueData.leagues = [
+      makeLeague({ id: "league-page", name: "Page League" }),
+      makeLeague({ id: "league-b", name: "League B" }),
+    ];
+    const seed = seedForOpeningLot(players);
+    window.history.pushState({}, "", `/league-builder/auction-draft?devSeed=${seed}&reserveK=0`);
+    let resolveAdvisor: ((value: { text: string; source: "claude"; rejected: false }) => void) | null = null;
+    mockEmitAuctionAdvisorMoment.mockImplementation((payload) => {
+      if (payload.draftId?.startsWith("league-page:") && payload.seatTeamId === "team-b") {
+        return new Promise((resolve) => {
+          resolveAdvisor = resolve;
+        });
+      }
+      return Promise.resolve({ text: payload.fallback, source: "template", rejected: false });
+    });
+
+    const { rerender } = render(<LeagueBuilderAuctionDraft />);
+    await beginAndCommitHumanNomination("player-a");
+    fireEvent.click(screen.getByRole("button", { name: /Reveal Page Keys assistant GM read/ }));
+    await waitFor(() => expect(resolveAdvisor).not.toBeNull());
+
+    const draftA = await getAuctionSession("league-page", MLB_AUCTION_SEASON);
+    expect(draftA).not.toBeNull();
+    await saveAuctionSession({
+      ...draftA!,
+      id: createAuctionSessionId("league-b", MLB_AUCTION_SEASON),
+      leagueId: "league-b",
+    });
+
+    leagueData.leagues = [
+      makeLeague({ id: "league-b", name: "League B" }),
+      makeLeague({ id: "league-page", name: "Page League" }),
+    ];
+    rerender(<LeagueBuilderAuctionDraft />);
+    await waitFor(() => {
+      expect(leagueData.getRegisteredPool).toHaveBeenLastCalledWith("league-b");
+    });
+    await act(async () => {
+      resolveAdvisor?.({ text: "STALE DRAFT A ADVISOR RESULT", source: "claude", rejected: false });
+      await Promise.resolve();
+    });
+    leagueData.leagues = [
+      makeLeague({ id: "league-page", name: "Page League" }),
+      makeLeague({ id: "league-b", name: "League B" }),
+    ];
+    rerender(<LeagueBuilderAuctionDraft />);
+    await waitFor(() => {
+      expect(leagueData.getRegisteredPool).toHaveBeenLastCalledWith("league-page");
+    });
+    const reveal = await screen.findByRole("button", { name: /Reveal Page Keys assistant GM read/ });
+    if (reveal.getAttribute("aria-pressed") !== "true") fireEvent.click(reveal);
+
+    expect(screen.queryByText("STALE DRAFT A ADVISOR RESULT")).not.toBeInTheDocument();
   });
 
   test("uses leagueId query param over the first league when it matches a known league", async () => {
@@ -1026,7 +1043,7 @@ describe("LeagueBuilderAuctionDraft", () => {
     });
 
     expect(screen.getByText(/turn preview/i)).toBeInTheDocument();
-    const cpuMoveText = screen.getByText(/Page Caps nominates/);
+    expect(screen.getByText(/Page Caps nominates/)).toBeInTheDocument();
     const cpuReason = screen.getByText(/board value, roster need, and fit/i);
     expect(cpuReason).toBeInTheDocument();
     expect(cpuReason.textContent).not.toContain("$");

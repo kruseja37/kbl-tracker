@@ -126,9 +126,11 @@ describe('ScheduleContent Component', () => {
       expect(screen.getByText(/3 games scheduled/)).toBeInTheDocument();
     });
 
-    test('labels v1 schedule actions as user supplied with generated schedules off', () => {
+    test('keeps schedule instructions behind Help', () => {
       render(<ScheduleContent {...defaultProps} />);
-      expect(screen.getByText(/V1 schedule is user-supplied only/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Generated schedules are off/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'SCHEDULE HELP' }));
+      expect(screen.getByText(/Add games manually or review a CSV/i)).toBeInTheDocument();
       expect(screen.getByText(/Generated schedules are off/i)).toBeInTheDocument();
     });
   });
@@ -182,8 +184,8 @@ describe('ScheduleContent Component', () => {
 
     test('empty state has Add Game button', () => {
       render(<ScheduleContent {...defaultProps} games={[]} />);
-      const addButtons = screen.getAllByText(/Add Game|Add Series/);
-      expect(addButtons.length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Add Game').length).toBeGreaterThan(0);
+      expect(screen.queryByText(/Add Series/i)).not.toBeInTheDocument();
     });
 
     test('empty state message mentions Season 2', () => {
@@ -289,11 +291,15 @@ describe('ScheduleContent Component', () => {
   });
 
   describe('CSV Import', () => {
-    test('labels CSV import as user-provided rows only', () => {
+    test('keeps CSV format and import boundaries behind schedule Help', () => {
       render(<ScheduleContent {...defaultProps} onImportCsvRows={vi.fn()} />);
 
       expect(screen.getByText('CSV SCHEDULE IMPORT')).toBeInTheDocument();
-      expect(screen.getByText(/User-provided rows only; import does not generate missing matchups/i)).toBeInTheDocument();
+      expect(screen.queryByText(/CSV HEADER:/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/does not generate missing matchups/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'SCHEDULE HELP' }));
+      expect(screen.getByText(/CSV HEADER: gameNumber, awayTeam, homeTeam/i)).toBeInTheDocument();
+      expect(screen.getByText(/does not generate missing matchups/i)).toBeInTheDocument();
     });
   });
 

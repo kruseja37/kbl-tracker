@@ -4,12 +4,19 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { syncEngine, type SyncStatus } from '../utils/syncEngine';
+import {
+  syncEngine,
+  type ReplaceCloudWithLocalOptions,
+  type SyncStatus,
+} from '../utils/syncEngine';
 
 export function useSyncStatus(): SyncStatus & {
   pull: () => Promise<void>;
   replaceLocalWithCloud: () => Promise<void>;
-  replaceCloudWithLocal: (onProgress?: (db: string, store: string, sent: number, total: number) => void) => Promise<void>;
+  replaceCloudWithLocal: (
+    onProgress?: (db: string, store: string, sent: number, total: number) => void,
+    options?: ReplaceCloudWithLocalOptions,
+  ) => Promise<void>;
   setEnabled: (enabled: boolean) => void;
   isEnabled: boolean;
 } {
@@ -28,8 +35,10 @@ export function useSyncStatus(): SyncStatus & {
   const pull = useCallback(() => syncEngine.pull(), []);
   const replaceLocalWithCloud = useCallback(() => syncEngine.replaceLocalWithCloud(), []);
   const replaceCloudWithLocal = useCallback(
-    (onProgress?: (db: string, store: string, sent: number, total: number) => void) =>
-      syncEngine.replaceCloudWithLocal(onProgress),
+    (
+      onProgress?: (db: string, store: string, sent: number, total: number) => void,
+      options?: ReplaceCloudWithLocalOptions,
+    ) => syncEngine.replaceCloudWithLocal(onProgress, options),
     []
   );
   const setEnabled = useCallback((enabled: boolean) => {

@@ -10,7 +10,7 @@ import {
   type DesignSlot,
 } from './rosterDesignFeasibility';
 import type { ShapeClassification } from './playerArchetypeClassifier';
-import type { TierKey } from '../data/tierParams';
+import type { LuxuryCapRow, TierKey } from '../data/tierParams';
 
 export const BEST22_TUNING = {
   shapePrimaryMatch: 2.0,
@@ -167,6 +167,7 @@ export function buildBest22Target(
   realTeamCount: number,
   pins?: ReadonlyMap<string, string>,
   rankOverrides?: ReadonlyMap<string, readonly string[]>,
+  taxCaps?: readonly LuxuryCapRow[],
 ): Best22Target {
   const fitScore = archetypeFitScorer(archetype, tier, 'optimal');
   const u = meanStd(simPool.map(fitScore)).std || 1;
@@ -218,6 +219,7 @@ export function buildBest22Target(
     posture: 'optimal',
     slotPreferenceBonus,
     pinned: buildPins,
+    taxCaps,
   });
 
   let asked = 0;

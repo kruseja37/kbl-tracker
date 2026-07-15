@@ -316,7 +316,7 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     expect(freeze.players.find((player) => player.playerId === 'rank-1')?.morale.payBase).toBe(-10);
   });
 
-  test('S7 farm snake adapter uses absolute slot salary and slot-vs-talent rank after a pick trade', () => {
+  test('S7 farm snake adapter uses absolute slot salary and slot-vs-talent rank without mutable ownership', () => {
     const pickOrder = Array.from({ length: 6 }, (_, index) => ({
       round: index + 1,
       pick: index + 1,
@@ -336,8 +336,8 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
       farmSlotSalaries: [600, 500, 400, 300, 200, 100],
       pickOrder,
       completedPicks: [
-        { ...pickOrder[3], teamId: 'team-a', playerId: 'talent-1' },
-        { ...pickOrder[0], teamId: 'team-b', playerId: 'talent-4' },
+        { ...pickOrder[3], playerId: 'talent-1' },
+        { ...pickOrder[0], playerId: 'talent-4' },
         { ...pickOrder[1], playerId: 'talent-2' },
         { ...pickOrder[2], playerId: 'talent-3' },
         { ...pickOrder[4], playerId: 'talent-5' },
@@ -369,8 +369,8 @@ describe('buildDraftFreezeInputs RB-7b adapter', () => {
     });
 
     expect(inputs.map((input) => [input.playerId, input.teamId, input.settledSalary])).toEqual([
-      ['talent-1', 'team-a', 300],
-      ['talent-4', 'team-b', 600],
+      ['talent-1', 'team-b', 300],
+      ['talent-4', 'team-a', 600],
       ['talent-2', 'team-b', 500],
       ['talent-3', 'team-a', 400],
       ['talent-5', 'team-a', 200],

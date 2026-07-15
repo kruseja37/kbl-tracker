@@ -1,0 +1,3 @@
+# CONTRACT — SNAKE REPAIR: COMPANION PRIVACY AND PARITY
+
+Fix only companion/setup defects: COVER stays covered until explicit return; durable leave/finished-room handling prevents automatic old-room recovery; approved completed rooms show no editable private desk; render team logo/colors safely; add selected-player inspection plus existing planned/drafted money, chemistry, and Assistant-GM truth without inventing calculations; reject blank/unclaimable companion seats and enforce runtime device cap in setup. Keep authorization fail-closed and add focused tests. Do not touch farm companion support unless the existing storage/authorization contract can support it without new transport or schema. Builder must not audit its own diff.

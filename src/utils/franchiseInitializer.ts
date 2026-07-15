@@ -31,6 +31,7 @@ import {
 import {
   createFranchise,
   deleteFranchise,
+  loadFranchise,
   saveFranchiseConfig,
   getFranchiseConfig,
   updateFranchiseMetadata,
@@ -40,6 +41,7 @@ import { buildGmProfile } from './gmIdentity';
 import {
   createFarmAuctionSessionId,
   getAuctionSessionById,
+  getLeagueDraftFormat,
   getLeagueTemplate,
   getMlbDraftSession,
   getPlayer,
@@ -100,7 +102,9 @@ import {
   saveFranchiseTrueValueRows,
   type FranchiseTrueValueRow,
 } from './franchiseTrueValueStorage';
-import { readMlbDraftCompletion } from './mlbDraftCompletion';
+import { isCompletedLegacySnakeDraftSession, readMlbDraftCompletion } from './mlbDraftCompletion';
+import { readSnakeDraftTruth, snakeManifestOwnershipIdentity } from './snakeDraftManifest';
+import { assertSnakeRosterHandoffReady } from './snakeRosterHandoff';
 
 interface FranchiseLeagueTeams {
   leagueTemplate: LeagueTemplate;
@@ -108,25 +112,104 @@ interface FranchiseLeagueTeams {
 }
 
 const INCOMPLETE_DRAFT_FRANCHISE_MESSAGE =
-  "Your draft isn't finished yet - finish the MLB draft before starting the season.";
+  "Your draft isn't finished yet - finish both the MLB and farm drafts before starting the season.";
 
 function isAuctionComplete(session: { state?: string } | null | undefined): boolean {
   return session?.state === 'AUCTION_COMPLETE';
 }
 
-async function assertMlbDraftReadyForFranchise(leagueId: string): Promise<void> {
+async function assertMlbDraftReadyForFranchise(leagueId: string): Promise<string> {
+  const league = await getLeagueTemplate(leagueId);
+  if (!league) throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   const completion = await readMlbDraftCompletion(leagueId, 1);
   const hasMlbDraft = Boolean(completion.auctionSession?.session || completion.snakeSession);
-  if (!hasMlbDraft) return;
+  if (!hasMlbDraft) throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+  const draftFormat = getLeagueDraftFormat(league);
 
-  if (!completion.complete) {
+  const configuredMlbComplete = draftFormat === 'snake'
+    ? completion.snakeComplete
+    : completion.auctionComplete;
+  if (!configuredMlbComplete) {
     throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
 
-  const farmSession = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
-  if (farmSession?.session && !isAuctionComplete(farmSession.session)) {
+  const [farmSnakeSession, farmSession] = await Promise.all([
+    getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER),
+    getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
+  ]);
+  if (draftFormat === 'snake' && completion.snakeSession?.draftManifest) {
+    readSnakeDraftTruth(completion.snakeSession, 'MLB');
+    await assertSnakeRosterHandoffReady(completion.snakeSession, 'MLB');
+    if (!farmSnakeSession?.draftManifest) throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+    readSnakeDraftTruth(farmSnakeSession, 'FARM');
+    await assertSnakeRosterHandoffReady(farmSnakeSession, 'FARM');
+  } else if (draftFormat === 'snake' && completion.snakeComplete) {
+    const legacyFarmSnakeComplete = isCompletedLegacySnakeDraftSession(farmSnakeSession, 'FARM');
+    if (!legacyFarmSnakeComplete) {
+      throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
+    }
+  }
+
+  if (draftFormat === 'auction' && !isAuctionComplete(farmSession?.session)) {
     throw new Error(INCOMPLETE_DRAFT_FRANCHISE_MESSAGE);
   }
+
+  if (completion.snakeSession?.draftManifest && farmSnakeSession?.draftManifest) {
+    return [
+      leagueId,
+      snakeManifestOwnershipIdentity(completion.snakeSession.draftManifest),
+      snakeManifestOwnershipIdentity(farmSnakeSession.draftManifest),
+    ].join(':');
+  }
+  if (draftFormat === 'snake' && completion.snakeSession && farmSnakeSession) {
+    return [
+      leagueId,
+      'legacy-snake',
+      completion.snakeSession.id,
+      completion.snakeSession.revision ?? 0,
+      JSON.stringify(completion.snakeSession.completedPicks),
+      farmSnakeSession.id,
+      farmSnakeSession.revision ?? 0,
+      JSON.stringify(farmSnakeSession.completedPicks),
+    ].join(':');
+  }
+  const auctionIdentity = (row: typeof completion.auctionSession | typeof farmSession) => {
+    if (!row) return 'missing';
+    const results = row.session.results
+      .map((result) => ({
+        playerId: result.playerId,
+        disposition: result.disposition,
+        nominatorTeamId: result.nominatorTeamId,
+        winnerTeamId: result.winnerTeamId,
+        salary: result.salary,
+        settled: result.settled ?? false,
+        supersededByResultIndex: result.supersededByResultIndex ?? null,
+      }))
+      .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+    return JSON.stringify({
+      id: row.id,
+      seed: row.seed,
+      launchNonce: row.session.sessionLaunchNonce ?? null,
+      legacyCreatedAt: row.session.sessionLaunchNonce ? null : row.createdDate,
+      baseSeed: row.session.sessionBaseSeed ?? null,
+      results,
+    });
+  };
+  return [
+    leagueId,
+    'auction',
+    auctionIdentity(completion.auctionSession),
+    auctionIdentity(farmSession),
+  ].join(':');
+}
+
+function franchiseIdForDraftIdentity(identity: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < identity.length; index += 1) {
+    hash ^= identity.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `franchise-draft-${hash.toString(16).padStart(8, '0')}-${identity.length}`;
 }
 
 async function resolveDraftBaselinePosition(
@@ -585,29 +668,39 @@ async function deriveSeasonTotalGames(
 async function cleanupFailedFranchiseInitialization(
   franchiseId: string,
   seasonNumber: number,
+  required = false,
 ): Promise<void> {
+  const failures: string[] = [];
   try {
     await deleteSeasonMetadata(getFranchiseSeasonId(franchiseId, seasonNumber));
   } catch (err) {
     console.warn('[franchiseInitializer] Failed to clean up partial season metadata:', err);
+    failures.push(`season metadata: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   try {
     await deleteFranchiseFarmRecordsForSeason(franchiseId, getFranchiseSeasonId(franchiseId, seasonNumber));
   } catch (err) {
     console.warn('[franchiseInitializer] Failed to clean up partial franchise farm records:', err);
+    failures.push(`farm records: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   try {
     await deleteFranchise(franchiseId);
   } catch (err) {
     console.warn('[franchiseInitializer] Failed to clean up partial franchise:', err);
+    failures.push(`franchise metadata: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   try {
     await deleteFranchiseDatabase(franchiseId);
   } catch (err) {
     console.warn('[franchiseInitializer] Failed to clean up partial franchise DB:', err);
+    failures.push(`franchise database: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (required && failures.length > 0) {
+    throw new Error(`Could not safely clear the prior partial franchise launch (${failures.join('; ')}). A new franchise was not created.`);
   }
 }
 
@@ -693,10 +786,36 @@ export async function initializeFranchise(
     },
   };
 
-  await assertMlbDraftReadyForFranchise(franchiseLeagueId);
+  const sourceDraftIdentity = await assertMlbDraftReadyForFranchise(franchiseLeagueId);
+  const franchiseId = franchiseIdForDraftIdentity(sourceDraftIdentity);
+  const existingMetadata = await loadFranchise(franchiseId);
+  const existingConfig = await getFranchiseConfig(franchiseId);
+  if (existingMetadata?.initializationComplete) {
+    if (
+      existingMetadata.sourceDraftIdentity === sourceDraftIdentity
+      && existingConfig?.league === franchiseLeagueId
+    ) {
+      await setActiveFranchise(franchiseId);
+      return franchiseId;
+    }
+    throw new Error('A completed franchise already owns this draft launch identity. No data was changed.');
+  }
+  if (existingMetadata || existingConfig) {
+    if (
+      existingMetadata?.sourceDraftIdentity !== sourceDraftIdentity
+      || (existingConfig?.league != null && existingConfig.league !== franchiseLeagueId)
+    ) {
+      throw new Error('An existing franchise owns this draft launch identity. No data was changed.');
+    }
+    await cleanupFailedFranchiseInitialization(franchiseId, 1, true);
+  }
 
   // 1. Create franchise metadata record in kbl-app-meta
-  const franchiseId = await createFranchise(franchiseConfig.franchiseName, options);
+  await createFranchise(franchiseConfig.franchiseName, {
+    ...options,
+    franchiseId,
+    sourceDraftIdentity,
+  });
 
   try {
     // 2. Load the league template and team data
@@ -706,6 +825,16 @@ export async function initializeFranchise(
     );
 
     const teamControlSnapshot = buildTeamControlSnapshot(franchiseConfig, teams);
+    const [confirmedMlbSnake, confirmedFarmSnake] = await Promise.all([
+      getMlbDraftSession(franchiseLeagueId, 1),
+      getMlbDraftSession(franchiseLeagueId, FARM_SNAKE_SESSION_NUMBER),
+    ]);
+    const snakeDraftProvenance = confirmedMlbSnake?.draftManifest && confirmedFarmSnake?.draftManifest
+      ? {
+          mlb: readSnakeDraftTruth(confirmedMlbSnake, 'MLB').manifest!,
+          farm: readSnakeDraftTruth(confirmedFarmSnake, 'FARM').manifest!,
+        }
+      : undefined;
 
     // 3. Seed the per-franchise roster/team database from the selected league.
     const copyResult = await deepCopyLeagueToFranchise(franchiseId, franchiseLeagueId, {
@@ -756,6 +885,7 @@ export async function initializeFranchise(
       rosterRequirements: copyResult.rosterRequirements,
       stadiums: copyResult.stadiums,
       salaryBaseline: copyResult.salaryBaseline,
+      ...(snakeDraftProvenance ? { snakeDraftProvenance } : {}),
     };
     const storedConfig: StoredFranchiseConfig = {
       ...franchiseConfig,
@@ -770,6 +900,7 @@ export async function initializeFranchise(
       rosterRequirements: copyResult.rosterRequirements,
       stadiums: copyResult.stadiums,
       salaryBaseline: copyResult.salaryBaseline,
+      ...(snakeDraftProvenance ? { snakeDraftProvenance } : {}),
       handoffContract,
       franchiseId,
       createdAt: Date.now(),
@@ -813,10 +944,14 @@ export async function initializeFranchise(
           getRegisteredPool(config.league),
           getMlbDraftSession(config.league, FARM_SNAKE_SESSION_NUMBER),
         ]);
-        const farmSnakeSession = storedFarmSnakeSession?.draftPhase === 'FARM'
-          ? storedFarmSnakeSession
-          : null;
-        for (const pick of farmSnakeSession?.completedPicks ?? []) {
+        const farmSnakeSession = storedFarmSnakeSession && (
+          storedFarmSnakeSession.draftManifest?.phase === 'FARM'
+          || storedFarmSnakeSession.draftPhase === 'FARM'
+        ) ? storedFarmSnakeSession : null;
+        const frozenFarmPicks = farmSnakeSession
+          ? readSnakeDraftTruth(farmSnakeSession, 'FARM').completedPicks
+          : [];
+        for (const pick of frozenFarmPicks) {
           const player = playerById.get(pick.playerId);
           const meta = metaByPlayerId.get(pick.playerId);
           if (!player || !meta) continue;
@@ -954,12 +1089,18 @@ export async function initializeFranchise(
       normalizeCheckpointCadence(leagueTemplate.checkpointCadence),
     );
 
-    // 10. Set as active franchise
-    await setActiveFranchise(franchiseId);
+    // 10. Commit ownership before exposing this save as active. A failed active
+    // pointer write can be retried without deleting a fully initialized save.
+    await updateFranchiseMetadata(franchiseId, {
+      sourceDraftIdentity,
+      initializationComplete: true,
+    });
   } catch (err) {
     await cleanupFailedFranchiseInitialization(franchiseId, 1);
     throw err;
   }
+
+  await setActiveFranchise(franchiseId);
 
   return franchiseId;
 }

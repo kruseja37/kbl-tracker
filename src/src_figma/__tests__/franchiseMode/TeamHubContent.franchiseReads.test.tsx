@@ -38,7 +38,7 @@ vi.mock('@/hooks/useOffseasonData', () => ({
   useOffseasonData: mocks.mockUseOffseasonData,
 }));
 
-vi.mock('@/app/pages/FranchiseHome', () => ({
+vi.mock('@/app/pages/FranchiseHomeContext', () => ({
   useFranchiseDataContext: mocks.mockUseFranchiseDataContext,
 }));
 
@@ -730,6 +730,80 @@ describe('TeamHubContent franchise-owned visible reads', () => {
     await waitFor(() => expect(namesInOrder()).toEqual(['Farm Hidden', 'Copied Player']));
     fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /MORALE/i }));
     await waitFor(() => expect(namesInOrder()).toEqual(['Copied Player', 'Farm Hidden']));
+  });
+
+  test('preserves relational string numeric equal and missing-value sort semantics', async () => {
+    const [basePlayer] = await mocks.mockGetAllFranchisePlayers();
+    const players = [
+      { id: 'missing', firstName: 'Mike', lastName: 'Missing', salary: undefined },
+      { id: 'equal-a', firstName: 'Echo', lastName: 'Equal', salary: 300 },
+      { id: 'equal-b', firstName: 'Zed', lastName: 'Zulu', salary: 200 },
+      { id: 'accent', firstName: 'Åsa', lastName: 'Alpha', salary: 100 },
+    ].map((identity) => ({
+      ...basePlayer,
+      ...identity,
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    }));
+    mocks.mockGetAllFranchisePlayers.mockResolvedValue(players);
+    mocks.mockGetFranchiseFarmRoster.mockResolvedValue([]);
+    mocks.mockUseSeasonStats.mockReturnValue({
+      isLoading: false,
+      getBattingLeaders: vi.fn(() => players.filter((player) => player.id !== 'missing').map((player) => ({
+        playerId: player.id,
+        playerName: `${player.firstName} ${player.lastName}`,
+        teamId: 'team-1',
+        avg: 0.25,
+        ops: 0.7,
+        homeRuns: 0,
+        rbi: 0,
+        stolenBases: 0,
+        bWAR: player.id === 'accent' ? 2 : player.id.startsWith('equal') ? 1 : 0,
+        rWAR: 0,
+        fWAR: 0,
+        totalWAR: player.id === 'accent' ? 2 : player.id.startsWith('equal') ? 1 : 0,
+      }))),
+      getPitchingLeaders: vi.fn(() => []),
+    });
+
+    render(<TeamHubContent />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /ROSTER/i }));
+    const rosterTable = await screen.findByRole('table', { name: /Franchise roster scan table/i });
+    const rosterNames = () => within(rosterTable).getAllByRole('row').slice(1)
+      .map((row) => within(row).getAllByRole('button')[0].textContent ?? '');
+    fireEvent.click(within(rosterTable).getByRole('columnheader', { name: /SALARY/i }));
+    await waitFor(() => expect(rosterNames()).toEqual([
+      'Mike Missing',
+      'Åsa Alpha',
+      'Zed Zulu',
+      'Echo Equal',
+    ]));
+
+    fireEvent.click(screen.getByRole('button', { name: /^STATS$/i }));
+    const statsTable = await screen.findByRole('table');
+    const statsNames = () => within(statsTable).getAllByRole('row').slice(1)
+      .map((row) => within(row).getAllByRole('cell')[0].textContent ?? '');
+    fireEvent.click(within(statsTable).getByRole('columnheader', { name: /NAME/i }));
+    await waitFor(() => expect(statsNames()).toEqual([
+      'Å. Alpha',
+      'Z. Zulu',
+      'M. Missing',
+      'E. Equal',
+    ]));
+    fireEvent.click(within(statsTable).getByRole('columnheader', { name: /^WAR/i }));
+    await waitFor(() => expect(statsNames()).toEqual([
+      'Å. Alpha',
+      'E. Equal',
+      'Z. Zulu',
+      'M. Missing',
+    ]));
+    fireEvent.click(within(statsTable).getByRole('columnheader', { name: /PRIMARY/i }));
+    await waitFor(() => expect(statsNames()).toEqual([
+      'Å. Alpha',
+      'E. Equal',
+      'Z. Zulu',
+      'M. Missing',
+    ]));
   });
 
   test('hidden FARM roster scan row does not leak hidden prospect truth', async () => {

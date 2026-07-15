@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, CheckCircle, Edit3, FileUp, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle, CircleHelp, Edit3, FileUp, Plus, Trash2 } from "lucide-react";
 import {
   validateFranchiseScheduleCsv,
   type FranchiseScheduleCsvValidationResult,
@@ -48,6 +48,7 @@ export function ScheduleContent({
   const [csvFileName, setCsvFileName] = useState<string>("");
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [csvImporting, setCsvImporting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   // Helper: resolve team ID to display name
   const teamName = (id: string) => teamNameMap[id] || id;
   const filteredGames = selectedTeam === "FULL LEAGUE" 
@@ -236,28 +237,47 @@ export function ScheduleContent({
     <div className="space-y-4">
       {/* Header with Add Game button */}
       <div className="bg-[var(--franchise-panel)] p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           <div className="text-sm text-[var(--franchise-text)]">📅 SEASON {seasonNumber} SCHEDULE</div>
-          <button
-            onClick={onAddGame}
-            className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-3 py-1 text-xs text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform flex items-center gap-1"
-          >
-            <Plus className="w-3 h-3" /> Add Game
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="SCHEDULE HELP"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen((current) => !current)}
+              className="flex h-9 w-9 items-center justify-center border-[3px] border-[var(--franchise-info)] bg-[var(--franchise-border)] text-[var(--franchise-text)]"
+            >
+              <CircleHelp className="h-4 w-4" />
+            </button>
+            <button
+              onClick={onAddGame}
+              className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-3 py-1 text-xs text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Add Game
+            </button>
+          </div>
         </div>
         
         {teamStats ? (
           <div className="text-xs text-[var(--franchise-text)]/80">
-            ⭐ {selectedTeam} │ {teamStats.wins}-{teamStats.losses} ({teamStats.winPct}) │ {teamStats.gamesRemaining} games remaining
+            ⭐ {teamName(selectedTeam)} │ {teamStats.wins}-{teamStats.losses} ({teamStats.winPct}) │ {teamStats.gamesRemaining} games remaining
           </div>
         ) : (
           <div className="text-xs text-[var(--franchise-text)]/80">
             Full League │ {games.length} games scheduled
           </div>
         )}
-        <div className="mt-2 text-[9px] text-[var(--franchise-text)]/65">
-          V1 schedule is user-supplied only: add/edit/delete pending rows or review CSV. Generated schedules are off.
-        </div>
+        {helpOpen ? (
+          <aside aria-label="Schedule instructions" className="mt-3 border-[3px] border-[var(--franchise-info)] bg-[var(--franchise-panel-dark)] p-3 text-[9px] leading-5 text-[var(--franchise-text)]/80">
+            <p>ADD GAMES MANUALLY OR REVIEW A CSV. GENERATED SCHEDULES ARE OFF.</p>
+            {onImportCsvRows ? (
+              <>
+                <p>CSV HEADER: gameNumber, awayTeam, homeTeam, optional dayNumber, date, time, notes.</p>
+                <p>IMPORT USES ONLY YOUR ROWS; IT DOES NOT GENERATE MISSING MATCHUPS.</p>
+              </>
+            ) : null}
+          </aside>
+        ) : null}
       </div>
 
       {onImportCsvRows && (
@@ -265,12 +285,6 @@ export function ScheduleContent({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="text-[10px] text-[var(--franchise-text)]">CSV SCHEDULE IMPORT</div>
-              <div className="text-[9px] text-[var(--franchise-text)]/70">
-                Header: gameNumber, awayTeam, homeTeam, optional dayNumber, date, time, notes
-              </div>
-              <div className="text-[8px] text-[var(--franchise-text)]/60">
-                User-provided rows only; import does not generate missing matchups.
-              </div>
             </div>
             <label className="bg-[var(--franchise-border)] border-[3px] border-[var(--franchise-panel-dark)] px-3 py-2 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform inline-flex items-center gap-2 cursor-pointer">
               <FileUp className="w-3.5 h-3.5" /> Review CSV
@@ -352,7 +366,7 @@ export function ScheduleContent({
             onClick={() => setDropdownOpen(!dropdownOpen)}
             className="w-full bg-[var(--franchise-border)] py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] active:scale-95 transition-transform flex items-center justify-between"
           >
-            <span>Filter: {selectedTeam}</span>
+            <span>Filter: {selectedTeam === "FULL LEAGUE" ? selectedTeam : teamName(selectedTeam)}</span>
             {dropdownOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
           
@@ -377,7 +391,7 @@ export function ScheduleContent({
                   }}
                   className="w-full py-2 px-3 text-[10px] text-[var(--franchise-text)] hover:bg-[var(--franchise-panel-dark)] flex items-center justify-between border-b border-[var(--franchise-panel-dark)]"
                 >
-                  <span>{team}</span>
+                  <span>{teamName(team)}</span>
                   {selectedTeam === team && <CheckCircle className="w-3 h-3 text-[var(--franchise-text)]" />}
                 </button>
               ))}
@@ -398,24 +412,14 @@ export function ScheduleContent({
           <div className="text-4xl mb-4">📭</div>
           <div className="text-lg text-[var(--franchise-text)] mb-2">NO GAMES SCHEDULED</div>
           <div className="text-sm text-[var(--franchise-text)]/80 mb-6">
-            Your Season {seasonNumber} schedule is empty.<br />
-            Add games as you play them in SMB4.
+            Your Season {seasonNumber} schedule is empty.
           </div>
-          <div className="space-y-3">
-            <button
-              onClick={onAddGame}
-              className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Game
-            </button>
-            <div className="text-xs text-[var(--franchise-text)]/60">or</div>
-            <button
-              onClick={onAddGame}
-              className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> Add Series (3 games)
-            </button>
-          </div>
+          <button
+            onClick={onAddGame}
+            className="bg-[var(--franchise-info-bright)] border-[3px] border-[var(--franchise-info)] px-6 py-3 text-sm text-[var(--franchise-text)] hover:bg-[var(--franchise-info)] active:scale-95 transition-transform inline-flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Add Game
+          </button>
         </div>
       )}
 

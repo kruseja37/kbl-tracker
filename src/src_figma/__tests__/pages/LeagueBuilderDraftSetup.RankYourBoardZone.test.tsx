@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
-import { BOARD_POSITION_DEPTH, RankYourBoardZone } from "../../app/pages/LeagueBuilderDraftSetup";
+import { RankYourBoardZone } from "../../app/pages/LeagueBuilderDraftSetup";
+import { BOARD_POSITION_DEPTH } from "../../app/pages/LeagueBuilderDraftSetup.helpers";
 import type { BoardEntry } from "../../../engines/rosterIntelligencePayload";
 import type { Player } from "../../../utils/leagueBuilderStorage";
 

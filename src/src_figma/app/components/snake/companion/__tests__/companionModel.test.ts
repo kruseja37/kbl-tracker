@@ -3,10 +3,24 @@ import { describe, expect, it } from 'vitest';
 import type { LeagueBuilderMlbDraftSession, SnakeSeatBoardRecord } from '../../../../../../utils/leagueBuilderStorage';
 import {
   approveCompanionClaim,
+  companionClaimIdentity,
+  isCompanionDraftComplete,
+  isCompanionRoomOpen,
+  selectCompanionRecoverySession,
   ensureCompanionRoom,
   submitCompanionClaim,
   updateApprovedCompanionBoard,
 } from '../companionModel';
+
+function transition(
+  value: LeagueBuilderMlbDraftSession,
+  deviceId: string,
+  status: 'approved' | 'revoked',
+): LeagueBuilderMlbDraftSession {
+  const claim = value.snakeCompanions?.claims.find((row) => row.deviceId === deviceId && row.status !== 'revoked');
+  if (!claim) throw new Error(`Missing active claim for ${deviceId}.`);
+  return approveCompanionClaim(value, companionClaimIdentity(claim), status);
+}
 
 function board(revision = 1): SnakeSeatBoardRecord {
   return {
@@ -44,9 +58,9 @@ describe('S5 companion lifecycle', () => {
     expect(pending.session && pending.session.snakeCompanions?.claims[0]?.status).toBe('pending');
     expect(pending.session && pending.session.snakeCompanions?.claims[0]?.teamId).toBe('team-a');
 
-    const approved = approveCompanionClaim(pending.session!, 'ipad-a', 'approved');
+    const approved = transition(pending.session!, 'ipad-a', 'approved');
     expect(approved.snakeCompanions?.claims[0]?.status).toBe('approved');
-    const revoked = approveCompanionClaim(approved, 'ipad-a', 'revoked');
+    const revoked = transition(approved, 'ipad-a', 'revoked');
     const write = updateApprovedCompanionBoard({
       session: revoked, deviceId: 'ipad-a', expectedSessionRevision: 4,
       expectedBoardRevision: 1, board: board(2),
@@ -59,25 +73,36 @@ describe('S5 companion lifecycle', () => {
     let current = ensureCompanionRoom(session(), () => '4821');
     for (const [deviceId, gmName] of [['one', 'Alex'], ['two', 'Blair']] as const) {
       const result = submitCompanionClaim(current, { deviceId, gmName, roomCode: '4821' });
-      current = approveCompanionClaim(result.session!, deviceId, 'approved');
+      current = transition(result.session!, deviceId, 'approved');
     }
     const third = submitCompanionClaim(current, { deviceId: 'three', gmName: 'Casey', roomCode: '4821' });
-    current = approveCompanionClaim(third.session!, 'three', 'approved');
+    current = transition(third.session!, 'three', 'approved');
     const fourth = submitCompanionClaim(current, { deviceId: 'four', gmName: 'Dana', roomCode: '4821' });
     expect(fourth.ok).toBe(false);
     expect(fourth.message).toBe('THIS ROOM ALREADY HAS 3 COMPANIONS. USE THE MAIN DEVICE OR HOTSEAT.');
 
-    const replacement = submitCompanionClaim(current, { deviceId: 'new-ipad', gmName: 'Alex', roomCode: '4821' });
+    const staleAlexIdentity = companionClaimIdentity(current.snakeCompanions!.claims.find((claim) => claim.deviceId === 'one')!);
+    const replacement = submitCompanionClaim(current, { deviceId: 'new-ipad', gmName: 'Alex', roomCode: '4821', claimId: 'alex-replacement' });
     expect(replacement.ok).toBe(true);
     expect(replacement.session?.snakeCompanions?.claims.find((claim) => claim.deviceId === 'one')?.status).toBe('revoked');
     expect(replacement.session?.snakeCompanions?.claims.find((claim) => claim.deviceId === 'new-ipad')?.status).toBe('pending');
+    expect(() => approveCompanionClaim(replacement.session!, staleAlexIdentity, 'approved')).toThrow(/STALE/);
+
+    const approvedReplacement = transition(replacement.session!, 'new-ipad', 'approved');
+    const active = approvedReplacement.snakeCompanions!.claims.filter((claim) => claim.status !== 'revoked');
+    expect(new Set(active.map((claim) => claim.deviceId)).size).toBe(3);
+    expect(active.filter((claim) => claim.teamId === 'team-a')).toHaveLength(1);
+    expect(active.find((claim) => claim.teamId === 'team-a')).toMatchObject({
+      claimId: 'alex-replacement',
+      status: 'approved',
+    });
   });
 
   it('writes only the approved seat board and refuses stale session or board revisions', () => {
     const pending = submitCompanionClaim(ensureCompanionRoom(session(), () => '4821'), {
       deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821',
     });
-    const approved = approveCompanionClaim(pending.session!, 'ipad-a', 'approved');
+    const approved = transition(pending.session!, 'ipad-a', 'approved');
     const stale = updateApprovedCompanionBoard({
       session: approved, deviceId: 'ipad-a', expectedSessionRevision: (approved.revision ?? 0) - 1,
       expectedBoardRevision: 1, board: board(2),
@@ -91,5 +116,119 @@ describe('S5 companion lifecycle', () => {
     expect(saved.ok).toBe(true);
     expect(saved.session?.seatBoards?.['team-a'].revision).toBe(2);
     expect(saved.session?.seatBoards?.['team-b'].rankings.global).toEqual(['player-b']);
+  });
+
+  it('refuses approval when another active claim already occupies the same team', () => {
+    const first = submitCompanionClaim(ensureCompanionRoom(session(), () => '4821'), {
+      deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821', claimId: 'claim-a',
+    }).session!;
+    const conflicting = {
+      ...first,
+      snakeCompanions: {
+        ...first.snakeCompanions!,
+        claims: [
+          ...first.snakeCompanions!.claims,
+          { claimId: 'claim-b', claimVersion: 1, deviceId: 'ipad-b', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const },
+        ],
+      },
+    };
+    expect(() => approveCompanionClaim(
+      conflicting,
+      companionClaimIdentity(conflicting.snakeCompanions.claims[0]),
+      'approved',
+    )).toThrow(/CONFLICTS WITH AN ACTIVE SEAT/);
+    expect(conflicting.snakeCompanions.claims.every((claim) => claim.status === 'pending')).toBe(true);
+  });
+
+  it('rejects blank, hotseat, duplicate, and completed-room claims fail-closed', () => {
+    const opened = ensureCompanionRoom(session(), () => '4821');
+    expect(submitCompanionClaim(opened, { deviceId: '', gmName: 'Alex', roomCode: '4821' })).toMatchObject({ ok: false });
+
+    const hotseat = {
+      ...opened,
+      snakeSetup: {
+        ...opened.snakeSetup!,
+        clubs: opened.snakeSetup!.clubs.map((club) => ({ ...club, hotseat: true })),
+      },
+    };
+    expect(isCompanionRoomOpen(hotseat)).toBe(false);
+    expect(submitCompanionClaim(hotseat, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' })).toMatchObject({
+      ok: false,
+      message: 'THAT GM NAME IS NOT A COMPANION SEAT IN THIS ROOM.',
+    });
+
+    const duplicate = {
+      ...opened,
+      snakeSetup: {
+        ...opened.snakeSetup!,
+        clubs: opened.snakeSetup!.clubs.map((club) => club.teamId === 'team-b' ? { ...club, gmName: ' alex ' } : club),
+      },
+    };
+    expect(submitCompanionClaim(duplicate, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' })).toMatchObject({
+      ok: false,
+      message: 'THAT GM NAME DOES NOT IDENTIFY ONE COMPANION SEAT.',
+    });
+
+    const picksComplete = { ...opened, currentPickIndex: opened.pickOrder.length };
+    expect(isCompanionDraftComplete(picksComplete)).toBe(false);
+    expect(isCompanionRoomOpen(picksComplete)).toBe(true);
+    const complete = {
+      ...picksComplete,
+      rosterHandoff: {
+        formatVersion: 'snake-roster-handoff-v1' as const,
+        phase: 'MLB' as const,
+        sourceSessionId: picksComplete.id,
+        manifestPoolIdentity: 'pool',
+        manifestIdentity: 'manifest',
+        committedAt: '2026-07-12T15:00:00.000Z',
+      },
+    };
+    expect(isCompanionDraftComplete(complete)).toBe(true);
+    expect(isCompanionRoomOpen(complete)).toBe(false);
+    expect(submitCompanionClaim(complete, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' })).toMatchObject({
+      ok: false,
+      message: 'THIS DRAFT IS COMPLETE.',
+    });
+  });
+
+  it('recovers approved before pending, live before completed, newest next, and honors forget', () => {
+    const candidate = (
+      id: string,
+      status: 'pending' | 'approved',
+      complete: boolean,
+      lastModified: string,
+    ): LeagueBuilderMlbDraftSession => ({
+      ...ensureCompanionRoom(session(), () => '4821'),
+      id,
+      leagueId: id,
+      currentPickIndex: complete ? 1 : 0,
+      rosterHandoff: complete ? {
+        formatVersion: 'snake-roster-handoff-v1',
+        phase: 'MLB',
+        sourceSessionId: id,
+        manifestPoolIdentity: 'pool',
+        manifestIdentity: 'manifest',
+        committedAt: lastModified,
+      } : undefined,
+      lastModified,
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status }],
+      },
+    });
+    const pendingNewest = candidate('pending-new', 'pending', false, '2026-07-12T15:00:00.000Z');
+    const approvedComplete = candidate('approved-complete', 'approved', true, '2026-07-12T14:00:00.000Z');
+    const approvedLiveOld = candidate('approved-live-old', 'approved', false, '2026-07-12T12:00:00.000Z');
+    const approvedLiveNew = candidate('approved-live-new', 'approved', false, '2026-07-12T13:00:00.000Z');
+
+    expect(selectCompanionRecoverySession({
+      sessions: [pendingNewest, approvedComplete, approvedLiveOld, approvedLiveNew],
+      deviceId: 'ipad-a',
+    })?.id).toBe('approved-live-new');
+    expect(selectCompanionRecoverySession({
+      sessions: [pendingNewest, approvedComplete, approvedLiveOld, approvedLiveNew],
+      deviceId: 'ipad-a',
+      forgottenSessionIds: new Set(['approved-live-new']),
+    })?.id).toBe('approved-live-old');
   });
 });

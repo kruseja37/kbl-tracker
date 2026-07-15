@@ -122,6 +122,29 @@ export interface HistoricalSmb4Profile {
     eraAdjustmentNotes: string[];
   };
   confidence: HistoricalConversionConfidence;
+  identity: {
+    sourceId: string;
+    versionGroupId: string;
+    versionLabel: string;
+  };
+}
+
+function historicalVersionLabel(source: HistoricalPlayerSourceRecord, mode: HistoricalConversionMode): string {
+  const seasons = [...(source.seasons ?? [])].sort((left, right) => left.season - right.season);
+  const years = [...new Set(seasons.map((season) => season.season))];
+  const teams = [...new Set(seasons.map((season) => season.team?.trim()).filter((team): team is string => Boolean(team)))];
+  const yearLabel = years.length === 1
+    ? String(years[0])
+    : years.length > 1
+      ? `${years[0]}–${years.at(-1)}`
+      : null;
+  const hasAgeEvidence = seasons.some((season) => Number.isFinite(season.age));
+  return [
+    yearLabel,
+    teams.length === 1 ? teams[0] : null,
+    mode.toUpperCase(),
+    hasAgeEvidence ? `AGE ${sourceAge(source, mode)}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 const PERCENTILE_RATING_ANCHORS = [
@@ -646,5 +669,10 @@ export function convertHistoricalPlayerToSmb4(request: HistoricalConversionReque
       eraAdjustmentNotes: builder.eraNotes,
     },
     confidence,
+    identity: {
+      sourceId: request.source.sourceId,
+      versionGroupId: request.source.sourceId,
+      versionLabel: historicalVersionLabel(request.source, mode),
+    },
   };
 }

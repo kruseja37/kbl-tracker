@@ -3,57 +3,22 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
-  buildIdentityAutoAssignPlan,
-  comparePlayersByIvDesc,
-  draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
 import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
 import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
-import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
+import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
-import { poolDemandModel } from "../../../engines/auctionPoolSizing";
-import {
-  useLeagueBuilderData,
-  type LeagueTemplate,
-  type Player,
-  type Team,
-  type UseLeagueBuilderDataReturn,
-} from "../../hooks/useLeagueBuilderData";
-import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
-import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
-import {
-  RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
-  resetCompletedDraftArc,
-} from "../../../utils/leagueBuilderAuctionPipeline";
-import {
-  addPlayersToLeaguePool,
-  computePlayerIv,
-  lockLeaguePool,
-  removePlayersFromLeaguePool,
-} from "../../../utils/leagueBuilderPoolBuilder";
+import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate } from "../../../utils/leagueBuilderStorage";
+import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
-import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
 vi.setConfig({ testTimeout: 15000 });
 
 const mockNavigate = vi.fn();
-
-type LeaguePoolRecord = {
-  leagueId: string;
-  tier: "standard";
-  balanceMode: "taxed";
-  players: Array<{ id: string; iv: number; salary: number }>;
-  tierCap: number;
-  luxuryCaps: never[];
-  pickValueChart: never[];
-  totalSlots: number;
-  poolSurplusWarning: boolean;
-  locked?: boolean;
-};
 
 vi.mock("react-router", () => ({
   useLocation: () => ({ search: window.location.search }),
@@ -162,15 +127,8 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
 });
 
 import {
-  DEFAULT_TEST_POOL_SIZE,
-  capFitDiagnosticText,
   clickDraftSetupButton,
-  clickSlot,
-  extractPoolOptions,
-  fiveGradedSsPlayers,
-  globalBoardOrder,
   makeBest22Target,
-  makeFinalizedDesignFirstPlayers,
   makeLeague,
   makeLegalRosterPlayerSet,
   makeLegalRosterPlayers,
@@ -178,13 +136,8 @@ import {
   makePlayer,
   makePlayers,
   makePool,
-  makeQualityRosterPlayerSet,
   makeTeam,
   mockLeagueData,
-  shortlistLines,
-  waitForExtractPoolOptions,
-  type ExtractPoolOptions,
-  type LeaguePoolRecord,
 } from "./LeagueBuilderDraftSetup.testUtils";
 
 describe("LeagueBuilderDraftSetup", () => {
@@ -688,7 +641,7 @@ describe("LeagueBuilderDraftSetup", () => {
   test("B5 recomputes draftability on pool membership changes, not roster-design edits", async () => {
     const basePlayers = makePlayers(24);
     const baseTeams = [makeTeam("team-a"), makeTeam("team-b")];
-    mockLeagueData({ players: basePlayers, teams: baseTeams });
+    mockLeagueData({ players: basePlayers, teams: baseTeams, pool: makePool({ locked: false }) });
     const { rerender } = render(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
@@ -706,6 +659,7 @@ describe("LeagueBuilderDraftSetup", () => {
         }),
         makeTeam("team-b"),
       ],
+      pool: makePool({ locked: false }),
     });
     rerender(<LeagueBuilderDraftSetup />);
 
@@ -720,6 +674,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const ratingEditData = mockLeagueData({
       players: ratingEditedPlayers,
       teams: baseTeams,
+      pool: makePool({ locked: false }),
     });
     await act(async () => {
       await ratingEditData.updatePlayer(ratingEditedPlayers[0]);
@@ -737,12 +692,47 @@ describe("LeagueBuilderDraftSetup", () => {
         makePlayer(200, { id: "new-pool-member", primaryPosition: "SS" }),
       ],
       teams: baseTeams,
+      pool: makePool({ locked: false }),
     });
     rerender(<LeagueBuilderDraftSetup />);
 
     await waitFor(() => {
       expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(3);
     });
+  });
+
+  test("draftability worker failure falls back and releases identity auto-fill", async () => {
+    class FailingDraftabilityWorker {
+      static instance: FailingDraftabilityWorker | null = null;
+      onmessage: ((event: MessageEvent<{ rows: unknown[] }>) => void) | null = null;
+      onerror: ((event: Event) => void) | null = null;
+      constructor() {
+        FailingDraftabilityWorker.instance = this;
+      }
+      postMessage() {}
+      terminate() {}
+    }
+    vi.stubGlobal("Worker", FailingDraftabilityWorker as unknown as typeof Worker);
+    const players = makePlayers(24);
+    mockLeagueData({
+      players,
+      teams: [makeTeam("team-a", {
+        controlledBy: "ai",
+        mlbArchetypeKey: undefined,
+        farmArchetypeKey: undefined,
+      })],
+      pool: makePool({ locked: false }),
+    });
+    try {
+      render(<LeagueBuilderDraftSetup />);
+      const autoFill = await screen.findByRole("button", { name: /Auto-fill remaining/i });
+      expect(autoFill).toBeDisabled();
+      act(() => FailingDraftabilityWorker.instance?.onerror?.(new Event("error")));
+      await waitFor(() => expect(rankAllArchetypesForPool).toHaveBeenCalled());
+      await waitFor(() => expect(autoFill).toBeEnabled());
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   // -----------------------------------------------------------------------------------------

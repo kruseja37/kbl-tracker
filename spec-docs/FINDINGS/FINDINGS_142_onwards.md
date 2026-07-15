@@ -287,3 +287,282 @@ any spec-doc / git-add (the Captain owns docs) — this run the builder over-pro
 - **Root cause / lesson:** L9b-3a used the SUPERSEDED §D triage instead of the resolved §VI model, and the superseded "needs new input" justification went uncaught. Future L-stack tickets that implement a spec with both an "open triage" and a "resolved model" section MUST build to the resolved section and the contract must name it.
 
 **Next:** TRAIT_DETECTION_SCOPE_AUDIT — mechanically diff §VI's buildable set (A + B + personality-primary, with the live-persistence status of each discriminating signal) against `BUILDABLE_TRAITS`, producing the exact wrongly-dormant / correctly-dormant / cut classification with a signal source per trait, BEFORE any L9b-3a rebuild. Then re-scope L9a-2 (precision-only) + expand L9b-3a + build the L9b-2 personality-primary exception (Q12).
+
+---
+
+### FINDING-152
+**Date:** 2026-07-13
+**Phase:** Snake mock-draft browser audit follow-up
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**File:** `src/src_figma/app/components/snake/desk/deskModel.ts`; `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; snake desk/room/companion/guide tests
+
+**Evidence:**
+1. `refitBoardSlots` already deterministically rebuilds a unique legal 22 from overall/position rankings, but `reorderSeatBoardRankings` explicitly returns `slots: input.board.slots`. Main and companion both call that non-refitting writer. SNAKE-MOCK-2B required both surfaces to refit and recalculate; current main/companion tests instead assert the stale plan. JK reproduced the visible result: moving a new player to #1 changes the ranking but not the board.
+2. `searchSnakeGuidePackage` searches equal-count packages but stops as soon as any package exists at the smallest count, and candidate ordering prefers fewer pieces before value equality. `validateTrade` accepts a symmetric 15% value gap, while `derivePickValueChart` assigns raw nth-player IV to nth pick. This makes a nearby one-for-one trade-up qualify before a realistic balancing-return package. The documented `14+41` for `9+62` test hand-pins that value relationship and therefore does not validate real-pool package quality.
+3. The repo already owns most required inputs: locked archetypes, live rosters, roster need, player fit, exact salary/tax/legal finish, five chemistry families, scarcity/replacement reads, a pin-capable Best-22 optimizer, and a public-information rival playout. The live snake product has only one persisted board, no separate derived Asst GM Board, no calibrated availability probability, no real multi-buyer pressure count, and no bridge from target risk to a fair executable trade-up.
+4. Focused baseline characterization on frozen branch `codex/snake-mock-draft-ready` at `99d13080`: 7 test files / 60 tests passed. The green state does not clear item 1 because three tests positively encode the stale-board behavior; it characterizes the defect.
+
+**Impact:**
+- User ranking work does not control the primary 22-player plan or its money/chemistry consequences.
+- The trade guide is legal but strategically worthless for common trade-ups.
+- High-value backend intelligence is fragmented into cards/logs instead of producing a coherent decision aid.
+- Main and companion surfaces share the same stale-board defect.
+
+**Approved repair:** Binding contract `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`. Build in verified batches: live My Board refit; fair balancing trade packages; separate live Asst GM Board; selected-player opportunity cost; availability/rival/scarcity intelligence; actionable TAKE/WAIT/TRADE recommendations; UI consolidation under the ratified Help-Button Law. Separate builder and auditor; JK's browser walk is the only acceptance gate.
+
+---
+
+### FINDING-153
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 2 pre-build trace
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**File:** `src/engines/snakeGuideTrade.ts`; `src/engines/leagueConstruction.ts`; MLB snake guide callers/tests
+
+**Evidence:**
+1. MLB package execution revalidation checks equal array lengths but not unique picks, disjoint sides,
+   distinct buyer/seller, or required target ownership. `swapOwnership` later converts those arrays to
+   sets. A tampered offer such as `[24, 24]` for `[19, 41]` can therefore value pick 24 twice, pass as
+   2-for-2, then execute as a real 1-for-2.
+2. Revalidation persists caller-supplied `offerValue` and `receiveValue` instead of recomputing current
+   posted totals. A stale or tampered proposal can therefore leave an inaccurate trade receipt even when
+   ownership/revision checks still pass.
+3. The shared `validateTrade` helper is also used by the frozen farm-draft path. Changing its symmetric
+   semantics would cross the Batch 2 boundary. MLB needs an additional directional rule: the buyer moving
+   up may not offer less posted value than the seller gives up.
+4. The current chart is raw nth-player IV. Current-pool opportunity value can instead be derived
+   deterministically as the one-round forward-cohort expected IV above the first undrafted cohort, with a
+   positive late-pick floor derived from the final drafted-to-replacement gap.
+5. Hostile Batch 2 audit found two contract-level gaps in the first repair: naive summation can overflow
+   to `NaN` even when every IV is finite (for example two `Number.MAX_VALUE` rows), and `registerPool`
+   reconstructed club count with `ceil(totalSlots / 22)` rather than receiving the actual league club
+   count from both production registration callers.
+
+**Impact:** A forged equal-length package can change actual turn counts, and the live guide can recommend
+strategically weak packages or record caller-controlled values. This is a transaction-integrity defect,
+not merely a presentation problem.
+
+**Required repair:** Reject duplicate/overlapping/self/target-mismatched packages; recompute canonical
+totals at execution; retain equal counts and the 15% imbalance ceiling; enforce seller protection; search
+all authorized 1–3 pick counts and minimize posted value gap before complexity. Keep shared farm validation
+unchanged. Exact math and test gates are frozen in Batch 2 of the Snake Intelligence contract.
+
+---
+
+### FINDING-154
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 3 pre-build trace
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**File:** `src/src_figma/app/pages/SnakeDraftRoom.tsx`; `src/src_figma/app/pages/SnakeCompanion.tsx`; `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`; `src/src_figma/app/components/snake/desk/deskModel.ts`; canonical Best-22/legality/economics engines
+
+**Evidence:**
+1. Main builds contextual advisor worth through `computeOwnValue` and `assembleBoard`; companion sets
+   `advisorWorth` to raw frozen price. The two private devices therefore rank the same club/player pool
+   with different intelligence even though parity is canon.
+2. The only live persisted board is My Board. The repo owns a pin-capable `buildBest22Target`, canonical
+   identity construction, team archetype, current roster need, tax, chemistry, and legal-finish math, but
+   neither live page builds a separate derived assistant plan from those inputs.
+3. The current What-If lets the GM choose a slot and player, swaps at most two occupants, and declares
+   legality from local `isCandidateEligibleForBoardSlot` checks. That helper accepts every player in FLEX
+   and can accept pitchers in SWING, while canonical roster law requires FLEX hitters and a complete legal
+   22. The preview can therefore say the chosen slots work without proving the roster works.
+4. Both pages already possess the authoritative current inputs, but they mix price sources: completed picks
+   own settled salary, available players own frozen IV, and stored player salary is neither. A shared adapter
+   must preserve those sources before Best-22 construction.
+5. Best-22 construction is too expensive for synchronous render on the target iPad. The existing rational-risk
+   worker/hook establishes the fail-closed keyed-worker pattern, including stale-result rejection.
+
+**Impact:** The assistant intelligence is inconsistent by device, the requested Asst GM Board does not exist,
+and the current direct decision aid can affirm an illegal roster. A synchronous page-local implementation would
+also risk freezing the iPad and leaking stale private results across cover/team changes.
+
+**Required repair:** Build one pure derived assistant-board engine plus serializable adapter/worker/hook, pin all
+own drafted players, use settled/frozen price truth, require an exact legal solvent 22, and consume it identically
+on main and companion. Replace the detached What-If with deterministic selected-player displacement and exact
+before/after consequences. Full Batch 3A/3B allowlists and adversarial gates are frozen in the Snake Intelligence
+contract.
+
+---
+
+### FINDING-155
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 4 pre-build trace
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**File:** `src/engines/snakeRationalRoom.ts`; `src/src_figma/app/components/snake/desk/deskRoomModel.ts`; `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`; snake private-desk and trade-guide surfaces
+
+**Evidence:**
+1. `playSnakeRationalRoom` owns one greedy deterministic playout. A requested player is therefore either
+   selected by one predicted club or not selected at all, and `rationalBuyersBeforeTurn` is hard-coded to
+   `0` or `1`. The UI can consequently report `AT RISK · 0 CLUBS` even though risk and buyer pressure are
+   meant to describe the same public market.
+2. `riskFromPlayout` returns `SAFE_TO_WAIT` when the asking club has no later pick. Missing turn truth,
+   missing inputs, and zero valid scenarios are not safety evidence and must fail closed.
+3. `canonicalSnakeRoleDepth` counts cards, not version-unique people, and does not prove affordability or
+   constructive legal completion. `computeSnakeScarcity` deduplicates people but is not connected to the
+   private desk. The displayed role depth can therefore overstate usable supply while the better scarcity
+   input remains orphaned.
+4. The rational-room result contains no opportunity-cost cliff, scenario range, or actionable bridge. The
+   private desk can label risk but cannot convert an urgent player into a current, fair, executable guide
+   package. The trade guide still requires the GM to guess a destination pick.
+5. The repo already owns the required public inputs: current pick ownership/order, locked club archetypes,
+   public completed rosters, frozen pool identity and prices, canonical roster need/completion proof, and the
+   Batch 2 posted-value package search. No rival private board or fabricated probability is needed.
+
+**Impact:** Current risk copy presents a single guess as a market read, can call an unknowable state safe,
+and does not help a GM decide whether to take, wait, pass, or move to a specific pick. Position depth can
+also count unusable alternate cards as real replacements.
+
+**Required repair:** Use a deterministic public-information sensitivity ensemble, count distinct interested
+clubs, and expose categorical survival truth plus a pick range rather than an uncalibrated percentage.
+Compute version-unique, role-applicable, affordable, legal-finish supply and the replacement cliff. A pure
+decision resolver may emit `TAKE NOW`, `SAFE TO WAIT`, `TRADE TO #N`, or `PASS` only when its prerequisites
+are proved; a trade call must carry the current Batch 2 guide package and may only prefill the guide. Full
+Batch 4A/4B allowlists and adversarial gates are frozen in the Snake Intelligence contract.
+
+---
+
+### FINDING-156
+**Date:** 2026-07-13
+**Phase:** Snake Intelligence Batch 5 pre-build UI trace
+**Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**File:** MLB `SnakeDraftRoom.tsx`; `SnakeDraftRoomView.tsx`; private desk/board/selected-player components; `SnakeCompanion.tsx`; `SnakeCompanionFrame.tsx`; MLB trade-guide presentation
+
+**Evidence:**
+1. The MLB main room exposes a fixed-team private `GUIDE`, a second shared top-level `THE GUIDE`, and
+   a commissioner trade tool. Two GM guide entry points answer the same question while only the private
+   one has the correct team-first context.
+2. Team switching is duplicated in the clickable live-pick window and a second all-team `CLUB LENS`
+   button cloud. A pick-status control unexpectedly changes the private seat, and the two selectors consume
+   scarce iPad width without establishing one obvious team-first lens.
+3. `PrivateDesk` still renders the superseded `WhatIfSandbox` and exposes generic `BOARD`, `RANKINGS`,
+   `LOG`, and `GUIDE` tabs. The replacement needs explicit `MY BOARD`, `ASST GM BOARD`, `PLAYER POOL`,
+   and `TRADE PICKS`; an empty activity surface has no recurring decision value.
+4. `BoardView` iterates `Object.entries(boardSlots)`, so omitted slots disappear rather than appearing as
+   missing/broken. Unknown ids render as raw storage ids. The 22 rows precede the plan money/chemistry
+   ledger, forcing the GM to scroll past the plan before seeing its aggregate consequence.
+5. Selected identity is repeated in the room action header and `SelectedPlayerCard`, with consequence text
+   split into another panel. The draft control lives outside the profile/consequence owner, weakening the
+   click-player -> understand -> act path.
+6. `TradePackageCard` omits `YOU GIVE`, `YOU GET`, both posted totals, and seller premium. Open-offer cards
+   render only one receive side and omit the counterparty/value truth needed to evaluate an offer.
+7. The active companion desk has no Help control, uses two full-width panels for order and ticker, and keeps
+   `FORGET ROOM` in the live header. The shared room keeps an always-expanded recent-picks block at the very
+   bottom and displays disabled correction even when no correction exists.
+
+**Impact:** The MLB room is functionally dense but strategically ambiguous: duplicate entry points compete,
+the board hides its own total consequence below the fold, missing slots can vanish, and trade offers omit the
+facts a GM needs. On iPad, repeated selectors and full-width status panels crowd the actual player/board work.
+
+**Required repair:** Delete the retired What-If after Batch 3 proof; establish one covered team selector; make
+the private tabs name the four recurring jobs; put plan truth before canonical 22-slot rows; consolidate selected
+identity/consequences/action; make every trade package two-sided and valued; collapse public history/status; and
+give the active companion a Help control. Preserve the KBL/team palette, touch/keyboard sizing, farm behavior,
+privacy teardown, and Help-only explanations. Full Batch 5 allowlist and UI gates are frozen in the Snake
+Intelligence contract.
+
+### FINDING-157
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
+**Files:** `SnakeCompanion.tsx`, `useSnakeRationalRisks.ts`
+**Evidence:** The companion rational-risk request is built without `deviceCovered`; the covered-screen return occurs later. The hook retains its prior ready snapshot for the same request key. Covering and returning to the same seat can therefore reuse private pre-cover advice instead of clearing synchronously.
+**Impact:** A privacy cover can hide the DOM without invalidating private derived state, violating the team-first fail-closed cover contract.
+**Action:** Amendment 8 A8-1 in `CONTRACT_SNAKE_REPO_CRAWL_REPAIRS_2026-07-13.md`; caller-level red-first cover/reveal test, separate audit required.
+
+### FINDING-158
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
+**Files:** `useSnakeAssistantBoard.ts`, `useSnakeGuideRecommendation.ts`, `SnakeDraftSetupAdapter.tsx`, `LeagueBuilderDraftSetup.tsx`
+**Evidence:** Normal changed-file lint is green only with inline configuration active. `--no-inline-config` exposes 20 findings: 16 errors and four warnings, including set-state-in-effect, fast-refresh export, and hook dependency failures. The repair contract explicitly forbids suppressions.
+**Impact:** The branch does not satisfy its acceptance gate, and hidden hook/state defects remain structurally unresolved.
+**Action:** Amendment 8 A8-2; remove suppressions, relocate pure exports where necessary, prove no behavior drift, separate audit required.
+
+### FINDING-159
+**Date:** 2026-07-14 | **Phase:** Snake combined-branch closing audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — AMENDMENT 9
+**Files:** `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `SnakeDraftRoomView.tsx`, `SnakeDraftSetupAdapter.tsx`
+**Evidence:** Missing player lookup in the advisor activity log falls back to `gonePlayerId`; companion ticker uses `A PLAYER`; two missing-team paths fall back to internal team keys. The contract requires exact neutral `UNKNOWN PLAYER` / `UNKNOWN TEAM` copy and no internal identifier exposure.
+**Impact:** Corrupt, migrated, or incomplete identity data can leak internal keys into user-visible Snake surfaces and produce inconsistent recovery language.
+**Action:** Amendment 8 A8-3; neutralize every fallback and add DOM-level absence tests, separate audit required.
+
+**Repair-1 audit addendum (2026-07-14): NOT VERIFIED.** The caller now passes
+null while covered, but the real rational-risk hook retains and reuses its
+settled snapshot when the same semantic key returns. Direct mutation produced
+`AT_RISK -> IDLE -> AT_RISK` before the fresh worker result. Amendment 9 A9-1
+requires a true privacy epoch and a direct unmocked hook test.
+
+**FINDING-158 repair-1 audit addendum (2026-07-14): NOT VERIFIED.** Suppressions
+and no-inline lint debt are cleared, but the two refactored hooks compare request
+objects for state reset while their worker effects use semantic keys. A fresh
+same-key clone can clear the UI without restarting the worker and strand it in
+pending. Amendment 9 A9-2 aligns state and worker identity and adds direct
+same-key-clone tests.
+
+**FINDING-159 repair-1 audit addendum (2026-07-14): NOT VERIFIED.** The four
+contracted fallbacks are fixed, but CompanionApprovalCard, TradePackageCard, and
+SnakeCommissionerTrade still render `CLUB` for missing teams. Amendment 9 A9-3
+expands the allowlist and requires exact `UNKNOWN TEAM` across those live
+surfaces.
+
+**Amendment 9 closing addendum (2026-07-14): FIXED-AND-VERIFIED.** A replacement
+independent auditor returned VERIFIED with zero major and zero minor findings.
+Direct mutations killed the stale-result privacy path and both same-key-clone
+worker-lifecycle defects. Exact changed-file ESLint with `--no-inline-config`
+finished with zero errors and zero warnings; the live Snake fallback sweep found
+no residual `CLUB`, `A PLAYER`, or internal-ID recovery copy. Focused proof was
+131/131, the combined changed-test gate was 266/266, the 48-file Snake matrix was
+383/383, responsive Playwright was 4/4, and TypeScript plus production build were
+green. After that independent verdict, the final serial repository run passed
+681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped (10,135
+total), zero failed. FINDING-157, FINDING-158, and FINDING-159 are closed.
+
+### FINDING-160
+**Date:** 2026-07-14 | **Phase:** Final committed whole-branch hostile audit | **Status:** FIXED-AND-VERIFIED — AMENDMENT 10
+**Files:** `deskModel.ts`, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, `snakeEconomics.ts`, `rosterConstruction.ts`
+**Evidence:** The independent auditor fresh-fetched and attacked committed HEAD `fcfb44c3`. `refitBoardSlots` treats every `FLEX` slot as eligible for every player. A direct production-code probe supplied nine required hitters, eight pure starters, four relievers, and one closer; the refit returned no broken slots and assigned pure SPs to FLEX1–FLEX4, producing nine hitters and thirteen pitchers. Main and companion persist this board, and `evaluateSnakePlan` prices its 22 unique ids without a canonical roster-legality check.
+**Impact:** My Board can show authoritative salary, tax, cushion, chemistry, and availability for a roster the franchise cannot legally carry. This falsifies the legal-22, scarce-role-safe board contract and can steer both the host and companion into a dead draft.
+**Action:** Amendment 10 in `CONTRACT_SNAKE_REPO_CRAWL_REPAIRS_2026-07-13.md`. FLEX must obey the canonical 13–14 hitter / 8–9 pitcher roster law; every persisted/evaluated board must fail closed if canonical legality is not proven. Direct mutation-honest refit plus main/companion persistence tests and separate re-audit are required.
+
+**First A10 re-audit:** **NOT VERIFIED — one major, zero minor.** The direct FLEX, economics, main-save, and companion-save mutations all failed correctly; 202 focused tests, exact-file lint, TypeScript, and production build were green. A separate production-code attack began with a canonical 14H/8P board, made FLEX1 unavailable, and ranked an eligible alternate version of the existing catcher first. `reconcileBoardAvailability` accepted that duplicate-version card, `reconcileExistingSeatBoards` returned `changed: true`, and the main room's automatic effect would persist the resulting non-canonical board. Amendment 10 now explicitly covers this automatic writer: ranked backfill must test the complete canonical/version invariant, skip unsafe candidates, and leave an unresolved slot unpersisted when no safe candidate exists.
+
+**Final A10 re-audit:** **VERIFIED — zero major, zero minor.** The original 9H/13P attack is rejected; valid 13/9 and 14/8 controls remain deterministic. The duplicate-version first replacement is skipped for a later safe hitter, while a no-safe result returns the original board object and bytes unchanged. An independent two-slot C/SS probe confirmed deterministic backtracking, stable unaffected slots/rankings, and all-or-nothing failure. Whole-board/version and final-legality mutations failed the direct, session, main-page, and sole-primary-SS regressions. Exact proof was 79/79 plus 137/137 broader tests; exact-path lint, TypeScript, production build, and diff checks were green. FINDING-160 is closed.
+
+### FINDING-161
+**Date:** 2026-07-14 | **Phase:** Live production setup crawl | **Status:** FIXED-AND-VERIFIED — LIVE-CRAWL CONTRACT
+**Files:** `playerDatabase.ts`, `leagueBuilderStorage.ts`, Snake Draft Setup pool proof
+**Evidence:** The stock 20-club Super Mega League loaded every available source card yet the rendered source universe remained short five true closers with zero cards left to add. Static source proof found fourteen SML club records marked CP plus two free agents, while six clubs store their final bullpen chair as RP even though every other SML roster stores that chair as CP. Correcting those six exact records yields one closer for every stock club plus two free agents; all twenty original 22-player rosters are then individually legal and form a disjoint constructive seating. The remaining five-card shortage comes from the setup proof treating the seven-card competitive-surplus target (27 CP) as a hard legality floor instead of the canonical one-per-club minimum (20 CP).
+**Impact:** The bad stock roles and conflation of hard feasibility with competitive pool quality make a constructively legal stock league dead-end before the Snake room.
+**Action:** Correct the six stock roles and migrate existing IndexedDB installs without clearing user data. Preserve CP-only canon. Use the canonical one-per-club CP minimum for hard seating/start proof, retain surplus as a soft quality/production-shape target, and prove all twenty stock clubs constructively seat. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**Independent verdict:** **VERIFIED — zero major, zero minor.** Exact source proof found only the six contracted RP-to-CP changes. Fresh stock has twenty club-assigned true closers; all original 22s are legal; a strengthened probe seated 440 unique/disjoint assignments from all 506 cards. Hard feasibility is twenty CP while competitive shaping remains twenty-seven, and mutations kill either caller conflation. The guarded v9-to-v10 migration preserves salary/IV, refuses custom/historical collisions, upgrades older databases, and leaves locked pool/session bytes unchanged. The reconstructed audit passed 181/181 focused tests, exact-path lint, TypeScript, build, and diff checks. FINDING-161 is closed.
+
+### FINDING-162
+**Date:** 2026-07-14 | **Phase:** Live production room crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** Snake rational/assistant workers, `snakeRationalRoom.ts`, `snakeSeatingProof.ts`, main/companion request wiring
+**Evidence:** In a real two-club practice room with 506 available cards, risk rows and the Asst GM Board remained calculating for tens of seconds, and a simple browser query was delayed about forty seconds while the workers ran. After Amendment 10 made the displayed board legal, a fresh first-pick reveal correctly showed `ON BOARD`, but the Asst GM Board settled to `UNAVAILABLE` in about 2.8 seconds and the next My Board click missed the browser deadline while intelligence work continued. The existing 484-player benchmark gives every club twenty-one drafted players and therefore measures only the final-seat fast path. The early-draft worker repeatedly validates a large constructive certificate during candidate proofs.
+**Impact:** The strategic intelligence exists but is not usable at the moment a GM clicks, compares, or reorganizes players; concurrent workers can make the iPad feel frozen.
+**Action:** Add an honest 500+ card, 20-club, zero-pick benchmark; remove repeated proof work; prioritize exact useful results without weakening public simulation, legality, money, scarcity, privacy, or companion parity. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+### FINDING-163
+**Date:** 2026-07-14 | **Phase:** Frozen responsive-preview crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** `SnakeResponsivePreview.tsx`, responsive Playwright
+**Evidence:** The preview hard-codes Jovita and sends selection, reorder, team-switch, trade, and draft callbacks to no-ops. The Asst GM Board is permanently idle. Live clicks on Sam, ranking moves, team switch, seller nod, and execute did not change rendered truth. The companion fixture opens with private Beewolves data visible instead of covered.
+**Impact:** The frozen build can look polished while teaching the wrong privacy model and proving none of the interaction the user must accept.
+**Action:** Turn the preview into a deterministic, covered, stateful test drive with real local selection/refit/team/trade/assistant transitions and browser assertions. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**First independent audit:** **NOT VERIFIED — seven major, two minor across FINDING-163/164.** The stateful preview's selected consequence did not match its actual Keep/refit money or moved slots; an off-clock Beewolves desk drafted for the on-clock Buzzards; initial/drafted players stayed enabled and Jovita could be drafted three times; a pick trade changed owned lists but not live order; main and companion showed contradictory salary and hardcoded zero tax; portrait lost the action strip while organizing and companion lacked the contracted responsive workspace; all green tests missed these outcomes. REVERT could restore an unrelated ranking action, SIGN OUT/FORGET ROOM left private state behind, and the final recap control was a no-op. Contract amended with the exact repair and regression gate.
+
+### FINDING-164
+**Date:** 2026-07-14 | **Phase:** iPad live workflow crawl | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — code commit `f8ca392d`
+**Files:** `SnakeDraftRoomView.tsx`, selected-player card, private desk, responsive Playwright
+**Evidence:** At 1280x720 the selected-player card fills the private column's viewport and the board starts below it. Each candidate change calls page-level `scrollIntoView`, pulling the GM away from the board. Existing responsive checks scroll every target into view and therefore cannot detect the repeated board -> profile -> board loop.
+**Impact:** Organizing and comparing specific players requires continuous vertical recovery, exactly where the draft room must be fastest and clearest.
+**Action:** At iPad landscape keep profile/action beside a stable-scroll board; at portrait use a compact persistent selection strip plus full profile without losing board position. Remove forced page scrolling and add a multi-player browser journey. Full contract: `CONTRACT_SNAKE_LIVE_UI_CRAWL_REPAIRS_2026-07-14.md`.
+
+**First independent audit:** **NOT VERIFIED.** At 768x1024, scrolling to organize the player pool placed the selected pane at y=-126.5 and action strip at y=-122.5 while the board began at y=166.5; the strip was sticky only inside its off-screen card sibling. Companion remained a sequential profile/roster/board stack at both iPad sizes and lost its action while scrolling. The passing anchor check recorded an already-wrong page position and never asserted visible action. The combined FINDING-163/164 rejection and exact repair gate are recorded in the live-crawl contract.
+
+**Final Snake close (2026-07-14): FIXED-AND-INDEPENDENTLY-VERIFIED.** FINDING-152
+through FINDING-156 and FINDING-162 through FINDING-164 are closed on code commit
+`f8ca392d`. Main and companion now consume the same worker-backed assistant board,
+legal-finish/scarcity/rival reads, current fair trade packages, and team-first privacy
+model. The preview is stateful and covered; the selected-player workspace remains usable
+at both iPad orientations and 430px companion width. Independent browser review found
+zero remaining UI findings. Final gates: 686 passed test files / 10,227 passed tests /
+zero failures, 17/17 Playwright journeys, strict changed-file lint, TypeScript,
+production build, and diff integrity. JK's hands-on browser walk remains the sole
+product-acceptance gate.

@@ -1,8 +1,6 @@
 import { LEGAL_ROSTER, isLegalRoster } from '../data/rosterConstruction';
 import type { LuxuryCapRow } from '../data/tierParams';
-import {
-  normalizeAuctionLuxuryCapsForLeagueSize,
-} from './auctionLuxuryTax';
+import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import { cheapestLegalCompletion, type CompletionCandidate } from './auctionCompletionFloor';
 import {
   luxuryTax,
@@ -41,7 +39,7 @@ function shiftedCaps(input: {
   realTeamCount: number;
   capIdentity?: TeamCapIdentity;
 }): LuxuryCapRow[] {
-  const normalized = normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount);
+  const normalized = snakeLuxuryCaps([...input.baseCaps]);
   return input.capIdentity ? shiftLuxuryCaps(normalized, input.capIdentity) : normalized;
 }
 
@@ -61,6 +59,9 @@ export function evaluateSnakePlan(input: SnakePlanInput): SnakePlanBill {
   });
   if (new Set(planned.map(deriveVersionGroupId)).size !== planned.length) {
     throw new Error('PLAN COST cannot count two cards of the same human as two roster seats.');
+  }
+  if (!isLegalRoster(planned.map((player) => player.shape))) {
+    throw new Error('PLAN COST needs a canonically legal 22-player roster.');
   }
   const planCost = planned.reduce((sum, player) => sum + player.price, 0);
   const planTax = luxuryTax(
@@ -131,13 +132,13 @@ export function evaluateSnakeLegalFinish(input: SnakeLegalFinishInput): SnakeLeg
     ...completion.map((player) => player.construction),
   ], caps, 'taxed').charged;
   const completionCost = completion.reduce((sum, player) => sum + player.price, 0);
-  const completionTax = Math.max(0, finalTax - currentTax);
+  const completionTax = finalTax - currentTax;
   return {
     feasible: true,
     completionPlayerIds: completion.map((player) => player.playerId),
     completionCost,
     completionTax,
-    legalFinishCushion: input.budget - input.committedSpent - currentTax - completionCost - completionTax,
+    legalFinishCushion: input.budget - input.committedSpent - finalTax - completionCost,
   };
 }
 

@@ -136,6 +136,7 @@ export function FranchiseLens() {
       reload();
     } catch (caught) {
       setToastMessage(caught instanceof Error ? caught.message : "Failed to add game.");
+      throw caught;
     }
   };
 
@@ -144,6 +145,8 @@ export function FranchiseLens() {
       await scheduleData.addSeries({
         seasonId,
         statsScopeId: seasonId,
+        gameNumber: gameData.gameNumber,
+        dayNumber: gameData.dayNumber,
         date: gameData.date,
         time: gameData.time,
         awayTeamId: gameData.awayTeamId,
@@ -152,6 +155,7 @@ export function FranchiseLens() {
       reload();
     } catch (caught) {
       setToastMessage(caught instanceof Error ? caught.message : "Failed to add series.");
+      throw caught;
     }
   };
 
@@ -169,6 +173,7 @@ export function FranchiseLens() {
       reload();
     } catch (caught) {
       setToastMessage(caught instanceof Error ? caught.message : "Failed to update game.");
+      throw caught;
     }
   };
 
@@ -430,6 +435,7 @@ export function FranchiseLens() {
         nextDayNumber={getNextDayNumber()}
         nextDate={getNextDate()}
         teams={availableTeams}
+        teamNameMap={teamNameMap}
       />
       {isPreparingGameLaunch && (
         <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 bg-[#1A2433] px-5 py-3 text-[11px] text-[#F4F1E4] shadow-[4px_4px_0px_rgba(0,0,0,0.5)]">

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createFranchise: vi.fn(),
+  loadFranchise: vi.fn(),
   deleteFranchise: vi.fn(),
   saveFranchiseConfig: vi.fn(),
   getFranchiseConfig: vi.fn(),
@@ -35,6 +36,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../franchiseManager', () => ({
   createFranchise: mocks.createFranchise,
+  loadFranchise: mocks.loadFranchise,
   deleteFranchise: mocks.deleteFranchise,
   saveFranchiseConfig: mocks.saveFranchiseConfig,
   getFranchiseConfig: mocks.getFranchiseConfig,
@@ -46,6 +48,7 @@ vi.mock('../leagueBuilderStorage', () => ({
   getLeagueTemplate: mocks.getLeagueTemplate,
   getTeam: mocks.getTeam,
   getAuctionSession: mocks.getAuctionSession,
+  getLeagueDraftFormat: (template: { draftFormat?: 'auction' | 'snake' } | null | undefined) => template?.draftFormat ?? 'auction',
   getMlbDraftSession: mocks.getMlbDraftSession,
   getRegisteredPool: mocks.getRegisteredPool,
   getAuctionSessionById: mocks.getAuctionSessionById,
@@ -83,6 +86,31 @@ vi.mock('../franchiseFarmStorage', () => ({
 
 import { initializeFranchise, repairFranchisePersistence } from '../franchiseInitializer';
 
+function completedAuctionSession(seed: string) {
+  return {
+    state: 'AUCTION_COMPLETE',
+    config: {
+      format: 'auction',
+      bidIncrement: 500,
+      turnTimerSeconds: null,
+      nominationOrderSeed: seed,
+      cpuShillCount: 0,
+      excludeFromLeague: false,
+    },
+    teams: [],
+    nominationOrder: [],
+    nominationIndex: 0,
+    nominationRound: 1,
+    players: {},
+    playerOrder: [],
+    availablePlayerIds: [],
+    currentLot: null,
+    pendingClaim: null,
+    results: [],
+    saleCount: 0,
+  };
+}
+
 function makeConfig(gamesPerTeam = 32) {
   return {
     league: 'league-1',
@@ -115,6 +143,7 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.createFranchise.mockResolvedValue('franchise-1');
+    mocks.loadFranchise.mockResolvedValue(null);
     mocks.getLeagueTemplate.mockResolvedValue({
       id: 'league-1',
       name: 'League One',
@@ -124,10 +153,10 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       id: teamId,
       name: teamId === 'team-a' ? 'Team A' : 'Team B',
     }));
-    mocks.getAuctionSession.mockResolvedValue(null);
+    mocks.getAuctionSession.mockResolvedValue({ session: completedAuctionSession('w1-mlb') });
     mocks.getMlbDraftSession.mockResolvedValue(null);
     mocks.getRegisteredPool.mockResolvedValue(null);
-    mocks.getAuctionSessionById.mockResolvedValue(null);
+    mocks.getAuctionSessionById.mockResolvedValue({ session: completedAuctionSession('w1-farm') });
     mocks.getPlayer.mockResolvedValue(null);
     mocks.createFarmAuctionSessionId.mockImplementation((leagueId: string, seasonNumber = 1) =>
       `${leagueId}::startup-farm-auction-draft::${seasonNumber}`,
@@ -180,10 +209,10 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
   });
 
   test('initializeFranchise creates season metadata with config gamesPerTeam', async () => {
-    await initializeFranchise(makeConfig(40) as never);
+    const franchiseId = await initializeFranchise(makeConfig(40) as never);
 
     expect(mocks.getOrCreateSeason).toHaveBeenCalledWith(
-      'franchise-1-season-1',
+      `${franchiseId}-season-1`,
       1,
       'Season 1',
       0,
@@ -191,7 +220,7 @@ describe('W1-FIX franchise season metadata gamesPerTeam fuel line', () => {
       'standard',
     );
     expect(mocks.saveFranchiseTeam).toHaveBeenCalledWith(
-      'franchise-1',
+      franchiseId,
       expect.objectContaining({
         id: 'team-a',
         captainPlayerId: 'player-1',

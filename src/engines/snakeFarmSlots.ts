@@ -1,14 +1,41 @@
-import { createMlbDraftSessionId, type LeagueBuilderMlbDraftSession } from '../utils/leagueBuilderStorage';
-import { buildSnakeOrder, validateTrade, type PickValue } from './leagueConstruction';
-import type { SnakeGuidePackage } from './snakeGuideTrade';
-import { withLatestSnakeCorrection } from './snakeSession';
+import {
+  buildFarmSlotTableFromTarget,
+  FARM_SLOT_SALARY_UNIT,
+  FARM_SNAKE_SESSION_NUMBER,
+  createMlbDraftSessionId,
+  type LeagueBuilderMlbDraftSession,
+} from '../utils/leagueBuilderStorage';
+import { buildSnakeOrder } from './leagueConstruction';
+import type { FarmAuctionPool } from '../utils/farmAuctionPool';
 
-export const FARM_SLOT_SALARY_UNIT = 1_000;
 /** Separate key in the existing store; preserves the completed MLB record at season 1. */
-export const FARM_SNAKE_SESSION_NUMBER = 2;
+export { FARM_SLOT_SALARY_UNIT, FARM_SNAKE_SESSION_NUMBER } from '../utils/leagueBuilderStorage';
 
 function roundToUnit(value: number, unit: number): number {
   return Math.round(value / unit) * unit;
+}
+
+function buildClubLocalFarmSlotTable(openSlots: number, farmBudget: number): number[] {
+  if (!Number.isFinite(farmBudget) || farmBudget < 0) {
+    throw new Error('Farm budget must be finite and non-negative.');
+  }
+  const maximumTarget = Math.floor((farmBudget * 0.75) / FARM_SLOT_SALARY_UNIT)
+    * FARM_SLOT_SALARY_UNIT;
+  if (maximumTarget < openSlots * FARM_SLOT_SALARY_UNIT) {
+    throw new Error('The club cannot fund one salary unit for each open FARM slot.');
+  }
+  if (openSlots === 1) return [maximumTarget];
+
+  // Rounding can make an exact 3x endpoint ratio unrepresentable at the first
+  // 75% unit (most visibly with two picks). Move down only enough salary units
+  // to preserve the ratio without ever committing more than the club's target.
+  for (let offset = 0; offset <= openSlots * 4; offset += 1) {
+    const target = maximumTarget - (offset * FARM_SLOT_SALARY_UNIT);
+    if (target < openSlots * FARM_SLOT_SALARY_UNIT) break;
+    const table = buildFarmSlotTableFromTarget(openSlots, target, FARM_SLOT_SALARY_UNIT);
+    if (table[0] === 3 * table.at(-1)!) return table;
+  }
+  throw new Error('The club cannot fund a rounded 3x FARM salary curve.');
 }
 
 /**
@@ -20,8 +47,8 @@ export function buildFarmSlotTable(
   farmBudgets: readonly number[],
   salaryUnit = FARM_SLOT_SALARY_UNIT,
 ): number[] {
-  if (!Number.isInteger(totalPicks) || totalPicks < 2) {
-    throw new Error('Farm slot table requires at least two picks.');
+  if (!Number.isInteger(totalPicks) || totalPicks < 1) {
+    throw new Error('Farm slot table requires at least one pick.');
   }
   if (!Number.isFinite(salaryUnit) || salaryUnit <= 0) {
     throw new Error('Farm slot salary unit must be positive and finite.');
@@ -33,37 +60,7 @@ export function buildFarmSlotTable(
   const target = roundToUnit(farmBudgets.reduce((sum, budget) => sum + budget, 0) * 0.75, salaryUnit);
   if (target <= 0) throw new Error('Farm slot table requires a positive league budget.');
 
-  const ratio = 3 ** (-1 / (totalPicks - 1));
-  const weights = Array.from({ length: totalPicks }, (_, index) => ratio ** index);
-  const scale = target / weights.reduce((sum, weight) => sum + weight, 0);
-  const last = Math.max(salaryUnit, roundToUnit(scale * weights.at(-1)!, salaryUnit));
-  const table = weights.map((weight) => Math.max(salaryUnit, roundToUnit(scale * weight, salaryUnit)));
-  table[0] = 3 * last;
-  table[table.length - 1] = last;
-
-  let remainder = target - table.reduce((sum, salary) => sum + salary, 0);
-  const direction = Math.sign(remainder);
-  let guard = 0;
-  while (remainder !== 0 && guard < totalPicks * totalPicks * 20) {
-    let changed = false;
-    const indexes = direction > 0
-      ? Array.from({ length: totalPicks - 2 }, (_, index) => index + 1)
-      : Array.from({ length: totalPicks - 2 }, (_, index) => totalPicks - 2 - index);
-    for (const index of indexes) {
-      if (remainder === 0) break;
-      const next = table[index] + direction * salaryUnit;
-      if (next <= 0 || next > table[index - 1] || next < table[index + 1]) continue;
-      table[index] = next;
-      remainder -= direction * salaryUnit;
-      changed = true;
-    }
-    if (!changed) break;
-    guard += 1;
-  }
-  if (remainder !== 0) {
-    throw new Error('Farm slot table could not satisfy its rounded 75% calibration.');
-  }
-  return table;
+  return buildFarmSlotTableFromTarget(totalPicks, target, salaryUnit);
 }
 
 export function createFarmSnakeSession(input: {
@@ -71,25 +68,53 @@ export function createFarmSnakeSession(input: {
   teamOrder: readonly string[];
   existingFarmRosterCountsByTeamId: Readonly<Record<string, number>>;
   farmBudgetsByTeamId: Readonly<Record<string, number>>;
+  farmArchetypeIdByTeamId: Readonly<Record<string, string | undefined>>;
   prospectIds: readonly string[];
+  prospects: FarmAuctionPool['prospects'];
   now: string;
 }): LeagueBuilderMlbDraftSession {
-  if (input.mlbSession.currentPickIndex < input.mlbSession.pickOrder.length) {
+  if (!input.mlbSession.draftManifest && input.mlbSession.currentPickIndex < input.mlbSession.pickOrder.length) {
     throw new Error('Finish the MLB snake draft before opening the farm room.');
+  }
+  if (input.teamOrder.length === 0 || new Set(input.teamOrder).size !== input.teamOrder.length) {
+    throw new Error('The farm snake needs a unique canonical club order.');
+  }
+  for (const teamId of input.teamOrder) {
+    const count = input.existingFarmRosterCountsByTeamId[teamId];
+    if (!Number.isInteger(count) || count < 0 || count > 10) {
+      throw new Error(`${teamId} must begin the farm snake with 0–10 rostered prospects.`);
+    }
   }
   const rawOrder = buildSnakeOrder([...input.teamOrder], 10).filter((slot) => (
     slot.round <= Math.max(0, 10 - (input.existingFarmRosterCountsByTeamId[slot.teamId] ?? 0))
   ));
   const pickOrder = rawOrder.map((slot, index) => ({ ...slot, pick: index + 1 }));
-  if (pickOrder.length < 2) throw new Error('The farm snake needs at least two open roster spots.');
   if (input.prospectIds.length < pickOrder.length) {
     throw new Error('The farm pool cannot fill every open roster spot.');
   }
-  const farmSlotSalaries = buildFarmSlotTable(pickOrder.length, input.teamOrder.map((teamId) => {
-    const budget = input.farmBudgetsByTeamId[teamId];
-    if (!Number.isFinite(budget)) throw new Error(`Farm budget is missing for ${teamId}.`);
-    return budget;
-  }));
+  if (
+    input.prospects.length !== input.prospectIds.length
+    || input.prospects.some((prospect, index) => prospect.id !== input.prospectIds[index])
+  ) throw new Error('The farm prospect snapshot does not match the frozen prospect ids.');
+  let farmSlotSalaries: number[];
+  if (pickOrder.length === 0) {
+    farmSlotSalaries = [];
+  } else {
+    farmSlotSalaries = Array.from({ length: pickOrder.length }, () => 0);
+    for (const teamId of input.teamOrder) {
+      const ownedSlots = pickOrder.filter((slot) => slot.teamId === teamId);
+      if (ownedSlots.length === 0) continue;
+      const budget = input.farmBudgetsByTeamId[teamId];
+      if (!Number.isFinite(budget) || budget < 0) throw new Error(`Farm budget is missing for ${teamId}.`);
+      let localTable: number[];
+      try {
+        localTable = buildClubLocalFarmSlotTable(ownedSlots.length, budget);
+      } catch {
+        throw new Error(`${teamId} cannot fund its rounded 3x FARM salary curve.`);
+      }
+      ownedSlots.forEach((slot, index) => { farmSlotSalaries[slot.pick - 1] = localTable[index]; });
+    }
+  }
   for (const teamId of input.teamOrder) {
     const owed = pickOrder.filter((slot) => slot.teamId === teamId)
       .reduce((sum, slot) => sum + farmSlotSalaries[slot.pick - 1], 0);
@@ -98,26 +123,39 @@ export function createFarmSnakeSession(input: {
     }
   }
   return {
-    ...input.mlbSession,
+    leagueId: input.mlbSession.leagueId,
+    tier: input.mlbSession.tier,
+    balanceMode: input.mlbSession.balanceMode,
     id: createMlbDraftSessionId(input.mlbSession.leagueId, FARM_SNAKE_SESSION_NUMBER),
     seasonNumber: FARM_SNAKE_SESSION_NUMBER,
-    seed: `${input.mlbSession.seed}:farm`,
+    seed: `${input.mlbSession.draftManifest?.seed ?? input.mlbSession.seed}:farm`,
     workflowVersion: 'snake-v1-farm',
     engineMethodVersion: 'snake-s6',
     rounds: 10,
     draftPhase: 'FARM',
     farmSlotSalaries,
+    farmProspectSnapshot: input.prospects.map((prospect) => structuredClone(prospect)),
     pickOrder,
     completedPicks: [],
     trades: [],
-    versionState: undefined,
     correctionSnapshots: [],
     currentPickIndex: 0,
     revision: 0,
-    snakeSetup: input.mlbSession.snakeSetup ? {
-      ...input.mlbSession.snakeSetup,
+    snakeSetup: (input.mlbSession.draftManifest || input.mlbSession.snakeSetup) ? {
       poolPlayerIds: [...input.prospectIds],
       versionSelections: {},
+      orderSeed: input.mlbSession.draftManifest?.seed ?? input.mlbSession.snakeSetup!.orderSeed,
+      clubs: input.teamOrder.map((teamId) => {
+        const source = input.mlbSession.draftManifest?.lockedClubs.find((club) => club.teamId === teamId)
+          ?? input.mlbSession.snakeSetup?.clubs.find((club) => club.teamId === teamId);
+        const farmArchetypeId = input.farmArchetypeIdByTeamId[teamId];
+        return {
+          teamId,
+          ...(source?.gmName ? { gmName: source.gmName } : {}),
+          hotseat: source?.hotseat ?? false,
+          ...(farmArchetypeId ? { archetypeId: farmArchetypeId } : {}),
+        };
+      }),
     } : undefined,
     createdDate: input.now,
     lastModified: input.now,
@@ -132,171 +170,32 @@ export function farmPickSalary(session: LeagueBuilderMlbDraftSession, absolutePi
   return salary!;
 }
 
-function ownershipAfterTrade(input: {
-  session: LeagueBuilderMlbDraftSession;
-  buyerTeamId: string;
-  sellerTeamId: string;
-  offerPickNumbers: readonly number[];
-  receivePickNumbers: readonly number[];
-}): LeagueBuilderMlbDraftSession['pickOrder'] {
-  const offered = new Set(input.offerPickNumbers);
-  const received = new Set(input.receivePickNumbers);
-  return input.session.pickOrder.map((slot) => {
-    if (offered.has(slot.pick)) return { ...slot, teamId: input.sellerTeamId };
-    if (received.has(slot.pick)) return { ...slot, teamId: input.buyerTeamId };
-    return slot;
-  });
+export interface FarmMoneyLedger {
+  draftedCount: number;
+  draftedSpend: number;
+  moneyLeft: number;
+  plannedCount: number;
+  futureSlotCost: number;
+  moneyAfterOwedSlots: number;
 }
 
-export interface FarmPickTradeVerdict {
-  valid: boolean;
-  reason: string;
-}
-
-/** Exact S6 money/count gate. Prices ride absolute slots, never owners. */
-export function validateFarmPickTrade(input: {
-  session: LeagueBuilderMlbDraftSession;
-  buyerTeamId: string;
-  sellerTeamId: string;
-  offerPickNumbers: readonly number[];
-  receivePickNumbers: readonly number[];
-  farmBudgetsByTeamId: Readonly<Record<string, number>>;
-  remainingUniqueProspects: number;
-}): FarmPickTradeVerdict {
-  if (input.session.draftPhase !== 'FARM' || !input.session.farmSlotSalaries) {
-    return { valid: false, reason: 'This is not a farm snake session.' };
-  }
-  if (input.offerPickNumbers.length !== input.receivePickNumbers.length) {
-    return { valid: false, reason: 'Both clubs must keep the same number of farm turns.' };
-  }
-  const remaining = input.session.pickOrder.slice(input.session.currentPickIndex);
-  const ownerByPick = new Map(remaining.map((slot) => [slot.pick, slot.teamId]));
-  if (input.offerPickNumbers.some((pick) => ownerByPick.get(pick) !== input.buyerTeamId)
-    || input.receivePickNumbers.some((pick) => ownerByPick.get(pick) !== input.sellerTeamId)) {
-    return { valid: false, reason: 'The draft moved on — refresh.' };
-  }
-  if (input.remainingUniqueProspects < remaining.length) {
-    return { valid: false, reason: 'The remaining farm pool cannot fill every open roster spot.' };
-  }
-
-  const spentByTeamId = new Map<string, number>();
-  for (const pick of input.session.completedPicks) {
-    spentByTeamId.set(pick.teamId, (spentByTeamId.get(pick.teamId) ?? 0) + farmPickSalary(input.session, pick.pick));
-  }
-  const proposed = ownershipAfterTrade(input).slice(input.session.currentPickIndex);
-  for (const teamId of Object.keys(input.farmBudgetsByTeamId)) {
-    const remainingBudget = input.farmBudgetsByTeamId[teamId] - (spentByTeamId.get(teamId) ?? 0);
-    const owed = proposed
-      .filter((slot) => slot.teamId === teamId)
-      .reduce((sum, slot) => sum + farmPickSalary(input.session, slot.pick), 0);
-    if (owed > remainingBudget) {
-      return { valid: false, reason: `${teamId} does not have enough farm budget for its remaining picks.` };
-    }
-  }
-  return { valid: true, reason: 'Guide-matched and affordable now.' };
-}
-
-export function farmSlotPickValueChart(session: LeagueBuilderMlbDraftSession): PickValue[] {
-  return session.pickOrder.map((slot) => ({ pick: slot.pick, value: farmPickSalary(session, slot.pick) }));
-}
-
-function combinations(values: readonly number[], count: number): number[][] {
-  const result: number[][] = [];
-  const walk = (start: number, picked: number[]) => {
-    if (picked.length === count) { result.push(picked); return; }
-    for (let index = start; index < values.length; index += 1) walk(index + 1, [...picked, values[index]]);
-  };
-  walk(0, []);
-  return result;
-}
-
-function swapFarmPickOwnership(session: LeagueBuilderMlbDraftSession, proposal: SnakeGuidePackage): LeagueBuilderMlbDraftSession {
-  return { ...session, pickOrder: ownershipAfterTrade({
-    session,
-    buyerTeamId: proposal.buyerTeamId,
-    sellerTeamId: proposal.sellerTeamId,
-    offerPickNumbers: proposal.offerPickNumbers,
-    receivePickNumbers: proposal.receivePickNumbers,
-  }) };
-}
-
-export function searchFarmGuidePackage(input: {
-  session: LeagueBuilderMlbDraftSession;
-  buyerTeamId: string;
-  targetPick: number;
-  farmBudgetsByTeamId: Readonly<Record<string, number>>;
-  remainingUniqueProspects: number;
-}): { package: SnakeGuidePackage | null; message: string } {
-  const remaining = input.session.pickOrder.slice(input.session.currentPickIndex);
-  const target = remaining.find((slot) => slot.pick === input.targetPick);
-  if (!target || target.teamId === input.buyerTeamId) return { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
-  const buyerPicks = remaining.filter((slot) => slot.teamId === input.buyerTeamId).map((slot) => slot.pick);
-  const sellerReturns = remaining.filter((slot) => slot.teamId === target.teamId && slot.pick !== target.pick).map((slot) => slot.pick);
-  const chart = farmSlotPickValueChart(input.session);
-  const valueByPick = new Map(chart.map((row) => [row.pick, row.value]));
-  const packages: SnakeGuidePackage[] = [];
-  for (let count = 1; count <= 3; count += 1) {
-    for (const offers of combinations(buyerPicks, count)) {
-      for (const extras of combinations(sellerReturns, count - 1)) {
-        const receives = [target.pick, ...extras].sort((a, b) => a - b);
-        if (!validateTrade(offers.map((pick) => ({ pick })), receives.map((pick) => ({ pick })), chart).balanced) continue;
-        const verdict = validateFarmPickTrade({ ...input, offerPickNumbers: offers, receivePickNumbers: receives, sellerTeamId: target.teamId });
-        if (!verdict.valid) continue;
-        packages.push({
-          buyerTeamId: input.buyerTeamId,
-          sellerTeamId: target.teamId,
-          targetPick: target.pick,
-          offerPickNumbers: offers,
-          receivePickNumbers: receives,
-          offerValue: offers.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0),
-          receiveValue: receives.reduce((sum, pick) => sum + (valueByPick.get(pick) ?? 0), 0),
-          sessionRevision: input.session.revision ?? 0,
-        });
-      }
-    }
-  }
-  const best = packages.sort((a, b) => a.offerPickNumbers.length - b.offerPickNumbers.length || a.offerPickNumbers.join(',').localeCompare(b.offerPickNumbers.join(',')))[0];
-  return best
-    ? { package: best, message: `OFFER ${best.offerPickNumbers.join('+')}; RECEIVE ${best.receivePickNumbers.join('+')} — guide-matched and affordable now.` }
-    : { package: null, message: `No legal guide trade reaches pick ${input.targetPick}.` };
-}
-
-export function executeFarmGuidePackage(input: {
-  session: LeagueBuilderMlbDraftSession;
-  proposal: SnakeGuidePackage;
-  farmBudgetsByTeamId: Readonly<Record<string, number>>;
-  remainingUniqueProspects: number;
-}): { valid: boolean; message: string; session: LeagueBuilderMlbDraftSession | null } {
-  if ((input.session.revision ?? 0) !== input.proposal.sessionRevision) {
-    return { valid: false, message: 'The draft moved on — refresh.', session: null };
-  }
-  const verdict = validateFarmPickTrade({ ...input, ...input.proposal });
-  if (!verdict.valid) return { valid: false, message: verdict.reason, session: null };
-  const guide = validateTrade(
-    input.proposal.offerPickNumbers.map((pick) => ({ pick })),
-    input.proposal.receivePickNumbers.map((pick) => ({ pick })),
-    farmSlotPickValueChart(input.session),
-  );
-  if (!guide.balanced) return { valid: false, message: 'This package no longer matches the posted guide.', session: null };
-  const base = withLatestSnakeCorrection(input.session, 'trade');
-  const swapped = swapFarmPickOwnership(base, input.proposal);
+/** Public frozen-slot money only. Candidate ordering never changes these amounts. */
+export function buildFarmMoneyLedger(
+  session: LeagueBuilderMlbDraftSession,
+  teamId: string,
+  farmBudget: number,
+): FarmMoneyLedger {
+  const drafted = session.completedPicks.filter((pick) => pick.teamId === teamId);
+  const draftedSpend = drafted.reduce((sum, pick) => sum + farmPickSalary(session, pick.pick), 0);
+  const futureSlots = session.pickOrder.slice(session.currentPickIndex).filter((slot) => slot.teamId === teamId);
+  const futureSlotCost = futureSlots.reduce((sum, slot) => sum + farmPickSalary(session, slot.pick), 0);
+  const moneyLeft = farmBudget - draftedSpend;
   return {
-    valid: true,
-    message: 'Guide-matched and affordable now.',
-    session: {
-      ...swapped,
-      trades: [...(input.session.trades ?? []), {
-        id: `snake-farm-guide-${input.session.revision ?? 0}-${(input.session.trades?.length ?? 0) + 1}`,
-        atPickIndex: input.session.currentPickIndex,
-        humanTeamId: input.proposal.buyerTeamId,
-        cpuTeamId: input.proposal.sellerTeamId,
-        humanPickNumbers: [...input.proposal.offerPickNumbers],
-        cpuPickNumbers: [...input.proposal.receivePickNumbers],
-        humanValue: input.proposal.offerValue,
-        cpuValue: input.proposal.receiveValue,
-        greedMargin: 0,
-      }],
-      revision: (input.session.revision ?? 0) + 1,
-    },
+    draftedCount: drafted.length,
+    draftedSpend,
+    moneyLeft,
+    plannedCount: futureSlots.length,
+    futureSlotCost,
+    moneyAfterOwedSlots: moneyLeft - futureSlotCost,
   };
 }

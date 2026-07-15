@@ -137,11 +137,12 @@ AND the farm draft, consistently.** No mixing — an auction league auctions bot
 league snakes both. (More coherent than IV_ENGINE's current split, which auctioned MLB but kept
 farm non-auction regardless.)
 
-**R2 — Snake = a candidate v1 OPTION, not deferred (CONDITIONAL).** Snake is LARGELY BUILT
-already (`LeagueBuilderSnakeDraft.tsx` is the current live MLB rail, IV-priced — audit-
-confirmed). So "keep snake as an option" = KEEP the existing snake + add a format-selector,
-NOT build-from-scratch. KEEP IN v1 **IF** the farm-snake path + the format-toggle wire cleanly
-(VERIFY). FALLBACK (JK's explicit): if the toggle is messy, DEFER snake, ship auction-only.
+**R2 — Snake = the v1 flagship draft path (CURRENT OVERRIDE, 2026-07-12).** The production
+surface is the shared `LeagueBuilderDraftSetup.tsx` plus `SnakeDraftSetupAdapter.tsx`, followed
+by `SnakeDraftRoom.tsx` at canonical route `/snake-room`. MLB and farm snake phases, durable
+pick trades/corrections, private team boards, recap confirmation, staffing, and the exact
+zero-schedule Franchise handoff are wired. The deleted `LeagueBuilderSnakeDraft.tsx` was a
+superseded shell and must not be restored. Auction remains routed and regression-tested for v2.
 
 **R3 — FARM AUCTION design (NEW — overrides IV_ENGINE's non-auction farm for auction leagues).**
 In an auction league the FARM draft is ALSO an auction, with:

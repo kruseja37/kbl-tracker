@@ -212,7 +212,8 @@ vi.mock('@/app/components/ScheduleContent', () => ({
   ScheduleContent: () => <div data-testid="schedule-content" />,
 }));
 
-import { FranchiseHome, resolveFranchiseExtraInnings, resolveFranchiseGameUseDH } from '../../app/pages/FranchiseHome';
+import { FranchiseHome } from '../../app/pages/FranchiseHome';
+import { resolveFranchiseExtraInnings, resolveFranchiseGameUseDH } from '../../app/utils/franchiseGameLaunch';
 
 const snapshot = (
   snapshotId: string,

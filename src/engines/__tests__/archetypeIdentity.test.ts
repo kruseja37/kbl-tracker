@@ -197,6 +197,14 @@ describe('archetype identity bridge', () => {
       .toEqual(archetypeBandPriorities(archetype));
   });
 
+  test('reuses one immutable archetype priority result across every club with the same locked identity', () => {
+    const first = resolveClubBandPriorities({ mlbArchetypeKey: 'rangy-defenders' });
+    const second = resolveClubBandPriorities({ mlbArchetypeKey: 'rangy-defenders' });
+
+    expect(first).toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
   test('DJ-03 rawShift fallback is bijective with archetype provenance for archetype identities', () => {
     const archetype = HISTORICAL_ARCHETYPES.find((arch) => arch.id === 'the-opener')!;
 

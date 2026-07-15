@@ -157,22 +157,7 @@ export function setFranchisePhase2StadiumRecordsEnabledForTests(enabled: boolean
   franchisePhase2StadiumRecordsEnabledOverride = enabled;
 }
 
-// CONTRACT_SNAKE_POC_2026-07-09: house Phase-2 activation pattern, deliberately default ON for
-// JK's isolated viability test. Persisted/global activation and the test override still win.
-export const SNAKE_DRAFT_POC_ENABLED_DEFAULT = false;
-
-let snakeDraftPocEnabledOverride: boolean | null = null;
-
-export function isSnakeDraftPocEnabled(): boolean {
-  return resolvePhase2Flag('snakeDraftPoc', snakeDraftPocEnabledOverride, SNAKE_DRAFT_POC_ENABLED_DEFAULT);
-}
-
-export function setSnakeDraftPocEnabledForTests(enabled: boolean | null): void {
-  snakeDraftPocEnabledOverride = enabled;
-}
-
-// CONTRACT_S1B_SETUP_UI_2026-07-10: the production snake-draft path stays dark until
-// the captain deliberately flips this new v1 gate. It is separate from the older POC.
+// Production snake-draft route gate.
 export const SNAKE_DRAFT_V1_ENABLED_DEFAULT = true;
 
 let snakeDraftV1EnabledOverride: boolean | null = null;

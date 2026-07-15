@@ -1186,3 +1186,30 @@ merged, S7 plus the companion stitch still open, and JK's browser walkthrough ne
 This lane adds a branch-local UNIFYSETUP status above it: implementation and focused
 firewalls are green, but the one-worker full suite has two non-amended failures, so
 the lane is stopped pending a captain ruling rather than marked complete.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 final Snake close
+
+The prior live header recorded the combined Snake branch after Amendment 9: 681 passed
+files / 10,120 passed tests, responsive Playwright 4/4, and the live UI crawl still next.
+The final close then completed that crawl, repaired every resulting finding through
+FINDING-185 under builder-auditor separation, and advanced the exact code tree to commit
+`f8ca392d` with a larger clean repository and browser proof.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake browser-walk repair close
+
+The prior live header recorded code commit `f8ca392d` as ready for JK's walk with a
+686-file / 10,227-test clean baseline and 17/17 browser proof. JK's next live pass then
+found the board recalculation loop, unavailable/weak Assistant GM state, incorrect
+drafted-player board/pool handling, an incomplete unnumbered pick log, and a companion
+address/auth failure. This close supersedes that header with the independently approved
+repair at `00fd64fe`; JK's browser walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake companion/economy/responsive close
+
+The prior live header recorded code commit `00fd64fe` as ready for JK's re-walk after
+closing the board loop, archetype fallback, drafted-player truth, numbered log, and LAN
+address repairs. JK's physical companion pass then found lag, false permanent calculation,
+missing Assistant boards, incorrect zero projected tax, suspect team fit, and desktop
+nested-scroll friction; he also approved companion pick intent with Hotseat confirmation
+and questioned the no-clock Pause action. This close supersedes that header with the
+independently approved repair at `6ae55543`. JK's Mac/iPad walk remains the sole acceptance gate.

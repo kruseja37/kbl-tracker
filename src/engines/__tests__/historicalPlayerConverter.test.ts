@@ -128,4 +128,21 @@ describe("historical player converter", () => {
     expect(arsenalFromArray.some((pitch) => ["SL", "CB", "CH", "FK", "SB"].includes(pitch))).toBe(true);
     expect(profile.grade.playerType).toBe("pitcher");
   });
+
+  test("gives multiple cards from one source distinct human-readable version labels", () => {
+    const source: HistoricalPlayerSourceRecord = {
+      ...rickeyLikeRecord,
+      seasons: [
+        { season: 1989, team: "OAK", age: 30 },
+        { season: 1990, team: "OAK", age: 31 },
+      ],
+    };
+    const career = convertHistoricalPlayerToSmb4({ source, mode: "career" });
+    const peak = convertHistoricalPlayerToSmb4({ source, mode: "peak" });
+
+    expect(career.identity.versionGroupId).toBe(peak.identity.versionGroupId);
+    expect(career.identity.versionLabel).toContain("CAREER");
+    expect(peak.identity.versionLabel).toContain("PEAK");
+    expect(career.identity.versionLabel).not.toBe(peak.identity.versionLabel);
+  });
 });

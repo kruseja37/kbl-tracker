@@ -13,9 +13,12 @@ import type { FranchiseConfig } from '../../../types/franchise';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
+  createAuctionSessionId,
+  createFarmAuctionSessionId,
   saveLeagueTemplate,
   savePlayer,
   saveScoutProfile,
+  saveAuctionSession,
   saveTeam,
   saveTeamRoster,
   getTeam,
@@ -57,6 +60,51 @@ const AWAY_TEAM_ID = 'integration-away';
 const HOME_TEAM_ID = 'integration-home';
 
 const createdFranchiseIds: string[] = [];
+
+function completedAuctionSession(seed: string, sessionLaunchNonce?: string) {
+  return {
+    state: 'AUCTION_COMPLETE' as const,
+    config: {
+      format: 'auction' as const,
+      bidIncrement: 500,
+      turnTimerSeconds: null,
+      nominationOrderSeed: seed,
+      cpuShillCount: 0,
+      excludeFromLeague: false,
+    },
+    teams: [],
+    nominationOrder: [],
+    nominationIndex: 0,
+    nominationRound: 1,
+    players: {},
+    playerOrder: [],
+    availablePlayerIds: [],
+    currentLot: null,
+    pendingClaim: null,
+    results: [],
+    saleCount: 0,
+    ...(sessionLaunchNonce ? { sessionLaunchNonce } : {}),
+  };
+}
+
+async function seedCompletedDraftArc(identitySuffix?: string): Promise<void> {
+  const mlb = completedAuctionSession(`${LEAGUE_ID}:mlb`, identitySuffix ? `${identitySuffix}:mlb` : undefined);
+  const farm = completedAuctionSession(`${LEAGUE_ID}:farm`, identitySuffix ? `${identitySuffix}:farm` : undefined);
+  await saveAuctionSession({
+    id: createAuctionSessionId(LEAGUE_ID, 1),
+    leagueId: LEAGUE_ID,
+    seasonNumber: 1,
+    seed: mlb.config.nominationOrderSeed,
+    session: mlb,
+  });
+  await saveAuctionSession({
+    id: createFarmAuctionSessionId(LEAGUE_ID, 1),
+    leagueId: LEAGUE_ID,
+    seasonNumber: 1,
+    seed: farm.config.nominationOrderSeed,
+    session: farm,
+  });
+}
 
 function makePlayer(
   teamId: string,
@@ -272,6 +320,7 @@ async function seedValidLeagueTemplate(): Promise<void> {
     divisions: [],
     defaultRulesPreset: 'default',
   });
+  await seedCompletedDraftArc();
 }
 
 describe('franchise setup-to-launch persistence integration', () => {
@@ -296,6 +345,7 @@ describe('franchise setup-to-launch persistence integration', () => {
       divisions: [],
       defaultRulesPreset: 'default',
     });
+    await seedCompletedDraftArc();
 
     const franchiseId = await initializeFranchise(makeFranchiseConfig());
     createdFranchiseIds.push(franchiseId);
@@ -437,6 +487,7 @@ describe('franchise setup-to-launch persistence integration', () => {
     const migratedConfig = makeFranchiseConfig();
     migratedConfig.season.extraInningsRule = 'Runner on 2nd';
     delete migratedConfig.season.extraInningsRunnerDelay;
+    await seedCompletedDraftArc('extra-innings-migrated');
     const migratedFranchiseId = await initializeFranchise(migratedConfig);
     createdFranchiseIds.push(migratedFranchiseId);
 
@@ -460,6 +511,7 @@ describe('franchise setup-to-launch persistence integration', () => {
       divisions: [],
       defaultRulesPreset: 'default',
     });
+    await seedCompletedDraftArc();
 
     await expect(initializeFranchise(makeFranchiseConfig())).rejects.toThrow(
       /Invalid Mode 1 roster handoff/,
@@ -479,6 +531,7 @@ describe('franchise setup-to-launch persistence integration', () => {
       divisions: [],
       defaultRulesPreset: 'default',
     });
+    await seedCompletedDraftArc();
 
     await expect(initializeFranchise(makeFranchiseConfig())).rejects.toThrow(
       /Home Club: roster is not a legal 22 — Still needs a starting SS\. Re-run the MLB draft for this league\./,
@@ -497,6 +550,7 @@ describe('franchise setup-to-launch persistence integration', () => {
       divisions: [],
       defaultRulesPreset: 'default',
     });
+    await seedCompletedDraftArc();
 
     const franchiseId = await initializeFranchise(makeFranchiseConfig());
     createdFranchiseIds.push(franchiseId);

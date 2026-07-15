@@ -31,6 +31,8 @@ export function LeagueBuilder() {
   const [isSMLSeeded, setIsSMLSeeded] = useState(false);
   const [isMLBSeededState, setIsMLBSeededState] = useState(false);
   const [areLegendsSeeded, setAreLegendsSeeded] = useState(false);
+  const smlPlayerCount = players.filter((player) => player.sourceDatabase === 'SMB4').length;
+  const mlbPlayerCount = players.filter((player) => player.sourceDatabase === 'MLB').length;
 
   // Check if already seeded on mount
   useEffect(() => {
@@ -98,7 +100,7 @@ export function LeagueBuilder() {
                   <div className="text-sm font-bold text-[#E8E8D8]">Super Mega League</div>
                   <div className="text-xs text-[#E8E8D8]/70">
                     {isSMLSeeded
-                      ? '20 teams, ~440 players'
+                      ? `20 teams, ${smlPlayerCount} players`
                       : 'Import 20 SML teams + players'}
                   </div>
                 </div>
@@ -135,7 +137,7 @@ export function LeagueBuilder() {
                   <div className="text-sm font-bold text-[#E8E8D8]">Major League Baseball</div>
                   <div className="text-xs text-[#E8E8D8]/70">
                     {isMLBSeededState
-                      ? '30 teams, ~660 players'
+                      ? `30 teams, ${mlbPlayerCount} players`
                       : 'Import 30 MLB teams + players'}
                   </div>
                 </div>

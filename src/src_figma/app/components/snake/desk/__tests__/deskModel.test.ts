@@ -5,15 +5,20 @@ import {
   buildSeededSeatBoard,
   buildTaxCoreRows,
   isCandidateEligibleForBoardSlot,
+  isCanonicalSnakeBoard,
   reconcileBoardAvailability,
+  refitBoardSlots,
+  reorderSeatBoardRankings,
+  seedPositionalRankings,
   type DeskCandidate,
 } from '../deskModel';
 
-function candidate(id: string, position: DeskCandidate['position'], worth: number): DeskCandidate {
+function candidate(id: string, position: DeskCandidate['position'], worth: number, eligiblePositions = [position]): DeskCandidate {
   return {
     id,
     name: id.toUpperCase(),
     position,
+    eligiblePositions,
     advisorWorth: worth,
     iv: worth,
     marginalTax: 0,
@@ -38,6 +43,24 @@ function fullPool(): DeskCandidate[] {
   return positions.flatMap((position, positionIndex) => Array.from({ length: 6 }, (_, index) => (
     candidate(`${position}-${index + 1}`, position, 1000 - positionIndex * 10 - index)
   )));
+}
+
+function canonicalControlPool(split: '13/9' | '14/8'): DeskCandidate[] {
+  const hitters = [
+    candidate('CONTROL-C-1', 'C', 2_000), candidate('CONTROL-C-2', 'C', 1_990),
+    ...(['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+      .map((position, index) => candidate(`CONTROL-${position}`, position, 1_980 - index)),
+    candidate('CONTROL-FLEX-1', '1B', 1_800), candidate('CONTROL-FLEX-2', '2B', 1_790),
+    candidate('CONTROL-FLEX-3', '3B', 1_780), candidate('CONTROL-FLEX-4', 'SS', 1_770),
+  ];
+  const pitchers = [
+    ...Array.from({ length: 4 }, (_, index) => candidate(`CONTROL-SP-${index + 1}`, 'SP', 1_500 - index)),
+    ...Array.from({ length: 3 }, (_, index) => candidate(`CONTROL-RP-${index + 1}`, 'RP', 1_400 - index)),
+    candidate('CONTROL-CP', 'CP', 1_300),
+  ];
+  return split === '13/9'
+    ? [...hitters, ...pitchers, candidate('CONTROL-NINTH-ARM', 'RP', 1_200)]
+    : [...hitters, candidate('CONTROL-FIFTH-BENCH', 'CF', 1_200), ...pitchers];
 }
 
 describe('private desk model', () => {
@@ -67,6 +90,216 @@ describe('private desk model', () => {
     expect(isCandidateEligibleForBoardSlot('SP1', candidate('swing', 'SP/RP', 50))).toBe(true);
   });
 
+  it('uses secondary eligibility in rankings but primary-only eligibility in starting field slots', () => {
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const rankings = buildSeededSeatBoard([...fullPool(), dual]).board!.rankings.byPosition!;
+    expect(rankings.C).toContain(dual.id);
+    expect(rankings['1B']).toContain(dual.id);
+    expect(isCandidateEligibleForBoardSlot('C', dual)).toBe(false);
+    expect(isCandidateEligibleForBoardSlot('1B', dual)).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SS', dual)).toBe(false);
+    expect(isCandidateEligibleForBoardSlot('SP1', dual)).toBe(false);
+  });
+
+  it('deterministically refits overall and position reorders, changes plan totals, and never duplicates a player', () => {
+    const pool = fullPool();
+    const seeded = buildSeededSeatBoard(pool).board!;
+    const total = (slots: Partial<Record<string, string>>) => Object.values(slots)
+      .reduce((sum, id) => sum + (pool.find((row) => row.id === id)?.iv ?? 0), 0);
+
+    const overallTarget = '1B-6';
+    const overall = refitBoardSlots({
+      candidates: pool,
+      rankings: { ...seeded.rankings, global: [overallTarget, ...seeded.rankings.global.filter((id) => id !== overallTarget)] },
+    });
+    expect(overall.brokenSlots).toEqual([]);
+    expect(Object.values(overall.slots)).toContain(overallTarget);
+    expect(total(overall.slots)).not.toBe(total(seeded.slots));
+    expect(new Set(Object.values(overall.slots)).size).toBe(22);
+
+    const positionTarget = 'SS-6';
+    const position = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        ...seeded.rankings,
+        byPosition: { ...seeded.rankings.byPosition, SS: [positionTarget, ...(seeded.rankings.byPosition?.SS ?? []).filter((id) => id !== positionTarget)] },
+      },
+    });
+    expect(position.brokenSlots).toEqual([]);
+    expect(position.slots.SS).toBe(positionTarget);
+    expect(total(position.slots)).not.toBe(total(seeded.slots));
+    expect(new Set(Object.values(position.slots)).size).toBe(22);
+  });
+
+  it('immediately refits a unique 22-player plan when a GM reorders a ranking', () => {
+    const pool = fullPool();
+    const board = buildSeededSeatBoard(pool).board!;
+    const priorSlots = structuredClone(board.slots);
+    const target = '1B-6';
+    const orderedIds = [target, ...board.rankings.global.filter((id) => id !== target)];
+
+    const reordered = reorderSeatBoardRankings({ board, view: 'OVERALL', orderedIds, candidates: pool });
+
+    expect(reordered.brokenSlots).toEqual([]);
+    expect(reordered.board).not.toBeNull();
+    expect(reordered.board!.slots).not.toEqual(priorSlots);
+    expect(Object.values(reordered.board!.slots)).toContain(target);
+    expect(new Set(Object.values(reordered.board!.slots))).toHaveLength(22);
+    const exactChangedSlotCount = Object.keys(priorSlots)
+      .filter((slotId) => priorSlots[slotId as keyof typeof priorSlots] !== reordered.board!.slots[slotId as keyof typeof priorSlots]).length;
+    expect(exactChangedSlotCount).toBeGreaterThan(0);
+    expect(reordered.changedSlotCount).toBe(exactChangedSlotCount);
+    expect(reordered.board!.rankings.global?.[0]).toBe(target);
+    expect(reordered.board!.revision).toBe(board.revision + 1);
+    expect(reordered.board!.rankings.frozenPlayerIds).toContain(target);
+    expect(board.slots).toEqual(priorSlots);
+  });
+
+  it('reports the exact broken slot instead of inventing a player', () => {
+    const full = fullPool();
+    const rankings = buildSeededSeatBoard(full).board!.rankings;
+    const refit = refitBoardSlots({ candidates: full.filter((row) => row.position !== 'CP'), rankings });
+    expect(refit.brokenSlots).toEqual(['CP']);
+    expect(refit.slots.CP).toBeUndefined();
+  });
+
+  it('fails a ranking refit closed instead of returning a partial board', () => {
+    const full = fullPool();
+    const board = buildSeededSeatBoard(full).board!;
+    const prior = structuredClone(board);
+    const orderedIds = [...board.rankings.global].reverse();
+
+    const reordered = reorderSeatBoardRankings({
+      board,
+      view: 'OVERALL',
+      orderedIds,
+      candidates: full.filter((row) => row.position !== 'CP'),
+    });
+
+    expect(reordered.board).toBeNull();
+    expect(reordered.brokenSlots).toEqual(['CP']);
+    expect(reordered.changedSlotCount).toBe(0);
+    expect(board).toEqual(prior);
+  });
+
+  it('protects a scarce C/1B dual from the 1B slot when only that player can finish BACKUP_C', () => {
+    const pureC = candidate('pure-c', 'C', 3_000);
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const pureFirst = candidate('pure-first', '1B', 1_000);
+    const pool = [
+      ...fullPool().filter((row) => row.position !== 'C' && row.position !== '1B'),
+      pureC,
+      dual,
+      pureFirst,
+    ];
+    const byPosition = seedPositionalRankings(pool);
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: [pureC.id, dual.id, pureFirst.id, ...pool.map((row) => row.id).filter((id) => ![pureC.id, dual.id, pureFirst.id].includes(id))],
+        byPosition: {
+          ...byPosition,
+          C: [pureC.id, dual.id],
+          '1B': [dual.id, pureFirst.id],
+        },
+      },
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.slots.C).toBe(pureC.id);
+    expect(refit.slots['1B']).toBe(pureFirst.id);
+    expect(refit.slots.BACKUP_C).toBe(dual.id);
+  });
+
+  it('lets SWING hold the canonical 22nd bench bat or reliever without requiring an SP/RP card', () => {
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('bench', '1B', 5_000))).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('relief', 'RP', 5_000))).toBe(true);
+    expect(isCandidateEligibleForBoardSlot('SWING', candidate('starter', 'SP', 5_000))).toBe(false);
+  });
+
+  it('refuses to fill FLEX1-4 with pure starters on a nine-hitter, thirteen-pitcher board', () => {
+    const hitters = [
+      candidate('C-1', 'C', 2_000),
+      candidate('C-2', 'C', 1_990),
+      ...(['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+        .map((position, index) => candidate(`${position}-1`, position, 1_980 - index)),
+    ];
+    const pitchers = [
+      ...Array.from({ length: 8 }, (_, index) => candidate(`SP-${index + 1}`, 'SP', 1_500 - index)),
+      ...Array.from({ length: 4 }, (_, index) => candidate(`RP-${index + 1}`, 'RP', 1_400 - index)),
+      candidate('CP-1', 'CP', 1_300),
+    ];
+    const pool = [...hitters, ...pitchers];
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: pool.map((row) => row.id),
+        byPosition: seedPositionalRankings(pool),
+        frozenPlayerIds: [],
+      },
+    });
+
+    expect(refit.brokenSlots).toEqual(['FLEX1', 'FLEX2', 'FLEX3', 'FLEX4']);
+    expect(Object.values(refit.slots)).toHaveLength(18);
+    expect(Object.values(refit.slots).filter((id) => id.startsWith('SP-'))).toHaveLength(4);
+  });
+
+  it('keeps deterministic valid 13/9 and 14/8 boards with the swing body in the right family', () => {
+    const hitters = [
+      candidate('C-1', 'C', 2_000), candidate('C-2', 'C', 1_990),
+      ...(['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+        .map((position, index) => candidate(`${position}-1`, position, 1_980 - index)),
+      candidate('FLEX-BAT-1', '1B', 1_800), candidate('FLEX-BAT-2', '2B', 1_790),
+      candidate('FLEX-BAT-3', '3B', 1_780), candidate('FLEX-BAT-4', 'SS', 1_770),
+    ];
+    const corePitchers = [
+      ...Array.from({ length: 4 }, (_, index) => candidate(`SP-${index + 1}`, 'SP', 1_500 - index)),
+      ...Array.from({ length: 3 }, (_, index) => candidate(`RP-${index + 1}`, 'RP', 1_400 - index)),
+      candidate('CP-1', 'CP', 1_300),
+    ];
+    const fit = (pool: DeskCandidate[]) => refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: pool.map((row) => row.id),
+        byPosition: seedPositionalRankings(pool),
+        frozenPlayerIds: [],
+      },
+    });
+
+    const thirteenNinePool = [...hitters, ...corePitchers, candidate('NINTH-ARM', 'RP', 1_200)];
+    const thirteenNine = fit(thirteenNinePool);
+    expect(thirteenNine.brokenSlots).toEqual([]);
+    expect(thirteenNine.invalidRoster).toBe(false);
+    expect(thirteenNine.slots.SWING).toBe('NINTH-ARM');
+    expect(fit(thirteenNinePool)).toEqual(thirteenNine);
+
+    const fourteenEightPool = [...hitters, candidate('FIFTH-BENCH-BAT', 'CF', 1_200), ...corePitchers];
+    const fourteenEight = fit(fourteenEightPool);
+    expect(fourteenEight.brokenSlots).toEqual([]);
+    expect(fourteenEight.invalidRoster).toBe(false);
+    expect(fourteenEight.slots.SWING).toBe('FIFTH-BENCH-BAT');
+    expect(fit(fourteenEightPool)).toEqual(fourteenEight);
+  });
+
+  it('rejects an otherwise complete refit that seats two cards from one version group', () => {
+    const pool = fullPool();
+    const board = buildSeededSeatBoard(pool).board!;
+    const duplicateVersionIds = Object.values(board.slots).slice(0, 2);
+    const versionedPool = pool.map((row) => duplicateVersionIds.includes(row.id)
+      ? { ...row, versionGroupId: 'same-human' }
+      : row);
+    const refit = refitBoardSlots({ candidates: versionedPool, rankings: board.rankings });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.invalidRoster).toBe(true);
+    expect(reorderSeatBoardRankings({
+      board,
+      view: 'OVERALL',
+      orderedIds: board.rankings.global,
+      candidates: versionedPool,
+    })).toMatchObject({ board: null, invalidRoster: true });
+  });
+
   it('never moves a hand-touched survivor and only backfills the unavailable slot from the GM ranking', () => {
     const seeded = buildSeededSeatBoard(fullPool());
     const board = seeded.board!;
@@ -84,6 +317,141 @@ describe('private desk model', () => {
     expect(reconciled.board.slots['2B']).toBe(untouchedSecondBase);
     expect(reconciled.events).toEqual([{ slotId: 'SS', gonePlayerId: gone, promotedPlayerId: expected }]);
     expect(reconciled.board.rankings.byPosition?.SS).toEqual(board.rankings.byPosition?.SS);
+  });
+
+  it('skips a ranked FLEX backfill that duplicates the existing catcher version and uses the later safe hitter', () => {
+    const sourcePool = canonicalControlPool('14/8');
+    const sourceBoard = buildSeededSeatBoard(sourcePool).board!;
+    const gonePlayerId = sourceBoard.slots.FLEX1;
+    const existingCatcherId = sourceBoard.slots.C;
+    const duplicateCatcher = {
+      ...candidate('CONTROL-C-ALT', 'C', 3_000),
+      versionGroupId: 'control-catcher-human',
+    };
+    const safeHitter = candidate('CONTROL-SAFE-FLEX', '1B', 2_900);
+    const candidates = [
+      ...sourcePool.map((row) => row.id === existingCatcherId
+        ? { ...row, versionGroupId: 'control-catcher-human' }
+        : row),
+      duplicateCatcher,
+      safeHitter,
+    ];
+    const board = {
+      ...sourceBoard,
+      rankings: {
+        ...sourceBoard.rankings,
+        global: [duplicateCatcher.id, safeHitter.id, ...sourceBoard.rankings.global],
+      },
+    };
+
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates,
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+
+    expect(reconciled.board.slots.FLEX1).toBe(safeHitter.id);
+    expect(reconciled.events).toEqual([{
+      slotId: 'FLEX1',
+      gonePlayerId,
+      promotedPlayerId: safeHitter.id,
+    }]);
+    expect(reconciled.board.rankings).toBe(board.rankings);
+    for (const slotId of Object.keys(board.slots) as Array<keyof typeof board.slots>) {
+      if (slotId !== 'FLEX1') expect(reconciled.board.slots[slotId]).toBe(board.slots[slotId]);
+    }
+  });
+
+  it('leaves an unresolved duplicate-version FLEX backfill byte-stable when no safe candidate exists', () => {
+    const sourcePool = canonicalControlPool('14/8');
+    const sourceBoard = buildSeededSeatBoard(sourcePool).board!;
+    const gonePlayerId = sourceBoard.slots.FLEX1;
+    const existingCatcherId = sourceBoard.slots.C;
+    const duplicateCatcher = {
+      ...candidate('CONTROL-C-ONLY-ALT', 'C', 3_000),
+      versionGroupId: 'control-only-catcher-human',
+    };
+    const candidates = [
+      ...sourcePool
+        .filter((row) => Object.values(sourceBoard.slots).includes(row.id))
+        .map((row) => row.id === existingCatcherId
+          ? { ...row, versionGroupId: 'control-only-catcher-human' }
+          : row),
+      duplicateCatcher,
+    ];
+    const board = {
+      ...sourceBoard,
+      rankings: {
+        ...sourceBoard.rankings,
+        global: [duplicateCatcher.id, ...sourceBoard.rankings.global],
+      },
+    };
+
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates,
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+
+    expect(reconciled.board).toBe(board);
+    expect(reconciled.board).toEqual(board);
+    expect(reconciled.events).toEqual([{
+      slotId: 'FLEX1',
+      gonePlayerId,
+      promotedPlayerId: null,
+    }]);
+    expect(reconciled.brokenSlots).toEqual(['FLEX1']);
+  });
+
+  it('preserves a canonical 13/9 board while backfilling one unavailable FLEX hitter', () => {
+    const sourcePool = canonicalControlPool('13/9');
+    const sourceBoard = buildSeededSeatBoard(sourcePool).board!;
+    const gonePlayerId = sourceBoard.slots.FLEX1;
+    const safeHitter = candidate('CONTROL-13-9-SAFE-FLEX', '1B', 3_000);
+    const candidates = [...sourcePool, safeHitter];
+    const board = {
+      ...sourceBoard,
+      rankings: {
+        ...sourceBoard.rankings,
+        global: [safeHitter.id, ...sourceBoard.rankings.global],
+      },
+    };
+
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates,
+      unavailablePlayerIds: new Set([gonePlayerId]),
+    });
+
+    expect(reconciled.brokenSlots).toEqual([]);
+    expect(reconciled.board.slots.FLEX1).toBe(safeHitter.id);
+    expect(reconciled.board.slots.SWING).toBe(sourceBoard.slots.SWING);
+    expect(isCanonicalSnakeBoard({ slots: reconciled.board.slots, candidates })).toBe(true);
+  });
+
+  it('backfills by the board slot role when the gone player qualified there by secondary position', () => {
+    const pool = fullPool();
+    const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
+    const seeded = buildSeededSeatBoard(pool).board!;
+    const board = {
+      ...seeded,
+      slots: { ...seeded.slots, C: dual.id },
+      rankings: {
+        ...seeded.rankings,
+        byPosition: {
+          ...seeded.rankings.byPosition,
+          C: [dual.id, 'C-1', 'C-2'],
+          '1B': ['1B-6', dual.id],
+        },
+      },
+    };
+    const reconciled = reconcileBoardAvailability({
+      board,
+      candidates: [...pool, dual],
+      unavailablePlayerIds: new Set([dual.id]),
+    });
+    expect(reconciled.board.slots.C).toBe('C-1');
+    expect(reconciled.events).toContainEqual({ slotId: 'C', gonePlayerId: dual.id, promotedPlayerId: 'C-1' });
   });
 
   it('marks PLAN BROKEN when the GM ranking has no available replacement', () => {

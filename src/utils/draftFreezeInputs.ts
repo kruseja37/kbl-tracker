@@ -6,6 +6,7 @@ import { perceivedValueRange } from '../engines/scoutValueRange';
 import type { PlayerPosition } from '../engines/salaryCalculator';
 import type { HiddenModifiers } from '../types/game';
 import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
+import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 export interface DraftFreezePlayerMeta {
   personality: string | undefined;
@@ -78,22 +79,35 @@ function buildSnakeSessionInputs(
   pool: RegisteredPool | null,
   metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>,
 ): DraftFreezePlayerInput[] {
-  if (session.currentPickIndex < session.pickOrder.length) return [];
+  if (!session.draftManifest && session.currentPickIndex < session.pickOrder.length) return [];
+  const truth = readSnakeDraftTruth(session, 'MLB');
   if (!pool) {
     throw new Error(`Completed snake draft for league "${session.leagueId}" is missing its RegisteredPool.`);
   }
+  const availablePoolIds = new Set(pool.players.map((player) => player.id));
+  if (truth.manifest && truth.manifest.pool.playerIds.some((playerId) => !availablePoolIds.has(playerId))) {
+    throw new Error(`Completed snake draft for league "${session.leagueId}" does not match its frozen pool membership.`);
+  }
 
+  const frozenPoolIds = truth.manifest ? new Set(truth.manifest.pool.playerIds) : null;
   const rankedPool = [...pool.players]
-    .filter((player) => Number.isFinite(player.iv) && player.iv > 0)
+    .filter((player) => (
+      (!frozenPoolIds || frozenPoolIds.has(player.id))
+      && (truth.manifest || (Number.isFinite(player.iv) && player.iv > 0))
+    ))
+    .map((player) => truth.manifest
+      ? { ...player, iv: truth.manifest.pool.mlbIvByPlayerId![player.id] }
+      : player)
     .sort((left, right) => right.iv - left.iv || left.id.localeCompare(right.id));
   const ivRankByPlayerId = new Map(rankedPool.map((player, index) => [player.id, index + 1]));
   const poolById = new Map(pool.players.map((player) => [player.id, player]));
-  const totalPicks = session.pickOrder.length;
+  const totalPicks = truth.pickOrder.length;
 
-  return session.completedPicks.map((pick) => {
+  return truth.completedPicks.map((pick) => {
     const poolPlayer = poolById.get(pick.playerId);
     const ivRank = ivRankByPlayerId.get(pick.playerId);
-    if (!poolPlayer || !Number.isFinite(poolPlayer.iv) || poolPlayer.iv <= 0 || !ivRank) {
+    const frozenIv = truth.manifest ? pick.launchSalary : poolPlayer?.iv;
+    if (!poolPlayer || !Number.isFinite(frozenIv) || frozenIv! <= 0 || !ivRank) {
       throw new Error(`Completed snake pick ${pick.pick} player "${pick.playerId}" is missing a finite RegisteredPool IV.`);
     }
     const payClassOverride = payClassForSlotVsTalent(pick.pick, ivRank, totalPicks);
@@ -103,10 +117,10 @@ function buildSnakeSessionInputs(
       playerId: pick.playerId,
       teamId: pick.teamId,
       tier: 'MLB',
-      iv: poolPlayer.iv,
-      settledSalary: poolPlayer.iv,
+      iv: frozenIv!,
+      settledSalary: frozenIv!,
       position: meta?.position ?? null,
-      scoutRange: { low: poolPlayer.iv, high: poolPlayer.iv },
+      scoutRange: { low: frozenIv!, high: frozenIv! },
       personality: meta?.personality,
       modifiers: meta?.modifiers ?? { ...NEUTRAL_FREEZE_MODIFIERS },
       payClassOverride,
@@ -119,33 +133,34 @@ function buildFarmSnakeSessionInputs(
   metaByPlayerId: ReadonlyMap<string, DraftFreezePlayerMeta>,
   defaultScoutAccuracy: number,
 ): DraftFreezePlayerInput[] {
-  if (session.currentPickIndex < session.pickOrder.length) return [];
-  if (session.draftPhase !== 'FARM') {
+  if (!session.draftManifest && session.currentPickIndex < session.pickOrder.length) return [];
+  if (!session.draftManifest && session.draftPhase !== 'FARM') {
     throw new Error(`Completed farm snake input for league "${session.leagueId}" is not a FARM session.`);
   }
-  if (!session.farmSlotSalaries) {
+  if (!session.draftManifest && !session.farmSlotSalaries) {
     throw new Error(`Completed farm snake draft for league "${session.leagueId}" is missing its frozen slot table.`);
   }
+  const truth = readSnakeDraftTruth(session, 'FARM');
 
-  const rankedPicks = session.completedPicks
+  const rankedPicks = truth.completedPicks
     .map((pick) => ({ pick, iv: metaByPlayerId.get(pick.playerId)?.iv }))
     .filter((row): row is { pick: typeof row.pick; iv: number } => Number.isFinite(row.iv) && row.iv! > 0)
     .sort((left, right) => right.iv - left.iv || left.pick.playerId.localeCompare(right.pick.playerId));
-  if (rankedPicks.length !== session.completedPicks.length) {
+  if (rankedPicks.length !== truth.completedPicks.length) {
     const rankedIds = new Set(rankedPicks.map((row) => row.pick.playerId));
-    const missing = session.completedPicks.find((pick) => !rankedIds.has(pick.playerId));
+    const missing = truth.completedPicks.find((pick) => !rankedIds.has(pick.playerId));
     throw new Error(`Completed farm snake pick ${missing?.pick ?? '?'} player "${missing?.playerId ?? 'unknown'}" is missing a finite farm IV.`);
   }
 
   const talentRankByPlayerId = new Map(
     rankedPicks.map((row, index) => [row.pick.playerId, index + 1]),
   );
-  const totalPicks = session.pickOrder.length;
+  const totalPicks = truth.pickOrder.length;
 
-  return session.completedPicks.map((pick) => {
+  return truth.completedPicks.map((pick) => {
     const meta = metaByPlayerId.get(pick.playerId)!;
     const iv = meta.iv!;
-    const settledSalary = session.farmSlotSalaries![pick.pick - 1];
+    const settledSalary = truth.manifest ? pick.launchSalary : session.farmSlotSalaries![pick.pick - 1];
     const talentRank = talentRankByPlayerId.get(pick.playerId)!;
     if (!Number.isFinite(settledSalary) || settledSalary < 0) {
       throw new Error(`Completed farm snake pick ${pick.pick} has no finite frozen slot salary.`);

@@ -18,7 +18,11 @@ const mockInitializeFranchise = vi.fn();
 const mockLoadFranchiseFreezeSummary = vi.fn();
 const mockValidatePreparedLeagueBuilderFarmScoutingState = vi.fn();
 const mockGetAuctionSession = vi.fn();
+const mockGetAuctionSessionById = vi.fn();
 const mockGetMlbDraftSession = vi.fn();
+const mockGetLeagueTemplate = vi.fn();
+const mockLeagueRefresh = vi.hoisted(() => vi.fn(async () => undefined));
+const leagueHookFlags = vi.hoisted(() => ({ baseError: null as string | null, multiGm: false, snakeKbl: false }));
 
 vi.mock('react-router', () => ({
   useNavigate: () => mockNavigate,
@@ -38,8 +42,12 @@ vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
 }));
 
 vi.mock('../../../utils/leagueBuilderStorage', () => ({
+  FARM_SNAKE_SESSION_NUMBER: 2,
   getAuctionSession: (...args: unknown[]) => mockGetAuctionSession(...args),
+  getAuctionSessionById: (...args: unknown[]) => mockGetAuctionSessionById(...args),
   getMlbDraftSession: (...args: unknown[]) => mockGetMlbDraftSession(...args),
+  getLeagueTemplate: (...args: unknown[]) => mockGetLeagueTemplate(...args),
+  createFarmAuctionSessionId: (leagueId: string, seasonNumber = 1) => `farm-auction-${leagueId}-${seasonNumber}`,
 }));
 
 // Mock league data — FranchiseSetup uses { leagues, teams, isLoading, error } from this hook
@@ -61,6 +69,9 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
           { id: 'div-3', name: 'Central', teamIds: ['team-9', 'team-10', 'team-11', 'team-12'] },
           { id: 'div-4', name: 'South', teamIds: ['team-13', 'team-14', 'team-15', 'team-16'] },
         ],
+        draftSeats: leagueHookFlags.multiGm
+          ? [{ id: 'seat-alex', name: 'Alex' }, { id: 'seat-blair', name: 'Blair' }]
+          : undefined,
         defaultRulesPreset: 'preset-1',
         createdDate: '2026-01-01',
         lastModified: '2026-01-01',
@@ -94,11 +105,14 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
       abbreviation: `T${i + 1}`,
       location: 'City',
       nickname: `Nickname ${i + 1}`,
+      controlledBy: leagueHookFlags.multiGm && i >= 2 ? 'ai' : undefined,
+      gmSeatId: leagueHookFlags.multiGm && i < 2 ? (i === 0 ? 'seat-alex' : 'seat-blair') : undefined,
+      gmSeatName: leagueHookFlags.multiGm && i < 2 ? (i === 0 ? 'Alex' : 'Blair') : undefined,
     })),
     players: [],
     rulesPresets: [],
     isLoading: false,
-    error: null,
+    error: leagueHookFlags.baseError,
     // All required hook functions (not used by FranchiseSetup but must exist)
     getLeague: vi.fn(),
     createLeague: vi.fn(),
@@ -123,7 +137,7 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
     removeRoster: vi.fn(),
     seedSMB4Data: vi.fn(),
     isSMB4Seeded: vi.fn(() => Promise.resolve(false)),
-    refresh: vi.fn(),
+    refresh: mockLeagueRefresh,
   })),
 }));
 
@@ -134,6 +148,9 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 describe('FranchiseSetup Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    leagueHookFlags.baseError = null;
+    leagueHookFlags.multiGm = false;
+    leagueHookFlags.snakeKbl = false;
     window.history.pushState({}, '', '/franchise/setup');
     mockInitializeFranchise.mockResolvedValue('franchise-1');
     mockLoadFranchiseFreezeSummary.mockResolvedValue({
@@ -182,8 +199,13 @@ describe('FranchiseSetup Component', () => {
         'Draft slot class and pay class are not persisted; only the final starting morale baseline is readable.',
       ],
     });
-    mockGetAuctionSession.mockResolvedValue(null);
+    mockGetAuctionSession.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+    mockGetAuctionSessionById.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
     mockGetMlbDraftSession.mockResolvedValue(null);
+    mockGetLeagueTemplate.mockImplementation(async (leagueId: string) => ({
+      id: leagueId,
+      draftFormat: leagueId === 'kbl' && leagueHookFlags.snakeKbl ? 'snake' : 'auction',
+    }));
     mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
       validationVersion: 'league-builder-farm-scouting-v1',
       ownership: 'league-builder-mode-1',
@@ -200,9 +222,11 @@ describe('FranchiseSetup Component', () => {
     });
   });
 
-  function selectLeagueAndAdvance(times = 1) {
+  async function selectLeagueAndAdvance(times = 1) {
+    await screen.findAllByText('Draft complete');
     fireEvent.click(screen.getByText('KRUSE BASEBALL LEAGUE'));
     const next = () => fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled());
     for (let index = 0; index < times; index += 1) {
       next();
     }
@@ -252,8 +276,10 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByText('SUMMER LEAGUE')).toBeInTheDocument();
     });
 
-    test('shows league description text', () => {
+    test('keeps league selection instructions behind Help', () => {
       render(<FranchiseSetup />);
+      expect(screen.queryByText(/Choose the league template/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'LEAGUE SELECTION HELP' }));
       expect(screen.getByText(/Choose the league template/i)).toBeInTheDocument();
     });
 
@@ -262,12 +288,177 @@ describe('FranchiseSetup Component', () => {
 
       render(<FranchiseSetup />);
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled();
-      });
+      expect(await screen.findByText('FRANCHISE LAUNCH')).toBeInTheDocument();
+      expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.getByText('CONFIRM & LAUNCH')).toBeInTheDocument();
+    });
+
+    test('completed draft handoff uses the compact launch path and starts with an empty schedule', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+      mockGetAuctionSessionById.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('FRANCHISE LAUNCH')).toBeInTheDocument();
+      expect(screen.getByText('Step 1 of 2')).toBeInTheDocument();
+      expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument();
+      expect(screen.queryByText('Playoffs')).not.toBeInTheDocument();
+      expect(screen.queryByText('Rosters')).not.toBeInTheDocument();
+      expect(screen.getByText('SCHEDULE AT LAUNCH: EMPTY')).toBeInTheDocument();
+      expect(screen.queryByText(/add games manually or import a CSV/i)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'FRANCHISE SETUP HELP' }));
+      expect(screen.getByText(/starts with an empty schedule/i)).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
 
-      expect(screen.getByText('SEASON SETTINGS')).toBeInTheDocument();
+      expect(screen.getByText('CONFIRM & LAUNCH')).toBeInTheDocument();
+      expect(screen.getByText('MLB + FARM DRAFT PICKS COMPLETE')).toBeInTheDocument();
+      expect(screen.getByText('ROSTERS READY')).toBeInTheDocument();
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
+      expect(screen.queryByText(/FANTASY DRAFT/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/PLAYOFF SETTINGS/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/run League Builder startup scout/i)).not.toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: /LIVING SEASON/i })).toHaveAttribute('aria-checked', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
+
+      await waitFor(() => {
+        expect(mockInitializeFranchise).toHaveBeenCalledWith(
+          expect.objectContaining({
+            league: 'kbl',
+            roster: expect.objectContaining({ mode: 'existing' }),
+            teams: expect.objectContaining({
+              selectedTeams: expect.arrayContaining(['team-1', 'team-16']),
+              playerAssignments: expect.objectContaining({ 'team-1': 'seat-you', 'team-16': 'seat-you' }),
+            }),
+          }),
+          { livingSeason: true },
+        );
+      });
+    });
+
+    test('does not collapse an incomplete farm leg into generic setup and can recheck it', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockImplementation(async (leagueId: string) => (
+        leagueId === 'kbl' ? { session: { state: 'AUCTION_COMPLETE' } } : null
+      ));
+      mockGetAuctionSessionById
+        .mockResolvedValueOnce(null)
+        .mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('DRAFT HANDOFF NOT READY')).toBeInTheDocument();
+      expect(screen.getByText(/FARM DRAFT IS NOT COMPLETE/i)).toBeInTheDocument();
+      expect(screen.queryByText('SELECT A LEAGUE')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /RECHECK DRAFTS/i }));
+      expect(await screen.findByText('FRANCHISE LAUNCH')).toBeInTheDocument();
+    });
+
+    test('keeps completed picks blocked when the farm roster handoff is not prepared', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockImplementation(async (leagueId: string) => (
+        leagueId === 'kbl' ? { session: { state: 'AUCTION_COMPLETE' } } : null
+      ));
+      mockGetAuctionSessionById.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+      mockValidatePreparedLeagueBuilderFarmScoutingState.mockResolvedValue({
+        validationVersion: 'league-builder-farm-scouting-v1',
+        ownership: 'league-builder-mode-1',
+        bridgePolicy: 'temporary-franchise-setup-repair-only',
+        leagueId: 'kbl',
+        status: 'blocked',
+        prepared: false,
+        bridgeRequired: false,
+        bridgeAllowed: false,
+        blockers: ['Team 1 farm roster does not match the frozen draft.'],
+        warnings: [],
+        limitations: [],
+        teams: [],
+      });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('FRANCHISE LAUNCH')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(await screen.findByText('ROSTER HANDOFF BLOCKED')).toBeInTheDocument();
+      expect(screen.getByText(/does not match the frozen draft/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /START FRANCHISE/i })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: /RECHECK HANDOFF/i }));
+      expect(mockValidatePreparedLeagueBuilderFarmScoutingState.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('shows a completion-read failure and retries instead of silently opening generic setup', async () => {
+      let failKblRead = true;
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockImplementation(async (leagueId: string) => {
+        if (leagueId === 'kbl' && failKblRead) {
+          failKblRead = false;
+          throw new Error('DRAFT DATABASE UNAVAILABLE');
+        }
+        return null;
+      });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('DRAFT HANDOFF COULD NOT LOAD')).toBeInTheDocument();
+      expect(screen.getByText('DRAFT DATABASE UNAVAILABLE')).toBeInTheDocument();
+      expect(screen.queryByText('SELECT A LEAGUE')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /RETRY DRAFT HANDOFF/i }));
+      expect(await screen.findByText('DRAFT HANDOFF NOT READY')).toBeInTheDocument();
+    });
+
+    test('preserves persisted multi-GM seats and team assignments in the compact handoff', async () => {
+      leagueHookFlags.multiGm = true;
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockImplementation(async (leagueId: string) => (
+        leagueId === 'kbl' ? { session: { state: 'AUCTION_COMPLETE' } } : null
+      ));
+      mockGetAuctionSessionById.mockResolvedValue({ session: { state: 'AUCTION_COMPLETE' } });
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('FRANCHISE LAUNCH')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.getByText('Team 1')).toBeInTheDocument();
+      expect(screen.getByText('Team 2')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /START FRANCHISE/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Start Franchise' }));
+
+      await waitFor(() => expect(mockInitializeFranchise).toHaveBeenCalledWith(
+        expect.objectContaining({
+          teams: expect.objectContaining({
+            selectedTeams: ['team-1', 'team-2'],
+            mode: 'multiplayer',
+            playerAssignments: expect.objectContaining({
+              'team-1': 'seat-alex',
+              'team-2': 'seat-blair',
+              'team-3': 'cpu',
+            }),
+            seats: expect.arrayContaining([
+              { id: 'seat-alex', name: 'Alex' },
+              { id: 'seat-blair', name: 'Blair' },
+            ]),
+          }),
+        }),
+        { livingSeason: true },
+      ));
+    });
+
+    test('leagueId without a completed draft blocks the setup flow', async () => {
+      window.history.pushState({}, '', '/franchise/setup?leagueId=kbl');
+      mockGetAuctionSession.mockResolvedValue(null);
+      mockGetAuctionSessionById.mockResolvedValue(null);
+
+      render(<FranchiseSetup />);
+
+      expect(await screen.findByText('NEW FRANCHISE')).toBeInTheDocument();
+      expect(screen.getByText('Step 1 of 6')).toBeInTheDocument();
+      expect(screen.getByText('DRAFT HANDOFF NOT READY')).toBeInTheDocument();
+      expect(screen.getByText('Playoffs')).toBeInTheDocument();
+      expect(screen.getByText('Rosters')).toBeInTheDocument();
     });
 
     test('keeps manual setup entry on the full picker without a leagueId param', () => {
@@ -286,6 +477,9 @@ describe('FranchiseSetup Component', () => {
         if (leagueId === 'kbl') return { session: { state: 'OPEN_BIDDING' } };
         return null;
       });
+      mockGetAuctionSessionById.mockImplementation(async (id: string) => (
+        id.includes('summer') ? { session: { state: 'AUCTION_COMPLETE' } } : null
+      ));
 
       render(<FranchiseSetup />);
 
@@ -300,8 +494,17 @@ describe('FranchiseSetup Component', () => {
     });
 
     test('D1 repro: badges a league with a completed snake session', async () => {
-      mockGetMlbDraftSession.mockImplementation(async (leagueId: string) => {
+      leagueHookFlags.snakeKbl = true;
+      mockGetMlbDraftSession.mockImplementation(async (leagueId: string, seasonNumber = 1) => {
         if (leagueId !== 'kbl') return null;
+        if (seasonNumber === 2) {
+          return {
+            draftPhase: 'FARM',
+            pickOrder: [{ round: 1, pick: 1, teamId: 'team-1' }],
+            completedPicks: [{ round: 1, pick: 1, teamId: 'team-1', playerId: 'farm-1' }],
+            currentPickIndex: 1,
+          };
+        }
         return {
           pickOrder: [{ round: 1, pick: 1, teamId: 'team-1' }],
           completedPicks: [{ round: 1, pick: 1, teamId: 'team-1', playerId: 'player-1' }],
@@ -311,10 +514,10 @@ describe('FranchiseSetup Component', () => {
 
       render(<FranchiseSetup />);
 
-      expect(await screen.findByText('Draft complete')).toBeInTheDocument();
-      expect(
+      await waitFor(() => expect(
         within(screen.getByText('KRUSE BASEBALL LEAGUE').parentElement as HTMLElement).getByText('Draft complete'),
-      ).toBeInTheDocument();
+      ).toBeInTheDocument());
+      expect(mockGetMlbDraftSession).toHaveBeenCalledWith('kbl', 2);
     });
   });
 
@@ -328,6 +531,55 @@ describe('FranchiseSetup Component', () => {
     test('no BACK button on step 1', () => {
       render(<FranchiseSetup />);
       expect(screen.queryByRole('button', { name: /BACK/i })).not.toBeInTheDocument();
+    });
+
+    test('base league-data errors expose a retry action', () => {
+      leagueHookFlags.baseError = 'LEAGUE DATABASE OFFLINE';
+      render(<FranchiseSetup />);
+
+      expect(screen.getByText('LEAGUE DATABASE OFFLINE')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /RETRY LEAGUES/i }));
+      expect(mockLeagueRefresh).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Generic fallback Help law', () => {
+    test('keeps every cited generic-step explainer behind its own Help affordance', async () => {
+      render(<FranchiseSetup />);
+
+      expect(screen.queryByText(/Choose the league template/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'LEAGUE SELECTION HELP' }));
+      expect(screen.getByText(/CHOOSE THE LEAGUE TEMPLATE/i)).toBeInTheDocument();
+
+      await selectLeagueAndAdvance(2);
+
+      expect(screen.queryByText(/Traditional elimination tournament/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Higher seed hosts/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'PLAYOFF SETTINGS HELP' }));
+      expect(screen.getByText(/TRADITIONAL ELIMINATION TOURNAMENT/i)).toBeInTheDocument();
+      expect(screen.getByText(/HIGHER SEED GAMES 1-2 AND 6-7/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.queryByText(/SELECT THE TEAMS YOU CONTROL/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'TEAM CONTROL HELP' }));
+      expect(screen.getByText(/SELECT THE TEAMS YOU CONTROL/i)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.queryByText(/Choose how team rosters will be populated/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Startup farm\/scouting belongs to League Builder/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Use League Builder Draft to hire one scout/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Franchise v1 uses existing League Builder MLB rosters/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'ROSTER MODE HELP' }));
+      expect(screen.getByText(/Choose how team rosters will be populated/i)).toBeInTheDocument();
+      expect(screen.getByText(/Startup farm\/scouting belongs to League Builder/i)).toBeInTheDocument();
+      expect(screen.getByText(/Use League Builder Draft to hire one scout/i)).toBeInTheDocument();
+      expect(screen.getByText(/Franchise v1 uses existing League Builder MLB rosters/i)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
+      expect(screen.queryByText(/LIVING SEASON LETS RATINGS/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/GM NAME APPEARS/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'FRANCHISE CONFIRM HELP' }));
+      expect(screen.getByText(/LIVING SEASON LETS RATINGS/i)).toBeInTheDocument();
+      expect(screen.getByText(/GM NAME APPEARS/i)).toBeInTheDocument();
     });
   });
 
@@ -366,9 +618,9 @@ describe('FranchiseSetup Component', () => {
   });
 
   describe('Franchise v1 release gates', () => {
-    test('removes unsupported setup event controls instead of showing decorative knobs', () => {
+    test('removes unsupported setup event controls instead of showing decorative knobs', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(1);
+      await selectLeagueAndAdvance(1);
 
       expect(screen.queryByRole('button', { name: /All-Star Game/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Trade Deadline/i })).not.toBeInTheDocument();
@@ -381,24 +633,30 @@ describe('FranchiseSetup Component', () => {
       expect(screen.getByRole('button', { name: /Best Record Bye.*deferred/i })).toBeDisabled();
     });
 
-    test('keeps team control explicit with no AI or random team shortcut copy', () => {
+    test('keeps team control explicit with no AI or random team shortcut copy', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
 
-      expect(screen.getByText(/Unselected teams remain uncontrolled/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Unselected teams remain uncontrolled/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'TEAM CONTROL HELP' }));
+      expect(screen.getByText(/UNSELECTED TEAMS USE MANUAL SCORE ENTRY/i)).toBeInTheDocument();
       expect(screen.getByText(/UNCONTROLLED:/i)).toBeInTheDocument();
       expect(screen.queryByText(/AI-CONTROLLED/i)).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Random 1/i })).not.toBeInTheDocument();
     });
 
-    test('defers fantasy draft and points farm setup to League Builder scout and prospect draft', () => {
+    test('defers fantasy draft and points farm setup to League Builder scout and prospect draft', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
 
       expect(screen.getByRole('button', { name: /Fantasy Draft.*Deferred/i })).toBeDisabled();
       expect(screen.getByText(/22 MLB \+ 10 FARM/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Startup farm\/scouting belongs to League Builder/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/hire one scout for every team/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Franchise Setup does not auto-fill farms/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'ROSTER MODE HELP' }));
       expect(screen.getByText(/Startup farm\/scouting belongs to League Builder/i)).toBeInTheDocument();
       expect(screen.getByText(/hire one scout for every team/i)).toBeInTheDocument();
       expect(screen.getByText(/Franchise Setup does not auto-fill farms/i)).toBeInTheDocument();
@@ -407,7 +665,7 @@ describe('FranchiseSetup Component', () => {
 
     test('renders the post-freeze summary with persisted fixture values before entering the lens', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
@@ -442,7 +700,7 @@ describe('FranchiseSetup Component', () => {
 
     test('passes typed GM name to franchise initialization config', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
@@ -463,14 +721,16 @@ describe('FranchiseSetup Component', () => {
 
     test('keeps living season off by default and locks an enabled choice into creation', async () => {
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
 
       const livingSeason = screen.getByRole('switch', { name: /LIVING SEASON/i });
       expect(livingSeason).toHaveAttribute('aria-checked', 'false');
-      expect(screen.getByText(/Locked in at creation for this season/i)).toBeInTheDocument();
+      expect(screen.queryByText(/THIS CHOICE LOCKS AT CREATION/i)).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'FRANCHISE CONFIRM HELP' }));
+      expect(screen.getByText(/THIS CHOICE LOCKS AT CREATION/i)).toBeInTheDocument();
       fireEvent.click(livingSeason);
       expect(livingSeason).toHaveAttribute('aria-checked', 'true');
 
@@ -505,7 +765,7 @@ describe('FranchiseSetup Component', () => {
         .mockResolvedValueOnce(incompleteReport);
 
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
@@ -537,7 +797,7 @@ describe('FranchiseSetup Component', () => {
         .mockResolvedValueOnce(blockedReport);
 
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
@@ -553,7 +813,7 @@ describe('FranchiseSetup Component', () => {
       mockInitializeFranchise.mockRejectedValueOnce(new Error('copy failed'));
 
       render(<FranchiseSetup />);
-      selectLeagueAndAdvance(3);
+      await selectLeagueAndAdvance(3);
       fireEvent.click(screen.getAllByRole('button', { name: /Team 1/i })[0]);
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
@@ -567,10 +827,12 @@ describe('FranchiseSetup Component', () => {
   });
 
   describe('Step 3 - Playoff Team Count Guard', () => {
-    test('hides impossible Top 4 qualifier option for a 2-team league', () => {
+    test('hides impossible Top 4 qualifier option for a 2-team league', async () => {
       render(<FranchiseSetup />);
 
+      await screen.findAllByText('Draft complete');
       fireEvent.click(screen.getByText('DUEL LEAGUE'));
+      await waitFor(() => expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled());
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
       fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
 
@@ -580,10 +842,10 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByText(/Top 4 teams qualify/i)).not.toBeInTheDocument();
     });
 
-    test('preserves standard playoff qualifier options for a 16-team league', () => {
+    test('preserves standard playoff qualifier options for a 16-team league', async () => {
       render(<FranchiseSetup />);
 
-      selectLeagueAndAdvance(2);
+      await selectLeagueAndAdvance(2);
 
       expect(screen.getByText(/With 16 teams in league: Top 4 teams qualify/i)).toBeInTheDocument();
       for (const count of ['4', '6', '8', '10', '12']) {
@@ -592,10 +854,10 @@ describe('FranchiseSetup Component', () => {
       expect(screen.queryByRole('button', { name: /Top 2 teams qualify/i })).not.toBeInTheDocument();
     });
 
-    test('clamps playoff qualifier count when switching to a smaller league', () => {
+    test('clamps playoff qualifier count when switching to a smaller league', async () => {
       render(<FranchiseSetup />);
 
-      selectLeagueAndAdvance(2);
+      await selectLeagueAndAdvance(2);
       fireEvent.click(screen.getByRole('button', { name: /Top 12 teams qualify/i }));
       expect(screen.getByText(/With 16 teams in league: Top 12 teams qualify/i)).toBeInTheDocument();
 

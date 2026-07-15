@@ -2,8 +2,12 @@ import { describe, expect, test } from 'vitest';
 
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import {
+  advanceTrustedSnakeSeatingCertificate,
   countSnakeSupplyByPosition,
+  createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
+  proveSnakePickKeepsAllClubsSeated,
+  validateSnakeSeatingProof,
   type SnakeSeatingPlayer,
 } from '../snakeSeatingProof';
 
@@ -129,10 +133,234 @@ describe('simultaneous snake seating proof', () => {
       baseCaps: [],
       realTeamCount: 2,
     });
-    expect(result.feasible).toBe(true);
+    expect(result.message).toBe('EVERY CLUB CAN FINISH A LEGAL 22.');
     const picks = result.assignments.flatMap((assignment) => assignment.playerIds);
     expect(picks).toHaveLength(44);
     expect(new Set(picks)).toHaveLength(44);
     expect(result.assignments.every((assignment) => assignment.playerIds.length === 22)).toBe(true);
+  });
+
+  test('globally balances cheap and expensive cards instead of falsely stranding the last club', () => {
+    const priced = (players: SnakeSeatingPlayer[], price: number) => players.map((player) => ({ ...player, price }));
+    const result = proveSimultaneousSnakeSeating({
+      clubs: ['a', 'b'].map((teamId) => ({ teamId, roster: [], budgetRemaining: 660 })),
+      pool: [
+        ...priced(oneClubPool('cheap'), 10),
+        ...priced(oneClubPool('expensive'), 50),
+        ...priced(floorSlackExtras('slack'), 100),
+      ],
+      baseCaps: [],
+      realTeamCount: 2,
+    });
+    expect(result.message).toBe('EVERY CLUB CAN FINISH A LEGAL 22.');
+    expect(result.assignments).toHaveLength(2);
+    expect(result.assignments.every((assignment) => assignment.allInCost <= 660)).toBe(true);
+  });
+
+  test('keeps arbitrary legal picks available by globally rebalancing every partial roster', () => {
+    const priced = (players: SnakeSeatingPlayer[], price: number) => players.map((player) => ({ ...player, price }));
+    const cheap = priced(oneClubPool('cheap'), 10);
+    const current = {
+      clubs: ['a', 'b'].map((teamId) => ({ teamId, roster: [], budgetRemaining: 660 })),
+      pool: [
+        ...cheap,
+        ...priced(oneClubPool('expensive'), 50),
+        ...priced(floorSlackExtras('slack'), 100),
+      ],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const picked = cheap.find((player) => player.playerId === 'cheap-C')!;
+    const currentProof = proveSimultaneousSnakeSeating(current);
+    expect(validateSnakeSeatingProof(current, currentProof)).toBe(true);
+    const result = proveSnakePickKeepsAllClubsSeated({
+      current,
+      teamId: 'b',
+      player: picked,
+      allInCost: picked.price,
+      currentProof,
+    });
+
+    expect(result.message).toBe('EVERY CLUB CAN FINISH A LEGAL 22.');
+    expect(result.assignments.find((assignment) => assignment.teamId === 'b')?.playerIds).toHaveLength(21);
+    expect(result.assignments.every((assignment) => assignment.allInCost <= (assignment.teamId === 'b' ? 650 : 660)))
+      .toBe(true);
+    expect(result.assignments.flatMap((assignment) => assignment.playerIds)).not.toContain(picked.playerId);
+  });
+
+  test('rejects a persisted certificate whose reserved player ledger was altered', () => {
+    const input = {
+      clubs,
+      pool: [...oneClubPool('a'), ...oneClubPool('b'), ...floorSlackExtras('slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    const tampered = {
+      ...proof,
+      assignments: proof.assignments.map((assignment, index) => index === 0
+        ? { ...assignment, playerIds: assignment.playerIds.slice(1) }
+        : assignment),
+    };
+    expect(validateSnakeSeatingProof(input, proof)).toBe(true);
+    expect(validateSnakeSeatingProof(input, tampered)).toBe(false);
+  });
+
+  test('validates one root certificate and advances immutable constructive children without re-trusting callers', () => {
+    const input = {
+      clubs,
+      pool: [...oneClubPool('a'), ...oneClubPool('b'), ...floorSlackExtras('slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    const trusted = createTrustedSnakeSeatingCertificate(input, proof);
+    expect(trusted).not.toBeNull();
+    if (!trusted) return;
+
+    const selectedId = trusted.proof.assignments.find((row) => row.teamId === 'a')!.playerIds[0];
+    const selected = input.pool.find((player) => player.playerId === selectedId)!;
+    const child = advanceTrustedSnakeSeatingCertificate({
+      certificate: trusted,
+      teamId: 'a',
+      playerId: selected.playerId,
+      allInCost: selected.price,
+    });
+
+    expect(child).not.toBeNull();
+    if (!child) return;
+    expect(validateSnakeSeatingProof(child.input, child.proof)).toBe(true);
+    expect(child.input.clubs.find((club) => club.teamId === 'a')?.roster.map((player) => player.playerId))
+      .toContain(selected.playerId);
+    expect(child.proof.assignments.find((row) => row.teamId === 'a')?.playerIds).toHaveLength(21);
+  });
+
+  test('trusted advances ignore post-trust source mutation and reject forged or underpriced advances', () => {
+    const input = {
+      clubs: structuredClone(clubs),
+      pool: [...oneClubPool('a'), ...oneClubPool('b'), ...floorSlackExtras('slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    const trusted = createTrustedSnakeSeatingCertificate(input, proof);
+    expect(trusted).not.toBeNull();
+    if (!trusted) return;
+    const selectedId = trusted.proof.assignments.find((row) => row.teamId === 'a')!.playerIds[0];
+    const selected = input.pool.find((player) => player.playerId === selectedId)!;
+
+    selected.price = 999_999;
+    proof.assignments[0].playerIds.splice(0, proof.assignments[0].playerIds.length);
+    const child = advanceTrustedSnakeSeatingCertificate({
+      certificate: trusted,
+      teamId: 'a',
+      playerId: selectedId,
+      allInCost: 10,
+    });
+    expect(child).not.toBeNull();
+    if (child) expect(validateSnakeSeatingProof(child.input, child.proof)).toBe(true);
+
+    expect(advanceTrustedSnakeSeatingCertificate({
+      certificate: { input: trusted.input, proof: trusted.proof },
+      teamId: 'a',
+      playerId: selectedId,
+      allInCost: 10,
+    })).toBeNull();
+    expect(advanceTrustedSnakeSeatingCertificate({
+      certificate: trusted,
+      teamId: 'a',
+      playerId: selectedId,
+      allInCost: 9,
+    })).toBeNull();
+  });
+
+  test('keeps a multi-pick trusted chain canonically valid when clubs take rival reservations', () => {
+    const input = {
+      clubs: structuredClone(clubs),
+      pool: [...oneClubPool('a'), ...oneClubPool('b'), ...floorSlackExtras('slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const root = proveSimultaneousSnakeSeating(input);
+    let certificate = createTrustedSnakeSeatingCertificate(input, root);
+    expect(certificate).not.toBeNull();
+    if (!certificate) return;
+
+    for (let pick = 0; pick < 6; pick += 1) {
+      const draftingTeamId = pick % 2 === 0 ? 'a' : 'b';
+      const rivalTeamId = draftingTeamId === 'a' ? 'b' : 'a';
+      const rivalPlayerId = certificate.proof.assignments
+        .find((assignment) => assignment.teamId === rivalTeamId)?.playerIds[0];
+      expect(rivalPlayerId).toBeTruthy();
+      if (!rivalPlayerId) return;
+      const player = certificate.input.pool.find((entry) => entry.playerId === rivalPlayerId);
+      expect(player).toBeTruthy();
+      if (!player) return;
+      certificate = advanceTrustedSnakeSeatingCertificate({
+        certificate,
+        teamId: draftingTeamId,
+        playerId: player.playerId,
+        allInCost: player.price,
+      });
+      expect(certificate).not.toBeNull();
+      if (!certificate) return;
+      expect(validateSnakeSeatingProof(certificate.input, certificate.proof)).toBe(true);
+    }
+  });
+
+  test('a club already carrying nine pitchers reserves only hitters for its final 13 seats', () => {
+    const fixedPitchers = [
+      ...oneClubPool('fixed').filter((player) => player.shape.isPitcher),
+      card('fixed-extra-rp', { isPitcher: true, position: 'RP', role: 'RP' }),
+    ];
+    const hitters = oneClubPool('hitters').filter((player) => !player.shape.isPitcher);
+    const temptingArm = card('cheap-two-way-c', {
+      isPitcher: true,
+      position: 'RP',
+      role: 'RP',
+      twoWayVariant: 'C',
+    });
+    const result = proveSimultaneousSnakeSeating({
+      clubs: [{ teamId: 'nine-arms', roster: fixedPitchers, budgetRemaining: 1_000 }],
+      pool: [temptingArm, ...hitters],
+      baseCaps: [],
+      realTeamCount: 1,
+    });
+    const assigned = new Set(result.assignments[0]?.playerIds ?? []);
+    expect(result.feasible).toBe(true);
+    expect(assigned).toHaveLength(13);
+    expect([temptingArm, ...hitters].filter((player) => assigned.has(player.playerId)).every((player) => !player.shape.isPitcher))
+      .toBe(true);
+  });
+
+  test('repairs a globally legal setup against exact luxury tax using unused pool slack', () => {
+    const withPower = (players: SnakeSeatingPlayer[], power: number) => players.map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: { ...player.construction.bat, POW: power },
+      },
+    }));
+    const result = proveSimultaneousSnakeSeating({
+      clubs: [{ teamId: 'taxed', roster: [], budgetRemaining: 500 }],
+      pool: [
+        ...withPower(oneClubPool('a-high-tax'), 100),
+        ...withPower(floorSlackExtras('z-low-tax'), 0),
+      ],
+      baseCaps: [{
+        group: 'hitters',
+        stat: 'POW',
+        topN: 8,
+        cap: 0,
+        penaltyCurve: 1,
+        penaltyPer100: 100,
+        minAdder: 0,
+      }],
+      realTeamCount: 20,
+    });
+    expect(result.message).toBe('EVERY CLUB CAN FINISH A LEGAL 22.');
+    expect(result.assignments[0]).toMatchObject({ teamId: 'taxed', salaryCost: 220 });
+    expect(result.assignments[0].allInCost).toBeLessThanOrEqual(500);
+    expect(result.assignments[0].playerIds.some((playerId) => playerId.startsWith('z-low-tax'))).toBe(true);
   });
 });

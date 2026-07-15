@@ -31,6 +31,8 @@ export type PoolConfig = {
   tier: TierKey;
   balanceMode: BalanceMode;
   totalSlots: number;
+  /** Explicit live league club count. Legacy/direct callers may omit and use slot inference. */
+  teamCount?: number;
   players: PoolPlayerPriced[];
   salaryCap?: number;
 };
@@ -320,10 +322,69 @@ export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode
   };
 }
 
-export function derivePickValueChart(ivsDesc: number[]): PickValue[] {
-  return [...ivsDesc]
-    .sort((left, right) => right - left)
-    .map((value, index) => ({ pick: index + 1, value }));
+export function derivePickValueChart(
+  frozenIvs: readonly number[],
+  draftPickCount: number,
+  teamCount: number,
+): PickValue[] {
+  if (!Number.isInteger(draftPickCount) || draftPickCount < 0) {
+    throw new Error('Draft pick count must be a non-negative integer.');
+  }
+  if (!Number.isInteger(teamCount) || teamCount <= 0) {
+    throw new Error('Team count must be a positive integer.');
+  }
+  if (draftPickCount === 0) return [];
+
+  const sorted = frozenIvs.filter(Number.isFinite).sort((left, right) => right - left);
+  const rankedIvs = sorted.length > 0 ? sorted : [0];
+  const finalIv = rankedIvs[rankedIvs.length - 1];
+  const expectedIv = (pick: number): number => {
+    let total = 0;
+    const cohort: number[] = [];
+    for (let offset = 0; offset < teamCount; offset += 1) {
+      const value = rankedIvs[pick - 1 + offset] ?? finalIv;
+      cohort.push(value);
+      total += value;
+    }
+    if (Number.isFinite(total)) return total / teamCount;
+
+    // Canonical IV cohorts take the direct path above byte-for-byte. Only a finite-input overflow
+    // enters this scaled path, where normalizing before summation keeps the represented mean finite.
+    const scale = cohort.reduce((maximum, value) => Math.max(maximum, Math.abs(value)), 0);
+    if (scale === 0) return 0;
+    const normalizedTotal = cohort.reduce((sum, value) => sum + (value / scale), 0);
+    const normalizedMean = Math.max(-1, Math.min(1, normalizedTotal / teamCount));
+    const scaledMean = normalizedMean * scale;
+    if (Number.isFinite(scaledMean)) return scaledMean;
+    return normalizedMean < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE;
+  };
+  const nonnegativeFiniteDifference = (higher: number, lower: number): number => {
+    const difference = higher - lower;
+    if (Number.isFinite(difference)) return Math.max(0, difference);
+    if (difference === Number.NEGATIVE_INFINITY) return 0;
+    if (difference === Number.POSITIVE_INFINITY) return Number.MAX_VALUE;
+    if (higher === lower) return 0;
+    return higher > lower ? Number.MAX_VALUE : 0;
+  };
+  const roundedPositiveFinite = (value: number): number => {
+    const bounded = Number.isFinite(value)
+      ? Math.min(Number.MAX_VALUE, Math.max(0, value))
+      : Number.MAX_VALUE;
+    const rounded = Math.round(bounded);
+    return Math.max(1, Number.isFinite(rounded) ? rounded : Number.MAX_VALUE);
+  };
+  const replacementIv = expectedIv(draftPickCount + 1);
+  const lateFloor = roundedPositiveFinite(
+    nonnegativeFiniteDifference(expectedIv(draftPickCount), replacementIv),
+  );
+
+  let priorValue = Number.MAX_VALUE;
+  return Array.from({ length: draftPickCount }, (_, index) => {
+    const surplus = nonnegativeFiniteDifference(expectedIv(index + 1), replacementIv);
+    const value = Math.min(priorValue, roundedPositiveFinite(Math.max(lateFloor, surplus)));
+    priorValue = value;
+    return { pick: index + 1, value };
+  });
 }
 
 const MLB_ROSTER_SLOTS_PER_TEAM = LEGAL_ROSTER.size;
@@ -349,6 +410,8 @@ export function computePoolTierCap(ivs: number[], tier: TierKey): number {
 }
 
 export function registerPool(cfg: PoolConfig): RegisteredPool {
+  const teamCount = cfg.teamCount
+    ?? Math.max(1, Math.ceil(cfg.totalSlots / MLB_ROSTER_SLOTS_PER_TEAM));
   return {
     leagueId: cfg.leagueId,
     tier: cfg.tier,
@@ -356,7 +419,11 @@ export function registerPool(cfg: PoolConfig): RegisteredPool {
     players: cfg.players,
     tierCap: cfg.salaryCap ?? computePoolTierCap(cfg.players.map((player) => player.iv), cfg.tier),
     luxuryCaps: LUXURY_CAP_TABLES[cfg.tier],
-    pickValueChart: derivePickValueChart(cfg.players.map((player) => player.iv)),
+    pickValueChart: derivePickValueChart(
+      cfg.players.map((player) => player.iv),
+      cfg.totalSlots,
+      teamCount,
+    ),
     totalSlots: cfg.totalSlots,
     poolSurplusWarning: cfg.players.length > cfg.totalSlots * POOL_SURPLUS_MAX,
   };

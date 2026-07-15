@@ -65,7 +65,7 @@ export interface UseScheduleDataReturn {
 
   // Actions
   addGame: (input: Omit<AddGameInput, 'seasonNumber'>) => Promise<ScheduledGame>;
-  addSeries: (input: Omit<AddGameInput, 'seasonNumber' | 'gameNumber' | 'dayNumber'>, seriesLength?: number) => Promise<ScheduledGame[]>;
+  addSeries: (input: Omit<AddGameInput, 'seasonNumber'>, seriesLength?: number) => Promise<ScheduledGame[]>;
   importFranchiseRows: (rows: FranchiseScheduleImportRow[], scope?: { seasonId?: string; statsScopeId?: string }) => Promise<ScheduledGame[]>;
   updateGame: (gameId: string, input: Omit<AddGameInput, 'seasonNumber' | 'franchiseId' | 'seasonId' | 'statsScopeId' | 'source' | 'importedAt'>) => Promise<ScheduledGame>;
   updateStatus: (gameId: string, status: GameStatus) => Promise<void>;
@@ -163,7 +163,7 @@ export function useScheduleData(
 
   // Add a series
   const handleAddSeries = useCallback(async (
-    input: Omit<AddGameInput, 'seasonNumber' | 'gameNumber' | 'dayNumber'>,
+    input: Omit<AddGameInput, 'seasonNumber'>,
     seriesLength: number = 3
   ): Promise<ScheduledGame[]> => {
     try {

@@ -7110,3 +7110,153 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next session must start with the captain ruling on the two non-amended Gate 5 failures;
   do not silently characterize them. If unblocked, rerun Gate 5 once, then dispatch the
   required independent builder≠auditor review before any landing.
+
+## 2026-07-12/13 (Codex, resumed after app crash) — snake mock-draft assembly and hostile close
+
+- Re-fetched `origin/main` before every current-state ruling. The isolated branch
+  `codex/snake-mock-draft-ready` remains based directly on `origin/main` `ea66830e`; this work is
+  not on `main` until the branch is merged.
+- Completed the approved functional path: shared Draft Setup → canonical snake room → explicit
+  MLB recap confirmation → Scout Hire → farm snake room/recap → staffing → compact Franchise
+  Setup → Franchise launch with zero schedule rows. Living Season remains the owner of later CSV
+  upload or manual schedule entry.
+- Closed the team-room contract: covered team-first desks, off-clock board work, full-pool search
+  and inspection, overall and position rankings over one saved ordering, explicit 22-player plan,
+  separate live roster, all non-zero player ratings, positions, traits, personality, archetype,
+  team fit, exact salary/tax/true-cost effects, and five chemistry aggregates. Pronouns remain in
+  engine data and do not render.
+- Hardened persistence and privacy: atomic pick/trade/correction/companion writes; immutable MLB
+  and farm manifests; exact roster-handoff proof; cloud-safe Run It Back receipts; version-aware
+  player identity; farm scouting fog and frozen absolute-slot salaries; hidden farm true-value
+  rows excluded while salary and morale reach Franchise launch.
+- Ruthless repo/UI crawling removed the retired POC page and engine, noncanonical route ownership,
+  stale whole-session races, terminal retry paths, privacy auto-reveal, recap/correction dead ends,
+  touch/focus/selected-state defects, explanatory-text violations, and iPad layout failures.
+- The final audit itself found and fixed 71 stale fixtures or regression expectations exposed by
+  the production corrections, then caught stale stock MLB/FARM assignments, first-confirm recap
+  revision races, same-name ambiguity, missing farm search/TOP, stranded Scout Hire recovery,
+  narrow-layout overflow, and checksum-only snake launch ownership. A stable full-repository run
+  then passed 674 test files with 8 skipped (682 total): 9,955 tests passed, 15 skipped (9,970
+  total), 0 failed.
+  TypeScript, production build, focused ESLint, and `git diff --check` are clean.
+- During the last recheck, macOS purged several `/private/tmp` directories under disk pressure,
+  including the uncommitted worktree. The ten committed checkpoints stayed safe. The exact final
+  tree was reconstructed from this task's retained ordered patch ledger, compared across all 107
+  touched files, and re-cleared through TypeScript plus the 11-file/89-test high-risk gate before
+  the independent closing audit resumed. No source was guessed from memory.
+- Automated evidence can make the build ready, not accept it. JK's browser walk remains the sole
+  product gate.
+- 2026-07-13 browser-walk repair: League Settings correctly wrote a selected Snake format, but the
+  Edit League modal always reopened with Auction and a later save overwrote the stored value.
+  Hydration now preserves `league.draftFormat` with Auction only as the legacy fallback. Live proof
+  on Super Mega League: save Snake, reopen still Snake, enter `Snake Draft — Super Mega League`.
+  Independent audit APPROVE; focused gate 4 files / 89 tests, TypeScript, scoped ESLint, and
+  `git diff --check` clean.
+
+## 2026-07-14 (Codex, unattended continuation) — Snake combined-repo close green; live UI crawl next
+
+- Fresh-fetch state remained `origin/main` `ea66830e`; the isolated Snake branch is still not on
+  `main`, and no automated result was treated as JK acceptance.
+- The independent combined-branch auditor returned NOT VERIFIED with three majors: covered
+  companion advice survived as retained hook state, assistant/guide render identity disagreed with
+  worker identity, and missing player/team fallbacks could expose placeholders or internal keys.
+- Repair 1 was independently rejected. Amendment 9 established a real privacy epoch, aligned hook
+  state and workers on semantic request keys, and completed the exact `UNKNOWN PLAYER` / `UNKNOWN
+  TEAM` sweep. A replacement independent auditor then returned VERIFIED, zero major and zero minor,
+  after direct mutation attacks and 9 files / 131 focused tests.
+- Closing evidence on the exact audited tree: combined changed tests 266/266; Snake matrix 48 files
+  / 383 tests; responsive iPad Playwright 4/4; exact changed-file no-inline lint 0 errors / 0
+  warnings; TypeScript, production build, and diff hygiene green. The required post-audit serial
+  repository gate passed 681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped
+  (10,135 total), zero failed.
+- Next: commit the exact audited tree after a fresh fetch, obtain one final hostile whole-branch
+  verdict on the commit, then crawl the live production Snake, companion, farm, recap, and
+  zero-schedule handoff paths. Every live finding still requires a separate builder and auditor.
+  JK's browser walk remains the sole product-acceptance gate.
+
+## 2026-07-14 (Codex, final continuation) — Snake repo/UI crawl closed; ready for JK walk
+
+- Fresh-fetched `origin/main` before final state and commit: `ea66830e0305d999f4140a101d452417f7d9152e`.
+  The isolated branch was 43 ahead / 0 behind before code commit `f8ca392d`; main did not move.
+- Completed the full hostile repository and UI crawl under builder-auditor separation. Every new
+  defect was booked before repair. FINDING-152 through FINDING-185 in the Snake lane are now fixed
+  and independently verified; rejected first repairs remained recorded rather than hidden.
+- Closed the final tail: FARM has no draft-pick trades and a frozen club-local 75%/3x salary
+  envelope; clean-device sync cannot bootstrap invalid season-2 authority; backup owns the v10
+  schema without stealing content migration or leaking a connection; the guide worker builds
+  without dragging storage/sync/backup code into its graph; final lifecycle fixtures are type-honest.
+- Final serial repository gate: 686 passed files / 8 skipped (694 total); 10,227 passed tests /
+  15 skipped (10,242 total); zero failures in 816.95 seconds.
+- Final live gate: 17/17 Playwright journeys across 1024x768, 768x1024, and 430x932. The full
+  production path completed MLB and FARM, staffing, Franchise launch with zero schedule rows, then
+  accepted manual and CSV schedule rows inside Living Season. Privacy epochs, board persistence,
+  exact trade transfer, recap/restart, and duplicate-pick prevention all passed.
+- Strict lint across every changed TypeScript file, TypeScript, production build, and diff integrity
+  are green. Production build transformed 2,718 modules and emitted every Snake worker.
+- Decisions preserved: FARM draft-pick trades retired; MLB draft-pick trades live; in-season player
+  trades separate; Help-button law canon; schedule is entered after launch for testing; no Legends
+  Library work belongs in this lane.
+- Code/test tree committed as `f8ca392d` (`feat: complete snake draft mock flow`). This documentation
+  close is the required separate session-end commit.
+- **Pending / next start:** run JK's hands-on browser walk against the frozen preview, including a
+  physical companion-device pass. Automated green is not acceptance; JK's walk is the only gate.
+
+## 2026-07-14 (Codex, JK browser-repair continuation) — reported Snake defects closed
+
+- Fresh-fetched `origin/main` before acting and again before close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. The repair is isolated on
+  `codex/snake-mock-draft-ready`, code commit `00fd64fe`.
+- Reproduced the blinking/hanging board failure to render-phase state writes plus stale worker
+  callbacks. Replaced it with ordered effect epochs, stale-result rejection, and cover/null
+  clearing; repeated rapid Optimize clicks settle on one ready 22-player Assistant GM board.
+- Restored real fit identity for older Snake setups by falling back to each team's saved MLB
+  archetype. An explicit Balanced selection remains Balanced.
+- Own drafted players now stay COMMITTED on My Board; rival picks are removed/backfilled; every
+  drafted player is absent from every Player Pool. The Assistant GM no longer says an own rostered
+  player is gone. Committed rows use settled salary plus current marginal tax.
+- Recent Picks now expands to the complete numbered pick-by-pick log. FARM uses numbered picks too.
+- Vite now binds for same-Wi-Fi devices and publishes its actual LAN origin to the companion Help
+  card; the room code travels in the URL and prefills the claim screen. Raw Safari `Load failed`
+  becomes an honest auth-service-unreachable state. External finding remains: the configured
+  Supabase hostname does not resolve and the connected account exposes no project, so real
+  companion login needs an active project URL/key; local code cannot manufacture that service.
+- Independent auditor first returned REJECT on committed-player tax being computed from a roster
+  that already contained that player. The repair removes the committed player from the comparison
+  basis and pins `$10,700` / `TAX +$700`; re-audit returned APPROVE with no other blocker.
+- Final evidence: 9 changed test files / 133 tests green; exact-tree Playwright 17/17 including the
+  full MLB→FARM→staffing→zero-schedule Franchise→manual/CSV schedule lifecycle; strict changed-file
+  lint, TypeScript, production build (2,719 modules), and diff checks green. Full repository runs
+  reached 10,235 passed / 15 skipped; three unrelated batch-load reds across two files passed in
+  their exact solo subsets (8/8) and were not widened into this repair.
+- **Pending / next start:** JK walks the frozen build. Browser acceptance remains JK's only gate;
+  physical companion sign-in waits on the external Supabase project connection.
+
+## 2026-07-14 (Codex, companion/economy/responsive continuation) — second Snake repair wave closed
+
+- Fresh-fetched `origin/main` before state rulings and before code freeze; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work remains isolated on
+  `codex/snake-mock-draft-ready`; code commit `6ae55543` is not on main until merged.
+- Closed JK's physical-device feedback without widening into generic hardening. Recurring main/companion
+  refresh is serialized and narrow, calculation labels are limited to actually requested players, and
+  Assistant GM worker transport now has an equivalent validated local fallback rather than hanging or
+  displaying unavailable.
+- Made Snake tax explicitly roster-local. My Board and Assistant GM Board each calculate their own live
+  22-player salary/tax/all-in/money-left truth from the team's exact archetype; identical rosters are invariant
+  across 2-, 8-, and 20-team rooms. Role-aware exact archetype fit restores strong high-velocity relief fit for
+  Nasty Boys and preserves distinct eight-team boards through one systematic engine.
+- Added safe companion pick submission: an approved on-clock GM may send intent, but the Hotseat owns the
+  authoritative pick and atomically revalidates the request, live pick/player/team, device, claim, approval,
+  and revision. FARM remains without companion picks or draft-pick trades.
+- Wide fine-pointer Mac/laptop layouts now use one page scroll; iPad retains bounded touch panes. The room has
+  no normal Pause control because it has no clock. A contextual `RESUME ROOM` appears only for automatic or
+  legacy saved stopped state, preserving recovery without advertising a purposeless action.
+- The independent auditor's first pass rejected five details: stopped-room recovery, stale companion approval,
+  unequal Assistant fallback behavior, destructive cloud replacement without rollback, and stale auction-size
+  tax test input. All five were repaired. Delta re-audit: **APPROVE**, zero blocker/major/minor findings, 5 files
+  / 168 tests independently green.
+- Final builder evidence: full Snake/companion 54 files / 499 tests; sync/SyncModal 112/112; production build
+  2,720 modules; `git diff --check` clean. Live 1440x1000 preview: no normal Pause/Resume, false `CALCULATING`,
+  Assistant-unavailable state, or horizontal overflow. JK's browser walk remains the sole acceptance gate.
+- **Pending / next start:** JK tests the actual League Builder Snake path on Mac plus a physical iPad companion,
+  including board editing, Assistant GM, projected 22-player tax/fit, and submit-choice→Hotseat approval. The
+  dev server remains running on port 5173. Automated proof is not product acceptance.

@@ -1,4 +1,5 @@
 import { LEAGUE_MINIMUM_SALARY } from '../data/rosterEngineConstants';
+import { isLegalRoster } from '../data/rosterConstruction';
 import type {
   AuctionPlayer,
   AuctionSession,
@@ -6,27 +7,15 @@ import type {
 } from '../engines/auctionStateMachine';
 import type { RegisteredPool } from '../engines/leagueConstruction';
 import { toRosterSlotPlayer } from '../engines/rosterNeed';
-import type { FarmAuctionPool } from './farmAuctionPool';
+import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM, type FarmAuctionPool } from './farmAuctionPool';
 import {
-  createEmptyTeamRoster,
-  createFarmAuctionSessionId,
-  deleteAuctionSession,
-  deleteAuctionSessionById,
-  deletePlayer,
-  deleteScoutProfilesForLeague,
-  deleteStartupDraftSession,
-  deleteMlbDraftSession,
   getAllPlayers,
-  getAuctionSession,
-  getAuctionSessionById,
-  getLeagueTemplate,
-  getMlbDraftSession,
   getPlayer,
-  getRegisteredPool,
-  getStartupDraftSession,
   getTeamRoster,
+  commitFarmDraftRostersAndPlayersAtomically,
   savePlayer,
   saveTeamRoster,
+  resetCompletedDraftArcAtomically,
   type Chemistry,
   type Grade,
   type PitchType,
@@ -38,6 +27,7 @@ import {
 } from './leagueBuilderStorage';
 import { leagueHasLinkedFranchise } from './franchiseManager';
 import { farmPickSalary } from '../engines/snakeFarmSlots';
+import { readSnakeDraftTruth } from './snakeDraftManifest';
 
 export const MLB_AUCTION_ROSTER_SLOTS = 22;
 export const MLB_AUCTION_SEASON = 1;
@@ -191,69 +181,19 @@ function completedSessionOrThrow(session: AuctionSession): void {
   }
 }
 
-async function readCompletedDraftArc(leagueId: string) {
-  const [mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool] = await Promise.all([
-    getAuctionSession(leagueId, MLB_AUCTION_SEASON),
-    getMlbDraftSession(leagueId, MLB_AUCTION_SEASON),
-    getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1)),
-    getStartupDraftSession(leagueId, 1),
-    getRegisteredPool(leagueId),
-  ]);
-
-  return { mlbSession, snakeSession, farmSession, startupDraftSession, registeredPool };
-}
-
-function committedSoldPlayerIds(session: AuctionSession | null | undefined): Set<string> {
-  if (!session || session.state !== 'AUCTION_COMPLETE') return new Set();
-  return new Set(
-    session.results
-      .filter((result) => result.disposition === 'SOLD')
-      .map((result) => result.playerId),
-  );
-}
-
 function assignmentForLeague(player: Player, leagueId: string): NonNullable<Player['leagueAssignments']>[number] | undefined {
   return player.leagueAssignments?.find((assignment) => assignment.leagueId === leagueId);
 }
 
-async function leagueTeamIds(leagueId: string): Promise<string[]> {
-  const league = await getLeagueTemplate(leagueId);
-  return league?.teamIds ?? [];
-}
-
-async function clearLeagueTeamRosterField(
-  teamIds: readonly string[],
-  field: 'mlbRoster' | 'farmRoster',
-): Promise<void> {
-  await Promise.all(teamIds.map(async (teamId) => {
-    const roster = await getTeamRoster(teamId);
-    if (roster && roster[field].length === 0) return;
-    const nextRoster = roster ? cloneRoster(roster) : createEmptyTeamRoster(teamId);
-    nextRoster[field] = [];
-    await saveTeamRoster(nextRoster);
-  }));
-}
-
-async function deleteCommittedFarmPlayers(leagueId: string, farmCommittedIds: Set<string>): Promise<void> {
-  if (farmCommittedIds.size === 0) return;
-  const players = await getAllPlayers();
-  await Promise.all(players.map(async (player) => {
-    if (!farmCommittedIds.has(player.id)) return;
-    const assignment = assignmentForLeague(player, leagueId);
-    if (assignment?.rosterStatus !== 'FARM') return;
-    await deletePlayer(player.id);
-  }));
-}
-
-async function resetAssignedLeaguePlayersToPool(
+async function resetAssignedLeaguePlayersByRosterStatus(
   leagueId: string,
-  askSalaryByPlayerId: ReadonlyMap<string, number>,
+  rosterStatus: 'MLB' | 'FARM',
 ): Promise<void> {
   const players = await getAllPlayers();
 
   for (const player of players) {
     const assignment = assignmentForLeague(player, leagueId);
-    if (!assignment?.teamId) continue;
+    if (!assignment?.teamId || assignment.rosterStatus !== rosterStatus) continue;
 
     const nextAssignments = (player.leagueAssignments ?? []).map((candidate) =>
       candidate.leagueId === leagueId
@@ -261,11 +201,9 @@ async function resetAssignedLeaguePlayersToPool(
         : candidate,
     );
     const { settledSalary: _settledSalary, ...playerWithoutSettledSalary } = player;
-    const askSalary = askSalaryByPlayerId.get(player.id);
-
+    void _settledSalary;
     await savePlayer({
       ...playerWithoutSettledSalary,
-      ...(askSalary === undefined ? {} : { salary: askSalary }),
       leagueAssignments: nextAssignments,
     });
   }
@@ -323,6 +261,7 @@ function farmProspectToPlayer(
   leagueId: string,
   teamId: string,
   salary: number,
+  existingAssignments: Player['leagueAssignments'] = [],
 ): Omit<Player, 'createdDate' | 'lastModified'> {
   return {
     ...prospect,
@@ -335,7 +274,10 @@ function farmProspectToPlayer(
     salary,
     settledSalary: salary,
     draftedAsFarmProspect: true,
-    leagueAssignments: [{ leagueId, teamId, rosterStatus: 'FARM' }],
+    leagueAssignments: [
+      ...(existingAssignments ?? []).filter((assignment) => assignment.leagueId !== leagueId),
+      { leagueId, teamId, rosterStatus: 'FARM' },
+    ],
   };
 }
 
@@ -349,6 +291,16 @@ export async function commitCompletedMlbAuctionSessionToLeagueRosters(input: {
   const teamRosterCounts: Record<string, number> = {};
   const committedPlayerIds: string[] = [];
   const excludedTeamIds = new Set(input.excludeTeamIds ?? []);
+
+  for (const team of input.session.teams) {
+    if (excludedTeamIds.has(team.teamId)) continue;
+    for (const assignment of team.roster) {
+      if (!await getPlayer(assignment.playerId)) {
+        throw new Error(`Auction winner player "${assignment.playerId}" was not found.`);
+      }
+    }
+  }
+  await resetAssignedLeaguePlayersByRosterStatus(input.leagueId, 'MLB');
 
   for (const team of input.session.teams) {
     if (excludedTeamIds.has(team.teamId)) {
@@ -388,35 +340,77 @@ export async function commitCompletedSnakeSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: RegisteredPool;
 }): Promise<AuctionRosterCommitReport> {
-  if (input.session.currentPickIndex < input.session.pickOrder.length) {
+  if (!input.session.draftManifest && input.session.currentPickIndex < input.session.pickOrder.length) {
     throw new Error(
       `Cannot commit snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
     );
   }
 
+  const frozenTruth = input.session.draftManifest ? readSnakeDraftTruth(input.session, 'MLB') : null;
+  if (frozenTruth?.manifest?.leagueId !== undefined && frozenTruth.manifest.leagueId !== input.leagueId) {
+    throw new Error('The MLB snake manifest belongs to a different league.');
+  }
+  const availableMlbPoolIds = new Set(input.pool.players.map((player) => player.id));
+  if (frozenTruth?.manifest && frozenTruth.manifest.pool.playerIds.some((playerId) => !availableMlbPoolIds.has(playerId))) {
+    throw new Error('The MLB snake pool no longer matches its frozen manifest.');
+  }
+  const completedPicks = frozenTruth?.completedPicks ?? input.session.completedPicks;
+  const pickOrder = frozenTruth?.pickOrder ?? input.session.pickOrder;
+  if (completedPicks.length !== pickOrder.length) {
+    throw new Error('Cannot commit snake rosters until every MLB pick is recorded.');
+  }
   const poolById = new Map(input.pool.players.map((player) => [player.id, player]));
+  const frozenSettlementByPlayerId = new Map(
+    (frozenTruth?.completedPicks ?? []).map((pick) => [pick.playerId, pick.launchSalary]),
+  );
   const settlementByPlayerId = new Map<string, number>();
   const seenPlayerIds = new Set<string>();
-  for (const pick of input.session.completedPicks) {
+  for (const pick of completedPicks) {
     if (seenPlayerIds.has(pick.playerId)) {
       throw new Error(`Snake draft player "${pick.playerId}" appears in more than one completed pick.`);
     }
     seenPlayerIds.add(pick.playerId);
     const poolPlayer = poolById.get(pick.playerId);
-    if (!poolPlayer || !Number.isFinite(poolPlayer.iv) || poolPlayer.iv < 0) {
+    const settlement = frozenTruth ? frozenSettlementByPlayerId.get(pick.playerId) : poolPlayer?.iv;
+    if (!Number.isFinite(settlement) || settlement! < 0) {
       throw new Error(`Snake draft player "${pick.playerId}" was not found with a finite RegisteredPool IV.`);
     }
-    settlementByPlayerId.set(pick.playerId, poolPlayer.iv);
+    settlementByPlayerId.set(pick.playerId, settlement!);
   }
 
-  const picksByTeamId = new Map<string, typeof input.session.completedPicks>();
-  for (const pick of input.session.completedPicks) {
+  const picksByTeamId = new Map<string, Array<{ round: number; pick: number; teamId: string; playerId: string }>>();
+  for (const pick of completedPicks) {
     picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
   }
 
   const teamRosterCounts: Record<string, number> = {};
   const committedPlayerIds: string[] = [];
-  const teamIds = [...new Set(input.session.pickOrder.map((pick) => pick.teamId))];
+  const teamIds = frozenTruth?.lockedClubs.map((club) => club.teamId)
+    ?? input.session.snakeSetup?.clubs.map((club) => club.teamId)
+    ?? [...new Set(pickOrder.map((pick) => pick.teamId))];
+  if (teamIds.length === 0 || new Set(teamIds).size !== teamIds.length) {
+    throw new Error('The FARM snake authority has no canonical frozen clubs.');
+  }
+
+  // Fail closed before the first roster/player write. Pick-time rails are not
+  // durable proof: synced, migrated, or tampered sessions can bypass them.
+  for (const teamId of teamIds) {
+    const picks = picksByTeamId.get(teamId) ?? [];
+    const storedPlayers = await Promise.all(picks.map((pick) => getPlayer(pick.playerId)));
+    if (storedPlayers.some((player) => !player)) {
+      throw new Error(`The completed MLB snake roster for ${teamId} is missing player data.`);
+    }
+    const legalityPlayers = storedPlayers.map((player) => toRosterSlotPlayer({
+      primaryPosition: player!.primaryPosition,
+      secondaryPosition: player!.secondaryPosition ?? null,
+      traits: [player!.trait1, player!.trait2],
+    }));
+    if (!isLegalRoster(legalityPlayers)) {
+      throw new Error(`The completed MLB snake roster for ${teamId} is not a legal 22-player roster.`);
+    }
+  }
+
+  await resetAssignedLeaguePlayersByRosterStatus(input.leagueId, 'MLB');
 
   for (const teamId of teamIds) {
     const picks = picksByTeamId.get(teamId) ?? [];
@@ -460,6 +454,15 @@ export async function commitCompletedFarmAuctionSessionToLeagueRosters(input: {
   const committedPlayerIds: string[] = [];
 
   for (const team of input.session.teams) {
+    for (const assignment of team.roster) {
+      if (!prospectsById.has(assignment.playerId)) {
+        throw new Error(`Farm auction prospect "${assignment.playerId}" was not found in the saved pool.`);
+      }
+    }
+  }
+  await resetAssignedLeaguePlayersByRosterStatus(input.leagueId, 'FARM');
+
+  for (const team of input.session.teams) {
     const playerIds = team.roster.map((assignment) => assignment.playerId);
     await commitTeamRoster({
       leagueId: input.leagueId,
@@ -491,47 +494,156 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: FarmAuctionPool;
 }): Promise<AuctionRosterCommitReport> {
-  if (input.session.draftPhase !== 'FARM') {
+  if (!input.session.draftManifest && input.session.draftPhase !== 'FARM') {
     throw new Error('Cannot commit a non-farm snake session to farm rosters.');
   }
-  if (input.session.currentPickIndex < input.session.pickOrder.length) {
+  if (!input.session.draftManifest && input.session.currentPickIndex < input.session.pickOrder.length) {
     throw new Error(
       `Cannot commit farm snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
     );
   }
+  const frozenTruth = input.session.draftManifest ? readSnakeDraftTruth(input.session, 'FARM') : null;
+  if (frozenTruth?.manifest?.leagueId !== undefined && frozenTruth.manifest.leagueId !== input.leagueId) {
+    throw new Error('The FARM snake manifest belongs to a different league.');
+  }
+  const availableFarmPoolIds = new Set(input.pool.prospects.map((prospect) => prospect.id));
+  if (frozenTruth?.manifest && frozenTruth.manifest.pool.playerIds.some((playerId) => !availableFarmPoolIds.has(playerId))) {
+    throw new Error('The FARM snake pool no longer matches its frozen manifest.');
+  }
+  const completedPicks = frozenTruth?.completedPicks ?? input.session.completedPicks;
+  const pickOrder = frozenTruth?.pickOrder ?? input.session.pickOrder;
+  const frozenSettlementByPlayerId = new Map(
+    (frozenTruth?.completedPicks ?? []).map((pick) => [pick.playerId, pick.launchSalary]),
+  );
   const prospectsById = new Map(input.pool.prospects.map((prospect) => [prospect.id, prospect]));
-  if (input.session.completedPicks.length !== input.session.pickOrder.length) {
+  if (completedPicks.length !== pickOrder.length) {
     throw new Error('Cannot commit farm snake rosters until every farm pick is recorded.');
   }
   const seenPlayerIds = new Set<string>();
-  const picksByTeamId = new Map<string, typeof input.session.completedPicks>();
-  for (const pick of input.session.completedPicks) {
+  const picksByTeamId = new Map<string, Array<{ round: number; pick: number; teamId: string; playerId: string }>>();
+  const orderByPick = new Map(pickOrder.map((slot) => [slot.pick, slot]));
+  const salaryByPickedPlayerId = new Map<string, number>();
+  for (const pick of completedPicks) {
     if (seenPlayerIds.has(pick.playerId)) {
       throw new Error(`Farm snake prospect "${pick.playerId}" appears in more than one completed pick.`);
+    }
+    const ordered = orderByPick.get(pick.pick);
+    if (!ordered || ordered.round !== pick.round || ordered.teamId !== pick.teamId) {
+      throw new Error(`Farm snake pick ${pick.pick} does not match the frozen pick order.`);
     }
     seenPlayerIds.add(pick.playerId);
     if (!prospectsById.has(pick.playerId)) {
       throw new Error(`Farm snake prospect "${pick.playerId}" was not found in the deterministic farm pool.`);
     }
+    const salary = frozenTruth
+      ? frozenSettlementByPlayerId.get(pick.playerId)
+      : farmPickSalary(input.session, pick.pick);
+    if (!Number.isFinite(salary) || salary! < 0) {
+      throw new Error(`Farm snake prospect "${pick.playerId}" has no finite frozen slot salary.`);
+    }
+    salaryByPickedPlayerId.set(pick.playerId, salary!);
     picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
   }
 
   const teamRosterCounts: Record<string, number> = {};
-  const committedPlayerIds: string[] = [];
-  const teamIds = [...new Set(input.session.pickOrder.map((pick) => pick.teamId))];
+  const teamIds = [...new Set(
+    frozenTruth?.manifest?.lockedClubs.map((club) => club.teamId)
+      ?? input.session.snakeSetup?.clubs.map((club) => club.teamId)
+      ?? pickOrder.map((pick) => pick.teamId),
+  )];
+  const teamIdSet = new Set(teamIds);
+  const [storedPlayers, rosterEntries] = await Promise.all([
+    getAllPlayers(),
+    Promise.all(teamIds.map(async (teamId) => [teamId, await getTeamRoster(teamId)] as const)),
+  ]);
+  const storedPlayerById = new Map(storedPlayers.map((player) => [player.id, player]));
+  const rosterByTeamId = new Map(rosterEntries);
+  const rosterOwnerByPlayerId = new Map<string, string>();
+
   for (const teamId of teamIds) {
-    const picks = picksByTeamId.get(teamId) ?? [];
-    const priorRoster = await getTeamRoster(teamId);
-    const playerIds = [...new Set([...(priorRoster?.farmRoster ?? []), ...picks.map((pick) => pick.playerId)])];
-    await commitTeamRoster({ leagueId: input.leagueId, teamId, rosterStatus: 'FARM', playerIds });
-    teamRosterCounts[teamId] = playerIds.length;
-    for (const pick of picks) {
-      const prospect = prospectsById.get(pick.playerId)!;
-      const salary = farmPickSalary(input.session, pick.pick);
-      await savePlayer(farmProspectToPlayer(prospect, input.leagueId, teamId, salary));
-      committedPlayerIds.push(pick.playerId);
+    const roster = rosterByTeamId.get(teamId);
+    if (!roster) throw new Error(`Team "${teamId}" is missing a League Builder roster.`);
+    if (new Set(roster.farmRoster).size !== roster.farmRoster.length) {
+      throw new Error(`Team "${teamId}" has duplicate players on its existing FARM roster.`);
+    }
+    for (const playerId of roster.farmRoster) {
+      const priorOwner = rosterOwnerByPlayerId.get(playerId);
+      if (priorOwner && priorOwner !== teamId) {
+        throw new Error(`FARM player "${playerId}" appears on more than one team roster.`);
+      }
+      rosterOwnerByPlayerId.set(playerId, teamId);
+      const player = storedPlayerById.get(playerId);
+      const assignments = player?.leagueAssignments?.filter((row) => row.leagueId === input.leagueId) ?? [];
+      if (!player || assignments.length !== 1
+        || assignments[0].teamId !== teamId || assignments[0].rosterStatus !== 'FARM') {
+        throw new Error(`Existing FARM player "${playerId}" does not have one canonical ${teamId} FARM assignment.`);
+      }
     }
   }
+
+  for (const player of storedPlayers) {
+    const assignments = player.leagueAssignments?.filter((row) => row.leagueId === input.leagueId) ?? [];
+    if (assignments.length > 1) {
+      throw new Error(`Player "${player.id}" has conflicting assignments in league "${input.leagueId}".`);
+    }
+    const assignment = assignments[0];
+    if (assignment?.rosterStatus === 'FARM' && teamIdSet.has(assignment.teamId)
+      && rosterOwnerByPlayerId.get(player.id) !== assignment.teamId) {
+      throw new Error(`FARM assignment for "${player.id}" is missing from ${assignment.teamId}'s roster.`);
+    }
+  }
+
+  const combinedRosterIdsByTeamId = new Map<string, string[]>();
+  for (const teamId of teamIds) {
+    const picks = picksByTeamId.get(teamId) ?? [];
+    const roster = rosterByTeamId.get(teamId)!;
+    const combinedPlayerIds = [...roster.farmRoster];
+    for (const pick of picks) {
+      const rosterOwner = rosterOwnerByPlayerId.get(pick.playerId);
+      const stored = storedPlayerById.get(pick.playerId);
+      const assignment = stored?.leagueAssignments?.find((row) => row.leagueId === input.leagueId);
+      if (rosterOwner) {
+        const salary = stored?.settledSalary ?? stored?.salary;
+        if (rosterOwner !== teamId || !stored?.draftedAsFarmProspect
+          || assignment?.teamId !== teamId || assignment.rosterStatus !== 'FARM'
+          || salary !== salaryByPickedPlayerId.get(pick.playerId)) {
+          throw new Error(`Frozen FARM pick "${pick.playerId}" conflicts with an existing roster entry.`);
+        }
+        continue;
+      }
+      if (assignment && (assignment.teamId !== '' || assignment.rosterStatus !== 'FREE_AGENT')) {
+        throw new Error(`Frozen FARM pick "${pick.playerId}" already belongs to another roster assignment.`);
+      }
+      combinedPlayerIds.push(pick.playerId);
+    }
+    if (combinedPlayerIds.length > FARM_AUCTION_ROSTER_SLOTS_PER_TEAM) {
+      throw new Error(`Team "${teamId}" would exceed ${FARM_AUCTION_ROSTER_SLOTS_PER_TEAM} FARM players.`);
+    }
+    if (combinedPlayerIds.length !== FARM_AUCTION_ROSTER_SLOTS_PER_TEAM) {
+      throw new Error(`Team "${teamId}" would finish with ${combinedPlayerIds.length}/${FARM_AUCTION_ROSTER_SLOTS_PER_TEAM} FARM players.`);
+    }
+    combinedRosterIdsByTeamId.set(teamId, combinedPlayerIds);
+  }
+
+  await commitFarmDraftRostersAndPlayersAtomically({
+    rosters: teamIds.map((teamId) => {
+      const combinedPlayerIds = combinedRosterIdsByTeamId.get(teamId)!;
+      teamRosterCounts[teamId] = combinedPlayerIds.length;
+      return { ...rosterByTeamId.get(teamId)!, farmRoster: combinedPlayerIds };
+    }),
+    players: completedPicks.map((pick) => {
+      const prospect = prospectsById.get(pick.playerId)!;
+      const stored = storedPlayerById.get(pick.playerId);
+      return farmProspectToPlayer(
+        prospect,
+        input.leagueId,
+        pick.teamId,
+        salaryByPickedPlayerId.get(pick.playerId)!,
+        stored?.leagueAssignments,
+      );
+    }),
+  });
+  const committedPlayerIds = completedPicks.map((pick) => pick.playerId);
   return { leagueId: input.leagueId, rosterStatus: 'FARM', committedPlayerIds, teamRosterCounts };
 }
 
@@ -540,25 +652,5 @@ export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
     throw new ResetCompletedDraftLinkedFranchiseError(leagueId);
   }
 
-  const draftArc = await readCompletedDraftArc(leagueId);
-  void draftArc.mlbSession;
-  void draftArc.snakeSession;
-  void draftArc.startupDraftSession;
-
-  const teamIds = await leagueTeamIds(leagueId);
-  const askSalaryByPlayerId = new Map(
-    (draftArc.registeredPool?.players ?? []).map((player) => [player.id, player.salary]),
-  );
-
-  await deleteCommittedFarmPlayers(leagueId, committedSoldPlayerIds(draftArc.farmSession?.session));
-  await clearLeagueTeamRosterField(teamIds, 'farmRoster');
-
-  await resetAssignedLeaguePlayersToPool(leagueId, askSalaryByPlayerId);
-  await clearLeagueTeamRosterField(teamIds, 'mlbRoster');
-
-  await deleteAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
-  await deleteAuctionSession(leagueId, MLB_AUCTION_SEASON);
-  await deleteMlbDraftSession(leagueId, MLB_AUCTION_SEASON);
-  await deleteStartupDraftSession(leagueId, 1);
-  await deleteScoutProfilesForLeague(leagueId);
+  await resetCompletedDraftArcAtomically(leagueId);
 }

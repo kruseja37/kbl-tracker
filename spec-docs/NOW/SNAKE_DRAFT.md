@@ -1,10 +1,55 @@
-# NOW — Snake Draft: mainly built, messy edges (NOT Fable-living-season thread's surface)
+# NOW — Snake Draft: companion/economy/responsive repair ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-12 post-midnight)
+## VERIFIED (git, 2026-07-14; latest code commit `6ae55543`)
+- **Current thread move:** keep the frozen preview running and hand the repaired build to JK for
+  his Mac/iPad browser walk. The reported companion lag, false `CALCULATING`, team-specific fit,
+  projected board tax, Assistant GM availability, and desktop scroll defects are fixed. Companion
+  GMs can submit intent for the on-clock player; only the Hotseat's fresh atomic approval records
+  the pick. The no-clock room has no normal Pause control; `RESUME ROOM` exists only for a real
+  automatic/legacy stopped state. Independent delta re-audit is **APPROVE** with zero findings.
+- Snake tax is roster-local. My Board and Assistant GM Board each construct an independent live
+  22-player projection using the selected team's archetype, salary, exact cap shifts, position
+  groups, and ratings. The same roster produces the same tax in a 2-, 8-, or 20-club room; room
+  size is not an input. Candidate tax/fit remains contextual and updates when a board changes or a
+  drafted player leaves the pool.
+- Main/companion refresh no longer overlaps or rereads the entire League Builder data graph every
+  cycle. Calculation state is limited to the players actually requested. Missing/failed Assistant
+  workers fall back to the same validated local engine and the same Optimize Around baseline proof.
+- Mac/laptop fine-pointer layouts use one document scroll; iPad retains bounded touch panes. Live
+  1440x1000 proof: no horizontal overflow, false calculation state, Assistant-unavailable state,
+  normal Pause, or normal-state Resume. Full Snake/companion gate: 54 files / 499 tests; sync and
+  SyncModal: 112/112; production build: 2,720 modules; independent focused re-audit: 168/168.
+- The production route is shared Draft Setup → `/snake-room`; the retired
+  `LeagueBuilderSnakeDraft.tsx` page and `snakeDraftPoc` engine are deleted. Legacy snake URLs
+  redirect into the canonical setup/room flow.
+- The assembled path now covers team-first private work, exact player inspection and search,
+  overall/position boards, explicit 22-slot planning, live roster and money/tax/fit/chemistry
+  truth, atomic MLB pick trades and phase-appropriate corrections, immutable MLB/farm manifests,
+  fog-safe farm boards with no draft-pick trades, recap
+  confirmation, staffing, compact Franchise Setup, and zero-schedule launch. Pronouns remain in
+  engine data and do not render.
+- My Board and Asst GM Board share the same live public/player truth on main and companion. Board
+  refits, salary/tax/fit/chemistry, scarcity/rival risk, opportunity cost, TAKE/WAIT/TRADE/PASS,
+  and fair executable MLB pick packages recalculate as players and picks leave the room.
+- The final browser-repair gate is 9 files / 133 tests, zero failures. The full repository run
+  reached 10,235 passed / 15 skipped with three unrelated batch-load failures across two files;
+  every affected exact subset passes solo (8/8). The exact-tree responsive plus full-production
+  Playwright gate is 17/17 across both iPad orientations and a 430px companion. Strict
+  changed-file lint, TypeScript, the 2,719-module production build, and diff integrity are green.
+- Rapid My Board/Optimize changes use ordered worker epochs instead of render-time state writes;
+  own picks remain COMMITTED and display settled salary plus current marginal tax, rival picks
+  leave boards, all drafted players leave Player Pool, and Recent Picks expands to the complete
+  numbered log. Older leagues missing Snake-specific archetype selection now use the team's saved
+  MLB archetype rather than silently degrading every fit to weak.
+- Companion instructions now discover Vite's real same-Wi-Fi address and include the room code in
+  the URL; the claim screen prefills it. The configured Supabase hostname is externally
+  unreachable and the connected account exposes no project, so real login still requires an
+  active Supabase project connection. The UI now reports that condition instead of raw Safari
+  `Load failed` or the false `Supabase not configured` diagnosis.
 - Walkthrough wave 1 merged as PRs #90-#98: unified setup (UNIFYSETUP), room performance
   (PERFROOM: room-code write-once + field-patch persistence; 217,865→1 proofs), route bridge,
   room fixes. Design/plan of record: `spec-docs/SNAKE_DRAFT_VISION_2026-07-10.md` +
@@ -20,7 +65,7 @@
   page (`/snake-companion`) now has a real fail-closed sign-in gate, honest empty/pulling states,
   account email + sign-out, AND a captain-found cross-device clobber fix (companion claim/board
   saves were whole-session-row writes against a row-last-write-wins cloud store; now atomic
-  field-patches with pull-before-write). **PR #111 HELPSWEEP** (merge `d6c988e9`, current `main`
+  field-patches with pull-before-write). **PR #111 HELPSWEEP** (merge `d6c988e9`, then-current `main`
   tip) — applies the ratified help-button law across every snake screen (13 strings relocated,
   2 deleted, price chart collapsed by default) plus JK's ruled **board-first room layout**
   (team's own draft board is now the primary column; commissioner/ceremony panel compacted into
@@ -29,20 +74,19 @@
   `spec-docs/contracts/CONTRACT_COMPANIONAUTH_2026-07-12.md`,
   `spec-docs/contracts/CONTRACT_HELPSWEEP_2026-07-12.md`.
 
-## CARRIED from Fable memory — re-verify before acting
-- **Companion cross-device flow is now BUILT + MERGED but UNVERIFIED on real hardware.** The
-  sign-in gap fix (PR #110 above) has not yet been proven on an actual second physical device —
-  JK's own phone-to-Mac round-trip (`http://192.168.68.54:5173/snake-companion`, same Wi-Fi, same
-  account) is the morning's first gate. Do this before anything else.
-- After the phone round-trip: continue JK's walkthrough wave 2 (farm snake, trades, season
-  handoff — still unwalked; he'll see the new board-first room layout live for the first time).
+## OPEN ACCEPTANCE ONLY
+- **Companion cross-device behavior is code-, sync-, and two-origin-browser-verified but still
+  unaccepted on real hardware.** JK's own phone/iPad-to-Mac round-trip (same Wi-Fi, same account)
+  belongs inside the final hands-on walk after the external Supabase project connection is live.
+- JK should walk the MLB room, pick trade, FARM draft, recap/staffing handoff, zero-schedule launch,
+  and later schedule entry. His browser walk remains the sole acceptance gate.
 - A smaller ticketed finding: the Draft Setup "can't legally seat every club at 22 under the cap"
   blocker message misdirects (an SML-import repro found raising the cap 1.2M→10M changed
   nothing — the real constraint is position-supply shape, not the cap number).
 - The snake draft is the ruled v1 flagship draft path; the auction stays routed/testable,
   frozen for v2.
-- General state: "code-complete but messy" — expect polish/wiring gaps found by walkthrough,
-  not missing systems. JK walkthrough findings drive the queue.
+- General state: code/system/UI crawl repairs are committed; JK walkthrough findings, not an
+  agent's visual opinion, decide acceptance and any next repair queue.
 
 ## ADDENDUM (2026-07-12 early AM) — EXECUTED, see VERIFIED above
 JK held a paste-ready walkthrough prompt (delivered in the living-season thread's chat) that

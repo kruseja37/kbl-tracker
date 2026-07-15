@@ -29,6 +29,25 @@ export interface FarmAuctionPool {
   auctionPlayers: AuctionPlayer[];
 }
 
+export function buildFarmAuctionPoolFromProspects(
+  prospects: readonly LeagueBuilderProspectPlayerDto[],
+): FarmAuctionPool {
+  const snapshot = prospects.map((prospect) => structuredClone(prospect));
+  const pricedProspects = snapshot.map((prospect) => ({
+    id: prospect.id,
+    iv: priceFarmAuctionProspect(prospect),
+  }));
+  const percentiles = computeIvPercentiles(pricedProspects);
+  return {
+    prospects: snapshot,
+    auctionPlayers: pricedProspects.map((player) => ({
+      playerId: player.id,
+      iv: player.iv,
+      ivPercentile: percentiles.get(player.id) ?? 0,
+    })),
+  };
+}
+
 const SALARY_POSITIONS = new Set<string>([
   'C',
   '1B',
@@ -165,19 +184,5 @@ export function buildFarmAuctionPool(input: BuildFarmAuctionPoolInput): FarmAuct
     teamDraftOrder,
     scoutsByTeamId: input.scoutsByTeamId,
   }, poolSize);
-  const pricedProspects = prospects.map((prospect) => ({
-    id: prospect.id,
-    iv: priceFarmAuctionProspect(prospect),
-  }));
-  const percentiles = computeIvPercentiles(pricedProspects);
-  const auctionPlayers = pricedProspects.map((player) => ({
-    playerId: player.id,
-    iv: player.iv,
-    ivPercentile: percentiles.get(player.id) ?? 0,
-  }));
-
-  return {
-    prospects,
-    auctionPlayers,
-  };
+  return buildFarmAuctionPoolFromProspects(prospects);
 }

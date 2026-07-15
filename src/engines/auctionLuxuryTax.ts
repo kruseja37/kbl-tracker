@@ -48,7 +48,7 @@ export function auctionShiftedCaps(
  * TAXPRECISION (2026-07-09, spec-docs/contracts/CONTRACT_TAXPRECISION_2026-07-09.md): delegate
  * straight to the canonical shiftLuxuryCaps with the FULL capIdentity (not a rebuilt
  * `{ increase, decrease }` literal) so archetype-selected teams' exact `rawShift` percentages win
- * here exactly as they already do for the snake draft (LeagueBuilderSnakeDraft.tsx) and
+ * here exactly as they already do for the production snake room and
  * identityCapShift's own rawShift short-circuit (leagueConstruction.ts). Reconstructing the
  * identity object here used to silently drop `rawShift`, forcing every archetype-selected team's
  * auction-side caps through the coarser CAP_MODIFICATION_FRACTIONS per-name table instead of its
@@ -61,6 +61,37 @@ function auctionShiftedCapsWithBaseCaps(
   baseCaps: LuxuryCapRow[],
 ): LuxuryCapRow[] {
   return capIdentity ? shiftLuxuryCaps(baseCaps, capIdentity) : baseCaps;
+}
+
+/**
+ * Exact one-player specialization of `luxuryTax([candidate], shiftedCaps,
+ * 'taxed')`. Draft setup prices thousands of empty-roster candidates, so it
+ * should not pay the generic roster grouping/sorting cost for this case.
+ */
+export function auctionSinglePlayerTaxWithShiftedCaps(
+  candidate: ConstructionPlayer,
+  shiftedCaps: readonly LuxuryCapRow[],
+): number {
+  const group: LuxuryCapRow['group'] | null = !candidate.isPitcher
+    ? 'hitters'
+    : candidate.role === 'SP' || candidate.role === 'SP/RP'
+      ? 'rotation'
+      : candidate.role === 'RP' || candidate.role === 'CP'
+        ? 'bullpen'
+        : null;
+  if (!group) return 0;
+
+  let charged = 0;
+  for (const row of shiftedCaps) {
+    if (row.group !== group || row.topN <= 0) continue;
+    const rating = row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC'
+      ? candidate.pit?.[row.stat] ?? 0
+      : candidate.bat[row.stat];
+    const over = rating - Math.max(row.cap, 0);
+    if (over <= 0) continue;
+    charged += row.penaltyPer100 * (over / 100) ** row.penaltyCurve + row.minAdder;
+  }
+  return charged;
 }
 
 export function computeAuctionTeamProjectedTaxWithCaps(
@@ -111,6 +142,12 @@ export function auctionMarginalTaxWithCaps(
   capIdentity: TeamCapIdentity | undefined,
   baseCaps: LuxuryCapRow[],
 ): number {
+  if (committedRoster.length === 0) {
+    return auctionSinglePlayerTaxWithShiftedCaps(
+      candidate,
+      auctionShiftedCapsWithBaseCaps(capIdentity, baseCaps),
+    );
+  }
   return computeAuctionTeamProjectedTaxWithCaps(committedRoster, candidate, capIdentity, baseCaps)
     - computeAuctionTeamProjectedTaxWithCaps(committedRoster, null, capIdentity, baseCaps);
 }

@@ -752,6 +752,8 @@ function constrainedIdentityClimb(
 export interface BuildIdentityOptions {
   /** Real non-shill league clubs. Required so advisory tax can never silently fall back to 20. */
   realTeamCount: number;
+  /** Optional already-resolved team tax caps. Snake uses this roster-local seam. */
+  taxCaps?: readonly LuxuryCapRow[];
   posture?: RosterPosture;
   /** Override the posture's value floor (fraction of the value-max baseline). */
   valueFloorOverride?: number;
@@ -800,7 +802,9 @@ export function buildIdentityRoster(
   const params = POSTURE_PARAMS[posture];
   const pool = options.banned?.size ? fullPool.filter((p) => !options.banned!.has(p.id)) : fullPool;
 
-  const caps = archetypeTaxCaps(archetype, tier, options.realTeamCount);
+  const caps = options.taxCaps
+    ? [...options.taxCaps]
+    : archetypeTaxCaps(archetype, tier, options.realTeamCount);
   const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
 
   // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
