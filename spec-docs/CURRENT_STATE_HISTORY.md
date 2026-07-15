@@ -1213,3 +1213,13 @@ missing Assistant boards, incorrect zero projected tax, suspect team fit, and de
 nested-scroll friction; he also approved companion pick intent with Hotseat confirmation
 and questioned the no-clock Pause action. This close supersedes that header with the
 independently approved repair at `6ae55543`. JK's Mac/iPad walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 unified setup and exact Snake money close
+
+The prior live header recorded code commit `6ae55543` after the companion/economy/responsive
+repair. JK's next review exposed disconnected Auction/Snake pool and archetype setup, doubtful
+fit/tax and legal-finish math, Assistant slot errors, duplicate legend-name display, and missing
+home navigation. This close supersedes that header with independently approved code commit
+`00e7f09e`: one shared setup surface, exact signed roster-local money and slot proof, corrected
+Assistant plan structure/IV ordering, duplicate nickname suppression, and the SMB home button.
+JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.

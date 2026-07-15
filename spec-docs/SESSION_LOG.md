@@ -7260,3 +7260,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending / next start:** JK tests the actual League Builder Snake path on Mac plus a physical iPad companion,
   including board editing, Assistant GM, projected 22-player tax/fit, and submit-choice→Hotseat approval. The
   dev server remains running on port 5173. Automated proof is not product acceptance.
+
+## 2026-07-15 (Codex, unified setup + exact Snake money/slot repair) — approved tree committed; JK walk next
+
+- Read the Snake brief and standard ritual, loaded `working-with-jk`, and fetched before every
+  current-state ruling. Final pre-code-commit `origin/main` was
+  `ea66830e0305d999f4140a101d452417f7d9152e`; work stayed isolated on
+  `codex/snake-legends-integration` and was committed as `00e7f09e`.
+- Connected Auction and Snake setup instead of duplicating it: one League Builder Draft Setup now
+  owns saved format, source leagues, grouped Career/Peak/Draft versions, manual add/remove, and
+  team MLB/farm archetypes. Lock/unlock restores only versions retired by the current lock and
+  preserves deliberate GM removals across repeated cycles.
+- Replaced inconsistent Snake affordability checks with one signed `1e-6`-tolerant money law
+  across seating proof, Assistant GM, best-22 feasibility, rational room, setup seeding, decisions,
+  and main/companion display. Exact legal-finish search distinguishes proven `BLOCKED` from bounded
+  `OPEN`; signed tax refunds remain visible.
+- Corrected roster intelligence: fit and projected tax use the complete team-specific 22-player
+  plan and exact before/after tax; dual-role pitchers use their worst applicable group. Assistant
+  plans require a backup catcher and sort same-role C/SP/RP/flex slots by IV. Duplicate legend
+  nickname display is suppressed and a compact SMB home button restores navigation.
+- Builder gates: 23 files / 370 tests; TypeScript, changed-file ESLint, 2,724-module production
+  build, and diff integrity green. Independent frozen-tree auditor: **APPROVE**, zero
+  blocker/major/minor findings, 22 files / 327 tests, plus its own TypeScript/lint/build/diff gates.
+- Dev server PID 77758 is listening on port 5173 from
+  `/private/tmp/kbl-snake-legends-integration`. **Pending / only acceptance gate:** JK's real
+  League Builder and Snake-room Mac/iPad browser walk. No push or merge was performed.

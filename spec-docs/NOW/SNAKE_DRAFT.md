@@ -1,10 +1,34 @@
-# NOW — Snake Draft: companion/economy/responsive repair ready; JK walk is the gate
+# NOW — Snake Draft: unified setup and exact money/slot repair ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-14; latest code commit `6ae55543`)
+## VERIFIED (git, 2026-07-15; latest code commit `00e7f09e`)
+- **Current thread move:** keep the frozen build running for JK's League Builder and Snake-room
+  browser walk. Auction and Snake now use the same setup surface for draft method, source leagues,
+  grouped Career/Peak/Draft player versions, manual pool membership, and each team's MLB/farm
+  archetypes. The room forks only after setup. Independent frozen-tree audit: **APPROVE**, zero
+  blocker/major/minor findings.
+- Pool locking is reversible without being destructive: unlock restores only versions retired by
+  the current lock, so repeated lock/unlock cycles cannot resurrect a player card the GM removed.
+  Duplicate legend nickname display is suppressed before those players reach setup or the room.
+- Snake seating and every board/room money decision share one signed, tolerance-aware money law.
+  Exact 22-slot feasibility proves `BLOCKED`; an exhausted bounded search remains `OPEN` rather
+  than inventing a hard rejection. Fit and tax use the full projected roster, exact before/after
+  tax, and the worst applicable pitching group for SP/RP players.
+- Assistant plans require a real backup catcher, place eligible catchers in catcher slots before
+  flex, and sort same-role C/SP/RP/flex slots by IV. Main and companion surfaces share the same
+  signed over-budget/refund copy. A compact 44px SMB icon returns to Home.
+- Final builder evidence: 23 focused files / 370 tests; TypeScript, changed-file ESLint,
+  2,724-module production build, and `git diff --check` green. Independent evidence: 22 files /
+  327 tests plus separate TypeScript, lint, build, and diff gates. Fresh `origin/main` was
+  `ea66830e`; this isolated branch was 54 ahead / 0 behind before the docs close.
+- **Pending / only gate:** JK walks Draft Setup with Auction and Snake, player-version/pool
+  edits, archetype persistence, then Snake My Board/Assistant/Player Pool on Mac and iPad. The
+  dev server is listening on port 5173 from `/private/tmp/kbl-snake-legends-integration`.
+
+## PRIOR VERIFIED (git, 2026-07-14; code commit `6ae55543`)
 - **Current thread move:** keep the frozen preview running and hand the repaired build to JK for
   his Mac/iPad browser walk. The reported companion lag, false `CALCULATING`, team-specific fit,
   projected board tax, Assistant GM availability, and desktop scroll defects are fixed. Companion
