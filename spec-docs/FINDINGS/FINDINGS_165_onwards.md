@@ -155,3 +155,38 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** The full repository suite, TypeScript, production build, and live browser journey are green, but strict lint rejects the changed tree: one destructured `_lastModified` value is never used, and two browser-seeding calls erase their storage input contracts with explicit `any` assertions.
 **Impact:** The final certification is not clean, and the browser lifecycle fixture can drift from real `saveTeam` or `savePlayer` input types without compile-time detection.
 **Action:** Remove the unused binding without changing snapshot semantics and bind both browser-seeding objects to the imported storage function parameter types. Re-run the exact integration tests, lifecycle browser journey, strict changed-file lint, TypeScript, build, and diff check.
+
+### FINDING-186
+**Date:** 2026-07-14 | **Phase:** JK Snake browser walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `useSnakeAssistantBoard.ts`, `SnakeDraftRoom.tsx`
+**Evidence:** Changing rankings or pressing Optimize Around could blink and hang because request-key changes wrote React state during render while late worker callbacks could restore superseded results.
+**Impact:** A GM could lose control of the private desk and escape only through Undo.
+**Action:** Move request lifecycle to ordered effect epochs, ignore stale worker callbacks, clear private state on Cover/null, and prove rapid request churn plus repeated live Optimize clicks settle.
+
+### FINDING-187
+**Date:** 2026-07-14 | **Phase:** JK Snake browser walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `deskRoomModel.ts`, `useSnakeAssistantBoard.ts`
+**Evidence:** Older Snake setup rows without a Snake-specific archetype id fell to Balanced even when the team already had an MLB archetype, producing weak fit and unavailable Assistant GM output.
+**Impact:** Player/team fit and the optimized 22 could be misleading or absent for valid teams.
+**Action:** Fall back to the team's saved MLB archetype while preserving an explicit Balanced choice; retain fail-closed worker validation.
+
+### FINDING-188
+**Date:** 2026-07-14 | **Phase:** JK Snake browser walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoom.tsx`, `deskRoomModel.ts`, `RankingsView.tsx`, `BoardView.tsx`, `DeskCandidateRow.tsx`
+**Evidence:** Drafted players remained in Player Pool, own picks were treated as gone instead of committed, and the first repair computed an own committed player's marginal tax by adding that player to a roster that already contained the pick.
+**Impact:** Boards gave false availability/advice and could display false money truth.
+**Action:** Remove every drafted card from Player Pool, retain own picks as COMMITTED, remove/backfill rival picks, and calculate a committed player's current tax contribution against the roster without that player. The independent audit rejected the double-count and approved the repair.
+
+### FINDING-189
+**Date:** 2026-07-14 | **Phase:** JK Snake browser walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `SnakeDraftRoom.tsx`, `SnakeDraftRoomView.tsx`
+**Evidence:** Recent Picks omitted pick numbers and received only the latest eight results.
+**Impact:** The commissioner could not reconstruct a complete pick-by-pick draft log.
+**Action:** Feed all completed picks and render exact `PICK #N · TEAM SELECTED PLAYER` entries in the expandable log; apply numbered truth to FARM.
+
+### FINDING-190
+**Date:** 2026-07-14 | **Phase:** JK Snake browser walk | **Status:** LOCAL FIX VERIFIED — EXTERNAL SERVICE OPEN
+**Files:** `CompanionApprovalCard.tsx`, `companionJoinUrl.ts`, `CompanionClaimScreen.tsx`, `CompanionSignInScreen.tsx`, Vite companion-address plugin
+**Evidence:** The displayed companion address was stale/manual, Vite was not reliably advertised for LAN use, room codes were not URL-prefilled, and Safari surfaced raw `Load failed`. The configured Supabase hostname does not resolve; the connected account exposes no project.
+**Impact:** iPad/iPhone could load a black page or fail login with a false local diagnosis.
+**Action:** Bind Vite on all interfaces, discover/publish the actual network origin, include/prefill room code, and map network auth failure to honest UI. Real account login remains blocked until an active Supabase project URL/key exists.

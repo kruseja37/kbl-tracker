@@ -15,12 +15,14 @@
 
 ---
 
-## Current Phase: Snake Draft automated close COMPLETE — JK browser acceptance next
+## Current Phase: Snake browser-walk repair COMPLETE — JK re-walk next
 
-The Snake repo crawl, builder-auditor repair loop, live UI crawl, and certification are
-complete on code commit `f8ca392d`. Final proof: 686 passed files / 10,227 passed tests,
-17/17 live browser journeys, strict lint, TypeScript, production build, and diff integrity.
-Next action: JK's hands-on browser walk; it remains the sole product-acceptance gate.
+JK's reported loop, Assistant GM/archetype, drafted-player, pick-log, and LAN companion
+defects are repaired on code commit `00fd64fe`. Final proof: 9 files / 133 focused tests,
+17/17 exact-tree browser journeys, strict lint, TypeScript, production build, and diff
+integrity. Independent audit rejected one committed-player tax double-count and approved
+the regression-pinned repair. Real companion login still needs an active external Supabase
+project connection. Next action: JK's hands-on browser re-walk; it remains the sole product gate.
 
 ---
 
@@ -33,7 +35,7 @@ Next action: JK's hands-on browser walk; it remains the sole product-acceptance 
 | 2 | Seams Audit | NOT STARTED | — | — |
 | 3 | Known Bug Verification | NOT STARTED | — | — |
 | 4 | Debt Inventory | NOT STARTED | — | — |
-| SNAKE-1 | Snake mock draft close | AUTOMATED COMPLETE — JK WALK PENDING | 2026-07-13 | 2026-07-14 |
+| SNAKE-1 | Snake mock draft close | BROWSER REPAIR COMPLETE — JK RE-WALK PENDING | 2026-07-13 | 2026-07-14 |
 
 ---
 
@@ -1170,3 +1172,17 @@ Still unresolved. FINDING-047 fallback path only has base state, not full scoreb
 Final evidence: code commit `f8ca392d`; 686 passed files / 10,227 passed tests / zero failures;
 17/17 responsive and production-lifecycle browser journeys; strict changed-file lint, TypeScript,
 production build, and diff integrity green. JK's browser walk remains the sole acceptance gate.
+
+### 2026-07-14 JK browser-walk repair — append-only finding index
+
+| Finding | Date | Status | Surface | Resolution |
+|---------|------|--------|---------|------------|
+| FINDING-186 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Assistant board lifecycle | Ordered worker epochs stop board/Optimize loops and stale private results. |
+| FINDING-187 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Archetype / Asst GM | Older Snake setup uses saved team archetype; explicit Balanced is preserved. |
+| FINDING-188 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Drafted-player truth | Own picks commit, rival picks leave, pools exclude all drafted cards, money truth is exact. |
+| FINDING-189 | 2026-07-14 | FIXED-AND-INDEPENDENTLY-VERIFIED | Recent Picks | Complete expandable numbered pick log is live. |
+| FINDING-190 | 2026-07-14 | LOCAL FIX VERIFIED — EXTERNAL SERVICE OPEN | Companion LAN/auth | Real LAN URL/prefill/error truth shipped; active Supabase connection still required. |
+
+Full text: `FINDINGS/FINDINGS_165_onwards.md`. Code commit: `00fd64fe`. Final focused gate:
+133/133; exact-tree Playwright: 17/17; independent re-audit: APPROVE. JK's re-walk remains
+the acceptance gate.

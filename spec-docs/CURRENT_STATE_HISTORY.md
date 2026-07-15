@@ -1194,3 +1194,12 @@ files / 10,120 passed tests, responsive Playwright 4/4, and the live UI crawl st
 The final close then completed that crawl, repaired every resulting finding through
 FINDING-185 under builder-auditor separation, and advanced the exact code tree to commit
 `f8ca392d` with a larger clean repository and browser proof.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake browser-walk repair close
+
+The prior live header recorded code commit `f8ca392d` as ready for JK's walk with a
+686-file / 10,227-test clean baseline and 17/17 browser proof. JK's next live pass then
+found the board recalculation loop, unavailable/weak Assistant GM state, incorrect
+drafted-player board/pool handling, an incomplete unnumbered pick log, and a companion
+address/auth failure. This close supersedes that header with the independently approved
+repair at `00fd64fe`; JK's browser walk remains the sole acceptance gate.

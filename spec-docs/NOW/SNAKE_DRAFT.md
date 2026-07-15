@@ -4,10 +4,12 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-14; code commit `f8ca392d`)
-- **Current thread move:** keep the frozen preview running and hand the exact build to JK for his
-  browser walk. The hostile repository crawl, separate builder/auditor repair loop, live UI crawl,
-  and final certification are complete. No design decision is waiting on JK before that walk.
+## VERIFIED (git, 2026-07-14; browser-repair code commit `00fd64fe`)
+- **Current thread move:** keep the frozen preview running and hand the repaired build to JK for
+  his browser walk. The reported loop, Assistant GM/archetype, drafted-player, Recent Picks, and
+  LAN companion-address defects are fixed. Independent audit rejected one committed-player tax
+  double-count; its narrow repair is regression-pinned and the re-audit is **APPROVE**. No design
+  decision is waiting on JK before the walk.
 - The production route is shared Draft Setup → `/snake-room`; the retired
   `LeagueBuilderSnakeDraft.tsx` page and `snakeDraftPoc` engine are deleted. Legacy snake URLs
   redirect into the canonical setup/room flow.
@@ -20,10 +22,21 @@
 - My Board and Asst GM Board share the same live public/player truth on main and companion. Board
   refits, salary/tax/fit/chemistry, scarcity/rival risk, opportunity cost, TAKE/WAIT/TRADE/PASS,
   and fair executable MLB pick packages recalculate as players and picks leave the room.
-- The closing serial repository gate is 686 passed files / 8 skipped and 10,227 passed tests /
-  15 skipped, zero failures. The responsive plus full-production Playwright gate is 17/17 across
-  both iPad orientations and a 430px companion. Strict changed-file lint, TypeScript, production
-  build, and diff integrity are green.
+- The final browser-repair gate is 9 files / 133 tests, zero failures. The full repository run
+  reached 10,235 passed / 15 skipped with three unrelated batch-load failures across two files;
+  every affected exact subset passes solo (8/8). The exact-tree responsive plus full-production
+  Playwright gate is 17/17 across both iPad orientations and a 430px companion. Strict
+  changed-file lint, TypeScript, the 2,719-module production build, and diff integrity are green.
+- Rapid My Board/Optimize changes use ordered worker epochs instead of render-time state writes;
+  own picks remain COMMITTED and display settled salary plus current marginal tax, rival picks
+  leave boards, all drafted players leave Player Pool, and Recent Picks expands to the complete
+  numbered log. Older leagues missing Snake-specific archetype selection now use the team's saved
+  MLB archetype rather than silently degrading every fit to weak.
+- Companion instructions now discover Vite's real same-Wi-Fi address and include the room code in
+  the URL; the claim screen prefills it. The configured Supabase hostname is externally
+  unreachable and the connected account exposes no project, so real login still requires an
+  active Supabase project connection. The UI now reports that condition instead of raw Safari
+  `Load failed` or the false `Supabase not configured` diagnosis.
 - Walkthrough wave 1 merged as PRs #90-#98: unified setup (UNIFYSETUP), room performance
   (PERFROOM: room-code write-once + field-patch persistence; 217,865→1 proofs), route bridge,
   room fixes. Design/plan of record: `spec-docs/SNAKE_DRAFT_VISION_2026-07-10.md` +
@@ -51,7 +64,7 @@
 ## OPEN ACCEPTANCE ONLY
 - **Companion cross-device behavior is code-, sync-, and two-origin-browser-verified but still
   unaccepted on real hardware.** JK's own phone/iPad-to-Mac round-trip (same Wi-Fi, same account)
-  belongs inside the final hands-on walk.
+  belongs inside the final hands-on walk after the external Supabase project connection is live.
 - JK should walk the MLB room, pick trade, FARM draft, recap/staffing handoff, zero-schedule launch,
   and later schedule entry. His browser walk remains the sole acceptance gate.
 - A smaller ticketed finding: the Draft Setup "can't legally seat every club at 22 under the cap"

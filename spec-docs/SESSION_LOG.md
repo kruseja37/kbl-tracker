@@ -7200,3 +7200,33 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   close is the required separate session-end commit.
 - **Pending / next start:** run JK's hands-on browser walk against the frozen preview, including a
   physical companion-device pass. Automated green is not acceptance; JK's walk is the only gate.
+
+## 2026-07-14 (Codex, JK browser-repair continuation) — reported Snake defects closed
+
+- Fresh-fetched `origin/main` before acting and again before close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. The repair is isolated on
+  `codex/snake-mock-draft-ready`, code commit `00fd64fe`.
+- Reproduced the blinking/hanging board failure to render-phase state writes plus stale worker
+  callbacks. Replaced it with ordered effect epochs, stale-result rejection, and cover/null
+  clearing; repeated rapid Optimize clicks settle on one ready 22-player Assistant GM board.
+- Restored real fit identity for older Snake setups by falling back to each team's saved MLB
+  archetype. An explicit Balanced selection remains Balanced.
+- Own drafted players now stay COMMITTED on My Board; rival picks are removed/backfilled; every
+  drafted player is absent from every Player Pool. The Assistant GM no longer says an own rostered
+  player is gone. Committed rows use settled salary plus current marginal tax.
+- Recent Picks now expands to the complete numbered pick-by-pick log. FARM uses numbered picks too.
+- Vite now binds for same-Wi-Fi devices and publishes its actual LAN origin to the companion Help
+  card; the room code travels in the URL and prefills the claim screen. Raw Safari `Load failed`
+  becomes an honest auth-service-unreachable state. External finding remains: the configured
+  Supabase hostname does not resolve and the connected account exposes no project, so real
+  companion login needs an active project URL/key; local code cannot manufacture that service.
+- Independent auditor first returned REJECT on committed-player tax being computed from a roster
+  that already contained that player. The repair removes the committed player from the comparison
+  basis and pins `$10,700` / `TAX +$700`; re-audit returned APPROVE with no other blocker.
+- Final evidence: 9 changed test files / 133 tests green; exact-tree Playwright 17/17 including the
+  full MLB→FARM→staffing→zero-schedule Franchise→manual/CSV schedule lifecycle; strict changed-file
+  lint, TypeScript, production build (2,719 modules), and diff checks green. Full repository runs
+  reached 10,235 passed / 15 skipped; three unrelated batch-load reds across two files passed in
+  their exact solo subsets (8/8) and were not widened into this repair.
+- **Pending / next start:** JK walks the frozen build. Browser acceptance remains JK's only gate;
+  physical companion sign-in waits on the external Supabase project connection.
