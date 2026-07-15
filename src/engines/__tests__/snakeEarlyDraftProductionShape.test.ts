@@ -12,8 +12,13 @@ vi.mock('../../utils/syncEngine', () => ({
 }));
 
 import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
-import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../auctionLuxuryTax';
+import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
+import { archetypeToCapIdentity, resolveClubBandPriorities } from '../archetypeIdentity';
+import { auctionMarginalTaxWithCaps } from '../auctionLuxuryTax';
+import { historicalToSimArchetype } from '../draftabilityRanker';
 import { buildSnakeOrder } from '../leagueConstruction';
+import { evaluateSnakePlan } from '../snakeEconomics';
+import { snakeLuxuryCaps } from '../snakeLuxuryTax';
 import {
   playSnakeRationalRoomProgressively,
   snakeScarcityWitnessAuthTag,
@@ -134,7 +139,7 @@ describe('production-shape early snake intelligence', () => {
     expect(trusted).not.toBeNull();
     if (!trusted) return;
     const selected = rationalPlayers[0];
-    const caps = normalizeAuctionLuxuryCapsForLeagueSize([...LUXURY_CAP_TABLES.juiced], TEAM_IDS.length);
+    const caps = snakeLuxuryCaps([...LUXURY_CAP_TABLES.juiced]);
     const allInCost = selected.price + auctionMarginalTaxWithCaps([], selected.construction, undefined, caps);
     const startedAt = performance.now();
     const child = advanceTrustedSnakeSeatingCertificate({
@@ -146,6 +151,23 @@ describe('production-shape early snake intelligence', () => {
     console.info('EARLY_SNAKE_ADVANCE', JSON.stringify({ elapsedMs: Math.round(performance.now() - startedAt), ready: Boolean(child) }));
     expect(child).not.toBeNull();
   }, 20_000);
+
+  test('uses the same roster-local snake caps for an exact tax-bearing production-shape cost', () => {
+    const hitters = rationalPlayers
+      .filter((player) => !player.construction.isPitcher)
+      .toSorted((left, right) => {
+        const total = (player: typeof left) => Object.values(player.construction.bat)
+          .reduce((sum, rating) => sum + rating, 0);
+        return total(right) - total(left);
+      });
+    const selected = hitters[0];
+    const existing = hitters.slice(1, 22).map((player) => player.construction);
+    const caps = snakeLuxuryCaps([...LUXURY_CAP_TABLES.juiced]);
+    const marginalTax = auctionMarginalTaxWithCaps(existing, selected.construction, undefined, caps);
+    const exactCost = selected.price + marginalTax;
+    expect(marginalTax).toBeGreaterThan(0);
+    expect(exactCost).toBe(selected.price + marginalTax);
+  });
 
   test('returns a useful solvent Asst GM board from the real 506-card source before pick one', () => {
     expect(assistantPlayers).toHaveLength(stockPlayers.length);
@@ -217,6 +239,75 @@ describe('production-shape early snake intelligence', () => {
       twoClubRequest,
     )).toBe(true);
   }, 20_000);
+
+  test('runs the same Assistant GM system for eight private archetype seats with distinct board and tax truth', () => {
+    const archetypeIds = [
+      'murderers-row', 'whiteyball', 'junkball-surgeons', 'flamethrowers',
+      'nasty-boys', 'hdh-royals', 'the-opener', 'the-oriole-way',
+    ];
+    const results = archetypeIds.map((archetypeId, index) => {
+      const archetype = HISTORICAL_ARCHETYPES.find((entry) => entry.id === archetypeId)!;
+      const capIdentity = archetypeToCapIdentity(archetype);
+      const request = buildSnakeAssistantBoardRequest({
+        identity: {
+          sessionId: 'eight-seat-parity', sessionRevision: 1,
+          teamId: TEAM_IDS[index], seatId: TEAM_IDS[index], deviceId: `device-${index}`,
+          privateEpoch: 1, boardRevision: 1,
+        },
+        frozenPoolIdentity: 'stock-smb4-506-eight-seat',
+        engineInput: {
+          activePool: assistantPlayers,
+          completedPicks: [],
+          versionSelections: {},
+          selectedPinPlayerId: null,
+          archetype: historicalToSimArchetype(archetype),
+          ownBandPriorities: resolveClubBandPriorities({ mlbArchetypeKey: archetype.id })!,
+          gmRankOverrides: { global: assistantPlayers.map((player) => player.playerId) },
+          tier: 'juiced',
+          budget: TIER_CAPS.juiced.tierCap,
+          baseCaps: LUXURY_CAP_TABLES.juiced,
+          realTeamCount: 8,
+          capIdentity,
+        },
+        savedDesignSlots: buildDefaultDesignSlots(),
+      });
+      return { request, result: runSnakeAssistantBoardRequest(request) };
+    });
+
+    expect(results.every(({ result }) => result.status === 'ready')).toBe(true);
+    const ready = results.flatMap(({ result }) => result.status === 'ready' ? [result.board] : []);
+    expect(ready).toHaveLength(8);
+    expect(new Set(ready.map((board) => board.playerIds.join(','))).size).toBeGreaterThan(1);
+    const seatingById = new Map(seatingPlayers.map((player) => [player.playerId, player]));
+    const taxHeavyPlayers = ready[0].playerIds.map((playerId) => {
+      const player = seatingById.get(playerId)!;
+      return {
+        ...player,
+        construction: {
+          ...player.construction,
+          bat: { POW: 99, CON: 99, SPD: 99, FLD: 99, ARM: 99 },
+          ...(player.construction.isPitcher ? { pit: { VEL: 99, JNK: 99, ACC: 99 } } : {}),
+        },
+      };
+    });
+    const deliberateTaxes = archetypeIds.map((archetypeId) => {
+      const archetype = HISTORICAL_ARCHETYPES.find((entry) => entry.id === archetypeId)!;
+      return evaluateSnakePlan({
+        boardPlayerIds: taxHeavyPlayers.map((player) => player.playerId),
+        players: taxHeavyPlayers,
+        budget: Number.MAX_SAFE_INTEGER,
+        baseCaps: LUXURY_CAP_TABLES.juiced,
+        realTeamCount: 8,
+        capIdentity: archetypeToCapIdentity(archetype),
+      }).planTax;
+    });
+    expect(deliberateTaxes.some((tax) => tax > 0)).toBe(true);
+    expect(new Set(deliberateTaxes.map((tax) => Math.round(tax))).size).toBeGreaterThan(1);
+    results.forEach(({ request, result }, index) => {
+      expect(result.status === 'ready' ? result.board.teamId : null).toBe(TEAM_IDS[index]);
+      expect(validSnakeAssistantBoardWorkerResponse(structuredClone({ key: request.key, result }), request)).toBe(true);
+    });
+  }, 30_000);
 
   test('returns selected and visible decision reads across the real full first-turn interval', () => {
     const pickOrder = buildSnakeOrder(TEAM_IDS, 22);

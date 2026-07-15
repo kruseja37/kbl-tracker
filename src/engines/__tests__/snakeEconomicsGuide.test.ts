@@ -253,6 +253,34 @@ describe('snake two-bills economics and guide packages', () => {
     expect(second.planTax).toBe(first.planTax);
   });
 
+  test('the same roster and archetype produce identical tax in 2-, 8-, and 20-club rooms', () => {
+    const plan = legalPlayers('mock-tax', 99);
+    const baseCaps = [{
+      group: 'hitters' as const,
+      stat: 'POW' as const,
+      topN: 8,
+      cap: 300,
+      penaltyPer100: 1_000,
+      penaltyCurve: 1,
+      minAdder: 0,
+    }];
+    const twoClub = evaluateSnakePlan({
+      boardPlayerIds: plan.map((row) => row.playerId), players: plan,
+      budget: 1_000_000, baseCaps, realTeamCount: 2,
+    });
+    const eightClub = evaluateSnakePlan({
+      boardPlayerIds: plan.map((row) => row.playerId), players: plan,
+      budget: 1_000_000, baseCaps, realTeamCount: 8,
+    });
+    const twentyClub = evaluateSnakePlan({
+      boardPlayerIds: plan.map((row) => row.playerId), players: plan,
+      budget: 1_000_000, baseCaps, realTeamCount: 20,
+    });
+    expect(twoClub.planTax).toBeGreaterThan(0);
+    expect(twoClub.planTax).toBe(eightClub.planTax);
+    expect(twoClub.planTax).toBe(twentyClub.planTax);
+  });
+
   test('plan economics refuses authoritative money for a complete nine-hitter, thirteen-pitcher board', () => {
     const legal = legalPlayers('illegal-plan', 10);
     const hitters = legal.filter((row) => !row.shape.isPitcher).slice(0, 9);

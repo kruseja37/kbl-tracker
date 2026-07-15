@@ -1,8 +1,6 @@
 import { LEGAL_ROSTER, isLegalRoster } from '../data/rosterConstruction';
 import type { LuxuryCapRow } from '../data/tierParams';
-import {
-  normalizeAuctionLuxuryCapsForLeagueSize,
-} from './auctionLuxuryTax';
+import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import { cheapestLegalCompletion, type CompletionCandidate } from './auctionCompletionFloor';
 import {
   luxuryTax,
@@ -41,7 +39,7 @@ function shiftedCaps(input: {
   realTeamCount: number;
   capIdentity?: TeamCapIdentity;
 }): LuxuryCapRow[] {
-  const normalized = normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount);
+  const normalized = snakeLuxuryCaps([...input.baseCaps]);
   return input.capIdentity ? shiftLuxuryCaps(normalized, input.capIdentity) : normalized;
 }
 

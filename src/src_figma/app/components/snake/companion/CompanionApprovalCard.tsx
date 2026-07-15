@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import {
+  declineCompanionPickRequest,
   fallBackCompanionSeatToHotseat,
   patchMlbDraftSessionSnakeCompanions,
   type LeagueBuilderMlbDraftSession,
+  type SnakeCompanionPickRequest,
   type SnakeCompanionState,
 } from '../../../../../utils/leagueBuilderStorage';
 import { CompanionHelp } from './CompanionHelp';
@@ -24,10 +26,13 @@ export interface CompanionApprovalCardProps {
   teams: readonly { id: string; name: string }[];
   onChange: (session: LeagueBuilderMlbDraftSession) => void | Promise<void>;
   createRoomCode?: () => string;
+  playerName?: (playerId: string) => string;
+  onApprovePick?: (request: SnakeCompanionPickRequest) => void | Promise<void>;
 }
 
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   const [error, setError] = useState<string | null>(null);
+  const [pickWorking, setPickWorking] = useState(false);
   const configuredOrigin = import.meta.env.VITE_COMPANION_ORIGIN as string | undefined;
   const currentIsLoopback = (() => {
     try { return isLoopbackCompanionHost(new URL(window.location.origin).hostname); } catch { return true; }
@@ -98,6 +103,29 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+  const actOnPickRequest = async (action: 'APPROVE' | 'DECLINE') => {
+    const request = props.session.snakeCompanions?.pickRequest;
+    if (!request || pickWorking) return;
+    setError(null);
+    setPickWorking(true);
+    try {
+      if (action === 'APPROVE') {
+        if (!props.onApprovePick) throw new Error('THE MAIN PICK PATH IS NOT READY.');
+        await props.onApprovePick(request);
+      } else {
+        const saved = await declineCompanionPickRequest({
+          leagueId: props.session.leagueId,
+          seasonNumber: props.session.seasonNumber,
+          requestId: request.id,
+        });
+        await props.onChange(saved);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPickWorking(false);
+    }
+  };
 
   return (
     <section className="ballpark-panel" aria-label="Companion approvals">
@@ -113,6 +141,16 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       </CompanionHelp>
       {error ? <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{error}</p> : null}
       <div className="mt-4 grid gap-3">
+        {companions.pickRequest ? (
+          <div className="border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="companion-pick-request">
+            <p className="text-xs font-black tracking-[0.16em] text-[var(--ballpark-brass)]">PICK REQUEST</p>
+            <p className="mt-1 text-lg font-black">#{companions.pickRequest.pick} · {teamName(companions.pickRequest.teamId).toUpperCase()} · {(props.playerName?.(companions.pickRequest.playerId) ?? companions.pickRequest.playerId).toUpperCase()}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={pickWorking} onClick={() => void actOnPickRequest('APPROVE')}>APPROVE PICK</button>
+              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={pickWorking} onClick={() => void actOnPickRequest('DECLINE')}>DECLINE</button>
+            </div>
+          </div>
+        ) : null}
         {companions.claims.filter((claim) => claim.status === 'pending').map((claim) => (
           <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="border-4 border-[var(--ballpark-panel-border)] p-3">
             <p className="font-bold">LET {claim.gmName.toUpperCase()} SEE THE {teamName(claim.teamId).toUpperCase()} DESK?</p>

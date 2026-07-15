@@ -49,12 +49,16 @@ vi.mock('../../utils/snakeSounds', () => ({
   saveSnakeSoundsEnabled: vi.fn(),
   createSnakeSoundPlayer: () => ({ play: vi.fn() }),
 }));
-vi.mock('../../app/components/snake/companion/companionFreshness', () => ({
-  startCompanionFreshness: (input: { pullAndRefresh: () => void | Promise<void> }) => {
-    mocks.companionFreshnessRefresh = input.pullAndRefresh;
-    return () => { mocks.companionFreshnessRefresh = null; };
-  },
-}));
+vi.mock('../../app/components/snake/companion/companionFreshness', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/companion/companionFreshness')>();
+  return {
+    ...actual,
+    startCompanionFreshness: (input: { pullAndRefresh: () => void | Promise<void> }) => {
+      mocks.companionFreshnessRefresh = input.pullAndRefresh;
+      return () => { mocks.companionFreshnessRefresh = null; };
+    },
+  };
+});
 vi.mock('../../app/components/snake/snakeRoomFreshness', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app/components/snake/snakeRoomFreshness')>();
   return {
@@ -326,7 +330,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
   });
   afterEach(() => cleanup());
 
-  test('refreshes companion player and pool authority after every recurring pull', async () => {
+  test('recurring pulls leave the frozen player and pool authority in memory', async () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     const freshPlayers = players.map((row) => row.id === 'dual'
@@ -337,10 +341,21 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
 
     await act(async () => { await mocks.companionFreshnessRefresh?.(); });
 
-    expect(mocks.refresh.mock.calls.length).toBeGreaterThan(refreshesBefore);
+    expect(mocks.refresh.mock.calls.length).toBe(refreshesBefore);
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
-    expect(await screen.findAllByText(/Fresh Authority/i)).not.toHaveLength(0);
-    expect(document.body).not.toHaveTextContent('dual Player');
+    expect(screen.queryByText(/Fresh Authority/i)).not.toBeInTheDocument();
+    expect(document.body).toHaveTextContent('dual Player');
+  });
+
+  test('an unrequested player-pool row never inherits another player risk calculation', async () => {
+    mocks.riskMode = 'SAFE';
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+
+    const unrequested = screen.getByRole('button', { name: /SELECT FLEX-8 PLAYER/i });
+    expect(unrequested).not.toHaveTextContent('CALCULATING');
+    expect(unrequested).not.toHaveTextContent('RISK UNAVAILABLE');
   });
 
   test('an approved off-clock companion refits only its plan and can undo the last reorder exactly', async () => {

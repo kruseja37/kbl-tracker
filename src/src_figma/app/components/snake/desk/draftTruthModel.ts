@@ -2,8 +2,8 @@ import { CHEMISTRY_CODE_TO_WORD, type ChemistryCode } from '../../../../../data/
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import {
   computeAuctionTeamProjectedTaxWithCaps,
-  normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../../../../../engines/auctionLuxuryTax';
+import { snakeLuxuryCaps } from '../../../../../engines/snakeLuxuryTax';
 import type { ConstructionPlayer, TeamCapIdentity } from '../../../../../engines/leagueConstruction';
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
 import { chemistryAdviceForCandidate, chemistryProfileForPlayers } from '../../../../../utils/chemistryIntelligence';
@@ -67,7 +67,7 @@ export function buildDraftedRosterLedger(input: {
         roster,
         null,
         input.capIdentity,
-        normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount),
+        snakeLuxuryCaps([...input.baseCaps]),
       )
     : null;
   const allIn = salary !== null && tax !== null ? salary + tax : null;

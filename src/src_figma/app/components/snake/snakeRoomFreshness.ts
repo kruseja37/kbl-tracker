@@ -1,5 +1,7 @@
 import { startCompanionFreshness } from './companion/companionFreshness';
 
+export { sameDraftSessionSnapshot } from './companion/companionFreshness';
+
 export const SNAKE_ROOM_FRESHNESS_MS = 5_000;
 
 export function startSnakeRoomFreshness(input: {

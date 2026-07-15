@@ -9,9 +9,7 @@ import {
   type FieldPosition,
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
-import {
-  normalizeAuctionLuxuryCapsForLeagueSize,
-} from './auctionLuxuryTax';
+import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import { computeOwnValue } from './auctionMarketModel';
 import {
   luxuryTax,
@@ -1235,10 +1233,7 @@ function validateConstructiveAssignmentDeltaAgainstRoot(input: {
       .map((player) => [player.playerId, player]));
     const usedIds = new Set<string>();
     const usedGroups = new Set<string>();
-    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
-      [...input.postPick.baseCaps],
-      input.postPick.realTeamCount,
-    );
+    const normalizedCaps = snakeLuxuryCaps([...input.postPick.baseCaps]);
 
     for (const club of input.postPick.clubs) {
       const assignment = deltaByTeamId.get(club.teamId) ?? rootAssignments.get(club.teamId);
@@ -1345,10 +1340,7 @@ export function validateSnakeScarcityWitness(input: {
     const requestedRoles = ROLE_ORDER.filter((role) => expectedRowIdentities.some((row) => row.role === role));
     if (witness.roles.length !== requestedRoles.length) return false;
 
-    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
-      [...input.room.baseCaps],
-      input.room.realTeamCount,
-    );
+    const normalizedCaps = snakeLuxuryCaps([...input.room.baseCaps]);
     if (!finiteDeep(normalizedCaps)) return false;
     const askingSeat = input.room.seats.find((seat) => seat.teamId === input.room.askingTeamId);
     if (!askingSeat) return false;
@@ -1556,7 +1548,7 @@ function prepareSnakeRationalRoom(
   if (interval.some((slot) => !seatIds.has(slot.teamId) || slot.teamId === input.askingTeamId)) {
     return terminal(unavailableResult(input, 'PUBLIC_SEATS_INCOMPLETE'));
   }
-  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount);
+  const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
   if (!finiteDeep(normalizedCaps)) return terminal(unavailableResult(input, 'NONFINITE_ECONOMICS'));
   const initialSeats = new Map(input.seats.map((seat): [string, MutableSeat] => [seat.teamId, {
     ...seat,

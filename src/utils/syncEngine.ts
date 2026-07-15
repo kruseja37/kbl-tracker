@@ -131,6 +131,11 @@ interface CloudLocalStorageWriteBaseRow extends CloudLocalStorageVerifiedDataRow
   deleted: boolean;
 }
 
+interface CloudReplacementSnapshot {
+  stores: Array<CloudStoreWriteBaseRow & { user_id: string }>;
+  localStorage: Array<CloudLocalStorageWriteBaseRow & { user_id: string }>;
+}
+
 interface CloudStoreChangedAtRow extends CloudStoreIdentityRow {
   changed_at: number;
 }
@@ -170,6 +175,15 @@ interface CloudStoreRow {
 interface PullApplyResult {
   appliedCursor: SyncCursor | null;
   skippedConflicts: boolean;
+}
+
+export interface ReplaceCloudWithLocalOptions {
+  /**
+   * The caller has already shown and received confirmation for the destructive
+   * "this device wins" operation. Queue drains stay blocked while the user's
+   * existing sync snapshot is removed and rebuilt from local storage.
+   */
+  replaceExisting?: boolean;
 }
 
 interface SnakeProtectedApplyResult {
@@ -888,19 +902,18 @@ class SyncEngine {
     });
   }
 
-  /**
-   * Full upload — upload all local data, then tombstone remote rows that no
-   * longer exist locally. This avoids wiping a good cloud snapshot before we
-   * know every replacement batch was accepted.
-   */
+  /** Full upload. Confirmed replacement keeps a rollback copy until verification. */
   async replaceCloudWithLocal(
-    onProgress?: (dbName: string, storeName: string, sent: number, total: number) => void
+    onProgress?: (dbName: string, storeName: string, sent: number, total: number) => void,
+    options: ReplaceCloudWithLocalOptions = {},
   ): Promise<void> {
     if (!supabase) return;
     const client = supabase;
 
     await this.runSyncOperation(true, async () => {
       let queuesAtOperationStart: QueueSnapshot | null = null;
+      let cloudRollbackSnapshot: CloudReplacementSnapshot | null = null;
+      let replacementUserId: string | null = null;
       try {
         this.queueDrainsBlocked = true;
         queuesAtOperationStart = this.snapshotQueues();
@@ -920,6 +933,7 @@ class SyncEngine {
         }
 
         const userId = session.user.id;
+        replacementUserId = userId;
         const franchiseIds = await this.getFranchiseIds({ throwOnError: true });
         const eliminationIds = await this.getEliminationIds({ throwOnError: true });
         const replacementStoreScopes = new Set(
@@ -928,12 +942,25 @@ class SyncEngine {
               storeNames.map((storeName) => this.storeCountKey(dbName, storeName))
             ),
         );
-        const operationBaseCursor = { ...this.cursor };
-        await this.assertCloudUnchangedSinceCursor(
-          userId,
-          replacementStoreScopes,
-          operationBaseCursor,
-        );
+        let operationBaseCursor = { ...this.cursor };
+        if (options.replaceExisting) {
+          await this.assertLocalReplacementSnapshotReadable(franchiseIds, eliminationIds);
+          cloudRollbackSnapshot = await this.captureCloudReplacementSnapshot(userId);
+          await this.clearCloudReplacementData(userId);
+          operationBaseCursor = {
+            changedAt: 0,
+            id: null,
+            receivedAt: null,
+            localReceivedAt: null,
+            localKey: null,
+          };
+        } else {
+          await this.assertCloudUnchangedSinceCursor(
+            userId,
+            replacementStoreScopes,
+            operationBaseCursor,
+          );
+        }
 
         const now = this.nextChangedAt(this.cursor.changedAt + 1);
         const expectedStoreKeys = new Set<string>();
@@ -1019,6 +1046,9 @@ class SyncEngine {
           expectedLocalFingerprints,
           scannedStoreScopes,
         );
+        // From this point forward the replacement itself is verified. Later
+        // cursor/queue failures must not roll a valid new snapshot backward.
+        cloudRollbackSnapshot = null;
         this.rememberStoreWriteBaseOverrides(verifiedWriteBases.stores);
         this.rememberLocalStorageWriteBaseOverrides(verifiedWriteBases.localStorage);
         if (!this.persistWriteBaseOverrides()) {
@@ -1038,12 +1068,28 @@ class SyncEngine {
         this._error = null;
         this.emitEvent('sync-complete');
       } catch (err) {
+        let rollbackError: unknown = null;
+        if (cloudRollbackSnapshot && replacementUserId) {
+          try {
+            await this.restoreCloudReplacementSnapshot(replacementUserId, cloudRollbackSnapshot);
+          } catch (restoreErr) {
+            rollbackError = restoreErr;
+            console.error('[syncEngine] Upload rollback error:', restoreErr);
+          }
+        }
         const currentQueues = this.snapshotQueues();
         this.pushQueue = new Map(queuesAtOperationStart?.pushQueue ?? []);
         this.localQueue = new Map(queuesAtOperationStart?.localQueue ?? []);
         this.mergeQueuedOps(currentQueues);
         this.persistQueues();
-        this._error = err instanceof Error ? err.message : 'Upload failed';
+        const originalMessage = err instanceof Error ? err.message : 'Upload failed';
+        if (rollbackError) {
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          this._error = `Upload failed and cloud rollback failed: ${originalMessage}; rollback: ${rollbackMessage}`;
+          console.error('[syncEngine] Upload error:', err);
+          throw new Error(this._error);
+        }
+        this._error = originalMessage;
         console.error('[syncEngine] Upload error:', err);
         throw err;
       } finally {
@@ -2131,6 +2177,75 @@ class SyncEngine {
     }
 
     return refs;
+  }
+
+  private async assertLocalReplacementSnapshotReadable(
+    franchiseIds: string[],
+    eliminationIds: string[],
+  ): Promise<void> {
+    for (const { dbName, storeNames } of this.getReplacementStoreRefs(franchiseIds, eliminationIds)) {
+      for (const storeName of storeNames) {
+        const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+        const records = await this.getLocalStoreRecords<Record<string, unknown>>(dbName, storeName);
+        if (!keyPath || records === null) {
+          throw new Error(`Could not read local sync store ${dbName}.${storeName}: store missing or unreadable`);
+        }
+        for (const record of records) {
+          const key = Array.isArray(keyPath) ? keyPath.map((part) => record[part]) : record[keyPath];
+          if (typeof serializeKey(key) !== 'string') {
+            throw new Error(`Cannot sync ${dbName}.${storeName}: missing key ${JSON.stringify(keyPath)}`);
+          }
+        }
+      }
+    }
+    // Build once before destructive work so malformed localStorage payloads
+    // fail while the current cloud snapshot is still untouched.
+    this.buildLocalStorageUploadRows('replacement-preflight', 1, {
+      changedAt: 0,
+      id: null,
+      receivedAt: null,
+      localReceivedAt: null,
+      localKey: null,
+    });
+  }
+
+  private async captureCloudReplacementSnapshot(userId: string): Promise<CloudReplacementSnapshot> {
+    const [stores, localStorageRows] = await Promise.all([
+      this.fetchStoreWriteBaseRows(userId),
+      this.fetchLocalStorageWriteBaseRows(userId),
+    ]);
+    return {
+      stores: stores.map((row) => ({ ...this.cloneValue(row), user_id: userId })),
+      localStorage: localStorageRows.map((row) => ({ ...this.cloneValue(row), user_id: userId })),
+    };
+  }
+
+  private async clearCloudReplacementData(userId: string): Promise<void> {
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    for (const table of ['kbl_local_storage', 'kbl_stores'] as const) {
+      const { error } = await supabase.from(table).delete().eq('user_id', userId);
+      this.assertNoSupabaseError(error, `Could not replace cloud snapshot (${table})`);
+    }
+  }
+
+  private async restoreCloudReplacementSnapshot(
+    userId: string,
+    snapshot: CloudReplacementSnapshot,
+  ): Promise<void> {
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    await this.clearCloudReplacementData(userId);
+    for (let index = 0; index < snapshot.stores.length; index += UPLOAD_BATCH_SIZE) {
+      const { error } = await supabase.from('kbl_stores').upsert(
+        snapshot.stores.slice(index, index + UPLOAD_BATCH_SIZE),
+      );
+      this.assertNoSupabaseError(error, 'Could not restore prior cloud stores after failed upload');
+    }
+    for (let index = 0; index < snapshot.localStorage.length; index += UPLOAD_BATCH_SIZE) {
+      const { error } = await supabase.from('kbl_local_storage').upsert(
+        snapshot.localStorage.slice(index, index + UPLOAD_BATCH_SIZE),
+      );
+      this.assertNoSupabaseError(error, 'Could not restore prior cloud localStorage after failed upload');
+    }
   }
 
   private async assertCloudUnchangedSinceCursor(

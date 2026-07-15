@@ -584,6 +584,18 @@ export interface LeagueBuilderMlbDraftSession {
       teamId: string;
       status: 'pending' | 'approved' | 'revoked';
     }>;
+    /** One seat-bound choice awaiting the main device's authoritative approval. */
+    pickRequest?: {
+      id: string;
+      teamId: string;
+      playerId: string;
+      pick: number;
+      submittedAt: string;
+      deviceId: string;
+      claimId?: string;
+      /** Revision observed before this request was committed. */
+      sessionRevision: number;
+    };
   };
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
@@ -2895,6 +2907,7 @@ export async function saveMlbDraftSession(
 }
 
 export type SnakeCompanionState = NonNullable<LeagueBuilderMlbDraftSession['snakeCompanions']>;
+export type SnakeCompanionPickRequest = NonNullable<SnakeCompanionState['pickRequest']>;
 
 export async function updateMlbDraftSessionAtomically(
   leagueId: string,
@@ -3183,11 +3196,137 @@ function approvedCompanionClaimForSeat(
   session: LeagueBuilderMlbDraftSession,
   deviceId: string,
   teamId: string,
-): void {
+): SnakeCompanionState['claims'][number] {
   const claim = session.snakeCompanions?.claims.find((candidate) => (
     candidate.deviceId === deviceId && candidate.teamId === teamId && candidate.status === 'approved'
   ));
   if (!claim) throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
+  return claim;
+}
+
+/**
+ * Companion choice writer. This records intent only; the main device must run
+ * the normal authoritative pick transaction before the draft can advance.
+ */
+export async function submitApprovedCompanionPickRequest(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  deviceId: string;
+  teamId: string;
+  playerId: string;
+  expectedSessionRevision: number;
+  submittedAt: string;
+  requestId?: string;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
+    throw new Error('FARM snake sessions do not allow companion pick requests.');
+  }
+  return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (validatedSnakeSessionPhase(current) !== 'MLB') {
+      throw new Error('FARM snake sessions do not allow companion pick requests.');
+    }
+    const claim = approvedCompanionClaimForSeat(current, input.deviceId, input.teamId);
+    if ((current.revision ?? 0) !== input.expectedSessionRevision) {
+      throw new Error('THE DRAFT MOVED ON — REFRESH.');
+    }
+    if (current.draftManifest || current.currentPickIndex >= current.pickOrder.length) {
+      throw new Error('THIS DRAFT IS COMPLETE.');
+    }
+    const slot = current.pickOrder[current.currentPickIndex];
+    if (!slot || slot.teamId !== input.teamId) throw new Error('YOUR CLUB IS NOT ON THE CLOCK.');
+    if (!input.playerId || !current.snakeSetup?.poolPlayerIds.includes(input.playerId)) {
+      throw new Error('THAT PLAYER IS NOT IN THE ACTIVE DRAFT POOL.');
+    }
+    if (current.completedPicks.some((pick) => pick.playerId === input.playerId)) {
+      throw new Error('THAT PLAYER HAS ALREADY BEEN DRAFTED.');
+    }
+    const existing = current.snakeCompanions?.pickRequest;
+    if (existing) {
+      if (existing.teamId === input.teamId
+        && existing.playerId === input.playerId
+        && existing.pick === slot.pick
+        && existing.deviceId === input.deviceId) return current;
+      throw new Error('A PICK IS ALREADY WAITING FOR HOTSEAT REVIEW.');
+    }
+    if (!current.snakeCompanions) throw new Error('THE COMPANION ROOM IS NOT OPEN.');
+    return {
+      ...current,
+      snakeCompanions: {
+        ...current.snakeCompanions,
+        pickRequest: {
+          id: input.requestId
+            ?? globalThis.crypto?.randomUUID?.()
+            ?? `snake-pick-request-${current.id}-${slot.pick}-${Date.now()}`,
+          teamId: input.teamId,
+          playerId: input.playerId,
+          pick: slot.pick,
+          submittedAt: input.submittedAt,
+          deviceId: input.deviceId,
+          ...(claim.claimId ? { claimId: claim.claimId } : {}),
+          sessionRevision: current.revision ?? 0,
+        },
+      },
+      revision: (current.revision ?? 0) + 1,
+    };
+  });
+}
+
+/** Main-device refusal path. Approval is intentionally owned by recordPick. */
+export async function declineCompanionPickRequest(input: {
+  leagueId: string;
+  seasonNumber?: number;
+  requestId: string;
+}): Promise<LeagueBuilderMlbDraftSession> {
+  return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    const request = current.snakeCompanions?.pickRequest;
+    if (!request || request.id !== input.requestId) {
+      throw new Error('THAT PICK REQUEST IS STALE. RELOAD THE ROOM.');
+    }
+    return {
+      ...current,
+      snakeCompanions: current.snakeCompanions ? {
+        ...current.snakeCompanions,
+        pickRequest: undefined,
+      } : undefined,
+      revision: (current.revision ?? 0) + 1,
+    };
+  });
+}
+
+/**
+ * Revalidate a companion request inside the Hotseat's authoritative pick
+ * transaction. Submission approval is not durable authority: the exact claim
+ * and request revision must still be current when the commissioner commits it.
+ */
+export function assertCompanionPickRequestApprovable(input: {
+  session: LeagueBuilderMlbDraftSession;
+  request: SnakeCompanionPickRequest;
+  teamId: string;
+  playerId: string;
+  pick: number;
+}): SnakeCompanionPickRequest {
+  const live = input.session.snakeCompanions?.pickRequest;
+  if (!live
+    || live.id !== input.request.id
+    || live.teamId !== input.teamId
+    || live.playerId !== input.playerId
+    || live.pick !== input.pick
+    || live.deviceId !== input.request.deviceId
+    || live.claimId !== input.request.claimId
+    || live.sessionRevision !== input.request.sessionRevision) {
+    throw new Error('THAT PICK REQUEST IS STALE. RELOAD THE ROOM.');
+  }
+  const claim = input.session.snakeCompanions?.claims.find((candidate) => (
+    candidate.deviceId === live.deviceId
+      && candidate.teamId === live.teamId
+      && candidate.status === 'approved'
+      && (!live.claimId || candidate.claimId === live.claimId)
+  ));
+  if (!claim) throw new Error('THAT COMPANION SEAT IS NO LONGER APPROVED.');
+  if ((input.session.revision ?? 0) !== live.sessionRevision + 1) {
+    throw new Error('THE DRAFT MOVED AFTER THAT PICK REQUEST. ASK THE GM TO SEND IT AGAIN.');
+  }
+  return live;
 }
 
 /** Authorized companion offer writer with current-revision and seat checks. */

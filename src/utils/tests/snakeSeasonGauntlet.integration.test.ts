@@ -146,7 +146,7 @@ function makePlayer(input: {
     secondaryPosition: input.secondaryPosition,
     power: pitcher ? 20 : 55,
     contact: pitcher ? 20 : 55,
-    speed: 55,
+    speed: pitcher ? 20 : 55,
     fielding: 55,
     arm: 55,
     velocity: pitcher ? 55 : 0,

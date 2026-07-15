@@ -706,6 +706,22 @@ vi.mock("../../supabase", () => ({
     },
     from(table: string) {
       return {
+        delete() {
+          return makeThenable((state) => {
+            const userId = state.filters.find(({ field }) => field === "user_id")?.value;
+            if (table === "kbl_stores") {
+              mockState.cloudRows = mockState.cloudRows.filter((row) => row.user_id !== userId);
+            } else if (table === "kbl_local_storage") {
+              mockState.localRows = mockState.localRows.filter((row) => row.user_id !== userId);
+            } else if (table === "kbl_sync_meta") {
+              mockState.metaRows = mockState.metaRows.filter((row) => row.user_id !== userId);
+            } else if (table === "kbl_sync_applied_ops") {
+              mockState.appliedOps.clear();
+              mockState.appliedOpMetadata.clear();
+            }
+            return { data: null, error: null };
+          });
+        },
         update(payload: unknown) {
           mockState.updates.push({ table, payload });
           return makeThenable(() => ({ data: null, error: null }));
@@ -3183,6 +3199,87 @@ describe("syncEngine dynamic elimination copied DBs", () => {
         deleted: false,
         data: expect.objectContaining({ result: "DOUBLE" }),
       }),
+    ]);
+  });
+
+  test("confirmed replacement removes stale cloud data and uploads this device's snapshot", async () => {
+    await seedCompletedGameWithEventLog("game-confirmed-replacement");
+    mockState.cloudRows = [
+      {
+        id: "stale-cloud-only-row",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("stale-cloud-only-event"),
+        data: { eventId: "stale-cloud-only-event", gameId: "old-game", result: "DOUBLE" },
+        changed_at: 500,
+        received_at: "2026-01-01T00:00:00.002Z",
+        deleted: false,
+      },
+    ];
+    const syncEngine = await loadFreshSyncEngine();
+
+    await expect(
+      syncEngine.replaceCloudWithLocal(undefined, { replaceExisting: true }),
+    ).resolves.toBeUndefined();
+
+    expect(mockState.cloudRows).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "stale-cloud-only-row" }),
+      ]),
+    );
+    expect(mockState.cloudRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          db_name: "kbl-event-log",
+          store_name: "gameHeaders",
+          record_key: JSON.stringify("game-confirmed-replacement"),
+          deleted: false,
+        }),
+      ]),
+    );
+  });
+
+  test("confirmed replacement restores the prior cloud snapshot when the replacement upload fails", async () => {
+    await seedCompletedGameWithEventLog("game-confirmed-rollback");
+    const priorCloudRow: StoreRow = {
+      id: "prior-cloud-row",
+      user_id: "user-1",
+      db_name: "kbl-event-log",
+      store_name: "atBatEvents",
+      record_key: JSON.stringify("prior-cloud-event"),
+      data: { eventId: "prior-cloud-event", gameId: "prior-game", result: "DOUBLE" },
+      changed_at: 500,
+      received_at: "2026-01-01T00:00:00.002Z",
+      deleted: false,
+    };
+    mockState.cloudRows = [priorCloudRow];
+    mockState.localRows = [{
+      user_id: "user-1",
+      key: "kbl-test-local",
+      data: "prior-local-value",
+      changed_at: 500,
+      received_at: "2026-01-01T00:00:00.002Z",
+      deleted: false,
+    }];
+    mockState.failNextUpsertTable = "kbl_stores";
+    const syncEngine = await loadFreshSyncEngine();
+
+    await expect(
+      syncEngine.replaceCloudWithLocal(undefined, { replaceExisting: true }),
+    ).rejects.toThrow("kbl_stores upsert failed intentionally");
+
+    expect(mockState.cloudRows).toEqual([
+      expect.objectContaining({
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("prior-cloud-event"),
+        data: expect.objectContaining({ result: "DOUBLE" }),
+        deleted: false,
+      }),
+    ]);
+    expect(mockState.localRows).toEqual([
+      expect.objectContaining({ key: "kbl-test-local", data: "prior-local-value", deleted: false }),
     ]);
   });
 

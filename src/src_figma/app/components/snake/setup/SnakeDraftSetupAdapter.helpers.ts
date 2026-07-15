@@ -8,8 +8,8 @@ import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/
 import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
 import {
   auctionSinglePlayerTaxWithShiftedCaps,
-  normalizeAuctionLuxuryCapsForLeagueSize,
 } from '../../../../../engines/auctionLuxuryTax';
+import { snakeLuxuryCaps } from '../../../../../engines/snakeLuxuryTax';
 import {
   proveSimultaneousSnakeSeating,
   type SimultaneousSnakeSeatingInput,
@@ -169,7 +169,7 @@ function boardCandidate(input: {
   iv: number;
   priorities: BandPriorities;
   archetypeName: string;
-  shiftedCaps: ReturnType<typeof normalizeAuctionLuxuryCapsForLeagueSize>;
+  shiftedCaps: ReturnType<typeof snakeLuxuryCaps>;
 }): DeskCandidate | null {
   if (!isTaxonomyPosition(input.player.primaryPosition)) return null;
   const need = rosterNeedBreakdown([]);
@@ -212,7 +212,7 @@ export function buildInitialSnakeSeatBoards(input: {
     const roomPlayer = buildDeskRoomPlayer({ player, price: priced.iv, seating });
     return roomPlayer ? [[priced.id, roomPlayer] as const] : [];
   }));
-  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(input.pool.luxuryCaps, input.teams.length);
+  const normalizedCaps = snakeLuxuryCaps(input.pool.luxuryCaps);
 
   return Object.fromEntries(input.teams.map((team) => {
     const priorities = resolveClubBandPriorities(team) ?? BALANCED_PRIORITIES;

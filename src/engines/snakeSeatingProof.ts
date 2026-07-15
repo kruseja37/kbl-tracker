@@ -10,7 +10,7 @@ import {
 } from '../data/rosterConstruction';
 import type { LuxuryCapRow } from '../data/tierParams';
 import type { SnakeVersionState } from '../utils/leagueBuilderStorage';
-import { normalizeAuctionLuxuryCapsForLeagueSize } from './auctionLuxuryTax';
+import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import {
   cheapestLegalCompletion,
   type CompletionCandidate,
@@ -305,10 +305,7 @@ export function validateConstructiveSnakeSeatingProof(
     if (fixedIds.size !== fixedPlayers.length || fixedGroups.size !== fixedPlayers.length) return false;
     const usedIds = new Set<string>();
     const usedGroups = new Set<string>();
-    const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
-      [...input.baseCaps],
-      input.realTeamCount,
-    );
+    const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
 
     for (const club of input.clubs) {
       const assignment = assignmentByTeamId.get(club.teamId);
@@ -402,10 +399,7 @@ function exactTrustedPickCost(input: {
   normalizedCaps?: readonly LuxuryCapRow[];
 }): number {
   const club = input.seatingInput.clubs[input.clubIndex];
-  const normalizedCaps = input.normalizedCaps ?? normalizeAuctionLuxuryCapsForLeagueSize(
-    [...input.seatingInput.baseCaps],
-    input.seatingInput.realTeamCount,
-  );
+  const normalizedCaps = input.normalizedCaps ?? snakeLuxuryCaps([...input.seatingInput.baseCaps]);
   const shiftedCaps = club.capIdentity
     ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
     : [...normalizedCaps];
@@ -431,10 +425,7 @@ function directTrustedAdvance(input: {
   if (!selected) return null;
   const selectedGroup = deriveVersionGroupId(selected);
   if (trustedIndex.committedGroups.has(selectedGroup)) return null;
-  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize(
-    [...current.baseCaps],
-    current.realTeamCount,
-  );
+  const normalizedCaps = snakeLuxuryCaps([...current.baseCaps]);
   const exactCost = exactTrustedPickCost({
     seatingInput: current,
     clubIndex,
@@ -1150,7 +1141,7 @@ function repairMatchedRosters(
   }
   const isFuture = (player: SnakeSeatingPlayer) => !fixedGroups.has(deriveVersionGroupId(player));
   const rosters = initialRosters.map((roster) => [...roster]);
-  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount);
+  const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
 
   const bill = (clubIndex: number, roster: readonly SnakeSeatingPlayer[]) => {
     const club = input.clubs[clubIndex];
@@ -1676,7 +1667,7 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
   const clubs = [...input.clubs].sort((left, right) => (
     scarcityScore(left, remaining) - scarcityScore(right, remaining) || left.teamId.localeCompare(right.teamId)
   ));
-  const normalizedCaps = normalizeAuctionLuxuryCapsForLeagueSize([...input.baseCaps], input.realTeamCount);
+  const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
 
   for (const club of clubs) {
     const rosterShapes = club.roster.map((player) => player.shape);

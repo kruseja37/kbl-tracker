@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
-import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
+import { auctionMarginalTaxWithCaps } from '../../../engines/auctionLuxuryTax';
+import { snakeLuxuryCaps } from '../../../engines/snakeLuxuryTax';
 import { computeOwnValue } from '../../../engines/auctionMarketModel';
 import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
@@ -21,6 +22,7 @@ import {
   patchMlbDraftSessionSnakeCompanions,
   postApprovedCompanionTradeOffer,
   respondApprovedCompanionTradeOffer,
+  submitApprovedCompanionPickRequest,
   SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
   type SnakeBoardSlotId,
@@ -37,7 +39,7 @@ import {
   SnakeCompanionFrame,
 } from '../components/snake/companion/SnakeCompanionFrame';
 import { safeCompanionLogoUrl } from '../components/snake/companion/companionFrameModel';
-import { startCompanionFreshness } from '../components/snake/companion/companionFreshness';
+import { sameDraftSessionSnapshot, startCompanionFreshness } from '../components/snake/companion/companionFreshness';
 import { runCompanionTradeWrite } from '../components/snake/companion/companionTradeWrite';
 import {
   approvedClaimForDevice,
@@ -364,16 +366,15 @@ export default function SnakeCompanion() {
     const requestEpoch = privacyEpochRef.current;
     try {
       await syncEngine.pull({ throwOnError: true });
-      await refresh();
       if (privacyEpochRef.current !== requestEpoch || deviceCoveredRef.current) return;
       if (session) {
-        const [fresh, freshPool] = await Promise.all([
-          readMlbDraftSession(session.leagueId, session.seasonNumber),
-          readRegisteredPool(session.leagueId),
-        ]);
+        const fresh = await readMlbDraftSession(session.leagueId, session.seasonNumber);
         if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
-          setSession(fresh);
-          setPoolResult({ leagueId: session.leagueId, value: freshPool });
+          setSession((current) => {
+            if (!current || !fresh) return fresh;
+            if ((fresh.revision ?? 0) < (current.revision ?? 0)) return current;
+            return sameDraftSessionSnapshot(current, fresh) ? current : fresh;
+          });
         }
       } else {
         const recovered = await findDeviceSession();
@@ -388,7 +389,7 @@ export default function SnakeCompanion() {
       const detail = cause instanceof Error ? cause.message : String(cause);
       setMessage(`LIVE ROOM SYNC FAILED — ${detail}`);
     }
-  }, [findDeviceSession, hasOpenRoom, refresh, roomAvailabilityKey, session]);
+  }, [findDeviceSession, hasOpenRoom, roomAvailabilityKey, session]);
 
   useEffect(() => {
     if (!auth.isAuthenticated
@@ -604,11 +605,15 @@ export default function SnakeCompanion() {
     });
   }, [board, deskById, deskPlayers, deviceCovered, leagueTeams, pool, selectedPlayerId, session, team, unavailable]);
   const rationalRiskState = useSnakeRationalRisks(rationalRiskRequest);
+  const askedRiskIds = useMemo(
+    () => new Set(rationalRiskRequest?.input.askedPlayerIds ?? []),
+    [rationalRiskRequest],
+  );
 
   const deskState = useMemo(() => {
     if (!session || !pool || !team || !board) return null;
     const locked = resolveLockedSeat({ team, session });
-    const caps = normalizeAuctionLuxuryCapsForLeagueSize(pool.luxuryCaps, leagueTeams.length);
+    const caps = snakeLuxuryCaps(pool.luxuryCaps);
     const seats = buildRationalSeats({ teams: leagueTeams, session, playersById: deskById, budget: pool.tierCap });
     const ownSeat = seats.find((seat) => seat.teamId === team.id);
     if (!ownSeat) return null;
@@ -660,11 +665,11 @@ export default function SnakeCompanion() {
         marginalTax,
         trueCost: entry.price + marginalTax,
         archetypeChip: locked.archetypeName,
-        fitWord: fitWord({ player: entry, priorities: locked.priorities, need, openSlots }),
+        fitWord: fitWord({ player: entry, priorities: locked.priorities, capIdentity: locked.capIdentity, need, openSlots }),
         risk: risk?.risk ?? 'SAFE_TO_WAIT',
-        riskPending: rationalRiskState.status === 'pending'
-          || (rationalRiskState.status === 'ready' && !risk),
-        riskUnavailable: rationalRiskState.status === 'unavailable',
+        riskPending: askedRiskIds.has(entry.playerId) && (rationalRiskState.status === 'pending'
+          || (rationalRiskState.status === 'ready' && !risk)),
+        riskUnavailable: askedRiskIds.has(entry.playerId) && rationalRiskState.status === 'unavailable',
         hasNextPick: risk?.nextPick !== null,
         riskReason: risk
           ? `${risk.rationalBuyersBeforeTurn} ${risk.rationalBuyersBeforeTurn === 1 ? 'CLUB COULD' : 'CLUBS COULD'} TAKE THIS PLAYER BEFORE YOUR TURN.`
@@ -756,7 +761,7 @@ export default function SnakeCompanion() {
       taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps }),
       advisorLog: brokenSlots.map((slotId) => ({ key: `broken:${slotId}`, text: `YOUR ${slotId} PLAN IS BROKEN — YOUR RANKING HAS NO AVAILABLE NAME.`, actionable: true })),
     };
-  }, [activePoolRows, board, boardEligibilityCandidates, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
+  }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
 
   const defaultSelectedPlayerId = useMemo(() => {
     if (!board || !deskState) return null;
@@ -1209,6 +1214,26 @@ export default function SnakeCompanion() {
       throw cause;
     }
   }, [ownDeviceId, refreshSession, session, team]);
+  const submitPickRequest = useCallback(async (playerId: string) => {
+    if (!session || !team) return;
+    try {
+      await syncEngine.pull({ throwOnError: true });
+      const saved = await submitApprovedCompanionPickRequest({
+        leagueId: session.leagueId,
+        seasonNumber: session.seasonNumber,
+        deviceId: ownDeviceId,
+        teamId: team.id,
+        playerId,
+        expectedSessionRevision: session.revision ?? 0,
+        submittedAt: new Date().toISOString(),
+      });
+      setSession(saved);
+      setMessage('PICK SENT TO HOTSEAT.');
+    } catch (cause) {
+      setMessage(cause instanceof Error ? cause.message : String(cause));
+      await refreshSession();
+    }
+  }, [ownDeviceId, refreshSession, session, team]);
 
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
@@ -1245,6 +1270,8 @@ export default function SnakeCompanion() {
     const player = playerById.get(pick.playerId);
     return `${(pickTeam?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`;
   });
+  const liveSlot = session.pickOrder[session.currentPickIndex];
+  const pickRequest = session.snakeCompanions?.pickRequest;
   return <SnakeCompanionFrame
     team={{ id: team.id, name: team.name, abbreviation: team.abbreviation, logoUrl: team.logoUrl, colors: team.colors }}
     currentPick={session.pickOrder[session.currentPickIndex]?.pick ?? session.currentPickIndex + 1}
@@ -1264,6 +1291,13 @@ export default function SnakeCompanion() {
         setAssistantOptimizeRevision((revision) => revision + 1);
       }}
       onKeep={() => { void keepSelectedConsequence(); }}
+      draftAction={liveSlot?.teamId === team.id ? (
+        pickRequest ? (
+          <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{pickRequest.pick} WAITING FOR HOTSEAT</span>
+        ) : (
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused)} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+        )
+      ) : undefined}
       decision={draftDecision}
       onTradeDecision={prefillTradeDecision}
     /> : undefined}

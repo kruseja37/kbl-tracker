@@ -2,7 +2,7 @@ import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes'
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import { LEGAL_ROSTER } from '../../../../../data/rosterConstruction';
 import { computeOwnValueFactors } from '../../../../../engines/auctionMarketModel';
-import { archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
+import { archetypeStatFitMultiplier, archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
 import { BANDS, type BandPriorities } from '../../../../../engines/leagueConstruction';
 import { derivePlayerBandWeights } from '../../../../../engines/snakePlayerBands';
 import { playSnakeRationalRoom, type SnakeRationalPlayer, type SnakeRationalSeat } from '../../../../../engines/snakeRationalRoom';
@@ -102,11 +102,24 @@ export function resolveLockedSeat(input: {
 export function fitWord(input: {
   player: DeskRoomPlayer;
   priorities: BandPriorities;
+  capIdentity?: Team['capIdentity'];
   need: Parameters<typeof computeOwnValueFactors>[0]['needBreakdown'];
   openSlots: number;
 }): string {
   if (!input.player.fitKnown) return 'FIT UNKNOWN';
-  const multiplier = computeOwnValueFactors({
+  const exactMultiplier = archetypeStatFitMultiplier(input.capIdentity, {
+    isPitcher: input.player.construction.isPitcher,
+    role: input.player.construction.role,
+    power: input.player.stored.power,
+    contact: input.player.stored.contact,
+    speed: input.player.stored.speed,
+    fielding: input.player.stored.fielding,
+    arm: input.player.stored.arm,
+    velocity: input.player.stored.velocity,
+    junk: input.player.stored.junk,
+    accuracy: input.player.stored.accuracy,
+  });
+  const multiplier = exactMultiplier ?? computeOwnValueFactors({
     archetypeWeights: input.player.archetypeWeights,
     ownBandPriorities: input.priorities,
     needBreakdown: input.need,

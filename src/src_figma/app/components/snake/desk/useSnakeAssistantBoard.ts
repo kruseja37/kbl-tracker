@@ -5,6 +5,7 @@ import type {
   SnakeAssistantBoardRequest,
   SnakeAssistantBoardRunResult,
 } from './snakeDeskIntelligenceModel';
+import { runSnakeAssistantBoardRequest } from './snakeDeskIntelligenceModel';
 import type { SnakeAssistantUnavailableReason } from '../../../../../engines/snakeAssistantBoard';
 import {
   CHEMISTRY_CODES,
@@ -266,6 +267,45 @@ export function validSnakeAssistantBoardWorkerResponse(
     && ASSISTANT_UNAVAILABLE_REASONS.has(response.result.reason);
 }
 
+export function runLocalSnakeAssistantRecovery(
+  current: SnakeAssistantBoardRequest,
+  baselineRequest: SnakeAssistantBoardRequest | null,
+  run: (request: SnakeAssistantBoardRequest) => SnakeAssistantBoardRunResult = runSnakeAssistantBoardRequest,
+): { snapshot: Snapshot; baselineProof: BaselineProof } {
+  const unavailable = (): { snapshot: Snapshot; baselineProof: BaselineProof } => ({
+    snapshot: {
+      key: current.key,
+      result: { status: 'unavailable', reason: 'MISSING_INPUT' },
+      workerFailed: true,
+    },
+    baselineProof: { pinnedRequestKey: current.key, ready: false },
+  });
+  try {
+    const response: SnakeAssistantBoardWorkerResponse = {
+      key: current.key,
+      result: run(current),
+    };
+    if (!validSnakeAssistantBoardWorkerResponse(response, current)) return unavailable();
+    let baselineReady = false;
+    if (baselineRequest
+      && response.result.status === 'unavailable'
+      && BASELINE_PROVEN_PIN_INFEASIBLE_REASONS.has(response.result.reason)) {
+      const baselineResponse: SnakeAssistantBoardWorkerResponse = {
+        key: baselineRequest.key,
+        result: run(baselineRequest),
+      };
+      baselineReady = validSnakeAssistantBoardWorkerResponse(baselineResponse, baselineRequest)
+        && baselineResponse.result.status === 'ready';
+    }
+    return {
+      snapshot: response,
+      baselineProof: { pinnedRequestKey: current.key, ready: baselineReady },
+    };
+  } catch {
+    return unavailable();
+  }
+}
+
 export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | null): SnakeAssistantBoardState {
   const requestRef = useRef(request);
   const requestEpochRef = useRef(0);
@@ -288,7 +328,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
     const requestEpoch = requestEpochRef.current + 1;
     requestEpochRef.current = requestEpoch;
     const current = requestRef.current;
-    if (!requestKey || !current || typeof Worker === 'undefined') {
+    if (!requestKey || !current) {
       if (!requestKey) {
         setHookState((state) => state.requestKey === null ? state : {
           epoch: requestEpoch,
@@ -321,7 +361,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
     const terminateIfSettled = () => {
       if (pinnedSettled && baselineSettled) worker?.terminate();
     };
-    const fail = () => {
+    const failClosed = () => {
       if (active && requestEpochRef.current === requestEpoch) {
         pinnedSettled = true;
         baselineSettled = true;
@@ -337,6 +377,19 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       }
       worker?.terminate();
     };
+    const recoverTransport = () => {
+      if (active && requestEpochRef.current === requestEpoch) {
+        pinnedSettled = true;
+        baselineSettled = true;
+        const local = runLocalSnakeAssistantRecovery(current, baselineRequest);
+        updateCurrent((state) => ({
+          ...state,
+          snapshot: local.snapshot,
+          baselineProof: local.baselineProof,
+        }));
+      }
+      worker?.terminate();
+    };
     const settleBaseline = (ready: boolean) => {
       if (!active || requestEpochRef.current !== requestEpoch) return;
       baselineSettled = true;
@@ -346,10 +399,14 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       }));
       terminateIfSettled();
     };
+    if (typeof Worker === 'undefined') {
+      queueMicrotask(recoverTransport);
+      return () => { active = false; };
+    }
     try {
       worker = new Worker(new URL('../../../workers/snakeAssistantBoard.worker.ts', import.meta.url), { type: 'module' });
     } catch {
-      queueMicrotask(fail);
+      queueMicrotask(recoverTransport);
       return () => { active = false; };
     }
     worker.onmessage = (event: MessageEvent<SnakeAssistantBoardWorkerResponse>) => {
@@ -362,7 +419,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       if (event.data.key !== requestKey) return;
       pinnedSettled = true;
       if (!validSnakeAssistantBoardWorkerResponse(event.data, current)) {
-        fail();
+        failClosed();
         return;
       }
       updateCurrent((state) => ({ ...state, snapshot: event.data }));
@@ -378,11 +435,11 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       baselineSettled = true;
       terminateIfSettled();
     };
-    worker.onerror = fail;
+    worker.onerror = recoverTransport;
     try {
       worker.postMessage(current);
     } catch {
-      queueMicrotask(fail);
+      queueMicrotask(recoverTransport);
       worker.terminate();
       return () => { active = false; };
     }
@@ -393,7 +450,6 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
   }, [requestKey]);
 
   if (!requestKey) return { status: 'idle', board: null, infeasibleReason: null };
-  if (typeof Worker === 'undefined') return { status: 'unavailable', board: null, infeasibleReason: null };
   if (snapshot?.key !== requestKey) return { status: 'pending', board: null, infeasibleReason: null };
   if (snapshot.workerFailed) return { status: 'unavailable', board: null, infeasibleReason: null };
   if (snapshot.result.status === 'unavailable') {

@@ -12,14 +12,17 @@ vi.mock('../syncEngine', () => ({
 
 import {
   __resetLeagueBuilderDatabaseForTests,
+  assertCompanionPickRequestApprovable,
   clearAllLeagueBuilderData,
   createMlbDraftSessionId,
+  declineCompanionPickRequest,
   freezeMlbDraftRoomSessionWithRegisteredPool,
   getMlbDraftSession,
   patchApprovedCompanionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
   saveRegisteredPool,
   saveMlbDraftSession,
+  submitApprovedCompanionPickRequest,
   type LeagueBuilderMlbDraftSession,
   type RegisteredPool,
   type SnakeSeatBoardRecord,
@@ -74,7 +77,7 @@ function session(): LeagueBuilderMlbDraftSession {
     currentPickIndex: 0,
     seatBoards: Object.fromEntries(clubs.map((club) => [club.teamId, board(1, `${club.teamId}-old`)])),
     snakeSetup: {
-      poolPlayerIds: [],
+      poolPlayerIds: ['player-a', 'player-b'],
       versionSelections: {},
       clubs,
       orderSeed: 'seed',
@@ -181,6 +184,124 @@ describe('companion atomic persistence', () => {
 
     await expect(submitAtomicClaim('ipad-d', 'Dana')).rejects.toThrow('THIS ROOM ALREADY HAS 3 COMPANIONS.');
     expect((await getMlbDraftSession('companion-atomic', 1))?.snakeCompanions?.claims.filter((claim) => claim.status !== 'revoked')).toHaveLength(3);
+  });
+
+  test('records one current on-clock companion choice and lets only the main device clear it', async () => {
+    const opened = ensureCompanionRoom(session(), () => '4821');
+    const pending = submitCompanionClaim(opened, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' });
+    const approved = transition(pending.session!, 'ipad-a', 'approved');
+    await saveMlbDraftSession(approved);
+
+    const requested = await submitApprovedCompanionPickRequest({
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-a',
+      teamId: 'team-a',
+      playerId: 'player-a',
+      expectedSessionRevision: approved.revision ?? 0,
+      requestId: 'request-1',
+      submittedAt: '2026-07-14T12:00:00.000Z',
+    });
+    expect(requested.currentPickIndex).toBe(0);
+    expect(requested.completedPicks).toEqual([]);
+    expect(requested.snakeCompanions?.pickRequest).toEqual(expect.objectContaining({
+      id: 'request-1', teamId: 'team-a', playerId: 'player-a', pick: 1, deviceId: 'ipad-a',
+    }));
+
+    await expect(submitApprovedCompanionPickRequest({
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-a',
+      teamId: 'team-a',
+      playerId: 'player-b',
+      expectedSessionRevision: requested.revision ?? 0,
+      submittedAt: '2026-07-14T12:00:01.000Z',
+    })).rejects.toThrow('A PICK IS ALREADY WAITING');
+
+    const declined = await declineCompanionPickRequest({
+      leagueId: approved.leagueId,
+      requestId: 'request-1',
+    });
+    expect(declined.snakeCompanions?.pickRequest).toBeUndefined();
+    expect(declined.currentPickIndex).toBe(0);
+  });
+
+  test('revalidates the exact live claim and request revision at Hotseat approval time', async () => {
+    const opened = ensureCompanionRoom(session(), () => '4821');
+    const pending = submitCompanionClaim(opened, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' });
+    const approved = transition(pending.session!, 'ipad-a', 'approved');
+    await saveMlbDraftSession(approved);
+    const requested = await submitApprovedCompanionPickRequest({
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-a',
+      teamId: 'team-a',
+      playerId: 'player-a',
+      expectedSessionRevision: approved.revision ?? 0,
+      requestId: 'request-approval-proof',
+      submittedAt: '2026-07-14T12:00:00.000Z',
+    });
+    const request = requested.snakeCompanions!.pickRequest!;
+    expect(assertCompanionPickRequestApprovable({
+      session: requested, request, teamId: 'team-a', playerId: 'player-a', pick: 1,
+    })).toEqual(request);
+
+    const revoked = {
+      ...requested,
+      snakeCompanions: {
+        ...requested.snakeCompanions!,
+        claims: requested.snakeCompanions!.claims.map((claim) => (
+          claim.deviceId === 'ipad-a' ? { ...claim, status: 'revoked' as const } : claim
+        )),
+      },
+    };
+    expect(() => assertCompanionPickRequestApprovable({
+      session: revoked, request, teamId: 'team-a', playerId: 'player-a', pick: 1,
+    })).toThrow('NO LONGER APPROVED');
+
+    expect(() => assertCompanionPickRequestApprovable({
+      session: { ...requested, revision: (requested.revision ?? 0) + 1 },
+      request,
+      teamId: 'team-a',
+      playerId: 'player-a',
+      pick: 1,
+    })).toThrow('THE DRAFT MOVED AFTER THAT PICK REQUEST');
+  });
+
+  test('rejects stale, wrong-seat, off-clock, unavailable, and farm companion choices', async () => {
+    const opened = ensureCompanionRoom(session(), () => '4821');
+    const pending = submitCompanionClaim(opened, { deviceId: 'ipad-b', gmName: 'Blair', roomCode: '4821' });
+    const approved = transition(pending.session!, 'ipad-b', 'approved');
+    await saveMlbDraftSession(approved);
+
+    const base = {
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-b',
+      teamId: 'team-b',
+      playerId: 'player-b',
+      submittedAt: '2026-07-14T12:00:00.000Z',
+    };
+    await expect(submitApprovedCompanionPickRequest({
+      ...base,
+      expectedSessionRevision: (approved.revision ?? 0) - 1,
+    })).rejects.toThrow('THE DRAFT MOVED ON');
+    await expect(submitApprovedCompanionPickRequest({
+      ...base,
+      expectedSessionRevision: approved.revision ?? 0,
+    })).rejects.toThrow('YOUR CLUB IS NOT ON THE CLOCK');
+    await expect(submitApprovedCompanionPickRequest({
+      ...base,
+      teamId: 'team-a',
+      expectedSessionRevision: approved.revision ?? 0,
+    })).rejects.toThrow('MAIN-DEVICE APPROVAL IS REQUIRED');
+    await expect(submitApprovedCompanionPickRequest({
+      ...base,
+      teamId: 'team-b',
+      playerId: 'missing-player',
+      expectedSessionRevision: approved.revision ?? 0,
+    })).rejects.toThrow('YOUR CLUB IS NOT ON THE CLOCK');
+    await expect(submitApprovedCompanionPickRequest({
+      ...base,
+      seasonNumber: 2,
+      expectedSessionRevision: approved.revision ?? 0,
+    })).rejects.toThrow('FARM snake sessions do not allow');
   });
 
   test('fresh claim, board edit, and revoke survive a final MLB freeze from a stale main-room copy', async () => {

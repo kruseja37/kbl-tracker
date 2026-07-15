@@ -128,7 +128,8 @@ vi.mock('../../../../../../utils/franchisePhase2Flags', () => ({
   isSnakeDraftV1Enabled: () => true,
 }));
 
-vi.mock('../companionFreshness', () => ({
+vi.mock('../companionFreshness', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../companionFreshness')>()),
   startCompanionFreshness: (input: { pullAndRefresh: () => Promise<void> }) => {
     harness.freshness = input.pullAndRefresh;
     return () => { harness.freshness = null; };

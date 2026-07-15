@@ -6,6 +6,7 @@ import type { Player } from '../../../../../../utils/leagueBuilderStorage';
 import { LUXURY_CAP_TABLES } from '../../../../../../data/tierParams';
 import { buildDefaultDesignSlots } from '../../../../../../engines/rosterDesignFeasibility';
 import {
+  runLocalSnakeAssistantRecovery,
   useSnakeAssistantBoard,
   type SnakeAssistantBoardWorkerResponse,
 } from '../useSnakeAssistantBoard';
@@ -252,15 +253,39 @@ describe('snake assistant board worker hook', () => {
     expect(screen.getByText('team-a')).toBeInTheDocument();
   });
 
-  it('fails closed on worker error or missing worker support', () => {
+  it('falls back to the same canonical engine on worker error or missing worker support', async () => {
     const view = render(<Harness value={request('a')} />);
     act(() => FakeWorker.instances[0].onerror?.(new Event('error')));
-    expect(screen.getByText('UNAVAILABLE')).toBeInTheDocument();
+    expect(screen.getByText('team-a')).toBeInTheDocument();
     cleanup();
     vi.stubGlobal('Worker', undefined);
     view.unmount();
     render(<Harness value={request('b')} />);
-    expect(screen.getByText('UNAVAILABLE')).toBeInTheDocument();
+    expect(await screen.findByText('team-a')).toBeInTheDocument();
+  });
+
+  it('runs the exact unpinned proof locally and settles closed when the local engine throws', () => {
+    const pinned = request('local-pin', 'p-c');
+    const baseline = {
+      ...pinned,
+      key: 'local-pin:unpinned-baseline',
+      input: { ...pinned.input, selectedPinPlayerId: null },
+    };
+    const recovered = runLocalSnakeAssistantRecovery(pinned, baseline, (value) => (
+      value.input.selectedPinPlayerId
+        ? { status: 'unavailable', reason: 'PIN_UNMATCHED' }
+        : ready(value.key).result
+    ));
+    expect(recovered.snapshot.workerFailed).not.toBe(true);
+    expect(recovered.snapshot.result).toEqual({ status: 'unavailable', reason: 'PIN_UNMATCHED' });
+    expect(recovered.baselineProof).toEqual({ pinnedRequestKey: pinned.key, ready: true });
+
+    const failed = runLocalSnakeAssistantRecovery(pinned, baseline, () => {
+      throw new Error('local engine failed');
+    });
+    expect(failed.snapshot.workerFailed).toBe(true);
+    expect(failed.snapshot.result).toEqual({ status: 'unavailable', reason: 'MISSING_INPUT' });
+    expect(failed.baselineProof.ready).toBe(false);
   });
 
   it('exposes an ambiguous pin infeasibility only after the exact unpinned baseline is READY', () => {
@@ -290,7 +315,7 @@ describe('snake assistant board worker hook', () => {
 
     view.rerender(<Harness value={request('transport', 'p-c')} />);
     act(() => FakeWorker.instances[2].onerror?.(new Event('error')));
-    expect(screen.getByText('UNAVAILABLE')).toBeInTheDocument();
+    expect(screen.getByText('team-a')).toBeInTheDocument();
     expect(screen.queryByText('PIN_UNMATCHED')).not.toBeInTheDocument();
 
     view.rerender(<Harness value={request('no-pin')} />);

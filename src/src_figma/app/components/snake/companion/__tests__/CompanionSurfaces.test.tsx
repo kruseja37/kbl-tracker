@@ -73,6 +73,32 @@ describe('S5 companion surfaces', () => {
     expect(fetchMock).toHaveBeenCalledWith('/__kbl/companion-address', expect.objectContaining({ cache: 'no-store' }));
   });
 
+  it('shows the exact companion choice and sends approval through the main pick callback', async () => {
+    const onApprovePick = vi.fn().mockResolvedValue(undefined);
+    const withPickRequest = {
+      ...session,
+      pickOrder: [{ round: 1, pick: 1, teamId: 'team-b' }],
+      snakeCompanions: {
+        ...session.snakeCompanions,
+        pickRequest: {
+          id: 'request-1', teamId: 'team-b', playerId: 'player-b', pick: 1,
+          submittedAt: '2026-07-14T12:00:00.000Z', deviceId: 'ipad-b', sessionRevision: 1,
+        },
+      },
+    } satisfies LeagueBuilderMlbDraftSession;
+    render(<CompanionApprovalCard
+      session={withPickRequest}
+      teams={[{ id: 'team-b', name: 'Comets' }]}
+      playerName={(playerId) => playerId === 'player-b' ? 'Punchie Patterson' : 'Unknown Player'}
+      onApprovePick={onApprovePick}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByTestId('companion-pick-request')).toHaveTextContent('#1 · COMETS · PUNCHIE PATTERSON');
+    fireEvent.click(screen.getByRole('button', { name: 'APPROVE PICK' }));
+    await waitFor(() => expect(onApprovePick).toHaveBeenCalledWith(withPickRequest.snakeCompanions.pickRequest));
+  });
+
   it('accepts only LAN-safe http companion origins', () => {
     expect(resolveCompanionJoinUrl('http://127.0.0.1:5173')).toBeNull();
     expect(resolveCompanionJoinUrl('http://0.0.0.0:5173')).toBeNull();
@@ -188,6 +214,10 @@ describe('S5 companion surfaces', () => {
     />);
     expect(screen.getByText('YOUR PRIVATE DRAFT DESK')).toBeInTheDocument();
     expect(screen.getByText('TEAM A PRIVATE BOARD')).toBeInTheDocument();
+    expect(screen.getByTestId('snake-companion-frame')).toHaveClass('snake-workspace-page');
+    expect(screen.getByTestId('companion-private-workspace-layout')).toHaveClass('snake-private-workspace');
+    expect(screen.getByTestId('companion-selected-player-pane')).toHaveClass('snake-selected-pane');
+    expect(screen.getByTestId('companion-private-workspace-scroll')).toHaveClass('snake-board-pane');
     expect(container.textContent).not.toMatch(/TEAM B PRIVATE BOARD|GAVEL|COMMISSIONER|EXECUTE TRADE|RECORD PICK/i);
   });
 

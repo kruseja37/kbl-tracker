@@ -33,6 +33,17 @@ function pool(players: Player[], iv = 1_000): RegisteredPool {
   };
 }
 
+function rosterLocalTaxFixture(players: Player[]): Player[] {
+  return players.map((player) => (
+    player.primaryPosition === 'SP'
+    || player.primaryPosition === 'SP/RP'
+    || player.primaryPosition === 'RP'
+    || player.primaryPosition === 'CP'
+      ? { ...player, power: 20, contact: 20, speed: 20 }
+      : player
+  ));
+}
+
 describe('SnakeDraftSetupAdapter', () => {
   test('an absent order team uses exact neutral copy without exposing the internal id', () => {
     const missingTeamId = 'setup-internal-team-key-51';
@@ -147,7 +158,7 @@ describe('SnakeDraftSetupAdapter', () => {
   });
 
   test('snapshots setup rankings into each initial seat board', () => {
-    const players = [
+    const players = rosterLocalTaxFixture([
       ...makeLegalRosterPlayerSet('first', 10_000),
       ...makeLegalRosterPlayerSet('second', 10_000),
       makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
@@ -155,7 +166,7 @@ describe('SnakeDraftSetupAdapter', () => {
       makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
       makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
       makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
-    ];
+    ]);
     const handRanked = players.at(-1)!;
     const team = makeTeam('team-a', { boardRankOverrides: { global: [handRanked.id] } });
     const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: pool(players) });
@@ -164,7 +175,7 @@ describe('SnakeDraftSetupAdapter', () => {
   });
 
   test('starts the default overall ranking with the same 22 players as the roster plan', () => {
-    const players = [
+    const players = rosterLocalTaxFixture([
       ...makeLegalRosterPlayerSet('first', 10_000),
       ...makeLegalRosterPlayerSet('second', 10_000),
       makePlayer(301, { id: 'floor-c', primaryPosition: 'C' }),
@@ -172,7 +183,7 @@ describe('SnakeDraftSetupAdapter', () => {
       makePlayer(303, { id: 'floor-cf', primaryPosition: 'CF' }),
       makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
       makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
-    ];
+    ]);
     const boards = buildInitialSnakeSeatBoards({ teams: [makeTeam('team-a')], players, pool: pool(players) });
     const board = boards['team-a'];
 

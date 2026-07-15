@@ -86,7 +86,8 @@ import type {
   Team,
 } from '../../../utils/leagueBuilderStorage';
 import { getAllPlayers as readAllPlayers } from '../../../utils/leagueBuilderStorage';
-import { auctionMarginalTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../engines/auctionLuxuryTax';
+import { auctionMarginalTaxWithCaps } from '../../../engines/auctionLuxuryTax';
+import { snakeLuxuryCaps } from '../../../engines/snakeLuxuryTax';
 import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import {
   canonicalDeskEligiblePositions,
@@ -639,7 +640,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByText(/THE DRAFT MOVED BEFORE UNDO/i)).not.toBeInTheDocument();
   });
 
-  test('an unrelated room write error does not consume a valid private-board Undo', async () => {
+  test('a later failed board write does not consume a valid private-board Undo', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
@@ -648,8 +649,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
     expect(await screen.findByTestId('main-board-update-banner')).toBeInTheDocument();
 
-    mocks.saveRoom.mockRejectedValueOnce(new Error('unrelated commissioner sync error'));
-    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
+    mocks.patchBoard.mockRejectedValueOnce(new Error('unrelated commissioner sync error'));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[1]);
     expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('UNRELATED COMMISSIONER SYNC ERROR');
     expect(screen.getByTestId('main-board-update-banner')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'UNDO BOARD UPDATE' })).toBeInTheDocument();
@@ -692,9 +693,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
   test('shows a recoverable room notice when a revision-safe write is rejected', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
-    mocks.saveRoom.mockClear();
-    mocks.saveRoom.mockRejectedValueOnce(new Error('The draft moved before this action could be saved. Refresh and try again.'));
-    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
+    await revealSeatAndSettle('Club A');
+    fireEvent.click(await screen.findByRole('button', { name: 'PLAYER POOL' }));
+    mocks.patchBoard.mockRejectedValueOnce(new Error('The draft moved before this action could be saved. Refresh and try again.'));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
     const notice = await screen.findByTestId('room-write-notice');
     expect(notice).toHaveTextContent('THE DRAFT MOVED BEFORE THIS ACTION COULD BE SAVED');
     expect(screen.getByTestId('snake-draft-room')).toBeInTheDocument();
@@ -824,10 +826,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     const saved = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
     const pick = saved.completedPicks[0];
     const pickedPlayer = players.find((entry) => entry.id === pick.playerId)!;
-    const normalized = normalizeAuctionLuxuryCapsForLeagueSize(identityPool.luxuryCaps, identityTeams.length);
+    const rosterLocalCaps = snakeLuxuryCaps(identityPool.luxuryCaps);
     const lockedIdentity = resolveLockedSeat({ team: identityTeams[0], session: source }).capIdentity;
-    const expected = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), lockedIdentity, normalized);
-    const mutable = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), identityTeams[0].capIdentity, normalized);
+    const expected = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), lockedIdentity, rosterLocalCaps);
+    const mutable = auctionMarginalTaxWithCaps([], toConstructionPlayer(pickedPlayer), identityTeams[0].capIdentity, rosterLocalCaps);
     expect(expected).not.toBe(mutable);
     expect(pick.marginalTax).toBe(expected);
   });

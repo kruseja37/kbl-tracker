@@ -5,7 +5,7 @@ import type { Player, SnakeVersionState } from '../utils/leagueBuilderStorage';
 import type { SimArchetype, SimPlayer } from './archetypeBalanceSimulator';
 import { computeOwnValue } from './auctionMarketModel';
 import { buildBest22Target } from './best22Target';
-import type { BandPriorities, TeamCapIdentity } from './leagueConstruction';
+import { shiftLuxuryCaps, type BandPriorities, type TeamCapIdentity } from './leagueConstruction';
 import type { ShapeClassification } from './playerArchetypeClassifier';
 import { assembleBoard, type BoardRankOverrides } from './rosterIntelligencePayload';
 import { rosterNeedBreakdown } from './rosterNeed';
@@ -14,6 +14,7 @@ import {
   type DesignSlot,
 } from './rosterDesignFeasibility';
 import { evaluateSnakePlan, type SnakePlanBill } from './snakeEconomics';
+import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import type { SnakeSeatingPlayer } from './snakeSeatingProof';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from './snakeVersioning';
 
@@ -339,8 +340,11 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
 
   let target;
   try {
+    const taxCaps = input.capIdentity
+      ? shiftLuxuryCaps(snakeLuxuryCaps([...input.baseCaps]), input.capIdentity)
+      : snakeLuxuryCaps([...input.baseCaps]);
     target = buildBest22Target(optimizer.slots, simPool, classifiedById, input.archetype, input.tier,
-      input.budget, input.realTeamCount, pins, optimizer.ranks);
+      input.budget, input.realTeamCount, pins, optimizer.ranks, taxCaps);
   } catch {
     return unavailable('INCOMPLETE_BOARD');
   }

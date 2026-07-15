@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { computeAuctionTeamProjectedTaxWithCaps, normalizeAuctionLuxuryCapsForLeagueSize } from '../../../../../../engines/auctionLuxuryTax';
+import { computeAuctionTeamProjectedTaxWithCaps } from '../../../../../../engines/auctionLuxuryTax';
+import { snakeLuxuryCaps } from '../../../../../../engines/snakeLuxuryTax';
 import type { ConstructionPlayer } from '../../../../../../engines/leagueConstruction';
 import type { Player } from '../../../../../../utils/leagueBuilderStorage';
 import {
@@ -40,7 +41,7 @@ describe('snake draft truth model', () => {
     ]);
     const base = { budget: 1_000_000, baseCaps: caps, realTeamCount: 2, playersById, frozenIvById: new Map([['a', 100_000], ['b', 120_000]]) };
     const afterAdd = buildDraftedRosterLedger({ ...base, picks: [{ playerId: 'a' }, { playerId: 'b', settledSalary: 125_000 }] });
-    const normalized = normalizeAuctionLuxuryCapsForLeagueSize([...caps], 2);
+    const normalized = snakeLuxuryCaps([...caps]);
     const expectedTax = computeAuctionTeamProjectedTaxWithCaps([construction('a', 90), construction('b', 80)], null, undefined, normalized);
     expect(afterAdd).toMatchObject({ rosterCount: 2, salary: 225_000, tax: expectedTax, allIn: 225_000 + expectedTax, moneyLeft: 775_000 - expectedTax });
 

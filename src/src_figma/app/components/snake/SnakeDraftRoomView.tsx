@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react';
-import { Eye, EyeOff, HelpCircle, Pause, Play, RotateCcw, Volume2, VolumeX } from 'lucide-react';
+import { Eye, EyeOff, HelpCircle, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 
 import { useSeatReveal } from '../../hooks/useSeatReveal';
 import { createSnakeSoundPlayer } from '../../../utils/snakeSounds';
@@ -294,20 +294,6 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     dispatch({ type: 'ARM', candidateId: props.candidate.id });
   };
 
-  const requestPauseChange = async () => {
-    if (!props.paused) {
-      cancelHold();
-      cancelAdvance();
-    }
-    try {
-      await props.onPauseChange(!props.paused);
-      dispatch({ type: props.paused ? 'RESUME' : 'PAUSE' });
-    } catch {
-      // Persistence owns the truth. Leave the reducer in its prior state when
-      // an optimistic-lock rejection says another device already moved it.
-    }
-  };
-
   const startHold = () => {
     const frozenCandidate = armedCandidate.current;
     if (holdTimer.current || props.canDraftFromActiveSeat === false || state.phase !== 'ARM' || state.paused || !frozenCandidate) return;
@@ -409,7 +395,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
 
   return (
     <main
-      className="ballpark-page min-h-screen min-w-0 overflow-x-clip overflow-y-visible"
+      className="ballpark-page snake-workspace-page min-h-screen min-w-0 overflow-x-clip overflow-y-visible"
       data-testid="snake-draft-room"
       onPointerDownCapture={() => {
         if (props.practiceMode && props.practiceFastForward) props.onPracticeFastForwardChange?.(false);
@@ -435,10 +421,6 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
             {props.soundsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
             SOUND {props.soundsEnabled ? 'ON' : 'OFF'}
           </button>
-          {!draftComplete ? <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => void requestPauseChange()}>
-            {props.paused ? <Play size={15} /> : <Pause size={15} />}
-            {props.paused ? 'RESUME' : 'PAUSE'}
-          </button> : null}
           {props.practiceMode && !draftComplete ? <button
             className={`ballpark-press-button ballpark-press-sm min-h-11 ${props.practiceFastForward ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
             aria-pressed={Boolean(props.practiceFastForward)}
@@ -460,7 +442,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
       {showHelp ? (
         <div className="mb-4 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs leading-relaxed text-[var(--ballpark-chalk)]/75">
           <p>THE SHARED ROOM STAYS COVERED UNTIL THE CLUB ARMS ITS PICK.</p>
-          {props.practiceMode ? <p className="mt-1">PAUSE AND CORRECTION WORK THE SAME.</p> : null}
+          {props.practiceMode ? <p className="mt-1">CORRECTION WORKS THE SAME.</p> : null}
           {props.roomHelpNotes?.map((note) => <p key={note} className="mt-1">{note}</p>)}
         </div>
       ) : null}
@@ -485,7 +467,16 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </div>
         </section>
       ) : null}
-      {props.paused && <p className="mb-3 bg-[var(--ballpark-warn-panel)] p-3 font-bold text-[var(--ballpark-warn-text)]">THE DRAFT IS PAUSED</p>}
+      {props.paused && (
+        <section className="mb-3 flex flex-wrap items-center justify-between gap-3 bg-[var(--ballpark-warn-panel)] p-3 font-bold text-[var(--ballpark-warn-text)]">
+          <p>THE DRAFT IS STOPPED</p>
+          <button
+            type="button"
+            className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+            onClick={() => void props.onPauseChange(false)}
+          >RESUME ROOM</button>
+        </section>
+      )}
 
       <section className="mb-5 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" aria-label="Draft order">
         <div className="mb-2 flex items-center justify-between gap-3 text-[10px] font-black tracking-[0.12em] text-[var(--ballpark-brass)]">
@@ -562,13 +553,13 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           ) : !props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : revealed && !effectivePendingSeatId ? (
             props.consolidatedMlb ? (
               <div
-                className="grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+                className="snake-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
                 data-testid="private-workspace-layout"
               >
-                <div className="sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:top-20 lg:max-h-[calc(100vh-22rem)]" data-testid="selected-player-pane">
+                <div className="snake-selected-pane sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:top-20 lg:max-h-[calc(100vh-22rem)]" data-testid="selected-player-pane">
                   {selectedPlayerAction}
                 </div>
-                <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none] lg:h-full" data-testid="private-workspace-scroll">
+                <div className="snake-board-pane min-h-0 min-w-0 overflow-y-auto overscroll-contain pr-1 [overflow-anchor:none] lg:h-full" data-testid="private-workspace-scroll">
                   {renderHelpAware(props.privateDesk)}
                 </div>
               </div>

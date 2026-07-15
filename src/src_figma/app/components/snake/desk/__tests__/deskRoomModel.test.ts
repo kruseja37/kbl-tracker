@@ -372,6 +372,32 @@ describe('private desk room assembly', () => {
     expect(locked.priorities.Speed).toBeGreaterThan(locked.priorities.Power);
   });
 
+  it('scores high-velocity relievers against the Nasty Boys exact bullpen identity', () => {
+    const locked = resolveLockedSeat({ team: { id: 'a' } as Team, session: session('nasty-boys') });
+    const pitcherShape = { isPitcher: true, position: 'RP', role: 'RP' } as const;
+    const highVelocity = storedPlayer('high-velocity', {
+      primaryPosition: 'RP', velocity: 95, junk: 50, accuracy: 55,
+    });
+    const lowVelocity = storedPlayer('low-velocity', {
+      primaryPosition: 'RP', velocity: 25, junk: 50, accuracy: 85,
+    });
+    const highRow = buildDeskRoomPlayer({
+      player: highVelocity,
+      price: 50,
+      seating: { playerId: highVelocity.id, price: 50, shape: pitcherShape, construction: construction(highVelocity.id, pitcherShape, 50) },
+    })!;
+    const lowRow = buildDeskRoomPlayer({
+      player: lowVelocity,
+      price: 50,
+      seating: { playerId: lowVelocity.id, price: 50, shape: pitcherShape, construction: construction(lowVelocity.id, pitcherShape, 50) },
+    })!;
+
+    expect(fitWord({ player: highRow, priorities: locked.priorities, capIdentity: locked.capIdentity, need: null, openSlots: 22 }))
+      .toBe('STRONG FIT');
+    expect(fitWord({ player: lowRow, priorities: locked.priorities, capIdentity: locked.capIdentity, need: null, openSlots: 22 }))
+      .toBe('WEAK FIT');
+  });
+
   it('keys exact settled public prices and uses them instead of frozen card prices', () => {
     const drafted = storedPlayer('drafted');
     const deskPlayer = buildDeskRoomPlayer({ player: drafted, price: 50, seating: seating(drafted, 50) })!;

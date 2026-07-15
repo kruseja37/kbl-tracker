@@ -396,7 +396,7 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.queryByRole('button', { name: 'REVEAL KODIAKS SEAT' })).not.toBeInTheDocument();
   });
 
-  it('keeps selection inside independent profile and board panes without page scroll choreography', () => {
+  it('keeps touch panes while exposing semantic hooks for the desktop single-scroll layout', () => {
     const scrollIntoView = vi.fn();
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
       configurable: true,
@@ -411,18 +411,20 @@ describe('SnakeDraftRoomView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
     scrollIntoView.mockClear();
     expect(screen.getByTestId('private-workspace-layout')).toHaveClass(
+      'snake-private-workspace',
       'lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)]',
     );
     expect(screen.getByTestId('selected-player-pane')).toContainElement(screen.getByTestId('profile-details'));
     expect(screen.getByTestId('selected-player-pane')).toHaveClass(
       'sticky',
+      'snake-selected-pane',
       'top-3',
       'self-start',
       'lg:top-20',
       'lg:max-h-[calc(100vh-22rem)]',
     );
     expect(screen.getByTestId('private-workspace-scroll')).toContainElement(screen.getByTestId('private-board'));
-    expect(screen.getByTestId('private-workspace-scroll')).toHaveClass('overflow-y-auto');
+    expect(screen.getByTestId('private-workspace-scroll')).toHaveClass('overflow-y-auto', 'snake-board-pane');
 
     rerender(<SnakeDraftRoomView {...props({
       consolidatedMlb: true,
@@ -498,13 +500,18 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('UNDO THE MOST RECENT ACTION?')).toBeInTheDocument();
   });
 
-  it('keeps the prior pause state when the durable write is rejected', async () => {
-    const onPauseChange = vi.fn().mockRejectedValue(new Error('stale pause'));
-    render(<SnakeDraftRoomView {...props({ onPauseChange })} />);
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'PAUSE' })); });
-    expect(onPauseChange).toHaveBeenCalledWith(true);
-    expect(screen.queryByText('THE DRAFT IS PAUSED')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'PAUSE' })).toBeInTheDocument();
+  it('does not render a manual pause control when the draft has no clock', () => {
+    render(<SnakeDraftRoomView {...props()} />);
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RESUME ROOM' })).not.toBeInTheDocument();
+  });
+
+  it('offers recovery only after an automatic or saved stopped state exists', () => {
+    const onPauseChange = vi.fn();
+    render(<SnakeDraftRoomView {...props({ paused: true, onPauseChange })} />);
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RESUME ROOM' }));
+    expect(onPauseChange).toHaveBeenCalledWith(false);
   });
 
   it('records only after the full gavel hold and fires the thock', async () => {
@@ -549,20 +556,6 @@ describe('SnakeDraftRoomView', () => {
     expect(onRecordPick).toHaveBeenCalledWith('p1');
     expect(screen.queryByText('PICK RECORDED')).not.toBeInTheDocument();
     expect(screen.getByText('PICK NOT SAVED — HOLD THE GAVEL AGAIN')).toBeInTheDocument();
-  });
-
-  it('cancels a mid-hold pause without touching the session save', async () => {
-    vi.useFakeTimers();
-    const saveSession = vi.fn();
-    render(<SnakeDraftRoomView {...props({ onRecordPick: saveSession })} />);
-    fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
-    fireEvent.click(screen.getByRole('button', { name: 'PAUSE' }));
-    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
-    expect(saveSession).not.toHaveBeenCalled();
-    expect(screen.queryByText('PICK RECORDED')).not.toBeInTheDocument();
   });
 
   it('shows the recorded beat, removes manual advance, then auto-advances a non-final pick once', async () => {
