@@ -135,7 +135,7 @@ describe('SnakeResponsivePreview', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: 'buz' } });
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL BUZZARDS SEAT' }));
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
-    expect(screen.getByRole('button', { name: /^SELECT CASEY RECEIVER/ })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^SELECT CASEY RECEIVER/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     expect(screen.getByTestId('my-board-view')).not.toHaveTextContent('CASEY RECEIVER');
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
@@ -246,7 +246,7 @@ describe('SnakeResponsivePreview', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: 'bew' } });
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL BEEWOLVES SEAT' }));
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
-    expect(screen.getByRole('button', { name: /^SELECT MAX BACKSTOP/ })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /^SELECT MAX BACKSTOP/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     expect(screen.getByTestId('my-board-view')).not.toHaveTextContent('MAX BACKSTOP');
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));

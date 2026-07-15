@@ -185,6 +185,28 @@ describe('snake assistant board worker hook', () => {
     expect(FakeWorker.instances).toHaveLength(1);
   });
 
+  it('cancels rapid request churn and lets only the newest board settle', () => {
+    const view = render(<Harness value={request('rank-a')} />);
+    const first = FakeWorker.instances[0];
+
+    view.rerender(<Harness value={request('rank-b')} />);
+    const second = FakeWorker.instances[1];
+    view.rerender(<Harness value={request('rank-c')} />);
+    const latest = FakeWorker.instances[2];
+
+    expect(first.terminated).toBe(true);
+    expect(second.terminated).toBe(true);
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+
+    act(() => first.onmessage?.({ data: ready('rank-a') } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    act(() => second.onmessage?.({ data: ready('rank-b') } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('PENDING')).toBeInTheDocument();
+
+    act(() => latest.onmessage?.({ data: ready('rank-c') } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+    expect(latest.terminated).toBe(true);
+  });
+
   it('accepts a real canonical READY result whose recommendation includes unslotted available players', () => {
     const value = request('canonical-extra-candidates');
     value.input.activePool = [

@@ -42,6 +42,8 @@ export interface DeskCandidate extends DeskEligibilityCandidate {
   boardFallout?: string;
   construction: ConstructionPlayer;
   drafted?: boolean;
+  draftedByActiveTeam?: boolean;
+  draftedByTeamName?: string;
   consequencesKnown?: boolean;
 }
 

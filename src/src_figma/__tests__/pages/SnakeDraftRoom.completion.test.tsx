@@ -298,7 +298,7 @@ describe('snake draft durable completion and recap', () => {
     expect(document.body.innerHTML).not.toContain(missingPlayerId);
 
     fireEvent.click(screen.getByRole('button', { name: 'BACK TO ROOM' }));
-    expect(await screen.findByText('KODIAKS SELECTED UNKNOWN PLAYER')).toBeInTheDocument();
+    expect(await screen.findByText('PICK #1 · KODIAKS SELECTED UNKNOWN PLAYER')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent(missingPlayerId);
     expect(document.body.innerHTML).not.toContain(missingPlayerId);
 

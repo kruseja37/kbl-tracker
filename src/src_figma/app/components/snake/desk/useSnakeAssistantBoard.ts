@@ -268,20 +268,15 @@ export function validSnakeAssistantBoardWorkerResponse(
 
 export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | null): SnakeAssistantBoardState {
   const requestRef = useRef(request);
+  const requestEpochRef = useRef(0);
   const requestKey = request?.key ?? null;
   const [hookState, setHookState] = useState<HookState>(() => ({
     epoch: 0,
-    requestKey,
+    requestKey: null,
     snapshot: null,
     baselineProof: null,
   }));
-  const requestEpoch = hookState.requestKey === requestKey
-    ? hookState.epoch
-    : hookState.epoch + 1;
-  if (hookState.requestKey !== requestKey) {
-    setHookState({ epoch: requestEpoch, requestKey, snapshot: null, baselineProof: null });
-  }
-  const currentIdentity = hookState.epoch === requestEpoch && hookState.requestKey === requestKey;
+  const currentIdentity = hookState.requestKey === requestKey;
   const snapshot = currentIdentity ? hookState.snapshot : null;
   const baselineProof = currentIdentity ? hookState.baselineProof : null;
 
@@ -290,8 +285,20 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
   }, [request]);
 
   useEffect(() => {
+    const requestEpoch = requestEpochRef.current + 1;
+    requestEpochRef.current = requestEpoch;
     const current = requestRef.current;
-    if (!requestKey || !current || typeof Worker === 'undefined') return;
+    if (!requestKey || !current || typeof Worker === 'undefined') {
+      if (!requestKey) {
+        setHookState((state) => state.requestKey === null ? state : {
+          epoch: requestEpoch,
+          requestKey: null,
+          snapshot: null,
+          baselineProof: null,
+        });
+      }
+      return;
+    }
     let active = true;
     let worker: Worker | null = null;
     let pinnedSettled = false;
@@ -301,14 +308,24 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       input: { ...current.input, selectedPinPlayerId: null },
     } : null;
     let baselineSettled = !baselineRequest;
+    const updateCurrent = (update: (state: HookState) => HookState) => {
+      if (!active || requestEpochRef.current !== requestEpoch) return;
+      setHookState((state) => {
+        if (requestEpochRef.current !== requestEpoch) return state;
+        const currentState = state.epoch === requestEpoch && state.requestKey === requestKey
+          ? state
+          : { epoch: requestEpoch, requestKey, snapshot: null, baselineProof: null };
+        return update(currentState);
+      });
+    };
     const terminateIfSettled = () => {
       if (pinnedSettled && baselineSettled) worker?.terminate();
     };
     const fail = () => {
-      if (active) {
+      if (active && requestEpochRef.current === requestEpoch) {
         pinnedSettled = true;
         baselineSettled = true;
-        setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey ? {
+        updateCurrent((state) => ({
           ...state,
           snapshot: {
             key: requestKey,
@@ -316,17 +333,17 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
             workerFailed: true,
           },
           baselineProof: { pinnedRequestKey: requestKey, ready: false },
-        } : state);
+        }));
       }
       worker?.terminate();
     };
     const settleBaseline = (ready: boolean) => {
-      if (!active) return;
+      if (!active || requestEpochRef.current !== requestEpoch) return;
       baselineSettled = true;
-      setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey ? {
+      updateCurrent((state) => ({
         ...state,
         baselineProof: { pinnedRequestKey: requestKey, ready },
-      } : state);
+      }));
       terminateIfSettled();
     };
     try {
@@ -336,7 +353,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       return () => { active = false; };
     }
     worker.onmessage = (event: MessageEvent<SnakeAssistantBoardWorkerResponse>) => {
-      if (!active) return;
+      if (!active || requestEpochRef.current !== requestEpoch) return;
       if (baselineRequest && event.data.key === baselineRequest.key) {
         settleBaseline(validSnakeAssistantBoardWorkerResponse(event.data, baselineRequest)
           && event.data.result.status === 'ready');
@@ -348,9 +365,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
         fail();
         return;
       }
-      setHookState((state) => state.epoch === requestEpoch && state.requestKey === requestKey
-        ? { ...state, snapshot: event.data }
-        : state);
+      updateCurrent((state) => ({ ...state, snapshot: event.data }));
       if (baselineRequest && event.data.result.status === 'unavailable'
         && BASELINE_PROVEN_PIN_INFEASIBLE_REASONS.has(event.data.result.reason)) {
         try {
@@ -375,7 +390,7 @@ export function useSnakeAssistantBoard(request: SnakeAssistantBoardRequest | nul
       active = false;
       worker?.terminate();
     };
-  }, [requestEpoch, requestKey]);
+  }, [requestKey]);
 
   if (!requestKey) return { status: 'idle', board: null, infeasibleReason: null };
   if (typeof Worker === 'undefined') return { status: 'unavailable', board: null, infeasibleReason: null };

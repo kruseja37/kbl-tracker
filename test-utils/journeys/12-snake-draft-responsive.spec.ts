@@ -316,8 +316,7 @@ test('a recorded pick becomes unavailable everywhere and cannot be drafted twice
   await page.getByRole('button', { name: 'REVEAL BEEWOLVES SEAT' }).click();
   await page.getByRole('button', { name: 'PLAYER POOL' }).click();
   const drafted = page.getByRole('button', { name: /^SELECT MAX BACKSTOP/ });
-  await expect(drafted).toBeDisabled();
-  await expect(drafted).toContainText('DRAFTED');
+  await expect(drafted).toHaveCount(0);
   await page.getByRole('button', { name: 'MY BOARD' }).click();
   await expect(page.getByTestId('my-board-view')).not.toContainText('MAX BACKSTOP');
   await page.getByRole('button', { name: 'ASST GM BOARD' }).click();

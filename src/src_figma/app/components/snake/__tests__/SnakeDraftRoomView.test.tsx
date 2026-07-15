@@ -25,7 +25,7 @@ function props(overrides: Partial<SnakeDraftRoomViewProps> = {}): SnakeDraftRoom
     teams,
     order: [{ pick: 1, teamId: 'a' }, { pick: 2, teamId: 'b' }, { pick: 3, teamId: 'b', endpoint: true }],
     currentPickIndex: 0,
-    ticker: [{ id: 't1', teamId: 'b', text: 'COMETS SELECTED JANE DOE' }],
+    ticker: [{ id: 't1', teamId: 'b', text: 'PICK #1 · COMETS SELECTED JANE DOE' }],
     rostersByTeamId: { a: [{ id: 'p0', name: 'Al Ready', position: 'SS' }], b: [] },
     ownedPicksByTeamId: { a: [1], b: [2, 3] },
     activeSeatId: 'a',
@@ -252,12 +252,27 @@ describe('SnakeDraftRoomView', () => {
   });
   it('keeps the shared ticker neutral and private strings covered', () => {
     render(<SnakeDraftRoomView {...props()} />);
-    expect(screen.getByText('COMETS SELECTED JANE DOE')).toBeInTheDocument();
+    expect(screen.getByText('PICK #1 · COMETS SELECTED JANE DOE')).toBeInTheDocument();
     expect(screen.queryByText('Sam Slugger')).not.toBeInTheDocument();
     expect(screen.queryByText('Your top first baseman.')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/steal|took your/i);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
     expect(screen.getByText('Your top first baseman.')).toBeInTheDocument();
+  });
+
+  it('keeps the full numbered pick-by-pick log inside the expandable Recent Picks panel', () => {
+    const ticker = Array.from({ length: 12 }, (_, index) => ({
+      id: `pick-${index + 1}`,
+      teamId: index % 2 === 0 ? 'a' : 'b',
+      text: `PICK #${index + 1} · ${index % 2 === 0 ? 'KODIAKS' : 'COMETS'} SELECTED PLAYER ${index + 1}`,
+    })).reverse();
+    render(<SnakeDraftRoomView {...props({ consolidatedMlb: true, ticker })} />);
+    const recent = screen.getByText('RECENT PICKS').closest('details');
+    expect(recent).not.toHaveAttribute('open');
+    fireEvent.click(screen.getByText('RECENT PICKS'));
+    expect(recent).toHaveAttribute('open');
+    expect(screen.getByText('PICK #12 · COMETS SELECTED PLAYER 12')).toBeInTheDocument();
+    expect(screen.getByText('PICK #1 · KODIAKS SELECTED PLAYER 1')).toBeInTheDocument();
   });
 
   it('auto-covers when the public club lens changes', () => {

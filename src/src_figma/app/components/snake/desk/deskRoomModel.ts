@@ -16,6 +16,7 @@ import type {
 import {
   canonicalDeskEligiblePositions,
   reconcileBoardAvailability,
+  refitBoardSlots,
   type BoardBackfillEvent,
   type DeskEligibilityCandidate,
 } from './deskModel';
@@ -79,7 +80,8 @@ export function resolveLockedSeat(input: {
   team: Team;
   session: LeagueBuilderMlbDraftSession;
 }): { archetypeName: string; priorities: BandPriorities; capIdentity: Team['capIdentity'] } {
-  const lockedId = input.session.snakeSetup?.clubs.find((club) => club.teamId === input.team.id)?.archetypeId;
+  const lockedId = input.session.snakeSetup?.clubs.find((club) => club.teamId === input.team.id)?.archetypeId
+    ?? input.team.mlbArchetypeKey;
   const archetype = lockedId && lockedId !== 'BALANCED'
     ? HISTORICAL_ARCHETYPES.find((entry) => entry.id === lockedId)
     : undefined;
@@ -236,15 +238,62 @@ export function reconcileExistingSeatBoards(input: {
   const nextBoards = { ...sourceBoards };
   const eventsByTeamId: Record<string, BoardBackfillEvent[]> = {};
   for (const [teamId, board] of Object.entries(sourceBoards)) {
+    const committedPlayerIds = input.session.completedPicks
+      .filter((pick) => pick.teamId === teamId)
+      .map((pick) => pick.playerId);
+    const committedSet = new Set(committedPlayerIds);
+    const teamUnavailable = new Set(
+      [...input.unavailablePlayerIds].filter((playerId) => !committedSet.has(playerId)),
+    );
+    let workingBoard = board;
+    const committedMissingFromBoard = committedPlayerIds.some((playerId) => (
+      !Object.values(workingBoard.slots).includes(playerId)
+    ));
+    if (committedMissingFromBoard) {
+      const candidateById = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
+      const rankings: SnakeSeatBoardRecord['rankings'] = {
+        ...workingBoard.rankings,
+        global: [
+          ...committedPlayerIds,
+          ...(workingBoard.rankings.global ?? []).filter((playerId) => !committedSet.has(playerId)),
+        ],
+        byPosition: Object.fromEntries(Object.entries(workingBoard.rankings.byPosition ?? {}).map(([position, ids]) => [
+          position,
+          [
+            ...committedPlayerIds.filter((playerId) => (
+              candidateById.get(playerId)?.eligiblePositions ?? [candidateById.get(playerId)?.position]
+            ).includes(position as TaxonomyPosition)),
+            ...(ids ?? []).filter((playerId) => !committedSet.has(playerId)),
+          ],
+        ])),
+      };
+      const refit = refitBoardSlots({
+        rankings,
+        candidates: input.candidates,
+        unavailablePlayerIds: teamUnavailable,
+      });
+      const refitPlayerIds = Object.values(refit.slots);
+      if (refit.brokenSlots.length === 0 && !refit.invalidRoster
+        && committedPlayerIds.every((playerId) => refitPlayerIds.includes(playerId))) {
+        workingBoard = {
+          ...workingBoard,
+          slots: refit.slots as SnakeSeatBoardRecord['slots'],
+          rankings,
+          revision: workingBoard.revision + 1,
+        };
+        changed = true;
+      }
+    }
     const reconciled = reconcileBoardAvailability({
-      board,
+      board: workingBoard,
       candidates: input.candidates,
-      unavailablePlayerIds: input.unavailablePlayerIds,
+      unavailablePlayerIds: teamUnavailable,
     });
     if (reconciled.events.length > 0) eventsByTeamId[teamId] = reconciled.events;
-    if (reconciled.board === board) continue;
-    nextBoards[teamId] = reconciled.board;
-    changed = true;
+    if (reconciled.board !== workingBoard) changed = true;
+    if (workingBoard !== board || reconciled.board !== workingBoard) {
+      nextBoards[teamId] = reconciled.board;
+    }
   }
 
   return {

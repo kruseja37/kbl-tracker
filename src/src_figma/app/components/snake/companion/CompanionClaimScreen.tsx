@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CompanionHelp } from './CompanionHelp';
+import { companionRoomCodeFromSearch } from './companionJoinUrl';
 
 export function CompanionClaimScreen(props: {
   pending?: boolean;
@@ -9,7 +10,7 @@ export function CompanionClaimScreen(props: {
   onClaim: (gmName: string, roomCode: string) => void | Promise<void>;
 }) {
   const [gmName, setGmName] = useState('');
-  const [roomCode, setRoomCode] = useState('');
+  const [roomCode, setRoomCode] = useState(() => companionRoomCodeFromSearch(window.location.search));
   const accountLine = (
     <p className="mt-3 text-xs font-bold">
       ACCOUNT {props.accountEmail.toUpperCase()}{' '}

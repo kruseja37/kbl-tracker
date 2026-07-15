@@ -16,8 +16,10 @@ export function DeskCandidateRow(props: {
     : tone === 'red'
       ? 'text-[var(--ballpark-warn-text)]'
       : 'text-[var(--ballpark-brass)]';
-  const risk = props.candidate.drafted
-    ? 'DRAFTED'
+  const risk = props.candidate.draftedByActiveTeam
+    ? 'ON ROSTER'
+    : props.candidate.drafted
+    ? `DRAFTED${props.candidate.draftedByTeamName ? ` BY ${props.candidate.draftedByTeamName}` : ''}`
     : props.candidate.risk !== 'SAFE_TO_WAIT'
     ? props.candidate.risk.replaceAll('_', ' ')
     : props.candidate.riskPending
@@ -33,7 +35,7 @@ export function DeskCandidateRow(props: {
       className={`grid min-h-12 min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-2 px-2 py-1 text-left ${props.selected ? 'border-[var(--ballpark-brass)] bg-[var(--ballpark-action-green)]' : 'border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)]'}`}
       aria-label={`SELECT ${props.candidate.name}${identity ? ` · ${identity}` : ''}`}
       aria-pressed={props.selected}
-      disabled={props.candidate.drafted}
+      disabled={props.candidate.drafted && !props.candidate.draftedByActiveTeam}
       onClick={() => props.onSelect?.(props.candidate.id)}
     >
       <span className="min-w-0">

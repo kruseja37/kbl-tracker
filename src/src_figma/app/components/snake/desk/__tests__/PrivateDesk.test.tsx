@@ -120,7 +120,7 @@ describe('PrivateDesk', () => {
     expect(onReorder).toHaveBeenLastCalledWith('SS', ['available', 'muraski']);
   });
 
-  it('selects an available non-default player from both the board and rankings but never selects a drafted card', () => {
+  it('selects an available non-default player from both the board and rankings but removes drafted cards from the player pool', () => {
     const onSelectCandidate = vi.fn();
     const available = { ...candidate, id: 'available', name: 'AVAILABLE PLAYER' };
     const drafted = { ...candidate, id: 'drafted', name: 'DRAFTED PLAYER', drafted: true };
@@ -140,8 +140,7 @@ describe('PrivateDesk', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SELECT AVAILABLE PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('available');
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
-    expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'SELECT DRAFTED PLAYER' })).toHaveTextContent('DRAFTED');
+    expect(screen.queryByRole('button', { name: 'SELECT DRAFTED PLAYER' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'SELECT BLOCKED PLAYER' }));
     expect(onSelectCandidate).toHaveBeenCalledWith('blocked');

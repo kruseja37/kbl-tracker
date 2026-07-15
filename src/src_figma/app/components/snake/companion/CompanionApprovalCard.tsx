@@ -7,7 +7,11 @@ import {
   type SnakeCompanionState,
 } from '../../../../../utils/leagueBuilderStorage';
 import { CompanionHelp } from './CompanionHelp';
-import { isLoopbackCompanionHost, resolveCompanionJoinUrl } from './companionJoinUrl';
+import {
+  discoverCompanionOrigin,
+  isLoopbackCompanionHost,
+  resolveCompanionJoinUrl,
+} from './companionJoinUrl';
 import {
   approveCompanionClaim,
   companionClaimIdentity,
@@ -22,16 +26,29 @@ export interface CompanionApprovalCardProps {
   createRoomCode?: () => string;
 }
 
-const COMPANION_ORIGIN_KEY = 'kbl-snake-companion-origin';
-
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   const [error, setError] = useState<string | null>(null);
   const configuredOrigin = import.meta.env.VITE_COMPANION_ORIGIN as string | undefined;
-  const [shareableOrigin, setShareableOrigin] = useState(() => configuredOrigin ?? localStorage.getItem(COMPANION_ORIGIN_KEY) ?? '');
   const currentIsLoopback = (() => {
     try { return isLoopbackCompanionHost(new URL(window.location.origin).hostname); } catch { return true; }
   })();
-  const joinUrl = resolveCompanionJoinUrl(window.location.origin, shareableOrigin);
+  const [discoveredOrigin, setDiscoveredOrigin] = useState<string | null | undefined>(() => (
+    currentIsLoopback && !configuredOrigin ? undefined : null
+  ));
+  const shareableOrigin = configuredOrigin ?? discoveredOrigin;
+  const joinUrl = resolveCompanionJoinUrl(
+    window.location.origin,
+    shareableOrigin,
+    props.session.snakeCompanions?.roomCode,
+  );
+  useEffect(() => {
+    if (!currentIsLoopback || configuredOrigin) return;
+    let cancelled = false;
+    void discoverCompanionOrigin().then((origin) => {
+      if (!cancelled) setDiscoveredOrigin(origin);
+    });
+    return () => { cancelled = true; };
+  }, [configuredOrigin, currentIsLoopback]);
   useEffect(() => {
     if (props.session.snakeCompanions?.roomCode) return;
     void patchMlbDraftSessionSnakeCompanions({
@@ -87,22 +104,11 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
       <CompanionHelp>
-        {joinUrl ? <p>ON YOUR PHONE, GO TO: <strong>{joinUrl}</strong> — SAME WI-FI.</p> : <p className="font-bold text-[var(--ballpark-warn-text)]" role="alert">THIS BROWSER ADDRESS ONLY WORKS ON THIS DEVICE.</p>}
-        {currentIsLoopback ? <label className="mt-3 block font-bold">SHAREABLE ADDRESS
-          <input
-            type="url"
-            aria-label="SHAREABLE ADDRESS"
-            placeholder="http://192.168.1.10:5173"
-            value={shareableOrigin}
-            onChange={(event) => {
-              const value = event.target.value;
-              setShareableOrigin(value);
-              if (value.trim()) localStorage.setItem(COMPANION_ORIGIN_KEY, value.trim());
-              else localStorage.removeItem(COMPANION_ORIGIN_KEY);
-            }}
-            className="mt-1 block min-h-11 w-full border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2"
-          />
-        </label> : null}
+        {joinUrl
+          ? <p>ON YOUR PHONE, GO TO: <strong data-testid="companion-join-url">{joinUrl}</strong> — SAME WI-FI.</p>
+          : discoveredOrigin === undefined
+            ? <p>FINDING THE SHAREABLE ADDRESS…</p>
+            : <p className="font-bold text-[var(--ballpark-warn-text)]" role="alert">COMPANION SHARING IS OFF. RESTART THE PREVIEW WITH <strong>NPM RUN DEV</strong>.</p>}
         <p>USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
       </CompanionHelp>
       {error ? <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{error}</p> : null}

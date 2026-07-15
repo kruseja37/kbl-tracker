@@ -211,6 +211,49 @@ describe('private desk room assembly', () => {
     }
   });
 
+  it("locks a team's own drafted player into its board while removing that player from every rival board", () => {
+    const own = canonicalBackfillFixture('own');
+    const rival = canonicalBackfillFixture('rival');
+    const punchie: DeskEligibilityCandidate = {
+      id: 'punchie-patterson',
+      position: 'SP',
+      eligiblePositions: ['SP'],
+      rosterShape: { isPitcher: true, position: 'SP', role: 'SP' },
+      versionGroupId: 'punchie-patterson-human',
+    };
+    const rivalBoard: SnakeSeatBoardRecord = {
+      ...rival.board,
+      slots: { ...rival.board.slots, SP1: punchie.id },
+      rankings: {
+        ...rival.board.rankings,
+        global: [punchie.id, ...rival.board.rankings.global],
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: punchie.id,
+        versionGroupId: punchie.versionGroupId!, settledSalary: 37, marginalTax: 0,
+      }],
+      seatBoards: { a: own.board, b: rivalBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...own.candidates, ...rival.candidates, punchie],
+      unavailablePlayerIds: new Set([punchie.id]),
+    });
+
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).toContain(punchie.id);
+    expect(Object.values(result.session.seatBoards?.b.slots ?? {})).not.toContain(punchie.id);
+    expect(result.eventsByTeamId.a).toBeUndefined();
+    expect(result.eventsByTeamId.b).toContainEqual({
+      slotId: 'SP1',
+      gonePlayerId: punchie.id,
+      promotedPlayerId: rival.board.slots.SP1,
+    });
+  });
+
   it('only marks an existing board changed when automatic FLEX backfill can prove canonical version-unique truth', () => {
     const fixture = canonicalBackfillFixture('automatic');
     const gonePlayerId = fixture.board.slots.FLEX1;
@@ -316,6 +359,17 @@ describe('private desk room assembly', () => {
     });
     expect(locked.archetypeName).toBe("MURDERERS' ROW");
     expect(locked.priorities.Power).toBeGreaterThan(locked.priorities.Speed);
+  });
+
+  it('inherits the team archetype when an older snake setup has no locked archetype', () => {
+    const source = session('BALANCED');
+    source.snakeSetup!.clubs = [{ teamId: 'a', hotseat: true }];
+    const locked = resolveLockedSeat({
+      team: { id: 'a', mlbArchetypeKey: 'whiteyball' } as Team,
+      session: source,
+    });
+    expect(locked.archetypeName).toBe('WHITEYBALL');
+    expect(locked.priorities.Speed).toBeGreaterThan(locked.priorities.Power);
   });
 
   it('keys exact settled public prices and uses them instead of frozen card prices', () => {

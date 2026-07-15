@@ -45,7 +45,9 @@ export function BoardView(props: {
               ? 'MISSING'
               : !candidate
                 ? 'UNKNOWN PLAYER'
-                : candidate.drafted
+                : candidate.draftedByActiveTeam
+                  ? 'COMMITTED'
+                  : candidate.drafted
                   ? 'UNAVAILABLE'
                   : (props.slotDepth[slotId] ?? 3) <= 2
                     ? `${props.slotDepth[slotId]} LEFT`

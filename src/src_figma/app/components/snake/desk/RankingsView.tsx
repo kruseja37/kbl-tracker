@@ -28,7 +28,9 @@ export function RankingsView(props: {
   const ids = view === 'OVERALL'
     ? props.overallRankings ?? []
     : props.rankings[view] ?? [];
-  const rows = ids.flatMap((id) => byId.get(id) ?? []);
+  const rankedIds = ids.filter((id) => byId.has(id));
+  const availableIds = rankedIds.filter((id) => !byId.get(id)?.drafted);
+  const rows = availableIds.flatMap((id) => byId.get(id) ?? []);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingRows = normalizedQuery
     ? rows.filter((candidate) => [
@@ -37,9 +39,15 @@ export function RankingsView(props: {
         ...(candidate.identityChips ?? []),
       ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
     : rows;
-  const persistOrder = (orderedIds: readonly string[]) => view === 'OVERALL'
-    ? props.onReorderOverall?.(orderedIds)
-    : props.onReorder(view, orderedIds);
+  const persistOrder = (orderedAvailableIds: readonly string[]) => {
+    let availableIndex = 0;
+    const completeOrder = rankedIds.map((id) => (
+      byId.get(id)?.drafted ? id : orderedAvailableIds[availableIndex++]
+    )).filter((id): id is string => Boolean(id));
+    return view === 'OVERALL'
+      ? props.onReorderOverall?.(completeOrder)
+      : props.onReorder(view, completeOrder);
+  };
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap gap-2" aria-label="Ranking view">
@@ -69,7 +77,7 @@ export function RankingsView(props: {
         </div>
         {normalizedQuery ? <div className="space-y-1.5" aria-label={`${view} ranking search results`}>
           {matchingRows.map((candidate) => {
-            const rank = ids.indexOf(candidate.id) + 1;
+            const rank = availableIds.indexOf(candidate.id) + 1;
             return <div key={candidate.id} className="grid grid-cols-[1fr_auto] gap-2 border-4 p-2">
               <DeskCandidateRow
                 candidate={candidate}
@@ -82,7 +90,7 @@ export function RankingsView(props: {
                 className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 min-w-11"
                 disabled={rank === 1}
                 aria-label={`Send ${candidate.name} to top`}
-                onClick={() => persistOrder([candidate.id, ...ids.filter((id) => id !== candidate.id)])}
+                onClick={() => persistOrder([candidate.id, ...availableIds.filter((id) => id !== candidate.id)])}
               >TOP</button>
             </div>;
           })}

@@ -318,7 +318,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     const saved = mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession;
     const expectedPrimaryCatchers = {
-      a: 'b-replacement',
+      // A drafted gone-c, so its own board must keep that player committed.
+      a: 'gone-c',
       b: 'b-replacement',
       c: 'c-replacement',
     } as const;
@@ -341,6 +342,30 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     await act(async () => { await Promise.resolve(); });
     expect(mocks.saveRoom).toHaveBeenCalledTimes(1);
+  });
+
+  test('keeps an own pick committed on My Board and removes every drafted player from the Player Pool', async () => {
+    renderRoom(session(true));
+    await screen.findByTestId('snake-draft-room');
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+
+    selectTeam('a');
+    await revealSeatAndSettle('Club A');
+    const committed = screen.getByRole('button', { name: /SELECT GONE-C PLAYER/ });
+    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'COMMITTED');
+    expect(committed).toHaveTextContent('$10,700');
+    expect(committed).toHaveTextContent('TAX +$700');
+    fireEvent.click(committed);
+    expect(screen.getByText('COMMITTED TO YOUR 22-MAN ROSTER.')).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('GONE-C PLAYER GONE');
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByRole('button', { name: /SELECT GONE-C PLAYER/ })).not.toBeInTheDocument();
+
+    selectTeam('b');
+    await revealSeatAndSettle('Club B');
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByRole('button', { name: /SELECT GONE-C PLAYER/ })).not.toBeInTheDocument();
   });
 
   test('automatic persistence skips a duplicate-version FLEX backfill and writes the later canonical hitter', async () => {
@@ -763,6 +788,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(/PICK #1 · CLUB A SELECTED/)).toBeInTheDocument();
 
     selectTeam('a');
     expect(screen.getByTestId('drafted-truth-a')).toHaveTextContent('1/22');
