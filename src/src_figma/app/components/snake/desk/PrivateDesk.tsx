@@ -127,20 +127,23 @@ export function PrivateDesk(props: {
           {props.assistantOptimizationLabel}
         </p> : null}
         {props.assistantBoard.status === 'ready' && props.assistantBoard.board ? (
-          <BoardView
-            candidates={props.candidates}
-            boardSlots={Object.fromEntries(props.assistantBoard.board.slots.map((slot) => [slot.slotId, slot.playerId]))}
-            brokenSlots={[]}
-            planBill={null}
-            planLedger={props.assistantBoard.board.ledger}
-            planTitle="ASST GM 22"
-            planChemistry={props.assistantBoard.board.chemistry}
-            taxCoreRows={[]}
-            slotDepth={{}}
-            selectedCandidateId={props.selectedCandidateId}
-            onSelectCandidate={props.onSelectCandidate}
-            readOnly
-          />
+          <>
+            {props.showHelp ? <p className="mb-3 text-sm font-bold">LEGAL AND SOLVENT FIRST. THEN ARCHETYPE IDENTITY. FROZEN IV CANNOT FALL BELOW 90% OF THE BEST-IV LEGAL BUILD.</p> : null}
+            <BoardView
+              candidates={props.candidates}
+              boardSlots={Object.fromEntries(props.assistantBoard.board.slots.map((slot) => [slot.slotId, slot.playerId]))}
+              brokenSlots={[]}
+              planBill={null}
+              planLedger={props.assistantBoard.board.ledger}
+              planTitle="ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV"
+              planChemistry={props.assistantBoard.board.chemistry}
+              taxCoreRows={[]}
+              slotDepth={{}}
+              selectedCandidateId={props.selectedCandidateId}
+              onSelectCandidate={props.onSelectCandidate}
+              readOnly
+            />
+          </>
         ) : <p className="border-4 border-[var(--ballpark-panel-border)] p-3 font-black" role="status">
           {props.assistantBoard.status === 'pending' ? 'ASST GM BOARD CALCULATING…' : 'ASST GM BOARD UNAVAILABLE'}
         </p>}

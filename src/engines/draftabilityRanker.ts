@@ -29,6 +29,7 @@ import { computePoolTierCap } from './leagueConstruction';
 import { archetypeCapShift, HISTORICAL_ARCHETYPES, type HistoricalArchetype } from '../data/historicalArchetypes';
 import { canCover, LEGAL_ROSTER } from '../data/rosterConstruction';
 import type { TierKey } from '../data/tierParams';
+import type { LuxuryCapRow } from '../data/tierParams';
 
 export type DraftabilityBand = 'GREEN' | 'YELLOW' | 'LOCKED';
 
@@ -139,6 +140,8 @@ export interface RankDraftabilityOptions {
    * SOURCE so feasibility-stuffed candidate pools don't mechanically raise the identity bar.
    */
   embodimentReference?: import('./archetypeBalanceSimulator').SimPlayer[];
+  /** Optional caller-owned BASE tax law. Each archetype still receives its own exact cap shift. */
+  taxCaps?: readonly LuxuryCapRow[];
 }
 
 /**
@@ -156,6 +159,7 @@ export function rankArchetypeDraftability(
 
   const rows = archetypes.map((archetype) => {
     const simArch = historicalToSimArchetype(archetype);
+    const capShift = archetypeCapShift(archetype);
     const banned = new Set<string>();
     let resilience = 0;
     let noTaxBuilds = 0;
@@ -168,6 +172,14 @@ export function rankArchetypeDraftability(
         realTeamCount: options.realTeamCount,
         posture,
         banned,
+        // Historical archetype shifts are keyed by the luxury row
+        // (`hitters/POW`, `bullpen/VEL`, ...). `shiftLuxuryCaps` consumes the
+        // separate ModStat vocabulary, so passing this map through that helper
+        // silently applied zero shift. Resolve the row-keyed contract here.
+        taxCaps: options.taxCaps?.map((row) => ({
+          ...row,
+          cap: Math.max(0, row.cap * (1 + (capShift[`${row.group}/${row.stat}`] ?? 0))),
+        })),
         ...(options.embodimentReference ? { embodimentReference: options.embodimentReference } : {}),
       });
       if (round === 0) firstBuild = build;

@@ -31,6 +31,13 @@ export interface SnakeAssistantBoardPlayer {
   archetypeWeights?: Partial<Record<keyof BandPriorities, number>>;
 }
 
+/** Economic value used by the Assistant GM's 90% floor; never contextualized. */
+export function assistantValueFloorIv(
+  player: Pick<SnakeAssistantBoardPlayer, 'frozenIv'>,
+): number {
+  return player.frozenIv;
+}
+
 export interface SnakeAssistantCompletedPick {
   teamId: string;
   playerId: string;
@@ -322,7 +329,6 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     need,
     rankOverrides: input.gmRankOverrides,
   });
-  const worthById = new Map(assembled.map((entry) => [entry.playerId, entry.worth]));
   const optimizer = buildOptimizerRankings(
     input.slots,
     universe,
@@ -332,7 +338,10 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   const simPool: SimPlayer[] = universe.map((player) => ({
     ...player.simPlayer,
     id: player.playerId,
-    iv: worthById.get(player.playerId) ?? player.frozenIv,
+    // The identity optimizer's 90% value floor is literal frozen IV. Contextual
+    // own-value still drives the recommendation/rank preference above, but it
+    // cannot redefine the economic baseline advertised to the GM.
+    iv: assistantValueFloorIv(player),
     salary: ownIds.has(player.playerId)
       ? ownPicks.find((pick) => pick.playerId === player.playerId)!.settledSalary!
       : player.frozenIv,

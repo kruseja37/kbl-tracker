@@ -126,6 +126,7 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
 });
 
 import {
+  clickDraftSetupButton,
   clickSlot,
   fiveGradedSsPlayers,
   globalBoardOrder,
@@ -1005,16 +1006,16 @@ describe("LeagueBuilderDraftSetup", () => {
 
       const { unmount } = render(<LeagueBuilderDraftSetup />);
 
-      fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
+      await clickDraftSetupButton(/^Grounded$/i);
       await waitFor(() => {
-        expect(window.sessionStorage.getItem("kbl:draft-pool-balance-preset:league-page:pool-first")).toBe("grounded");
+        expect(window.sessionStorage.getItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first")).toBe("grounded");
       });
 
       unmount();
       vi.mocked(extractPoolFromDemand).mockClear();
 
       render(<LeagueBuilderDraftSetup />);
-      fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+      await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
       await waitFor(() => {
         expect(extractPoolFromDemand).toHaveBeenCalled();
@@ -1027,10 +1028,10 @@ describe("LeagueBuilderDraftSetup", () => {
       const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
         makeLegalRosterPlayerSet(prefix, 10_000),
       );
-      window.sessionStorage.setItem("kbl:draft-pool-source-mode:league-page:pool-first", "full-pool");
-      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "74");
-      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:pool-first", "grounded");
-      window.sessionStorage.setItem("kbl:draft-reserve-price-k:league-page:pool-first", "0.8");
+      window.sessionStorage.setItem("kbl:draft-pool-source-mode:league-page:auction:pool-first", "full-pool");
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "74");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first", "grounded");
+      window.sessionStorage.setItem("kbl:draft-reserve-price-k:league-page:auction:pool-first", "0.8");
       window.sessionStorage.setItem("kbl:draft-identity-auto-fill-nonce:league-page", "7");
       mockLeagueData({
         league: makeLeague({
@@ -1047,14 +1048,14 @@ describe("LeagueBuilderDraftSetup", () => {
       });
 
       render(<LeagueBuilderDraftSetup />);
-      fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+      await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
       await waitFor(() => expect(extractPoolFromDemand).toHaveBeenCalled());
       const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as ExtractPoolOptions;
       expect(options.poolSourceMode).toBe("full-pool");
       expect(options.poolQualityCenter).toBe(74);
       expect(options.poolBalancePreset).toBe("grounded");
-      expect(window.sessionStorage.getItem("kbl:draft-reserve-price-k:league-page:pool-first")).toBe("0.8");
+      expect(window.sessionStorage.getItem("kbl:draft-reserve-price-k:league-page:auction:pool-first")).toBe("0.8");
       expect(window.sessionStorage.getItem("kbl:draft-identity-auto-fill-nonce:league-page")).toBe("7");
     });
 
@@ -1102,8 +1103,8 @@ describe("LeagueBuilderDraftSetup", () => {
       // basis implicitly assumed.
       const extractedPlayers = makeFinalizedDesignFirstPlayers();
       const extractedAt = "2026-01-05T00:00:00.000Z";
-      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "76");
-      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:pool-first", "juiced");
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "76");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first", "juiced");
       mockLeagueData({
         league: makeLeague({
           draftPoolMode: "pool-first",

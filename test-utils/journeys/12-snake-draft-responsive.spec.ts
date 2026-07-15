@@ -186,7 +186,7 @@ for (const viewport of [{ width: 1024, height: 768 }, { width: 768, height: 1024
     await expect(page.getByTestId('my-board-view')).toContainText('TAYLOR UTILITY');
     await expect(page.getByTestId('my-board-view')).toContainText('NORA CURVEBALL');
     await page.getByRole('button', { name: 'ASST GM BOARD' }).click();
-    await expect(page.getByTestId('assistant-board-panel')).toContainText('ASST GM 22');
+    await expect(page.getByTestId('assistant-board-panel')).toContainText('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
     await expect(page.getByTestId('assistant-board-panel')).toContainText('QUINN VERSATILE');
     await page.getByRole('button', { name: 'MY BOARD' }).click();
 

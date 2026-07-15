@@ -202,6 +202,7 @@ describe('PrivateDesk', () => {
           ],
         },
       }}
+      showHelp
       onReorder={() => undefined}
       tradeGuide={<div>POSTED PRICE GUIDE</div>}
     />);
@@ -210,7 +211,9 @@ describe('PrivateDesk', () => {
     expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
     expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('LEGAL AND SOLVENT FIRST');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('FROZEN IV CANNOT FALL BELOW 90%');
     expect(screen.getByTestId('assistant-plan-truth-strip')).toHaveTextContent('$90');
     expect(screen.queryByRole('button', { name: /KEEP/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));

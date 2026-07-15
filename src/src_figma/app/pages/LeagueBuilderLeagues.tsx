@@ -29,6 +29,11 @@ import {
 } from "../../../data/rosterEngineConstants";
 import type { BalanceMode } from "../../../engines/leagueConstruction";
 import { TIER_CAPS, type TierKey } from "../../../data/tierParams";
+import {
+  DEFAULT_SNAKE_POOL_ASSEMBLY_MODE,
+  SNAKE_POOL_COMPETITION_PRESETS,
+} from "../../../engines/snakePoolAssembly";
+import { DEFAULT_POOL_SIZE_MULTIPLIER } from "../../../engines/poolFromDemand";
 import { isFranchisePhase2L13Enabled } from "../../../utils/franchisePhase2Flags";
 import {
   isSavedAuctionMutationGuardMessage,
@@ -270,6 +275,11 @@ export function LeagueBuilderLeagues() {
           };
 
       if (editingLeague) {
+        const movedToSnake = formData.draftFormat === "snake" && editingLeague.draftFormat !== "snake";
+        const movedToAuction = formData.draftFormat === "auction" && editingLeague.draftFormat === "snake";
+        const migratesLeakedSnakeDefaults = movedToAuction
+          && editingLeague.poolAssemblyMode !== undefined
+          && editingLeague.snakePoolSizeMultiplier === undefined;
         await updateLeague({
           ...editingLeague,
           name: formData.name.trim(),
@@ -277,6 +287,18 @@ export function LeagueBuilderLeagues() {
           teamIds: formData.teamIds,
           defaultRulesPreset: editingLeague.defaultRulesPreset,
           draftFormat: formData.draftFormat,
+          ...(movedToSnake ? {
+            poolAssemblyMode: editingLeague.poolAssemblyMode ?? DEFAULT_SNAKE_POOL_ASSEMBLY_MODE,
+            snakePoolSizeMultiplier: editingLeague.snakePoolSizeMultiplier
+              ?? SNAKE_POOL_COMPETITION_PRESETS.competitive.multiplier,
+            snakeIncludeUnassignedSourcePlayers: editingLeague.snakeIncludeUnassignedSourcePlayers ?? false,
+          } : migratesLeakedSnakeDefaults ? {
+            snakePoolSizeMultiplier: editingLeague.poolSizeMultiplier
+              ?? SNAKE_POOL_COMPETITION_PRESETS.competitive.multiplier,
+            snakeIncludeUnassignedSourcePlayers: editingLeague.includeUnassignedSourcePlayers ?? false,
+            poolSizeMultiplier: DEFAULT_POOL_SIZE_MULTIPLIER,
+            includeUnassignedSourcePlayers: true,
+          } : {}),
           tier: formData.tier,
           salaryCap: parsedSalaryCap,
           balanceMode: formData.balanceMode,
@@ -293,6 +315,11 @@ export function LeagueBuilderLeagues() {
           divisions: conferencePatch.divisions,
           defaultRulesPreset: "standard",
           draftFormat: formData.draftFormat,
+          ...(formData.draftFormat === "snake" ? {
+            poolAssemblyMode: DEFAULT_SNAKE_POOL_ASSEMBLY_MODE,
+            snakePoolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.competitive.multiplier,
+            snakeIncludeUnassignedSourcePlayers: false,
+          } : {}),
           tier: formData.tier,
           salaryCap: parsedSalaryCap,
           balanceMode: formData.balanceMode,

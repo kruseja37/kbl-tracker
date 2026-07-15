@@ -6,6 +6,7 @@ import type { Player } from '../../utils/leagueBuilderStorage';
 import type { ShapeClassification } from '../playerArchetypeClassifier';
 import { buildDefaultDesignSlots, isDesignPlayerEligibleForSlot } from '../rosterDesignFeasibility';
 import {
+  assistantValueFloorIv,
   buildSnakeAssistantBoard,
   type SnakeAssistantBoardInput,
   type SnakeAssistantBoardPlayer,
@@ -112,6 +113,12 @@ function engineInput(overrides: Partial<SnakeAssistantBoardInput> = {}): SnakeAs
 }
 
 describe('shared snake assistant board core', () => {
+  it('anchors the advertised value floor to frozen IV, not contextual own-value', () => {
+    const player = candidate({ id: 'floor-check', position: 'SS', frozenIv: 123_456, storedSalary: 999_999 });
+    player.archetypeWeights = { Power: 999, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 0 };
+    expect(assistantValueFloorIv(player)).toBe(123_456);
+  });
+
   it('pins every own pick and returns an exact unique legal solvent 22', () => {
     const input = engineInput();
     const result = buildSnakeAssistantBoard(input);

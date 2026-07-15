@@ -3957,3 +3957,13 @@ makes the request stale. FARM companion pick submission remains absent.
 The Snake room has no draft clock, so a normal Pause button has no user job and is removed. Automatic
 plan-broken safety stops and old saved paused sessions remain recoverable through a contextual `RESUME ROOM`
 control that appears only while the persisted room is actually stopped.
+## 2026-07-15 — Snake pool assembly and competition-depth guide
+
+Snake Draft Setup offers two honest assembly laws inside the selected source universe. `FULL SOURCES`
+loads the exact source union, subject only to explicit hand removals/additions and active hard pins.
+`SHAPE TO TEAMS` runs the existing demand/archetype curve and keeps the same manual override law.
+For eight clubs (176 required roster slots), the shaped competition guide is Tight 1.20x = 212,
+Competitive 1.35x = 238 (recommended starting point), and Loose 1.50x = 264. Full Sources remains
+unrestricted. These are target counts, not readiness promises: the shared simultaneous Snake seating
+proof must still show that every club can finish a legal, affordable, archetype-credible 22 under its
+own roster-local tax caps. Draft-room size never rescales those caps.

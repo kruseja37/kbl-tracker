@@ -22,6 +22,7 @@ import {
 import { CHEMISTRY_CODE_TO_WORD, normalizeToChemistryCode } from '../data/chemistryCanonical';
 import { normalizePersonality, type CanonicalPersonality } from '../engines/masterMoraleMatrix';
 import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/leagueConstruction';
+import type { SnakePoolAssemblyMode } from '../engines/snakePoolAssembly';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
 import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
@@ -179,10 +180,23 @@ export interface LeagueTemplate {
      * comparison so a pre-feature record never retro-nags. */
     poolQualityCenter?: number;
     poolBalancePreset?: string;
+    /** Snake-only membership law at basis capture. Absent on pre-feature records. */
+    poolAssemblyMode?: SnakePoolAssemblyMode;
   };
   modeAExtractedIds?: string[];
   modeAHandAdds?: string[];
   modeAHandRemoves?: string[];
+  /** Snake/pool-first source-union vs shaped membership law. */
+  poolAssemblyMode?: SnakePoolAssemblyMode;
+  /** Snake-only competition depth. Kept separate so format switches never overwrite Auction's pool dial. */
+  snakePoolSizeMultiplier?: number;
+  /** Snake-only unassigned-player source choice. Auction retains its own backward-compatible default. */
+  snakeIncludeUnassignedSourcePlayers?: boolean;
+  /** Durable pool-first manual intent. Adds are outside the automatic result; removes stay out. */
+  poolFirstHandAdds?: string[];
+  poolFirstHandRemoves?: string[];
+  /** Durable reroll seed so a reload never silently resets the selected generated cohort. */
+  poolFirstGenerationNonce?: number;
   /** Full reversible card set captured before snake version trimming at lock. */
   snakeVersionSourcePlayerIds?: string[];
   /** Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08): which leagues' player

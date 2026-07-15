@@ -407,7 +407,7 @@ describe("LeagueBuilderDraftSetup", () => {
   });
 
   test("pool quality center restores from session and feeds regeneration", async () => {
-    window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "74");
+    window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "74");
     const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
       makeLegalRosterPlayerSet(prefix, 10_000),
     );
@@ -645,7 +645,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: currentPlayers.map((player) => player.id),
       userAddedIds: [],
       manualExcludedIds: [pinnedPlayer.id],
@@ -701,7 +701,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: currentPlayers.map((player) => player.id).filter((id) => id !== userAdded.id),
       userAddedIds: [userAdded.id],
       manualExcludedIds: [manualExcluded.id],
@@ -800,7 +800,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: [...generatedPlayers, ...extraGeneratedPlayers].map((player) => player.id),
       userAddedIds: [],
       manualExcludedIds: [],

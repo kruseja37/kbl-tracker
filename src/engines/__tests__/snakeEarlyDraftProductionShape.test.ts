@@ -15,8 +15,10 @@ import { LUXURY_CAP_TABLES, TIER_CAPS } from '../../data/tierParams';
 import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import { archetypeToCapIdentity, resolveClubBandPriorities } from '../archetypeIdentity';
 import { auctionMarginalTaxWithCaps } from '../auctionLuxuryTax';
-import { historicalToSimArchetype } from '../draftabilityRanker';
+import { historicalToSimArchetype, rankArchetypeDraftability } from '../draftabilityRanker';
 import { buildSnakeOrder } from '../leagueConstruction';
+import { extractPoolFromDemand } from '../poolFromDemand';
+import { SNAKE_POOL_COMPETITION_PRESETS, snakePoolSizeGuide } from '../snakePoolAssembly';
 import { evaluateSnakePlan } from '../snakeEconomics';
 import { snakeLuxuryCaps } from '../snakeLuxuryTax';
 import {
@@ -46,6 +48,7 @@ import {
   type SnakeRationalRiskWorkerResponse,
 } from '../../src_figma/app/components/snake/desk/useSnakeRationalRisks';
 import { toConstructionPlayer } from '../../src_figma/hooks/useLeagueBuilderData';
+import { demandUniverseFromPlayers } from '../../src_figma/app/engines/leaguePlayerAdapter';
 import { computePlayerIv } from '../../utils/leagueBuilderPoolBuilder';
 import {
   __resetLeagueBuilderDatabaseForTests,
@@ -168,6 +171,92 @@ describe('production-shape early snake intelligence', () => {
     expect(marginalTax).toBeGreaterThan(0);
     expect(exactCost).toBe(selected.price + marginalTax);
   });
+
+  test('builds every eight-team competition preset at its exact size with legal tax-aware 22-player finishes', () => {
+    const archetypeIds = [
+      'murderers-row', 'whiteyball', 'junkball-surgeons', 'flamethrowers',
+      'nasty-boys', 'hdh-royals', 'the-opener', 'the-oriole-way',
+    ];
+    const selectedArchetypes = archetypeIds.map((archetypeId) =>
+      HISTORICAL_ARCHETYPES.find((entry) => entry.id === archetypeId)!,
+    );
+    const roomTeamIds = TEAM_IDS.slice(0, selectedArchetypes.length);
+    const demandUniverse = demandUniverseFromPlayers(stockPlayers);
+    const guide = snakePoolSizeGuide(roomTeamIds.length);
+
+    for (const preset of ['tight', 'competitive', 'loose'] as const) {
+      const definition = SNAKE_POOL_COMPETITION_PRESETS[preset];
+      const result = extractPoolFromDemand(
+        demandUniverse,
+        [],
+        selectedArchetypes,
+        'juiced',
+        {
+          teams: roomTeamIds.length,
+          shills: 0,
+          budgetPerTeam: TIER_CAPS.juiced.tierCap,
+          poolBalancePreset: 'balanced',
+          poolQualityCenter: 68,
+          poolSizeMultiplier: definition.multiplier,
+          poolSourceMode: 'full-pool',
+        },
+      );
+      const poolIds = new Set(result.players.map((player) => player.id));
+      const finalVerdicts = rankArchetypeDraftability(
+        result.players,
+        selectedArchetypes,
+        'juiced',
+        {
+          realTeamCount: roomTeamIds.length,
+          budgetOverride: TIER_CAPS.juiced.tierCap,
+          taxCaps: snakeLuxuryCaps([...LUXURY_CAP_TABLES.juiced]),
+          embodimentReference: demandUniverse,
+        },
+      );
+      const proof = proveSimultaneousSnakeSeating({
+        clubs: roomTeamIds.map((teamId, index) => ({
+          teamId,
+          roster: [],
+          budgetRemaining: TIER_CAPS.juiced.tierCap,
+          capIdentity: archetypeToCapIdentity(selectedArchetypes[index]),
+        })),
+        pool: seatingPlayers.filter((player) => poolIds.has(player.playerId)),
+        baseCaps: LUXURY_CAP_TABLES.juiced,
+        realTeamCount: roomTeamIds.length,
+      });
+
+      console.info('SNAKE_POOL_PRESET', JSON.stringify({
+        preset,
+        target: guide.targets[preset],
+        actual: result.size,
+        verdicts: finalVerdicts.map((verdict) => ({
+          archetypeId: verdict.archetypeId,
+          band: verdict.band,
+          embodimentZ: Number(verdict.embodimentZ.toFixed(3)),
+        })),
+        g1: result.g1?.holds ?? false,
+        taxAwareFinish: proof.feasible,
+      }));
+      expect.soft(result.sizing?.effectiveTarget, `${preset} target`).toBe(guide.targets[preset]);
+      expect.soft(result.size, `${preset} size`).toBe(guide.targets[preset]);
+      // Count presets are competition guides, not false readiness guarantees. The authoritative
+      // final-pool verdicts are still computed under Snake's roster-local tax law and can expose a
+      // source/archetype mismatch for the UI to block rather than hiding it behind a count.
+      expect.soft(finalVerdicts, `${preset} archetype verdicts`).toHaveLength(selectedArchetypes.length);
+      expect.soft(finalVerdicts.every((verdict) => Number.isFinite(verdict.embodimentZ)), `${preset} finite embodiment`).toBe(true);
+      expect.soft(
+        finalVerdicts.some((verdict) => verdict.band === 'LOCKED'),
+        `${preset} keeps every selected stock archetype open`,
+      ).toBe(false);
+      expect.soft(result.g1?.holds, `${preset} legal seating`).toBe(true);
+      expect.soft(proof.feasible, `${preset} tax-aware finish`).toBe(true);
+      expect.soft(proof.assignments, `${preset} assignments`).toHaveLength(roomTeamIds.length);
+      expect.soft(
+        proof.assignments.every((assignment) => assignment.playerIds.length === 22),
+        `${preset} roster sizes`,
+      ).toBe(true);
+    }
+  }, 90_000);
 
   test('returns a useful solvent Asst GM board from the real 506-card source before pick one', () => {
     expect(assistantPlayers).toHaveLength(stockPlayers.length);

@@ -13,6 +13,7 @@ import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate } from "../../../utils/leagueBuilderStorage";
+import { addPlayersToLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
 import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 
@@ -136,8 +137,10 @@ import {
   makePlayer,
   makePlayers,
   makePool,
+  makePositionDiversePlayers,
   makeTeam,
   mockLeagueData,
+  waitForExtractPoolOptions,
 } from "./LeagueBuilderDraftSetup.testUtils";
 
 describe("LeagueBuilderDraftSetup", () => {
@@ -169,6 +172,123 @@ describe("LeagueBuilderDraftSetup", () => {
   // picks, roster-design feasibility, archetype draftability ranking) must respect the checked
   // source leagues, exactly like the two extraction call sites already do.
   // -----------------------------------------------------------------------------------------
+
+  test("SNAKE POOL GUIDE: eight clubs get 212/238/264/full-source controls and Competitive shapes at 1.35x", async () => {
+    const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
+    const teams = teamIds.map((id, index) => makeTeam(id, {
+      name: `Club ${index + 1}`,
+      controlledBy: "ai",
+      gmSeatId: undefined,
+      gmSeatName: undefined,
+    }));
+    const players = makePositionDiversePlayers(300, 8, "snake-guide");
+    mockLeagueData({
+      league: makeLeague({
+        teamIds,
+        draftFormat: "snake",
+        draftPoolMode: "pool-first",
+        poolAssemblyMode: "shape-to-teams",
+        poolSizeMultiplier: 1.35,
+        salaryCap: 10_000_000,
+      }),
+      teams,
+      players,
+      pool: makePool({ locked: false, players: [], totalSlots: 176 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const assembly = await screen.findByTestId("snake-pool-assembly");
+    expect(within(assembly).getByRole("button", { name: /TIGHT.*212/i })).toBeInTheDocument();
+    expect(within(assembly).getByRole("button", { name: /COMPETITIVE.*REC.*238/i })).toHaveAttribute("aria-pressed", "true");
+    expect(within(assembly).getByRole("button", { name: /LOOSE.*264/i })).toBeInTheDocument();
+    expect(within(assembly).getByRole("button", { name: /FULL SOURCES.*300/i })).toBeInTheDocument();
+
+    await clickDraftSetupButton("BUILD COMPETITIVE POOL");
+    const options = await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.35);
+    expect(options.poolSizeMultiplier).toBe(1.35);
+  }, 20_000);
+
+  test("FULL SOURCES loads the exact selected source union instead of running the curve", async () => {
+    const sourcePlayers = makePositionDiversePlayers(90, 2, "full-source").map((player) => ({
+      ...player,
+      leagueAssignments: [{ leagueId: "source-league", teamId: "", rosterStatus: "FREE_AGENT" as const }],
+    }));
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      poolAssemblyMode: "full-sources",
+      sourceLeagueIds: ["source-league"],
+      includeUnassignedSourcePlayers: false,
+      salaryCap: 10_000_000,
+    });
+    const sourceLeague = makeLeague({
+      id: "source-league",
+      name: "Source League",
+      teamIds: [],
+      sourceLibrary: { kind: "historical-legends", profileType: "Draft Pool" },
+    });
+    mockLeagueData({
+      league,
+      leagues: [league, sourceLeague],
+      players: sourcePlayers,
+      pool: makePool({ locked: false, players: [], totalSlots: 44 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => {
+      expect(vi.mocked(addPlayersToLeaguePool)).toHaveBeenCalledWith(
+        sourcePlayers.map((player) => player.id).sort((a, b) => a.localeCompare(b)),
+        "league-page",
+      );
+    });
+    expect(vi.mocked(extractPoolFromDemand)).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ poolSizeMultiplier: 1.35 }),
+    );
+  }, 20_000);
+
+  test("FULL SOURCES advertises the post-override result count", async () => {
+    const sourcePlayers = makePositionDiversePlayers(50, 2, "full-count").map((player) => ({
+      ...player,
+      leagueAssignments: [{ leagueId: "source-league", teamId: "", rosterStatus: "FREE_AGENT" as const }],
+    }));
+    const outside = makePlayer(999, {
+      id: "outside-add",
+      leagueAssignments: [{ leagueId: "other-league", teamId: "", rosterStatus: "FREE_AGENT" }],
+    });
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      poolAssemblyMode: "full-sources",
+      sourceLeagueIds: ["source-league"],
+      snakeIncludeUnassignedSourcePlayers: false,
+      poolFirstHandAdds: [outside.id],
+      poolFirstHandRemoves: [sourcePlayers[0].id, sourcePlayers[1].id],
+      salaryCap: 10_000_000,
+    });
+    mockLeagueData({
+      league,
+      leagues: [
+        league,
+        makeLeague({ id: "source-league", name: "Source", teamIds: [] }),
+        makeLeague({ id: "other-league", name: "Other", teamIds: [] }),
+      ],
+      players: [...sourcePlayers, outside],
+      pool: makePool({ locked: false, players: [], totalSlots: 44 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const assembly = await screen.findByTestId("snake-pool-assembly");
+    await waitFor(() => {
+      expect(within(assembly).getByRole("button", { name: /FULL SOURCES.*49/i })).toBeInTheDocument();
+    });
+  }, 20_000);
 
   test("VERSION-LABELS: identical Legend names stay distinguishable by Draft, Career, and Peak profile", async () => {
     const versions = ([
@@ -731,6 +851,78 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => {
       expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(3);
     });
+  });
+
+  test("source-cohort roster and IV inputs invalidate the visible Snake draftability snapshot", async () => {
+    vi.mocked(rankAllArchetypesForPool).mockReturnValue([{
+      archetypeId: "murderers-row",
+      name: "Murderers' Row",
+      band: "YELLOW",
+      resilience: 1,
+      noTaxBuilds: 1,
+      taxedBuilds: 0,
+      embodimentZ: 0.5,
+      taxHeadroom: 10_000,
+      reasons: ["CURRENT SNAPSHOT"],
+      rank: 1,
+    }]);
+    const poolPlayers = makePlayers(24);
+    const referenceOnly = makePlayer(900, {
+      id: "reference-only",
+      leagueAssignments: [{ leagueId: "source-only", teamId: "", rosterStatus: "FREE_AGENT" }],
+    });
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      sourceLeagueIds: ["league-page", "source-only"],
+    });
+    const sourceLeague = makeLeague({ id: "source-only", name: "Reference Source", teamIds: [] });
+    mockLeagueData({
+      league,
+      leagues: [league, sourceLeague],
+      players: [...poolPlayers, referenceOnly],
+      teams: [
+        makeTeam("team-a", {
+          controlledBy: "ai",
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+        makeTeam("team-b"),
+      ],
+      pool: makePool({ locked: false }),
+    });
+    const { rerender } = render(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("▲ CURRENT SNAPSHOT")).toBeInTheDocument();
+
+    const structurallyEditedReference = {
+      ...referenceOnly,
+      bats: "S" as const,
+      secondaryPosition: "C" as const,
+      trait1: "Utility",
+      arsenal: [...referenceOnly.arsenal, "CH" as const],
+    };
+
+    mockLeagueData({
+      league,
+      leagues: [league, sourceLeague],
+      players: [...poolPlayers, structurallyEditedReference],
+      teams: [
+        makeTeam("team-a", {
+          controlledBy: "ai",
+          mlbArchetypeKey: undefined,
+          farmArchetypeKey: undefined,
+        }),
+        makeTeam("team-b"),
+      ],
+      pool: makePool({ locked: false }),
+    });
+    rerender(<LeagueBuilderDraftSetup />);
+
+    expect(screen.queryByText("▲ CURRENT SNAPSHOT")).not.toBeInTheDocument();
+    await waitFor(() => expect(rankAllArchetypesForPool).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("▲ CURRENT SNAPSHOT")).toBeInTheDocument();
   });
 
   test("draftability worker failure falls back and releases identity auto-fill", async () => {
