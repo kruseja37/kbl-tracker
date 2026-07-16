@@ -7469,3 +7469,27 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   reaches 2,726 transformed modules and hits the existing Vite/PWA `worker.format = iife` conflict; the
   failing worker, Vite config, package manifest, and lockfile are byte-identical to the pre-retune base.
 - **Only remaining product gate:** JK walks the actual League Builder and Snake Room on Mac/iPad.
+
+## 2026-07-16 (Codex, multi-team companion desks) — builder complete; audit pending
+
+- Fresh-fetched moving `origin/main` before final state booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `0d28e63f`.
+- Draft Setup now treats duplicate normalized companion GM names as intentional multi-team packages.
+  The ceiling remains three distinct active packages/devices, so the eight-club table can use two
+  Hotseat clubs plus three two-club companion packages without inventing extra accounts or devices.
+- Companion claims, approvals, recovery, replacement, revocation, takeover, and persistence are exact
+  per `(deviceId, teamId)`. Hotseat can approve/refuse each team without erasing siblings. A fourth
+  unique device stays blocked, and approval for one team never authorizes another.
+- The companion switcher lists only approved teams and exposes one desk. Every switch invalidates old
+  private work, covers before rendering the next desk, and requires explicit open. Board, Assistant
+  GM, MLB trade, and pick-intent writes perform the same exact active-team guard after cloud pull and
+  inside the atomic write. Companion picks remain Hotseat-confirmed intent; FARM trades remain absent.
+- Deterministic browser proof rearranged independent Beewolves and Buzzards boards in both directions
+  and proved cover-before-reveal plus no cross-team state bleed. Its first full-file run caught the
+  switcher's 36px select target; the bounded repair raised it to 44px and the complete responsive file
+  passed 17/17 across Mac/iPad main and companion surfaces.
+- Closing builder proof: focused companion/setup/persistence 12 files / 140 tests; full Vitest exit 0;
+  TypeScript, changed-file ESLint, production build, and diff integrity green.
+- **Pending gates:** a separate non-builder audits `0d28e63f`; JK's real same-Wi-Fi device walkthrough
+  remains the sole product acceptance gate.

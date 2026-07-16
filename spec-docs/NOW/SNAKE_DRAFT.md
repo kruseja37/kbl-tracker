@@ -1,8 +1,33 @@
-# NOW — Snake Draft: pitcher-hitting identities recalibrated; JK walk is the gate
+# NOW — Snake Draft: multi-team companion build complete; audit and JK walk remain
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
+
+## BUILDER COMPLETE (2026-07-16; SNAKE-MULTI-TEAM-COMPANION-31; independent audit pending)
+- One companion device may now hold multiple separately approved team desks. Duplicate normalized
+  companion GM names in Draft Setup intentionally define a team package, and capacity remains three
+  distinct companion packages/devices rather than three teams. Unnamed companion teams and a fourth
+  distinct package remain blocked.
+- Authorization is exact per `(deviceId, teamId)`. Package claims create one pending row per team;
+  Hotseat approves or refuses each team independently without erasing approved siblings. Board,
+  Assistant GM, MLB trade, and pick-intent writes all revalidate the active exact tuple, including
+  after the cloud pull and inside the atomic write, so work started on a prior desk cannot land after
+  a switch.
+- The companion has one compact approved-team switcher and exposes exactly one private desk at a
+  time. Switching teams invalidates the prior private epoch immediately, clears transient private
+  state, covers the device, and requires an explicit open before the next team's branding or board
+  renders. Active-team revocation follows the same cover-before-fallback law.
+- Companion MLB pick submission remains intent only; Hotseat remains the authoritative confirmation
+  writer. Same-account Supabase, room code, three-device ceiling, exact draft/economy engines, and
+  the farm no-trade ruling are unchanged.
+- Builder commit: `0d28e63f`. Proof: focused companion/setup/persistence suite 140/140; full Vitest
+  exit 0; responsive real-browser journey 17/17 across main/companion Mac and iPad sizes, including
+  independent two-team board mutations and cover-gated switching; TypeScript, changed-file ESLint,
+  production build, and diff integrity green. The browser crawl exposed and repaired the new team
+  selector's 36px touch target; it now meets the 44px law.
+- **Next move:** a separate non-builder skeptically audits `0d28e63f`. If it passes, JK's actual
+  same-Wi-Fi companion-device walk remains the only product acceptance gate.
 
 ## VERIFIED (builder + separate auditor, 2026-07-16; SNAKE-PITCHER-HITTING-RECALIBRATION-30)
 - Exact zero-axis ablation against `9e5901d7` proved the playing-time correction made

@@ -4038,3 +4038,23 @@ bullpen secondary rows only at canonical relief exposure: RP `.08/.08/.16/.06`, 
 `.05/.05/.11/.05`. Two Way relievers are full-use hitters in hitter POW/CON/SPD/FLD and are excluded
 from bullpen secondary rows, so the same batting rating is never charged twice. There is no bullpen
 POW/CON archetype axis in the locked 24 and therefore no reliever-hitting identity retune.
+
+## 2026-07-16 — Companion capacity is device-first; one device may hold multiple covered desks
+
+Duplicate normalized GM names on companion clubs intentionally define one multi-team package in
+Snake Draft Setup. Capacity remains three distinct active companion device IDs/packages, not three
+team claims. A package request creates one pending exact `(deviceId, teamId)` claim per team. Hotseat
+approves or refuses each team separately; sibling approvals survive per-team refusal, revocation,
+refresh, recovery, replacement, and takeover. One team may have only one active device.
+
+An approved companion exposes exactly one active team desk. Its switcher lists only teams approved
+for that device. Choosing another team immediately invalidates the prior private epoch and every
+transient team-derived result, covers the device, and reveals nothing from the new desk until the user
+explicitly opens it. Active-team revocation covers before selecting an approved fallback; with no
+approved team remaining, the device returns to claim/pending state.
+
+Every companion board, Assistant GM, MLB trade, and pick-intent read/write is authorized against the
+currently active exact tuple. A team switch during pull or atomic persistence makes the old operation
+stale rather than letting it land or restore old UI. Companion picks remain requests only and require
+normal Hotseat confirmation. Same-account Supabase, room codes, the three-device ceiling, farm
+no-trade, draft legality, and salary/tax/archetype calculations are unchanged.
