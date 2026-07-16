@@ -7451,3 +7451,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending gates:** a separate non-builder audits `9ace5857`; JK walks the actual League Builder and
   Snake Room on Mac/iPad. Builder and auditor remain separate, and only JK's browser walk accepts the
   product.
+
+## 2026-07-16 (Codex, pitcher-hitting recalibration) — independent audit close
+
+- The separate non-builder audit inspected exact HEAD `5a3021b7` and implementation `9ace5857`, then
+  returned **VERIFIED with no Major or Minor findings**. It made no edits.
+- It independently reproduced the exact `9e5901d7` ablation and lower-candidate landscape:
+  Flamethrowers stays flat at Standard through +29% and first moves at +30%; HDH stays flat at Nerfed
+  through +37%, first moves at +38%, and +40% is the smallest simple round setting. Bash Brothers and
+  Launch & Leather already move their rotations in both priority tiers and remain unchanged.
+- Audit proof: 6/6 recalibration, 1/1 detached old-model ablation, 186/186 surrounding tests, all 72
+  parity rosters and 48 identity rosters legal/solvent, exact RP/CP and Two Way settlement agreement,
+  TypeScript, zero-warning changed-source lint, and diff integrity. The eight-team whole-file run had
+  five passes plus one fixed 180-second timeout; its exact gate-only retry passed in 172.46 seconds.
+- The auditor independently reproduced and isolated both known unrelated reds. Bomba Squad retains its
+  pre-existing `boostZ = -0.013142...` failure with its engine/test blobs unchanged. Production packaging
+  reaches 2,726 transformed modules and hits the existing Vite/PWA `worker.format = iife` conflict; the
+  failing worker, Vite config, package manifest, and lockfile are byte-identical to the pre-retune base.
+- **Only remaining product gate:** JK walks the actual League Builder and Snake Room on Mac/iPad.

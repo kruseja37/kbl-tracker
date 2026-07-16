@@ -15,15 +15,15 @@
 
 ---
 
-## Current Phase: Snake pitcher-hitting recalibration BUILT — independent audit + JK walk next
+## Current Phase: Snake pitcher-hitting recalibration VERIFIED — JK walk next
 
 The usage-aware builder rerun keeps starter POW/CON as explicit rotation-only identity axes for
 Bash Brothers, Launch & Leather, Flamethrowers, and HDH Royals, while restoring a visible
 Standard/Nerfed selection effect for Flamethrowers and HDH. Exact RP/CP proof confirms ordinary
 reliever batting remains role-usage-discounted; Two Way relief batting is full-use but never charged
-again in bullpen-secondary rows. All 24 identities stay inside the +/-10% parity band. Next action:
-a separate non-builder audits implementation commit `9ace5857`; JK's hands-on League Builder and
-Snake-room walk remains the sole product gate.
+again in bullpen-secondary rows. All 24 identities stay inside the +/-10% parity band. The separate
+audit returned VERIFIED with no Major or Minor findings. Next action: JK's hands-on League Builder
+and Snake-room walk remains the sole product gate.
 
 ---
 
@@ -36,7 +36,7 @@ Snake-room walk remains the sole product gate.
 | 2 | Seams Audit | NOT STARTED | — | — |
 | 3 | Known Bug Verification | NOT STARTED | — | — |
 | 4 | Debt Inventory | NOT STARTED | — | — |
-| SNAKE-1 | Snake mock draft close | PITCHER-HITTING RECALIBRATION BUILT — AUDIT + JK RE-WALK PENDING | 2026-07-13 | 2026-07-14 |
+| SNAKE-1 | Snake mock draft close | PITCHER-HITTING RECALIBRATION VERIFIED — JK RE-WALK PENDING | 2026-07-13 | 2026-07-14 |
 
 ---
 
@@ -1270,10 +1270,13 @@ Dev/test/type gates are green; JK's browser walk remains the product-acceptance 
 
 | Finding | Date | Status | Surface | Required resolution |
 |---------|------|--------|---------|---------------------|
-| FINDING-213 | 2026-07-16 | BUILT-AWAITING-INDEPENDENT-AUDIT | Starter-hitting identity value | Verify the exact zero-axis ablation, final +30% Flamethrowers POW/CON and +40% HDH CON values, and unchanged Bash/Launch values. |
+| FINDING-213 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED | Starter-hitting identity value | Exact zero-axis ablation and lower-bound sweep verified the final +30% Flamethrowers POW/CON, +40% HDH CON, and unchanged Bash/Launch values. |
 
 Contract: `PROMPT_CONTRACTS.md` section `SNAKE-PITCHER-HITTING-RECALIBRATION-30`.
 Implementation commit: `9ace5857`. Builder proof is 6/6 focused plus 136/136 surrounding tests,
 48/48 priority-tier identity rosters legal/solvent, all 72 value rosters legal/solvent, the contested
 eight-team production-shape gate solo-green, TypeScript, lint, and diff integrity. RP/CP and Two Way
-relief cases are pinned. The separate non-builder audit and JK browser walk remain open.
+relief cases are pinned. The separate non-builder audit returned **VERIFIED**, with no Major or Minor
+findings: 6/6 recalibration, exact `9e5901d7` ablation 1/1, 186/186 surrounding tests, 72/72 parity
+rosters and 48/48 identity rosters legal/solvent, independently reproduced lower bounds, and clean
+TypeScript/lint/diff gates. JK's browser walk remains open.

@@ -4,7 +4,7 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (builder, 2026-07-16; SNAKE-PITCHER-HITTING-RECALIBRATION-30 awaiting independent audit)
+## VERIFIED (builder + separate auditor, 2026-07-16; SNAKE-PITCHER-HITTING-RECALIBRATION-30)
 - Exact zero-axis ablation against `9e5901d7` proved the playing-time correction made
   Flamethrowers' prior +10% rotation POW/CON and HDH Royals' prior +10% rotation CON decorative in at
   least one priority tier. The smallest simple values with visible Standard and Nerfed starter-bat
@@ -16,8 +16,9 @@
   twice. No bullpen-hitting archetype axis exists and none was added.
 - The retune changes no base cap, tax coefficient, salary/IV, roster law, optimizer objective,
   reliever law, or other archetype lever. All three tiers remain 24/24 inside ±10%; maximum deviations
-  remain Juiced 4.9%, Standard 2.8%, and Nerfed 3.5%. Independent non-builder audit is still required
-  before this builder result becomes the final engine verdict.
+  remain Juiced 4.9%, Standard 2.8%, and Nerfed 3.5%. The independent non-builder audit returned
+  **VERIFIED with no Major or Minor findings** after reproducing the old-model ablation, lower-bound
+  sweep, 72 parity rosters, 48 identity rosters, RP/CP settlement, and Two Way no-double-tax proof.
 
 ## PRIOR VERIFIED (git, 2026-07-15; latest runtime commit `e26f9970`, canonical result docs `9e6fdd9e`)
 - **Current thread move:** JK walks actual Draft Setup and Snake Room on Mac/iPad. Browser acceptance

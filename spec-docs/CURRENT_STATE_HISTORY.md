@@ -1260,3 +1260,11 @@ explicitly required the same usage law to be proven for relievers. This builder 
 implementation commit `9ace5857`: Bash Brothers and Launch & Leather stay unchanged, Flamethrowers
 moves to +30% rotation POW/CON, HDH Royals moves to +40% rotation CON, and exact RP/CP and Two Way
 proof is pinned. Independent audit and JK's League Builder/Mac/iPad Snake walk remain open gates.
+
+## Outgoing Live Header Snapshot — before 2026-07-16 recalibration audit close
+
+The prior live header recorded implementation commit `9ace5857` and builder close `5a3021b7`, with
+the separate audit still open. The non-builder audit then independently reproduced the exact old-model
+ablation, current lower-bound sweep, 72 legal/solvent parity rosters, 48 legal/solvent identity rosters,
+RP/CP usage settlement, and Two Way no-double-tax treatment. Its verdict is VERIFIED with no Major or
+Minor findings. This close leaves only JK's League Builder and Mac/iPad Snake walk as the product gate.
