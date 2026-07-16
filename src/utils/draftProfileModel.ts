@@ -49,7 +49,16 @@ export type DraftProfileModel = DraftProfileBase & (
 
 function displayName(player: Player): string {
   const baseName = [player.firstName, player.lastName].filter(Boolean).join(' ').trim() || player.id;
-  return player.nickname ? `${baseName} "${player.nickname}"` : baseName;
+  const nickname = player.nickname?.trim();
+  const comparable = (value: string): string => value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+  return nickname && comparable(nickname) !== comparable(baseName)
+    ? `${baseName} "${nickname}"`
+    : baseName;
 }
 
 function traitsFor(player: Player): string[] {

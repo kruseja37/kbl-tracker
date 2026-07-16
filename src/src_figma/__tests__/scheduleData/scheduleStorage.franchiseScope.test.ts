@@ -11,6 +11,7 @@ vi.mock('../../../utils/syncEngine', () => ({
 
 import {
   addGame,
+  addSeries,
   clearAllSchedules,
   clearFranchiseSeasonSchedule,
   completeGame,
@@ -674,6 +675,105 @@ describe('scheduleStorage franchise scoping', () => {
     await expect(getAllGamesByFranchise('franchise-1', 4)).resolves.toMatchObject([
       { id: first.id, gameNumber: 1 },
       { id: second.id, gameNumber: 3 },
+    ]);
+  });
+
+  test('manual add cannot create duplicate game numbers inside one franchise schedule', async () => {
+    await addGame({
+      franchiseId: 'franchise-1',
+      seasonNumber: 8,
+      gameNumber: 1,
+      awayTeamId: 'team-a',
+      homeTeamId: 'team-b',
+    });
+
+    await expect(addGame({
+      franchiseId: 'franchise-1',
+      seasonNumber: 8,
+      gameNumber: 1,
+      awayTeamId: 'team-c',
+      homeTeamId: 'team-d',
+    })).rejects.toThrow('Duplicate game number 1');
+    await expect(addGame({
+      franchiseId: 'franchise-2',
+      seasonNumber: 8,
+      gameNumber: 1,
+      awayTeamId: 'team-c',
+      homeTeamId: 'team-d',
+    })).resolves.toMatchObject({ gameNumber: 1 });
+    await expect(getAllGamesByFranchise('franchise-1', 8)).resolves.toHaveLength(1);
+  });
+
+  test('CSV import rolls back every row on a mid-transaction write failure and can be retried', async () => {
+    const rows = [
+      { gameNumber: 1, awayTeamId: 'team-a', homeTeamId: 'team-b' },
+      { gameNumber: 2, awayTeamId: 'team-c', homeTeamId: 'team-d' },
+    ];
+    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(1234);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.25);
+    try {
+      await expect(importFranchiseScheduleRows({
+        franchiseId: 'franchise-atomic-import',
+        seasonNumber: 9,
+        rows,
+      })).rejects.toBeTruthy();
+      await expect(getAllGamesByFranchise('franchise-atomic-import', 9)).resolves.toEqual([]);
+    } finally {
+      dateSpy.mockRestore();
+      randomSpy.mockRestore();
+    }
+
+    await expect(importFranchiseScheduleRows({
+      franchiseId: 'franchise-atomic-import',
+      seasonNumber: 9,
+      rows,
+    })).resolves.toHaveLength(2);
+  });
+
+  test('Add Series rolls back every row on a mid-transaction write failure', async () => {
+    const dateSpy = vi.spyOn(Date, 'now').mockReturnValue(5678);
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    try {
+      await expect(addSeries({
+        franchiseId: 'franchise-atomic-series',
+        seasonNumber: 10,
+        dayNumber: 20,
+        awayTeamId: 'team-a',
+        homeTeamId: 'team-b',
+      }, 3)).rejects.toBeTruthy();
+      await expect(getAllGamesByFranchise('franchise-atomic-series', 10)).resolves.toEqual([]);
+    } finally {
+      dateSpy.mockRestore();
+      randomSpy.mockRestore();
+    }
+  });
+
+  test('Add Series honors an explicitly selected starting game number', async () => {
+    await addGame({
+      franchiseId: 'franchise-explicit-series',
+      seasonNumber: 11,
+      gameNumber: 1,
+      awayTeamId: 'team-a',
+      homeTeamId: 'team-b',
+    });
+
+    await expect(addSeries({
+      franchiseId: 'franchise-explicit-series',
+      seasonNumber: 11,
+      gameNumber: 10,
+      dayNumber: 20,
+      awayTeamId: 'team-c',
+      homeTeamId: 'team-d',
+    }, 3)).resolves.toMatchObject([
+      { gameNumber: 10, dayNumber: 20 },
+      { gameNumber: 11, dayNumber: 21 },
+      { gameNumber: 12, dayNumber: 22 },
+    ]);
+    await expect(getAllGamesByFranchise('franchise-explicit-series', 11)).resolves.toMatchObject([
+      { gameNumber: 1 },
+      { gameNumber: 10 },
+      { gameNumber: 11 },
+      { gameNumber: 12 },
     ]);
   });
 

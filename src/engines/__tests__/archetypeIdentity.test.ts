@@ -8,8 +8,9 @@ import {
 } from '../../data/historicalArchetypes';
 import { type LuxuryCapRow, type ModStat } from '../../data/tierParams';
 import { saveTeam, type Team } from '../../utils/leagueBuilderStorage';
+import { computeOwnValueFactors } from '../auctionMarketModel';
 import { archetypeBandPriorities } from '../cpuShillBidding';
-import { archetypeToCapIdentity, resolveClubBandPriorities, selectTeamArchetype } from '../archetypeIdentity';
+import { archetypeStatFitMultiplier, archetypeToCapIdentity, resolveClubBandPriorities, selectTeamArchetype } from '../archetypeIdentity';
 import { identityCapShift, shiftLuxuryCaps, luxKeyToModStat, MOD_STAT_TO_LUX } from '../leagueConstruction';
 
 const saveTeamMock = vi.hoisted(() => vi.fn(async <T>(team: T) => team));
@@ -72,7 +73,8 @@ describe('archetype identity bridge', () => {
       // Cardinality pins track the LOCKED 24 (efc7cfb6): rangy-defenders carries 3 boosts;
       // nerfs stay ≤2. The pre-lock draft-lane expectation was ≤2/≤2 — reconciled in FABLE-C1
       // (the known carried-forward assembly red).
-      expect(arch.boosts.length, `${arch.id} boosts`).toBeLessThanOrEqual(3);
+      const primaryBoosts = arch.boosts.filter((stat) => stat !== 'ROT_POW' && stat !== 'ROT_CON');
+      expect(primaryBoosts.length, `${arch.id} primary boosts`).toBeLessThanOrEqual(3);
       expect(arch.nerfs.length, `${arch.id} nerfs`).toBeLessThanOrEqual(2);
 
       const shift = identityCapShift(archetypeToCapIdentity(arch));
@@ -89,6 +91,79 @@ describe('archetype identity bridge', () => {
         expect(shift[modStat!], `${arch.id}:${stat}`).toBeLessThan(0);
       }
     }
+  });
+
+  test('starter batting axes shift only rotation POW/CON and prefer the better bat', () => {
+    const arch = HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === 'launch-and-leather')!;
+    const identity = archetypeToCapIdentity(arch);
+    const rows: LuxuryCapRow[] = [
+      row('hitters', 'POW'), row('hitters', 'CON'),
+      row('rotation', 'POW'), row('rotation', 'CON'),
+      row('bullpen', 'POW'), row('bullpen', 'CON'),
+    ];
+    const shifted = shiftLuxuryCaps(rows, identity);
+    const cap = (group: LuxuryCapRow['group'], stat: LuxuryCapRow['stat']) => (
+      shifted.find((entry) => entry.group === group && entry.stat === stat)!.cap
+    );
+
+    expect(cap('rotation', 'POW')).toBeGreaterThan(100);
+    expect(cap('rotation', 'CON')).toBeGreaterThan(100);
+    expect(cap('hitters', 'CON')).toBe(100);
+    expect(cap('bullpen', 'POW')).toBe(100);
+    expect(cap('bullpen', 'CON')).toBe(100);
+
+    const base = {
+      isPitcher: true, role: 'SP', speed: 50, fielding: 50, arm: 50,
+      velocity: 50, junk: 50, accuracy: 50,
+    } as const;
+    const strong = archetypeStatFitMultiplier(identity, { ...base, power: 90, contact: 90 });
+    const weak = archetypeStatFitMultiplier(identity, { ...base, power: 10, contact: 10 });
+    expect(strong).not.toBeNull();
+    expect(weak).not.toBeNull();
+    expect(strong!).toBeGreaterThan(weak!);
+
+    const rotationOnly = archetypeToCapIdentity(
+      HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === 'flamethrowers')!,
+    );
+    const relieverStrongBat = archetypeStatFitMultiplier(rotationOnly, { ...base, role: 'RP', power: 90, contact: 90 });
+    const relieverWeakBat = archetypeStatFitMultiplier(rotationOnly, { ...base, role: 'RP', power: 10, contact: 10 });
+    expect(relieverStrongBat).toBe(1);
+    expect(relieverWeakBat).toBe(1);
+
+    const neutral = archetypeToCapIdentity(HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === 'nasty-boys')!);
+    const neutralStarterFit = archetypeStatFitMultiplier(neutral, { ...base, power: 90, contact: 90 });
+    expect(neutralStarterFit).toBe(1);
+
+    const downstream = computeOwnValueFactors({
+      archetypeWeights: { Rotation: 1 },
+      ownBandPriorities: { Power: 0, Contact: 0, Speed: 0, Defense: 0, Rotation: 10, Bullpen: 0 },
+      archetypeFitMultiplierOverride: relieverStrongBat,
+      needBreakdown: null,
+      shape: { isPitcher: true, position: 'RP', role: 'RP' },
+      openSlots: 22,
+    });
+    expect(downstream.archetypeFitMultiplier).toBe(1);
+  });
+
+  test('Two Way fit uses everyday hitter axes plus pitching axes, not starter-batting axes', () => {
+    const rawShift = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
+    rawShift.RPOW = 0.1;
+    const rotationBatIdentity = { increase: [], decrease: [], rawShift };
+    const base = {
+      isPitcher: true, role: 'SP', power: 90, contact: 50, speed: 50, fielding: 50, arm: 50,
+      velocity: 50, junk: 50, accuracy: 50,
+    } as const;
+
+    expect(archetypeStatFitMultiplier(rotationBatIdentity, base)).toBeGreaterThan(1);
+    expect(archetypeStatFitMultiplier(rotationBatIdentity, { ...base, twoWayVariant: 'IF' })).toBe(1);
+
+    const hitterAndPitcherShift = { ...rawShift, RPOW: 0, POW: 0.1, RVEL: 0.1 };
+    const twoWayIdentity = { increase: [], decrease: [], rawShift: hitterAndPitcherShift };
+    expect(archetypeStatFitMultiplier(twoWayIdentity, {
+      ...base, twoWayVariant: 'IF', velocity: 90,
+    })).toBeGreaterThan(archetypeStatFitMultiplier(twoWayIdentity, {
+      ...base, twoWayVariant: 'IF', power: 10, velocity: 10,
+    })!);
   });
 
   test('matches the spec sign for every spec stat and leaves every off-spec ModStat at zero', () => {
@@ -195,6 +270,14 @@ describe('archetype identity bridge', () => {
 
     expect(resolveClubBandPriorities({ mlbArchetypeKey: archetype.id }))
       .toEqual(archetypeBandPriorities(archetype));
+  });
+
+  test('reuses one immutable archetype priority result across every club with the same locked identity', () => {
+    const first = resolveClubBandPriorities({ mlbArchetypeKey: 'rangy-defenders' });
+    const second = resolveClubBandPriorities({ mlbArchetypeKey: 'rangy-defenders' });
+
+    expect(first).toBe(second);
+    expect(Object.isFrozen(first)).toBe(true);
   });
 
   test('DJ-03 rawShift fallback is bijective with archetype provenance for archetype identities', () => {

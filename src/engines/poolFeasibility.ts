@@ -20,6 +20,8 @@ export const DEMAND_BULLPEN = 3;
 export const BINDING_STATS = new Set<ArchetypeStat>([
   'POW',
   'CON',
+  'ROT_POW',
+  'ROT_CON',
   'ROT_VEL',
   'ROT_JNK',
   'ROT_ACC',
@@ -32,6 +34,8 @@ export const DESCRIPTORS: Record<ArchetypeStat, string> = {
   SPD: 'speed/baserunning threats',
   FLD: 'rangy defenders',
   ARM: 'strong-armed fielders',
+  ROT_POW: 'power-hitting starters',
+  ROT_CON: 'contact-hitting starters',
   ROT_VEL: 'power starters',
   ROT_JNK: 'finesse starters',
   ROT_ACC: 'pinpoint command starters',
@@ -42,6 +46,8 @@ export const DESCRIPTORS: Record<ArchetypeStat, string> = {
 
 export interface FeasibilityShortfall {
   stat: ArchetypeStat;
+  /** When present, supply must satisfy every listed axis on the same player. */
+  jointStats?: readonly ArchetypeStat[];
   group: 'hitters' | 'rotation' | 'bullpen';
   demand: number;
   supply: number;
@@ -69,7 +75,7 @@ export interface PoolFeasibilityReport {
 type PlayerGroup = FeasibilityShortfall['group'];
 
 const HITTER_STATS = new Set<ArchetypeStat>(['POW', 'CON', 'SPD', 'FLD', 'ARM']);
-const ROTATION_STATS = new Set<ArchetypeStat>(['ROT_VEL', 'ROT_JNK', 'ROT_ACC']);
+const ROTATION_STATS = new Set<ArchetypeStat>(['ROT_POW', 'ROT_CON', 'ROT_VEL', 'ROT_JNK', 'ROT_ACC']);
 
 function groupForStat(stat: ArchetypeStat): PlayerGroup {
   if (HITTER_STATS.has(stat)) return 'hitters';
@@ -91,6 +97,10 @@ function ratingForStat(player: SimPlayer, stat: ArchetypeStat): number {
     case 'FLD':
     case 'ARM':
       return player.bat[stat] ?? 0;
+    case 'ROT_POW':
+      return player.bat.POW ?? 0;
+    case 'ROT_CON':
+      return player.bat.CON ?? 0;
     case 'ROT_VEL':
     case 'PEN_VEL':
       return player.pit?.VEL ?? 0;
@@ -155,6 +165,33 @@ function buildShortfall(
   };
 }
 
+function buildJointRotationShortfall(
+  lockedPool: SimPlayer[],
+  referencePool: SimPlayer[],
+  stats: readonly ArchetypeStat[],
+): FeasibilityShortfall {
+  const thresholds = new Map(stats.map((stat) => [
+    stat,
+    percentileThreshold(referencePool, stat, 'rotation'),
+  ]));
+  const supply = lockedPool.filter((player) => (
+    isGroupMember(player, 'rotation')
+    && stats.every((stat) => ratingForStat(player, stat) >= thresholds.get(stat)!)
+  )).length;
+  return {
+    stat: stats[0],
+    jointStats: stats,
+    group: 'rotation',
+    demand: DEMAND_ROTATION,
+    supply,
+    needCount: Math.max(0, DEMAND_ROTATION - supply),
+    binding: true,
+    descriptor: stats.includes('ROT_VEL')
+      ? 'power arms who can also hit'
+      : 'complete-hitting starters',
+  };
+}
+
 export function analyzePoolFeasibility(
   lockedPool: SimPlayer[],
   archetypes: HistoricalArchetype[],
@@ -173,9 +210,17 @@ export function analyzePoolFeasibility(
       budget,
       realTeamCount,
     );
-    const shortfalls = boostedStats(arch)
-      .map((stat) => buildShortfall(lockedPool, thresholdPool, stat))
-      .sort(sortShortfalls);
+    const boosts = boostedStats(arch);
+    const pitcherBatAxes = boosts.filter((stat) => stat === 'ROT_POW' || stat === 'ROT_CON');
+    const jointRotationAxes = pitcherBatAxes.length > 1
+      ? boosts.filter((stat) => ROTATION_STATS.has(stat))
+      : [];
+    const shortfalls = [
+      ...boosts.map((stat) => buildShortfall(lockedPool, thresholdPool, stat)),
+      ...(jointRotationAxes.length > 1
+        ? [buildJointRotationShortfall(lockedPool, thresholdPool, jointRotationAxes)]
+        : []),
+    ].sort(sortShortfalls);
     // Bodies-only: can the pool fill all 22 slots. The heuristic builder's `solvent` flag is a noisy
     // diagnostic (it leaves rosters $30–$150 over a ~$1.07M budget on convergence), NOT a composition
     // gate — feasibility is about player TYPES + bodies, per the brief. `built.solvent` stays in the

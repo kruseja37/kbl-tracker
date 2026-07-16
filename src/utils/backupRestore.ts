@@ -778,7 +778,7 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
     },
   },
   'kbl-league-builder': {
-    version: 8,
+    version: 10,
     stores: {
       leagueTemplates: {
         keyPath: 'id',
@@ -834,13 +834,21 @@ export const STATIC_DATABASE_SCHEMAS: Record<string, DatabaseSchema> = {
         indexes: [{ name: 'leagueId', keyPath: 'leagueId' }],
         optional: true,
       },
+      snakeSeatBoards: {
+        keyPath: 'id',
+        indexes: [
+          { name: 'sessionId', keyPath: 'sessionId' },
+          { name: 'leagueId', keyPath: 'leagueId' },
+        ],
+        optional: true,
+      },
       auctionSessions: {
         keyPath: 'id',
         indexes: [{ name: 'leagueId', keyPath: 'leagueId' }],
         optional: true,
       },
     },
-    includedStores: ['leaguePlayerOverrides', 'scoutProfiles', 'startupDraftSessions', 'registeredPools', 'mlbDraftSessions', 'auctionSessions'],
+    includedStores: ['leaguePlayerOverrides', 'scoutProfiles', 'startupDraftSessions', 'registeredPools', 'mlbDraftSessions', 'snakeSeatBoards', 'auctionSessions'],
   },
 };
 
@@ -1047,11 +1055,22 @@ export function openDatabaseWithSchema(
   return openDatabaseWithSchemaRepair(dbName, schema, options);
 }
 
+async function runCanonicalContentMigrationsBeforeSchemaOpen(dbName: string): Promise<void> {
+  if (dbName !== 'kbl-league-builder') return;
+
+  // This module is imported by syncEngine, which is imported by League Builder
+  // storage. Keep the dependency lazy so the canonical storage initializer can
+  // own every content-bearing version upgrade without creating a module cycle.
+  const { runCanonicalLeagueBuilderMigrations } = await import('./leagueBuilderStorage');
+  await runCanonicalLeagueBuilderMigrations();
+}
+
 async function openDatabaseWithSchemaRepair(
   dbName: string,
   schema: DatabaseSchema,
   options: OpenDatabaseWithSchemaOptions,
 ): Promise<IDBDatabase> {
+  await runCanonicalContentMigrationsBeforeSchemaOpen(dbName);
   let db: IDBDatabase;
 
   try {

@@ -27,6 +27,11 @@ import {
   serializeKey,
 } from './syncConfig';
 import { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } from './backupRestore';
+import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
+import {
+  assertCanonicalFarmSyncBootstrap,
+  FARM_SNAKE_SESSION_NUMBER,
+} from './snakeFarmTransitionContract';
 
 // ============================================================
 // Types
@@ -126,6 +131,11 @@ interface CloudLocalStorageWriteBaseRow extends CloudLocalStorageVerifiedDataRow
   deleted: boolean;
 }
 
+interface CloudReplacementSnapshot {
+  stores: Array<CloudStoreWriteBaseRow & { user_id: string }>;
+  localStorage: Array<CloudLocalStorageWriteBaseRow & { user_id: string }>;
+}
+
 interface CloudStoreChangedAtRow extends CloudStoreIdentityRow {
   changed_at: number;
 }
@@ -165,6 +175,302 @@ interface CloudStoreRow {
 interface PullApplyResult {
   appliedCursor: SyncCursor | null;
   skippedConflicts: boolean;
+}
+
+export interface ReplaceCloudWithLocalOptions {
+  /**
+   * The caller has already shown and received confirmation for the destructive
+   * "this device wins" operation. Queue drains stay blocked while the user's
+   * existing sync snapshot is removed and rebuilt from local storage.
+   */
+  replaceExisting?: boolean;
+}
+
+interface SnakeProtectedApplyResult {
+  writeBasesChanged: boolean;
+  deferredRows: CloudStoreRow[];
+}
+
+type SnakeSyncPool = { leagueId?: string; players?: Array<{ id?: string; iv?: number }> } | null;
+type SnakeSyncSession = {
+  leagueId?: string;
+  seasonNumber?: number;
+  draftPhase?: string;
+  seed?: unknown;
+  workflowVersion?: unknown;
+  engineMethodVersion?: unknown;
+  tier?: unknown;
+  balanceMode?: unknown;
+  rounds?: unknown;
+  pickOrder?: unknown;
+  farmSlotSalaries?: unknown;
+  trades?: unknown;
+  openTradeOffers?: unknown;
+  snakeSetup?: unknown;
+  draftManifest?: {
+    formatVersion?: string;
+    phase?: string;
+    leagueId?: string;
+    source?: { sessionId?: string };
+    pool?: { identity?: string; playerIds?: string[]; mlbIvByPlayerId?: Record<string, number> | null };
+  };
+  farmProspectSnapshot?: unknown[];
+  rosterHandoff?: {
+    formatVersion?: string;
+    phase?: string;
+    sourceSessionId?: string;
+    manifestPoolIdentity?: string;
+    manifestIdentity?: string;
+    committedAt?: string;
+  };
+} | null;
+
+type SnakeResetReceipt = {
+  formatVersion?: string;
+  leagueId?: string;
+  phase?: string;
+  sourceSessionId?: string;
+  manifestPoolIdentity?: string;
+  manifestIdentity?: string;
+  rosterHandoffCommittedAt?: string | null;
+  resetAt?: string;
+} | null;
+
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+    .join(',')}}`;
+}
+
+function snakeSyncManifestIdentity(manifest: NonNullable<SnakeSyncSession>['draftManifest']): string {
+  const source = canonicalJson(manifest);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return `snake-manifest-v1:${hash.toString(16).padStart(8, '0')}:${source.length}`;
+}
+
+function snakeSyncPhase(session: SnakeSyncSession): string | undefined {
+  return session?.draftManifest?.phase ?? session?.draftPhase;
+}
+
+const FARM_SYNC_ENVELOPE_KEYS = [
+  'seed',
+  'workflowVersion',
+  'engineMethodVersion',
+  'tier',
+  'balanceMode',
+  'rounds',
+  'pickOrder',
+  'farmSlotSalaries',
+  'farmProspectSnapshot',
+  'snakeSetup',
+] as const satisfies readonly (keyof NonNullable<SnakeSyncSession>)[];
+
+function assertFarmSyncEnvelopeUnchanged(
+  current: NonNullable<SnakeSyncSession>,
+  proposed: NonNullable<SnakeSyncSession>,
+): void {
+  for (const key of FARM_SYNC_ENVELOPE_KEYS) {
+    if (canonicalJson(current[key]) !== canonicalJson(proposed[key])) {
+      throw new Error(`Inbound sync cannot change the frozen FARM creation envelope (${key}).`);
+    }
+  }
+}
+
+function isProtectedSnakeMlbRecord(record: CloudStoreRow): boolean {
+  if (record.store_name === 'registeredPools') return true;
+  if (record.store_name !== 'mlbDraftSessions') return false;
+  const recordKey = JSON.parse(record.record_key);
+  return typeof recordKey === 'string'
+    && /::startup-mlb-draft::(?:1|2)$/.test(recordKey);
+}
+
+function protectedSnakeRecordIdentity(record: CloudStoreRow): {
+  leagueId: string;
+  kind: 'pool' | 'mlb' | 'farm';
+} | null {
+  const recordKey = JSON.parse(record.record_key);
+  if (record.store_name === 'registeredPools' && typeof recordKey === 'string') {
+    return { leagueId: recordKey, kind: 'pool' };
+  }
+  if (record.store_name !== 'mlbDraftSessions' || typeof recordKey !== 'string') return null;
+  const match = recordKey.match(/^(.*)::startup-mlb-draft::(1|2)$/);
+  if (!match?.[1]) return null;
+  return { leagueId: match[1], kind: match[2] === '1' ? 'mlb' : 'farm' };
+}
+
+/** Exported for adversarial tests; the pull path calls this before any IDB write. */
+export function assertSnakeManifestPoolInboundInvariant(input: {
+  currentPool: SnakeSyncPool;
+  currentSession: SnakeSyncSession;
+  proposedPool: SnakeSyncPool;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+  sessionTombstoneData?: unknown;
+}): void {
+  assertSnakeDraftSessionInboundInvariant({
+    currentSession: input.currentSession,
+    proposedSession: input.proposedSession,
+    sessionDeleted: input.sessionDeleted,
+    tombstoneData: input.sessionTombstoneData,
+  });
+  const currentManifest = input.currentSession?.draftManifest;
+  const proposedManifest = input.proposedSession?.draftManifest;
+  if (currentManifest && canonicalJson(input.proposedPool) !== canonicalJson(input.currentPool)) {
+    throw new Error('Inbound sync cannot mutate the RegisteredPool frozen by a completed snake manifest.');
+  }
+  if (currentManifest && !input.sessionDeleted) {
+    if (!proposedManifest || canonicalJson(proposedManifest) !== canonicalJson(currentManifest)) {
+      throw new Error('Inbound sync cannot remove or replace a completed snake manifest.');
+    }
+  }
+  if (!proposedManifest) return;
+  if (
+    proposedManifest.formatVersion !== 'snake-draft-manifest-v1'
+    || proposedManifest.phase !== 'MLB'
+    || !proposedManifest.leagueId
+  ) throw new Error('Inbound sync carried an invalid MLB snake manifest.');
+  const ids = [...(proposedManifest.pool?.playerIds ?? [])].sort();
+  const rows = [...(input.proposedPool?.players ?? [])].sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  if (!input.proposedPool || input.proposedPool.leagueId !== proposedManifest.leagueId
+    || ids.length === 0 || rows.length !== ids.length
+    || rows.some((row, index) => row.id !== ids[index]
+      || !Number.isFinite(row.iv)
+      || proposedManifest.pool?.mlbIvByPlayerId?.[String(row.id)] !== row.iv)) {
+    throw new Error('Inbound sync snake manifest and RegisteredPool do not match exactly.');
+  }
+}
+
+/** Preserve every frozen MLB/FARM session; only an exact reset receipt may delete it. */
+export function assertSnakeDraftSessionInboundInvariant(input: {
+  currentSession: SnakeSyncSession;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+  tombstoneData?: unknown;
+}): void {
+  const current = input.currentSession;
+  const proposed = input.proposedSession;
+  const currentManifest = current?.draftManifest;
+  const proposedManifest = proposed?.draftManifest;
+  const currentPhase = snakeSyncPhase(current);
+  const proposedPhase = snakeSyncPhase(proposed);
+  const farmAuthority = currentPhase === 'FARM'
+    || proposedPhase === 'FARM'
+    || current?.seasonNumber === 2
+    || proposed?.seasonNumber === 2;
+  if (farmAuthority && (
+    (proposed?.trades !== undefined && (!Array.isArray(proposed.trades) || proposed.trades.length > 0))
+    || (proposed?.openTradeOffers !== undefined
+      && (!Array.isArray(proposed.openTradeOffers) || proposed.openTradeOffers.length > 0))
+  )) {
+    throw new Error('Inbound sync cannot add pick trades or open trade offers to a FARM snake session.');
+  }
+  if (input.sessionDeleted && currentManifest) {
+    const receipt = (input.tombstoneData && typeof input.tombstoneData === 'object'
+      ? input.tombstoneData
+      : null) as SnakeResetReceipt;
+    const currentMarker = current?.rosterHandoff;
+    const resetAt = Date.parse(receipt?.resetAt ?? '');
+    if (
+      receipt?.formatVersion !== 'snake-draft-reset-v1'
+      || receipt.leagueId !== current?.leagueId
+      || receipt.phase !== currentManifest.phase
+      || receipt.sourceSessionId !== currentManifest.source?.sessionId
+      || receipt.manifestPoolIdentity !== currentManifest.pool?.identity
+      || receipt.manifestIdentity !== snakeSyncManifestIdentity(currentManifest)
+      || !Number.isFinite(resetAt)
+      || receipt.rosterHandoffCommittedAt !== (currentMarker?.committedAt ?? null)
+      || (currentMarker && (
+        receipt.manifestIdentity !== currentMarker.manifestIdentity
+        || receipt.sourceSessionId !== currentMarker.sourceSessionId
+        || receipt.manifestPoolIdentity !== currentMarker.manifestPoolIdentity
+      ))
+    ) {
+      throw new Error('Inbound sync cannot delete a frozen snake draft without its exact Run It Back receipt.');
+    }
+    return;
+  }
+  if (currentManifest && (!proposedManifest || canonicalJson(proposedManifest) !== canonicalJson(currentManifest))) {
+    throw new Error('Inbound sync cannot remove or replace a frozen snake draft manifest.');
+  }
+  if (current && proposed && (
+    currentPhase !== proposedPhase
+    || (Object.prototype.hasOwnProperty.call(current, 'draftPhase') && proposed.draftPhase !== current.draftPhase)
+  )) {
+    throw new Error('Inbound sync cannot remove or change the snake session phase.');
+  }
+  if (current && proposed && (currentPhase === 'FARM' || current.seasonNumber === 2)) {
+    assertFarmSyncEnvelopeUnchanged(current, proposed);
+  }
+  if (current?.farmProspectSnapshot && canonicalJson(proposed?.farmProspectSnapshot) !== canonicalJson(current.farmProspectSnapshot)) {
+    throw new Error('Inbound sync cannot remove or replace a frozen farm prospect snapshot.');
+  }
+  if (proposedManifest && (
+    proposedManifest.formatVersion !== 'snake-draft-manifest-v1'
+    || (proposedManifest.phase !== 'MLB' && proposedManifest.phase !== 'FARM')
+    || !proposedManifest.source?.sessionId
+    || !proposedManifest.pool?.identity
+  )) {
+    throw new Error('Inbound sync carried an invalid snake draft manifest.');
+  }
+  assertSnakeRosterHandoffInboundInvariant(input);
+}
+
+/** Exported for adversarial tests and used for both MLB and FARM session rows. */
+export function assertSnakeRosterHandoffInboundInvariant(input: {
+  currentSession: SnakeSyncSession;
+  proposedSession: SnakeSyncSession;
+  sessionDeleted?: boolean;
+  tombstoneData?: unknown;
+}): void {
+  const current = input.currentSession;
+  const proposed = input.proposedSession;
+  const currentMarker = current?.rosterHandoff;
+  const proposedMarker = proposed?.rosterHandoff;
+
+  if (input.sessionDeleted && currentMarker) {
+    const receipt = (input.tombstoneData && typeof input.tombstoneData === 'object'
+      ? input.tombstoneData
+      : null) as SnakeResetReceipt;
+    if (
+      receipt?.formatVersion !== 'snake-draft-reset-v1'
+      || receipt.leagueId !== current?.leagueId
+      || receipt.phase !== currentMarker.phase
+      || receipt.sourceSessionId !== currentMarker.sourceSessionId
+      || receipt.manifestPoolIdentity !== currentMarker.manifestPoolIdentity
+      || receipt.manifestIdentity !== currentMarker.manifestIdentity
+      || receipt.rosterHandoffCommittedAt !== currentMarker.committedAt
+      || !Number.isFinite(Date.parse(receipt.resetAt ?? ''))
+    ) {
+      throw new Error('Inbound sync cannot delete a completed snake roster handoff without its exact Run It Back receipt.');
+    }
+    return;
+  }
+
+  if (currentMarker) {
+    if (!proposedMarker || canonicalJson(proposedMarker) !== canonicalJson(currentMarker)) {
+      throw new Error('Inbound sync cannot remove or replace a completed snake roster handoff.');
+    }
+  }
+  if (!proposedMarker) return;
+  const manifest = proposed?.draftManifest;
+  if (
+    proposedMarker.formatVersion !== 'snake-roster-handoff-v1'
+    || (proposedMarker.phase !== 'MLB' && proposedMarker.phase !== 'FARM')
+    || !Number.isFinite(Date.parse(proposedMarker.committedAt ?? ''))
+    || manifest?.phase !== proposedMarker.phase
+    || manifest.source?.sessionId !== proposedMarker.sourceSessionId
+    || manifest.pool?.identity !== proposedMarker.manifestPoolIdentity
+    || proposedMarker.manifestIdentity !== snakeSyncManifestIdentity(manifest)
+  ) {
+    throw new Error('Inbound sync carried a snake roster handoff that does not match its manifest.');
+  }
 }
 
 interface QueueSnapshot {
@@ -257,6 +563,7 @@ const QUEUE_PERSIST_KEY = 'kbl-sync-queue';
 const LOCAL_QUEUE_PERSIST_KEY = 'kbl-sync-local-queue';
 const STORE_WRITE_BASES_PERSIST_KEY = 'kbl-sync-store-write-bases';
 const LOCAL_WRITE_BASES_PERSIST_KEY = 'kbl-sync-local-write-bases';
+const DEFERRED_SNAKE_PROTECTED_ROWS_KEY = 'kbl-sync-deferred-snake-protected-rows';
 const LAST_WRITE_TIME_KEY = 'kbl-sync-last-write-time';
 const DRAIN_INTERVAL_MS = 5_000;
 const PULL_INTERVAL_MS = 60_000;
@@ -299,6 +606,8 @@ class SyncEngine {
   private restoredPushQueueKeys = new Set<string>();
   private restoredLocalQueueKeys = new Set<string>();
   private lastGeneratedChangedAt = 0;
+  private mutationBatchDepth = 0;
+  private mutationBatchDirty = false;
 
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
@@ -356,6 +665,29 @@ class SyncEngine {
   // Public API — IndexedDB Records
   // ============================================================
 
+  async batchMutations<T>(work: () => Promise<T>): Promise<T> {
+    this.mutationBatchDepth += 1;
+    try {
+      return await work();
+    } finally {
+      this.mutationBatchDepth -= 1;
+      if (this.mutationBatchDepth === 0 && this.mutationBatchDirty) {
+        this.mutationBatchDirty = false;
+        this.persistQueues();
+        this.emitStatusChange();
+      }
+    }
+  }
+
+  private commitQueuedMutation(): void {
+    if (this.mutationBatchDepth > 0) {
+      this.mutationBatchDirty = true;
+      return;
+    }
+    this.persistQueues();
+    this.emitStatusChange();
+  }
+
   upsert(dbName: string, storeName: string, recordKey: unknown, data: unknown): void {
     if (!this._enabled || this._suppressSync || !supabase) return;
 
@@ -374,11 +706,10 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: false,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
-  remove(dbName: string, storeName: string, recordKey: unknown): void {
+  remove(dbName: string, storeName: string, recordKey: unknown, tombstoneData: unknown = {}): void {
     if (!this._enabled || this._suppressSync || !supabase) return;
 
     const keyStr = serializeKey(recordKey);
@@ -392,12 +723,11 @@ class SyncEngine {
       dbName,
       storeName,
       recordKey: keyStr,
-      data: {},
+      data: tombstoneData,
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: true,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   // ============================================================
@@ -417,8 +747,7 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: false,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   removeLocal(key: string): void {
@@ -434,8 +763,7 @@ class SyncEngine {
       changedAt: this.nextChangedAt(this.cursor.changedAt + 1),
       deleted: true,
     });
-    this.persistQueues();
-    this.emitStatusChange();
+    this.commitQueuedMutation();
   }
 
   // ============================================================
@@ -574,19 +902,18 @@ class SyncEngine {
     });
   }
 
-  /**
-   * Full upload — upload all local data, then tombstone remote rows that no
-   * longer exist locally. This avoids wiping a good cloud snapshot before we
-   * know every replacement batch was accepted.
-   */
+  /** Full upload. Confirmed replacement keeps a rollback copy until verification. */
   async replaceCloudWithLocal(
-    onProgress?: (dbName: string, storeName: string, sent: number, total: number) => void
+    onProgress?: (dbName: string, storeName: string, sent: number, total: number) => void,
+    options: ReplaceCloudWithLocalOptions = {},
   ): Promise<void> {
     if (!supabase) return;
     const client = supabase;
 
     await this.runSyncOperation(true, async () => {
       let queuesAtOperationStart: QueueSnapshot | null = null;
+      let cloudRollbackSnapshot: CloudReplacementSnapshot | null = null;
+      let replacementUserId: string | null = null;
       try {
         this.queueDrainsBlocked = true;
         queuesAtOperationStart = this.snapshotQueues();
@@ -606,6 +933,7 @@ class SyncEngine {
         }
 
         const userId = session.user.id;
+        replacementUserId = userId;
         const franchiseIds = await this.getFranchiseIds({ throwOnError: true });
         const eliminationIds = await this.getEliminationIds({ throwOnError: true });
         const replacementStoreScopes = new Set(
@@ -614,12 +942,25 @@ class SyncEngine {
               storeNames.map((storeName) => this.storeCountKey(dbName, storeName))
             ),
         );
-        const operationBaseCursor = { ...this.cursor };
-        await this.assertCloudUnchangedSinceCursor(
-          userId,
-          replacementStoreScopes,
-          operationBaseCursor,
-        );
+        let operationBaseCursor = { ...this.cursor };
+        if (options.replaceExisting) {
+          await this.assertLocalReplacementSnapshotReadable(franchiseIds, eliminationIds);
+          cloudRollbackSnapshot = await this.captureCloudReplacementSnapshot(userId);
+          await this.clearCloudReplacementData(userId);
+          operationBaseCursor = {
+            changedAt: 0,
+            id: null,
+            receivedAt: null,
+            localReceivedAt: null,
+            localKey: null,
+          };
+        } else {
+          await this.assertCloudUnchangedSinceCursor(
+            userId,
+            replacementStoreScopes,
+            operationBaseCursor,
+          );
+        }
 
         const now = this.nextChangedAt(this.cursor.changedAt + 1);
         const expectedStoreKeys = new Set<string>();
@@ -705,6 +1046,9 @@ class SyncEngine {
           expectedLocalFingerprints,
           scannedStoreScopes,
         );
+        // From this point forward the replacement itself is verified. Later
+        // cursor/queue failures must not roll a valid new snapshot backward.
+        cloudRollbackSnapshot = null;
         this.rememberStoreWriteBaseOverrides(verifiedWriteBases.stores);
         this.rememberLocalStorageWriteBaseOverrides(verifiedWriteBases.localStorage);
         if (!this.persistWriteBaseOverrides()) {
@@ -724,12 +1068,28 @@ class SyncEngine {
         this._error = null;
         this.emitEvent('sync-complete');
       } catch (err) {
+        let rollbackError: unknown = null;
+        if (cloudRollbackSnapshot && replacementUserId) {
+          try {
+            await this.restoreCloudReplacementSnapshot(replacementUserId, cloudRollbackSnapshot);
+          } catch (restoreErr) {
+            rollbackError = restoreErr;
+            console.error('[syncEngine] Upload rollback error:', restoreErr);
+          }
+        }
         const currentQueues = this.snapshotQueues();
         this.pushQueue = new Map(queuesAtOperationStart?.pushQueue ?? []);
         this.localQueue = new Map(queuesAtOperationStart?.localQueue ?? []);
         this.mergeQueuedOps(currentQueues);
         this.persistQueues();
-        this._error = err instanceof Error ? err.message : 'Upload failed';
+        const originalMessage = err instanceof Error ? err.message : 'Upload failed';
+        if (rollbackError) {
+          const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          this._error = `Upload failed and cloud rollback failed: ${originalMessage}; rollback: ${rollbackMessage}`;
+          console.error('[syncEngine] Upload error:', err);
+          throw new Error(this._error);
+        }
+        this._error = originalMessage;
         console.error('[syncEngine] Upload error:', err);
         throw err;
       } finally {
@@ -1419,12 +1779,53 @@ class SyncEngine {
       }
 
       try {
+        if (dbName === 'kbl-league-builder') {
+          const pageProtectedRecords = records.filter(isProtectedSnakeMlbRecord);
+          const protectedRecordsByIdentity = new Map<string, CloudStoreRow>();
+          for (const record of [
+            ...this.loadDeferredSnakeProtectedRows(),
+            ...pageProtectedRecords,
+          ]) {
+            protectedRecordsByIdentity.set(
+              this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+              record,
+            );
+          }
+          const protectedRecords = [...protectedRecordsByIdentity.values()].filter((record) => {
+            if (!this.hasQueuedStoreWrite(record, mutationBaseline)) return true;
+            markSkippedConflict(record);
+            return false;
+          });
+          if (protectedRecords.length > 0) {
+            const result = await this.applySnakeManifestPoolInboundAtomically(
+              db,
+              protectedRecords,
+              mutationBaseline,
+              markSkippedConflict,
+            );
+            this.persistDeferredSnakeProtectedRows(result.deferredRows);
+            writeBasesChanged = result.writeBasesChanged || writeBasesChanged;
+          } else {
+            this.persistDeferredSnakeProtectedRows([]);
+          }
+          if (pageProtectedRecords.length > 0) {
+            byStore.delete('registeredPools');
+            const ordinaryDraftSessions = byStore.get('mlbDraftSessions')?.filter((record) => (
+              !isProtectedSnakeMlbRecord(record)
+            )) ?? [];
+            if (ordinaryDraftSessions.length > 0) byStore.set('mlbDraftSessions', ordinaryDraftSessions);
+            else byStore.delete('mlbDraftSessions');
+          }
+        }
         for (const [storeName, storeRecords] of byStore) {
           if (!db.objectStoreNames.contains(storeName)) {
             throw new Error(`Store ${storeName} not found in ${dbName} while applying cloud pull`);
           }
 
           try {
+            if (dbName === 'kbl-league-builder' && storeName === 'mlbDraftSessions') {
+              await this.assertOrdinarySnakeSessionInbound(db, storeRecords);
+            }
             const tx = db.transaction(storeName, 'readwrite');
             const store = tx.objectStore(storeName);
             const appliedBases = new Map<string, { receivedAt: string; id: string }>();
@@ -1493,6 +1894,207 @@ class SyncEngine {
         : null,
       skippedConflicts,
     };
+  }
+
+  private async assertOrdinarySnakeSessionInbound(
+    db: IDBDatabase,
+    records: CloudStoreRow[],
+  ): Promise<void> {
+    if (records.length === 0) return;
+    const currentByKey = new Map<string, SnakeSyncSession>();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('mlbDraftSessions', 'readonly');
+      const store = tx.objectStore('mlbDraftSessions');
+      for (const record of records) {
+        const request = store.get(JSON.parse(record.record_key));
+        request.onsuccess = () => currentByKey.set(record.record_key, request.result ?? null);
+        request.onerror = () => reject(request.error);
+      }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    for (const record of records) {
+      assertSnakeDraftSessionInboundInvariant({
+        currentSession: currentByKey.get(record.record_key) ?? null,
+        proposedSession: record.deleted ? null : record.data as SnakeSyncSession,
+        sessionDeleted: record.deleted,
+        tombstoneData: record.data,
+      });
+    }
+  }
+
+  private async applySnakeManifestPoolInboundAtomically(
+    db: IDBDatabase,
+    relevant: CloudStoreRow[],
+    mutationBaseline: number,
+    markSkippedConflict: (record: CloudStoreRow) => void,
+  ): Promise<SnakeProtectedApplyResult> {
+    type LeagueRows = {
+      pool?: CloudStoreRow;
+      mlb?: CloudStoreRow;
+      farm?: CloudStoreRow;
+    };
+    const rowsByLeagueId = new Map<string, LeagueRows>();
+    for (const record of relevant) {
+      const identity = protectedSnakeRecordIdentity(record);
+      if (!identity) continue;
+      const rows = rowsByLeagueId.get(identity.leagueId) ?? {};
+      rows[identity.kind] = record;
+      rowsByLeagueId.set(identity.leagueId, rows);
+    }
+    if (rowsByLeagueId.size === 0) {
+      return { writeBasesChanged: false, deferredRows: [] };
+    }
+
+    return new Promise<SnakeProtectedApplyResult>((resolve, reject) => {
+      const tx = db.transaction(['registeredPools', 'mlbDraftSessions'], 'readwrite');
+      const poolStore = tx.objectStore('registeredPools');
+      const sessionStore = tx.objectStore('mlbDraftSessions');
+      const currentPools = new Map<string, SnakeSyncPool>();
+      const currentMlbSessions = new Map<string, SnakeSyncSession>();
+      const currentFarmSessions = new Map<string, SnakeSyncSession>();
+      const requests: IDBRequest[] = [];
+      for (const leagueId of rowsByLeagueId.keys()) {
+        const poolRead = poolStore.get(leagueId);
+        poolRead.onsuccess = () => currentPools.set(leagueId, poolRead.result ?? null);
+        const mlbRead = sessionStore.get(leagueId + '::startup-mlb-draft::1');
+        mlbRead.onsuccess = () => currentMlbSessions.set(leagueId, mlbRead.result ?? null);
+        const farmRead = sessionStore.get(leagueId + '::startup-mlb-draft::2');
+        farmRead.onsuccess = () => currentFarmSessions.set(leagueId, farmRead.result ?? null);
+        requests.push(poolRead, mlbRead, farmRead);
+      }
+
+      let completed = 0;
+      const appliedBases = new Map<string, { receivedAt: string; id: string }>();
+      const deferredIdentities = new Set<string>();
+      const defer = (record: CloudStoreRow | undefined) => {
+        if (!record) return;
+        deferredIdentities.add(
+          this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+        );
+      };
+      const apply = () => {
+        completed += 1;
+        if (completed !== requests.length) return;
+        try {
+          for (const [leagueId, rows] of rowsByLeagueId) {
+            const currentPool = currentPools.get(leagueId) ?? null;
+            const currentMlb = currentMlbSessions.get(leagueId) ?? null;
+            const currentFarm = currentFarmSessions.get(leagueId) ?? null;
+            const proposedPool = rows.pool
+              ? (rows.pool.deleted ? null : rows.pool.data as SnakeSyncPool)
+              : currentPool;
+            const proposedMlb = rows.mlb
+              ? (rows.mlb.deleted ? null : rows.mlb.data as SnakeSyncSession)
+              : currentMlb;
+            const proposedFarm = rows.farm
+              ? (rows.farm.deleted ? null : rows.farm.data as SnakeSyncSession)
+              : currentFarm;
+
+            const mlbWaitsForPool = Boolean(
+              rows.mlb
+              && !rows.mlb.deleted
+              && proposedMlb?.draftManifest
+              && !proposedPool,
+            );
+            if (mlbWaitsForPool) {
+              defer(rows.mlb);
+              defer(rows.farm);
+            } else {
+              assertSnakeManifestPoolInboundInvariant({
+                currentPool,
+                currentSession: currentMlb,
+                proposedPool,
+                proposedSession: proposedMlb,
+                sessionDeleted: Boolean(rows.mlb?.deleted),
+                sessionTombstoneData: rows.mlb?.deleted ? rows.mlb.data : undefined,
+              });
+            }
+
+            if (!rows.farm) continue;
+            assertSnakeDraftSessionInboundInvariant({
+              currentSession: currentFarm,
+              proposedSession: proposedFarm,
+              sessionDeleted: rows.farm.deleted,
+              tombstoneData: rows.farm.deleted ? rows.farm.data : undefined,
+            });
+            if (rows.farm.deleted) continue;
+
+            const mlbReady = !mlbWaitsForPool
+              && Boolean(proposedPool)
+              && proposedMlb?.draftManifest?.phase === 'MLB'
+              && proposedMlb.rosterHandoff?.phase === 'MLB';
+            if (!mlbReady) {
+              defer(rows.farm);
+              continue;
+            }
+            assertCanonicalFarmSyncBootstrap(
+              proposedFarm as unknown as LeagueBuilderMlbDraftSession,
+              leagueId + '::startup-mlb-draft::' + FARM_SNAKE_SESSION_NUMBER,
+              proposedMlb as unknown as LeagueBuilderMlbDraftSession,
+            );
+          }
+
+          for (const record of relevant) {
+            const identityKey = this.storeIdentityKey(
+              record.db_name,
+              record.store_name,
+              record.record_key,
+            );
+            if (deferredIdentities.has(identityKey)) continue;
+            if (this.hasQueuedStoreWrite(record, mutationBaseline)) {
+              markSkippedConflict(record);
+              continue;
+            }
+            const store = record.store_name === 'registeredPools' ? poolStore : sessionStore;
+            if (record.deleted) store.delete(JSON.parse(record.record_key));
+            else store.put(record.data);
+            if (record.received_at) {
+              appliedBases.set(identityKey, { receivedAt: record.received_at, id: record.id });
+            }
+          }
+        } catch (error) {
+          reject(error);
+          tx.abort();
+        }
+      };
+      for (const request of requests) {
+        request.onerror = () => reject(request.error);
+        request.addEventListener('success', apply);
+      }
+      tx.oncomplete = () => {
+        if (appliedBases.size > 0) this.rememberStoreWriteBaseOverrides(appliedBases);
+        resolve({
+          writeBasesChanged: appliedBases.size > 0,
+          deferredRows: relevant.filter((record) => deferredIdentities.has(
+            this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+          )),
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(
+        tx.error ?? new Error('Inbound snake manifest/pool/FARM sync transaction aborted.'),
+      );
+    });
+  }
+
+  private loadDeferredSnakeProtectedRows(): CloudStoreRow[] {
+    const raw = localStorage.getItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY);
+    if (!raw) return [];
+    const rows = JSON.parse(raw) as CloudStoreRow[];
+    if (!Array.isArray(rows)) {
+      throw new Error('Deferred snake sync rows are corrupt.');
+    }
+    return rows;
+  }
+
+  private persistDeferredSnakeProtectedRows(rows: CloudStoreRow[]): void {
+    if (rows.length === 0) {
+      localStorage.removeItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY);
+      return;
+    }
+    localStorage.setItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY, JSON.stringify(rows));
   }
 
   private async pullLocalStorage(userId: string, mutationBaseline: number): Promise<boolean> {
@@ -1575,6 +2177,75 @@ class SyncEngine {
     }
 
     return refs;
+  }
+
+  private async assertLocalReplacementSnapshotReadable(
+    franchiseIds: string[],
+    eliminationIds: string[],
+  ): Promise<void> {
+    for (const { dbName, storeNames } of this.getReplacementStoreRefs(franchiseIds, eliminationIds)) {
+      for (const storeName of storeNames) {
+        const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+        const records = await this.getLocalStoreRecords<Record<string, unknown>>(dbName, storeName);
+        if (!keyPath || records === null) {
+          throw new Error(`Could not read local sync store ${dbName}.${storeName}: store missing or unreadable`);
+        }
+        for (const record of records) {
+          const key = Array.isArray(keyPath) ? keyPath.map((part) => record[part]) : record[keyPath];
+          if (typeof serializeKey(key) !== 'string') {
+            throw new Error(`Cannot sync ${dbName}.${storeName}: missing key ${JSON.stringify(keyPath)}`);
+          }
+        }
+      }
+    }
+    // Build once before destructive work so malformed localStorage payloads
+    // fail while the current cloud snapshot is still untouched.
+    this.buildLocalStorageUploadRows('replacement-preflight', 1, {
+      changedAt: 0,
+      id: null,
+      receivedAt: null,
+      localReceivedAt: null,
+      localKey: null,
+    });
+  }
+
+  private async captureCloudReplacementSnapshot(userId: string): Promise<CloudReplacementSnapshot> {
+    const [stores, localStorageRows] = await Promise.all([
+      this.fetchStoreWriteBaseRows(userId),
+      this.fetchLocalStorageWriteBaseRows(userId),
+    ]);
+    return {
+      stores: stores.map((row) => ({ ...this.cloneValue(row), user_id: userId })),
+      localStorage: localStorageRows.map((row) => ({ ...this.cloneValue(row), user_id: userId })),
+    };
+  }
+
+  private async clearCloudReplacementData(userId: string): Promise<void> {
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    for (const table of ['kbl_local_storage', 'kbl_stores'] as const) {
+      const { error } = await supabase.from(table).delete().eq('user_id', userId);
+      this.assertNoSupabaseError(error, `Could not replace cloud snapshot (${table})`);
+    }
+  }
+
+  private async restoreCloudReplacementSnapshot(
+    userId: string,
+    snapshot: CloudReplacementSnapshot,
+  ): Promise<void> {
+    if (!supabase) throw new Error('Cloud sync is not configured.');
+    await this.clearCloudReplacementData(userId);
+    for (let index = 0; index < snapshot.stores.length; index += UPLOAD_BATCH_SIZE) {
+      const { error } = await supabase.from('kbl_stores').upsert(
+        snapshot.stores.slice(index, index + UPLOAD_BATCH_SIZE),
+      );
+      this.assertNoSupabaseError(error, 'Could not restore prior cloud stores after failed upload');
+    }
+    for (let index = 0; index < snapshot.localStorage.length; index += UPLOAD_BATCH_SIZE) {
+      const { error } = await supabase.from('kbl_local_storage').upsert(
+        snapshot.localStorage.slice(index, index + UPLOAD_BATCH_SIZE),
+      );
+      this.assertNoSupabaseError(error, 'Could not restore prior cloud localStorage after failed upload');
+    }
   }
 
   private async assertCloudUnchangedSinceCursor(

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  deriveLuxuryTaxUsageWeights,
   POOL_SURPLUS_MAX,
   SOLVENCY_RED_MARGIN,
   SOLVENCY_SEVERE_TAX_FRAC,
@@ -62,7 +63,7 @@ const composeGoldens: Array<{ name: string; priorities: BandPriorities; increase
   { name: 'pitching_equal', priorities: { ...zeroPriorities, Rotation: 3, Bullpen: 3 }, increase: ['Junk Ballers', 'JNK'] },
 ];
 
-const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }; shift: Record<ModStat, number> }> = [
+const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }; shift: Partial<Record<ModStat, number>> }> = [
   {
     identity: { increase: ['POW', 'CON'], decrease: [] },
     shift: { POW: 0.02, CON: 0.045871559633027525, SPD: 0, FLD: 0, ARM: 0, RVEL: 0, RJNK: 0, RACC: 0, PVEL: 0, PJNK: 0, PACC: 0 },
@@ -94,17 +95,17 @@ const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }
 function directShift(identity: { increase: string[]; decrease: string[] }): Record<ModStat, number> {
   const net = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
   for (const name of identity.increase.filter((item) => item !== '--')) {
-    for (const stat of MOD_STATS) net[stat] += CAP_MODIFICATION_FRACTIONS[name][stat];
+    for (const stat of MOD_STATS) net[stat] += CAP_MODIFICATION_FRACTIONS[name][stat] ?? 0;
   }
   for (const name of identity.decrease.filter((item) => item !== '--')) {
-    for (const stat of MOD_STATS) net[stat] -= CAP_MODIFICATION_FRACTIONS[name][stat];
+    for (const stat of MOD_STATS) net[stat] -= CAP_MODIFICATION_FRACTIONS[name][stat] ?? 0;
   }
   return net;
 }
 
-function expectShiftClose(actual: Record<ModStat, number>, expected: Record<ModStat, number>, precision = 5) {
+function expectShiftClose(actual: Record<ModStat, number>, expected: Partial<Record<ModStat, number>>, precision = 5) {
   for (const stat of MOD_STATS) {
-    expect(actual[stat], stat).toBeCloseTo(expected[stat], precision);
+    expect(actual[stat], stat).toBeCloseTo(expected[stat] ?? 0, precision);
   }
 }
 
@@ -185,15 +186,24 @@ function groupTax(result: ReturnType<typeof luxuryTax>, group: 'rotation' | 'bul
 }
 
 function expectedTax(roster: ConstructionPlayer[], caps: LuxuryCapRow[]) {
-  const hitters = roster.filter((player) => !player.isPitcher);
-  const rotation = roster.filter((player) => player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP'));
-  const bullpen = roster.filter((player) => player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP'));
+  const usageAware = caps.some((row) => row.ratingBasis === 'pitcher-role-usage-v1');
+  const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
   const binding: Array<{ group: string; stat: string; over: number; tax: number }> = [];
   let wouldBeTax = 0;
   for (const row of caps) {
-    const group = row.group === 'hitters' ? hitters : row.group === 'rotation' ? rotation : bullpen;
+    const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const vals = group
-      .map((player) => (row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC') ? player.pit?.[row.stat] ?? 0 : player.bat[row.stat])
+      .filter((player) => {
+        if (!usageAware) return row.group === 'hitters' ? !player.isPitcher : player.isPitcher;
+        const secondary = row.stat === 'POW' || row.stat === 'CON' || row.stat === 'SPD' || row.stat === 'FLD';
+        if (row.group === 'hitters') return !player.isPitcher || Boolean(player.twoWayVariant && secondary);
+        return player.isPitcher && !(player.twoWayVariant && secondary);
+      })
+      .map((player) => {
+        if (row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC') return player.pit?.[row.stat] ?? 0;
+        if (!usageAware || row.group === 'hitters' || !player.isPitcher || player.twoWayVariant) return player.bat[row.stat];
+        return player.bat[row.stat] * deriveLuxuryTaxUsageWeights(player.role!)[row.stat];
+      })
       .sort((left, right) => right - left)
       .slice(0, row.topN);
     const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);
@@ -285,6 +295,44 @@ describe('leagueConstruction T8a pure engine', () => {
     expect(actual.binding).toEqual(expected.binding);
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'VEL' && row.over > 0)).toBe(true);
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD' && row.over > 0)).toBe(true);
+  });
+
+  test('usage-aware tax weights ordinary pitcher secondary ratings by role and preserves legacy rows', () => {
+    const starter = pitcher('starter', 'SP', { VEL: 50, JNK: 50, ACC: 50 }, { POW: 80, CON: 80, SPD: 80, FLD: 80 });
+    const usageRows: LuxuryCapRow[] = (['POW', 'CON', 'SPD', 'FLD'] as const).map((stat) => ({
+      group: 'rotation', stat, topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0,
+      ratingBasis: 'pitcher-role-usage-v1',
+    }));
+    const usage = luxuryTax([starter], usageRows, 'taxed');
+    const byStat = new Map(usage.binding.map((entry) => [entry.stat, entry.over]));
+
+    expect(byStat.get('POW')).toBeCloseTo(15.7, 8);
+    expect(byStat.get('CON')).toBeCloseTo(15.7, 8);
+    expect(byStat.get('SPD')).toBeCloseTo(25.3, 8);
+    expect(byStat.get('FLD')).toBeCloseTo(20, 8);
+
+    const legacy = luxuryTax([starter], usageRows.map((row) => ({ ...row, ratingBasis: undefined })), 'taxed');
+    expect(legacy.binding.map((entry) => entry.over)).toEqual([80, 80, 80, 80]);
+  });
+
+  test('Two Way splits everyday batting and pitching without a duplicate secondary-rating charge', () => {
+    const twoWay = {
+      ...pitcher('two-way', 'SP', { VEL: 70, JNK: 0, ACC: 0 }, { POW: 80, CON: 0, SPD: 0, FLD: 0, ARM: 99 }),
+      twoWayVariant: 'IF' as const,
+    };
+    const rows: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'hitters', stat: 'ARM', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ];
+    const result = luxuryTax([twoWay], rows, 'taxed');
+
+    expect(result.wouldBeTax).toBe(150);
+    expect(result.binding).toEqual([
+      { group: 'hitters', stat: 'POW', over: 80, tax: 80 },
+      { group: 'rotation', stat: 'VEL', over: 70, tax: 70 },
+    ]);
   });
 
   describe('TAXSWING named single-assignment scenarios', () => {
@@ -408,27 +456,59 @@ describe('leagueConstruction T8a pure engine', () => {
     });
   });
 
-  test('derivePickValueChart sorts descending, preserves length, and reflects steeper juiced-shaped pools', () => {
-    const chart = derivePickValueChart([20, 100, 50, 50, 5]);
+  test('derivePickValueChart prices exactly the drafted picks from forward-cohort surplus', () => {
+    const chart = derivePickValueChart([30, 100, 50, 80, 40, 90, 60, 70], 4, 2);
     expect(chart).toEqual([
-      { pick: 1, value: 100 },
-      { pick: 2, value: 50 },
-      { pick: 3, value: 50 },
-      { pick: 4, value: 20 },
-      { pick: 5, value: 5 },
+      { pick: 1, value: 40 },
+      { pick: 2, value: 30 },
+      { pick: 3, value: 20 },
+      { pick: 4, value: 10 },
     ]);
-    expect(chart).toHaveLength(5);
+    expect(chart).toHaveLength(4);
     for (let i = 1; i < chart.length; i += 1) {
       expect(chart[i].value).toBeLessThanOrEqual(chart[i - 1].value);
     }
+  });
 
-    const juiced = derivePickValueChart([240, 180, 130, 95, 70]);
-    const nerfed = derivePickValueChart([120, 105, 95, 88, 82]);
-    expect((juiced[0].value - juiced[4].value) / juiced[0].value).toBeGreaterThan((nerfed[0].value - nerfed[4].value) / nerfed[0].value);
+  test('derivePickValueChart stays positive, finite, monotone, and deterministic for flat and exact-floor pools', () => {
+    const flat = derivePickValueChart([50, 50, 50, 50, 50, 50], 4, 2);
+    expect(flat).toEqual(Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })));
+
+    const exactFloor = derivePickValueChart([10, 9.8, 9.6, 9.4, 9.2, 9], 4, 2);
+    expect(exactFloor).toEqual(Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })));
+    expect(derivePickValueChart([10, Number.NaN, 9.8, Number.POSITIVE_INFINITY, 9.6, 9.4, 9.2, 9], 4, 2))
+      .toEqual(exactFloor);
+    for (const row of [...flat, ...exactFloor]) {
+      expect(Number.isFinite(row.value)).toBe(true);
+      expect(row.value).toBeGreaterThan(0);
+    }
+  });
+
+  test('derivePickValueChart stays finite and monotone at finite numeric extremes', () => {
+    const repeatedMaximum = derivePickValueChart(
+      [Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE],
+      4,
+      2,
+    );
+    expect(repeatedMaximum).toEqual(
+      Array.from({ length: 4 }, (_, index) => ({ pick: index + 1, value: 1 })),
+    );
+
+    const fullSpan = derivePickValueChart(
+      [Number.MAX_VALUE, Number.MAX_VALUE, -Number.MAX_VALUE, -Number.MAX_VALUE],
+      3,
+      1,
+    );
+    expect(fullSpan).toHaveLength(3);
+    for (let index = 0; index < fullSpan.length; index += 1) {
+      expect(Number.isFinite(fullSpan[index].value)).toBe(true);
+      expect(fullSpan[index].value).toBeGreaterThan(0);
+      if (index > 0) expect(fullSpan[index].value).toBeLessThanOrEqual(fullSpan[index - 1].value);
+    }
   });
 
   test('validateTrade applies the §7.3 15% advisory tolerance and favored side', () => {
-    const chart = derivePickValueChart([100, 90, 80, 70, 60]);
+    const chart = [100, 90, 80, 70, 60].map((value, index) => ({ pick: index + 1, value }));
     const balanced = validateTrade([{ pick: 1 }], [{ pick: 2 }], chart);
     expect(balanced.imbalancePct).toBeCloseTo(0.10, 10);
     expect(balanced.imbalancePct).toBeLessThanOrEqual(TRADE_TOLERANCE_BAND);
@@ -697,7 +777,7 @@ describe('registerPool T8b assembler', () => {
     }
   });
 
-  test('derives pick value chart from player IV sorted descending', () => {
+  test('derives a drafted-length pick chart from pool opportunity surplus', () => {
     const pool = registerPool({
       leagueId: 'league-chart',
       tier: 'juiced',
@@ -706,11 +786,45 @@ describe('registerPool T8b assembler', () => {
       players,
     });
 
-    expect(pool.pickValueChart).toEqual([
-      { pick: 1, value: 90_000 },
-      { pick: 2, value: 50_000 },
-      { pick: 3, value: 10_000 },
+    expect(pool.pickValueChart).toHaveLength(22);
+    expect(pool.pickValueChart.slice(0, 4)).toEqual([
+      { pick: 1, value: 80_000 },
+      { pick: 2, value: 40_000 },
+      { pick: 3, value: 1 },
+      { pick: 4, value: 1 },
     ]);
+    expect(pool.pickValueChart.at(-1)).toEqual({ pick: 22, value: 1 });
+  });
+
+  test('uses an explicitly supplied league club count instead of slot inference', () => {
+    const pool = registerPool({
+      leagueId: 'league-explicit-clubs',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      totalSlots: 4,
+      teamCount: 2,
+      players,
+    });
+
+    expect(pool.pickValueChart).toEqual([
+      { pick: 1, value: 60_000 },
+      { pick: 2, value: 20_000 },
+      { pick: 3, value: 1 },
+      { pick: 4, value: 1 },
+    ]);
+  });
+
+  test('rejects invalid explicitly supplied league club counts', () => {
+    for (const teamCount of [0, -1, 1.5, Number.NaN]) {
+      expect(() => registerPool({
+        leagueId: `league-invalid-clubs-${teamCount}`,
+        tier: 'standard',
+        balanceMode: 'taxed',
+        totalSlots: 22,
+        teamCount,
+        players,
+      })).toThrow('Team count must be a positive integer.');
+    }
   });
 
   test('passes through leagueId, balanceMode, totalSlots, and players', () => {

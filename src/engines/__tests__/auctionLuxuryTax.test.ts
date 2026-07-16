@@ -16,6 +16,8 @@ import {
 } from '../leagueConstruction';
 import {
   auctionMarginalTax,
+  auctionMarginalTaxWithCaps,
+  auctionSinglePlayerTaxWithShiftedCaps,
   auctionShiftedCaps,
   computeAuctionTeamProjectedTax,
   normalizeAuctionLuxuryCapsForLeagueSize,
@@ -45,6 +47,14 @@ function hitter(id: string, ratings: Partial<ConstructionPlayer['bat']>): Constr
     isPitcher: false,
     bat: { ...lowBat, ...ratings },
   };
+}
+
+function pitcher(
+  id: string,
+  role: NonNullable<ConstructionPlayer['role']>,
+  ratings: ConstructionPlayer['pit'],
+): ConstructionPlayer {
+  return { id, isPitcher: true, role, bat: lowBat, pit: ratings };
 }
 
 function findCap(
@@ -99,6 +109,23 @@ describe('auctionLuxuryTax', () => {
     expect(caps).toBe(LUXURY_CAP_TABLES[tier]);
     expect(actual).toBeGreaterThan(0);
     expect(actual).toBeCloseTo(expected, 8);
+  });
+
+  test('single-player fast path matches usage-aware Two Way settlement exactly', () => {
+    const candidate: ConstructionPlayer = {
+      id: 'two-way', isPitcher: true, role: 'SP', twoWayVariant: 'C',
+      bat: { POW: 80, CON: 0, SPD: 0, FLD: 0, ARM: 99 },
+      pit: { VEL: 70, JNK: 0, ACC: 0 },
+    };
+    const caps: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'hitters', stat: 'ARM', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ];
+
+    expect(auctionSinglePlayerTaxWithShiftedCaps(candidate, caps)).toBe(150);
+    expect(auctionSinglePlayerTaxWithShiftedCaps(candidate, caps)).toBe(luxuryTax([candidate], caps, 'taxed').charged);
   });
 
   test('selected cap identity shifts the prioritized band cap through shiftLuxuryCaps', () => {
@@ -160,12 +187,36 @@ describe('auctionLuxuryTax', () => {
       8,
     );
   });
+
+  test('the empty-roster fast path is exact for hitters and every pitching group across all identities and tiers', () => {
+    const candidates: ConstructionPlayer[] = [
+      hitter('fast-hitter', { POW: 99, CON: 87, SPD: 76, FLD: 65, ARM: 54 }),
+      pitcher('fast-sp', 'SP', { VEL: 99, JNK: 88, ACC: 77 }),
+      pitcher('fast-swing', 'SP/RP', { VEL: 91, JNK: 82, ACC: 73 }),
+      pitcher('fast-rp', 'RP', { VEL: 96, JNK: 84, ACC: 72 }),
+      pitcher('fast-cp', 'CP', { VEL: 97, JNK: 85, ACC: 74 }),
+    ];
+    const identities = [undefined, ...HISTORICAL_ARCHETYPES.map(archetypeToCapIdentity)];
+
+    for (const tier of ['juiced', 'standard', 'nerfed'] as const) {
+      for (const identity of identities) {
+        const shifted = identity
+          ? shiftLuxuryCaps(LUXURY_CAP_TABLES[tier], identity)
+          : LUXURY_CAP_TABLES[tier];
+        for (const candidate of candidates) {
+          const expected = luxuryTax([candidate], shifted, 'taxed').charged;
+          expect(auctionSinglePlayerTaxWithShiftedCaps(candidate, shifted)).toBeCloseTo(expected, 12);
+          expect(auctionMarginalTaxWithCaps([], candidate, identity, LUXURY_CAP_TABLES[tier])).toBeCloseTo(expected, 12);
+        }
+      }
+    }
+  });
 });
 
 /**
  * TAXPRECISION (2026-07-09, spec-docs/contracts/CONTRACT_TAXPRECISION_2026-07-09.md): the auction
  * tax must read a capIdentity's exact `rawShift` fractions -- the same short-circuit `shiftLuxuryCaps`
- * (leagueConstruction.ts) and the snake draft (LeagueBuilderSnakeDraft.tsx:129,335) already honor --
+ * (leagueConstruction.ts) and the production snake room already honor --
  * not the coarse `CAP_MODIFICATION_FRACTIONS` per-name table. Pre-fix, `auctionShiftedCapsWithBaseCaps`
  * rebuilt `{ increase, decrease }` from the capIdentity and dropped `rawShift` entirely, so every
  * archetype-selected team's auction-side caps were computed off the coarse table instead of its

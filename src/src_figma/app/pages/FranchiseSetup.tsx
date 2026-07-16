@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, type Dispatch, type KeyboardEvent, type SetStateAction } from "react";
 import { useNavigate } from "react-router";
-import { ArrowLeft, Check, Gamepad2, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, CircleHelp, Gamepad2, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { useLeagueBuilderData, type LeagueTemplate, type Team } from "../../hooks/useLeagueBuilderData";
 import type { FranchiseConfig } from "../../../types/franchise";
 import { initializeFranchise } from "../../../utils/franchiseInitializer";
@@ -9,11 +9,24 @@ import {
   type FranchiseFreezeSummary,
   type FranchiseFreezeTeamSummary,
 } from "../../../utils/franchiseFreezeSummary";
-import { isMlbDraftComplete } from "../../../utils/mlbDraftCompletion";
+import {
+  isCompletedLegacySnakeDraftSession,
+  readMlbDraftCompletion,
+} from "../../../utils/mlbDraftCompletion";
+import {
+  createFarmAuctionSessionId,
+  getAuctionSessionById,
+  getLeagueTemplate,
+  getMlbDraftSession,
+} from "../../../utils/leagueBuilderStorage";
+import { readSnakeDraftTruth } from "../../../utils/snakeDraftManifest";
+import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
+import { FARM_SNAKE_SESSION_NUMBER } from "../../../engines/snakeFarmSlots";
 import {
   validatePreparedLeagueBuilderFarmScoutingState,
   type LeagueBuilderFarmScoutingValidationReport,
 } from "../../../utils/leagueBuilderFarmScoutingHandoff";
+import { draftSetupRouteForLeague } from "../utils/draftRouting";
 
 const INITIAL_CONFIG: FranchiseConfig = {
   league: null,
@@ -86,14 +99,6 @@ function clampPlayoffTeamsQualifying(currentCount: number, teamCount: number): n
   return options[options.length - 1];
 }
 
-function setContentsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
-  if (a.size !== b.size) return false;
-  for (const value of a) {
-    if (!b.has(value)) return false;
-  }
-  return true;
-}
-
 function formatNumber(value: number | null | undefined): string {
   if (typeof value !== "number" || !Number.isFinite(value)) return "Not stored";
   return Math.round(value).toLocaleString();
@@ -120,9 +125,23 @@ function buildConfigForSelectedLeague(
   const leagueTeamIds = league.teamIds ?? [];
   const leagueTeams = teams.filter((team) => leagueTeamIds.includes(team.id));
   const teamCount = leagueTeams.length || leagueTeamIds.length || 0;
-  const humanTeamIds = leagueTeams
-    .filter((team) => team.controlledBy === "human")
-    .map((team) => team.id);
+  const persistedSeats = (league.draftSeats ?? [])
+    .map((seat) => ({ id: seat.id, name: seat.name.trim() }))
+    .filter((seat) => seat.id && seat.name);
+  const fallbackSeat = persistedSeats[0] ?? { id: "seat-you", name: "You" };
+  const seatById = new Map(persistedSeats.map((seat) => [seat.id, seat]));
+  const humanTeams = leagueTeams.filter((team) => team.controlledBy !== "ai");
+  const playerAssignments = Object.fromEntries(leagueTeams.map((team) => {
+    if (team.controlledBy === "ai") return [team.id, "cpu"];
+    return [team.id, team.gmSeatId || fallbackSeat.id];
+  }));
+  const derivedSeats = new Map(persistedSeats.map((seat) => [seat.id, seat]));
+  for (const team of humanTeams) {
+    const seatId = team.gmSeatId || fallbackSeat.id;
+    const seatName = team.gmSeatName?.trim() || seatById.get(seatId)?.name || fallbackSeat.name;
+    derivedSeats.set(seatId, { id: seatId, name: seatName });
+  }
+  const distinctHumanOwners = new Set(humanTeams.map((team) => playerAssignments[team.id]));
   return {
     ...current,
     league: leagueId,
@@ -139,8 +158,69 @@ function buildConfigForSelectedLeague(
     // Seed from the Draft Setup hub's ownership choices when present.
     teams: {
       ...current.teams,
-      selectedTeams: humanTeamIds,
+      selectedTeams: humanTeams.map((team) => team.id),
+      mode: distinctHumanOwners.size >= 2 ? "multiplayer" : "single",
+      playerAssignments,
+      seats: [...derivedSeats.values()],
     },
+  };
+}
+
+interface DraftHandoffCompletion {
+  hasMlbDraft: boolean;
+  mlbComplete: boolean;
+  farmComplete: boolean;
+  complete: boolean;
+  blocker: string | null;
+}
+
+async function readDraftHandoffCompletion(leagueId: string): Promise<DraftHandoffCompletion> {
+  const league = await getLeagueTemplate(leagueId);
+  if (!league) {
+    return { hasMlbDraft: false, mlbComplete: false, farmComplete: false, complete: false, blocker: "THE LEAGUE COULD NOT BE FOUND." };
+  }
+  const mlb = await readMlbDraftCompletion(leagueId, 1);
+  const hasMlbDraft = league.draftFormat === "snake" ? Boolean(mlb.snakeSession) : Boolean(mlb.auctionSession?.session);
+  const configuredMlbComplete = league.draftFormat === "snake" ? mlb.snakeComplete : mlb.auctionComplete;
+  if (!configuredMlbComplete) {
+    return {
+      hasMlbDraft,
+      mlbComplete: false,
+      farmComplete: false,
+      complete: false,
+      blocker: hasMlbDraft ? "THE MLB DRAFT RECORD IS INCOMPLETE OR INVALID." : "THE MLB DRAFT HAS NOT STARTED.",
+    };
+  }
+
+  // Keep the two reads sequential. The storage layer caches an opened database,
+  // not the in-flight open promise, so parallel cold reads are unsafe in tests.
+  const farmSnakeSession = await getMlbDraftSession(leagueId, FARM_SNAKE_SESSION_NUMBER);
+  const farmAuction = await getAuctionSessionById(createFarmAuctionSessionId(leagueId, 1));
+  let snakeFarmComplete = false;
+  if (league.draftFormat === "snake" && mlb.snakeComplete) {
+    if (mlb.snakeSession?.draftManifest) {
+      if (farmSnakeSession?.draftManifest) {
+        try {
+          await assertSnakeRosterHandoffReady(mlb.snakeSession, "MLB");
+          readSnakeDraftTruth(farmSnakeSession, "FARM");
+          await assertSnakeRosterHandoffReady(farmSnakeSession, "FARM");
+          snakeFarmComplete = true;
+        } catch {
+          snakeFarmComplete = false;
+        }
+      }
+    } else {
+      snakeFarmComplete = isCompletedLegacySnakeDraftSession(farmSnakeSession, "FARM");
+    }
+  }
+  const auctionFarmComplete = league.draftFormat === "auction" && mlb.auctionComplete && farmAuction?.session.state === "AUCTION_COMPLETE";
+  const farmComplete = league.draftFormat === "snake" ? snakeFarmComplete : auctionFarmComplete;
+  return {
+    hasMlbDraft,
+    mlbComplete: true,
+    farmComplete,
+    complete: farmComplete,
+    blocker: farmComplete ? null : "THE FARM DRAFT IS NOT COMPLETE OR ITS FROZEN RECORD IS INVALID.",
   };
 }
 
@@ -152,13 +232,17 @@ export function FranchiseSetup() {
     isLoading,
     error,
     seedSMB4Data,
+    refresh,
   } = useLeagueBuilderData();
   const [currentStep, setCurrentStep] = useState(1);
   const [config, setConfig] = useState<FranchiseConfig>(INITIAL_CONFIG);
   const [livingSeasonEnabled, setLivingSeasonEnabled] = useState(false);
   const [postFreezeSummary, setPostFreezeSummary] = useState<FranchiseFreezeSummary | null>(null);
   const [expandedLeague, setExpandedLeague] = useState<string | null>(null);
-  const [draftedLeagueIds, setDraftedLeagueIds] = useState<Set<string>>(() => new Set());
+  const [draftHandoffChecks, setDraftHandoffChecks] = useState<Record<string, DraftHandoffCompletion>>({});
+  const [draftCompletionErrors, setDraftCompletionErrors] = useState<Record<string, string>>({});
+  const [draftCompletionChecked, setDraftCompletionChecked] = useState(false);
+  const [draftCompletionRevision, setDraftCompletionRevision] = useState(0);
   const [isInitializing, setIsInitializing] = useState(false);
   const [showFreezeConfirm, setShowFreezeConfirm] = useState(false);
   const [initError, setInitError] = useState<string | null>(null);
@@ -166,9 +250,12 @@ export function FranchiseSetup() {
     useState<LeagueBuilderFarmScoutingValidationReport | null>(null);
   const [farmScoutingLoading, setFarmScoutingLoading] = useState(false);
   const [farmScoutingError, setFarmScoutingError] = useState<string | null>(null);
+  const [farmValidationRevision, setFarmValidationRevision] = useState(0);
   const autoSeedAttempted = useRef(false);
   const handoffLeagueApplied = useRef(false);
+  const handoffLivingSeasonApplied = useRef(false);
   const requestedLeagueId = useMemo(() => new URLSearchParams(window.location.search).get("leagueId"), []);
+  const leagueIdsKey = leagues.map((league) => league.id).join("\u0000");
 
   // Auto-seed SMB4 data if no leagues exist (first-time setup)
   useEffect(() => {
@@ -193,25 +280,39 @@ export function FranchiseSetup() {
   }, [isLoading, leagues, requestedLeagueId, teams]);
 
   useEffect(() => {
-    if (isLoading || leagues.length === 0) {
-      setDraftedLeagueIds((current) => current.size > 0 ? new Set() : current);
+    if (isLoading) {
+      setDraftCompletionChecked(false);
       return;
     }
+    if (leagueIdsKey.length === 0) {
+      setDraftHandoffChecks({});
+      setDraftCompletionErrors({});
+      setDraftCompletionChecked(true);
+      return;
+    }
+    const leagueIds = leagueIdsKey.split("\u0000");
+    setDraftCompletionChecked(false);
     let cancelled = false;
-    Promise.all(
-      leagues.map(async (league) => {
-        const complete = await isMlbDraftComplete(league.id, 1).catch(() => false);
-        return complete ? league.id : null;
-      }),
-    ).then((ids) => {
+    Promise.all(leagueIds.map(async (leagueId) => {
+      try {
+        return { leagueId, check: await readDraftHandoffCompletion(leagueId), error: null };
+      } catch (caught) {
+        return {
+          leagueId,
+          check: null,
+          error: caught instanceof Error ? caught.message : "Draft completion could not be read.",
+        };
+      }
+    })).then((results) => {
       if (cancelled) return;
-      const next = new Set(ids.filter((id): id is string => Boolean(id)));
-      setDraftedLeagueIds((current) => setContentsEqual(current, next) ? current : next);
+      setDraftHandoffChecks(Object.fromEntries(results.flatMap((result) => result.check ? [[result.leagueId, result.check]] : [])));
+      setDraftCompletionErrors(Object.fromEntries(results.flatMap((result) => result.error ? [[result.leagueId, result.error]] : [])));
+      setDraftCompletionChecked(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [isLoading, leagues]);
+  }, [isLoading, leagueIdsKey, draftCompletionRevision]);
 
   useEffect(() => {
     if (!config.league) {
@@ -241,7 +342,7 @@ export function FranchiseSetup() {
     return () => {
       cancelled = true;
     };
-  }, [config.league]);
+  }, [config.league, farmValidationRevision]);
 
   // Get teams that belong to the selected league
   const leagueTeams = useMemo(() => {
@@ -266,7 +367,36 @@ export function FranchiseSetup() {
     });
   }, [config, leagueTeams.length]);
 
-  const totalSteps = 6;
+  const draftedLeagueIds = useMemo(
+    () => new Set(Object.entries(draftHandoffChecks).filter(([, check]) => check.complete).map(([leagueId]) => leagueId)),
+    [draftHandoffChecks],
+  );
+  const requestedHandoffCheck = requestedLeagueId ? draftHandoffChecks[requestedLeagueId] : null;
+  const requestedCompletionError = requestedLeagueId ? draftCompletionErrors[requestedLeagueId] ?? null : null;
+  const requestedLeagueExists = requestedLeagueId ? leagues.some((league) => league.id === requestedLeagueId) : true;
+  const requestedHandoffBlocker = requestedLeagueId && draftCompletionChecked && !requestedLeagueExists
+    ? "THE REQUESTED LEAGUE DOES NOT EXIST."
+    : requestedHandoffCheck && !requestedHandoffCheck.complete
+      ? requestedHandoffCheck.blocker ?? "THE MLB AND FARM DRAFTS MUST BE COMPLETE."
+      : null;
+  const draftHandoffMode = Boolean(
+    requestedLeagueId
+      && draftCompletionChecked
+      && config.league === requestedLeagueId
+      && requestedHandoffCheck?.complete,
+  );
+  const handoffCheckPending = Boolean(requestedLeagueId && !draftCompletionChecked && !isLoading && !error);
+  const handoffGateStopped = Boolean(requestedCompletionError || requestedHandoffBlocker);
+  const stepLabels = draftHandoffMode
+    ? ["Season", "Confirm"]
+    : ["League", "Season", "Playoffs", "Teams", "Rosters", "Confirm"];
+  const totalSteps = stepLabels.length;
+
+  useEffect(() => {
+    if (!draftHandoffMode || handoffLivingSeasonApplied.current) return;
+    handoffLivingSeasonApplied.current = true;
+    setLivingSeasonEnabled(true);
+  }, [draftHandoffMode]);
 
   const handleNext = async () => {
     if (isInitializing) return;
@@ -277,7 +407,7 @@ export function FranchiseSetup() {
       setIsInitializing(true);
       setInitError(null);
       try {
-        let handoffValidation = config.league
+        const handoffValidation = config.league
           ? await validatePreparedLeagueBuilderFarmScoutingState(config.league)
           : null;
         if (handoffValidation) {
@@ -314,6 +444,10 @@ export function FranchiseSetup() {
   };
 
   const handleCancel = () => {
+    if (draftHandoffMode && config.league) {
+      navigate(`/league-builder/staff-hire?leagueId=${encodeURIComponent(config.league)}`);
+      return;
+    }
     navigate("/");
   };
 
@@ -329,16 +463,22 @@ export function FranchiseSetup() {
   };
 
   const canProceed = () => {
+    if (draftHandoffMode) {
+      if (currentStep === 1) return config.league !== null;
+      return config.teams.selectedTeams.length > 0
+        && !farmScoutingLoading
+        && farmScoutingReport?.status === "prepared";
+    }
     switch (currentStep) {
       case 1:
-        return config.league !== null;
+        return config.league !== null && draftCompletionChecked && draftedLeagueIds.has(config.league);
       case 4:
         return config.teams.selectedTeams.length > 0;
       default:
         return true;
     }
   };
-  const canAdvance = !isInitializing && canProceed();
+  const canAdvance = !isInitializing && !handoffCheckPending && canProceed();
 
   const jumpToStep = (step: number) => {
     if (step < currentStep) {
@@ -347,7 +487,7 @@ export function FranchiseSetup() {
   };
 
   return (
-    <div className="min-h-screen bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-6">
+    <div className="min-h-screen overflow-x-hidden bg-[#6B9462] text-[#E8E8D8] flex items-center justify-center p-3 sm:p-6">
       {/* Initialization overlay */}
       {isInitializing && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
@@ -360,12 +500,12 @@ export function FranchiseSetup() {
       )}
 
       {showFreezeConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6">
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="freeze-confirm-title"
-            className="w-full max-w-[520px] bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
+            className="min-w-0 w-full max-w-[520px] bg-[#4A6A42] border-[6px] border-[#E8E8D8] p-4 sm:p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]"
           >
             <h2 id="freeze-confirm-title" className="text-lg font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>
               Start the franchise?
@@ -401,10 +541,10 @@ export function FranchiseSetup() {
         </div>
       )}
 
-      <div className="w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
+      <div className="min-w-0 w-full max-w-[800px] bg-[#5A7A52] border-[6px] border-[#E8E8D8] shadow-[8px_8px_0px_0px_rgba(0,0,0,0.5)]">
         {/* Init error banner */}
         {initError && (
-          <div className="bg-[#DD0000]/20 border-b-4 border-[#DD0000] px-6 py-3 flex items-center gap-2">
+          <div className="bg-[#DD0000]/20 border-b-4 border-[#DD0000] px-4 sm:px-6 py-3 flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-[#DD0000] shrink-0" />
             <p className="text-xs text-[#DD0000]">{initError}</p>
             <button onClick={() => setInitError(null)} className="ml-auto text-xs text-[#DD0000]/70 hover:text-[#DD0000]">[Dismiss]</button>
@@ -412,16 +552,18 @@ export function FranchiseSetup() {
         )}
 
         {/* Header */}
-        <div className="bg-[#4A6A42] border-b-[6px] border-[#E8E8D8] px-8 py-4">
+        <div className="bg-[#4A6A42] border-b-[6px] border-[#E8E8D8] px-4 sm:px-8 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>NEW FRANCHISE</h1>
+            <h1 className="text-xl font-bold text-[#E8E8D8] tracking-wider" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>{draftHandoffMode ? "FRANCHISE LAUNCH" : "NEW FRANCHISE"}</h1>
             <span className="text-sm text-[#E8E8D8]/80" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>Step {currentStep} of {totalSteps}</span>
           </div>
 
           {/* Progress Indicator */}
           <div className="flex items-center justify-between">
-            {[1, 2, 3, 4, 5, 6].map((step, idx) => (
-              <div key={step} className="flex items-center" style={{ flex: idx < 5 ? 1 : 0 }}>
+            {stepLabels.map((_, idx) => {
+              const step = idx + 1;
+              return (
+              <div key={step} className="flex items-center" style={{ flex: idx < stepLabels.length - 1 ? 1 : 0 }}>
                 <button
                   onClick={() => jumpToStep(step)}
                   disabled={step > currentStep}
@@ -439,7 +581,7 @@ export function FranchiseSetup() {
                     <span className="text-xs text-[#4A6A42] font-bold">{step}</span>
                   )}
                 </button>
-                {idx < 5 && (
+                {idx < stepLabels.length - 1 && (
                   <div
                     className={`h-1 mx-2 flex-1 ${
                       step < currentStep
@@ -451,16 +593,16 @@ export function FranchiseSetup() {
                   />
                 )}
               </div>
-            ))}
+            );})}
           </div>
 
           {/* Step Labels */}
           <div className="flex items-center justify-between mt-2">
-            {["League", "Season", "Playoffs", "Teams", "Rosters", "Confirm"].map((label, idx) => (
+            {stepLabels.map((label, idx) => (
               <div
                 key={label}
                 className="text-[9px] text-[#E8E8D8]/70 text-center"
-                style={{ flex: idx < 5 ? 1 : 0, width: idx === 5 ? "60px" : "auto", textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
+                style={{ flex: idx < stepLabels.length - 1 ? 1 : 0, width: idx === stepLabels.length - 1 ? "60px" : "auto", textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
               >
                 {label}
               </div>
@@ -469,17 +611,52 @@ export function FranchiseSetup() {
         </div>
 
         {/* Content */}
-        <div className="p-8 min-h-[400px] max-h-[60vh] overflow-y-auto">
-          {isLoading ? (
+        <div className="min-w-0 p-4 sm:p-8 min-h-[400px] max-h-[60vh] overflow-y-auto">
+          {isLoading || handoffCheckPending ? (
             <div className="flex items-center justify-center h-64">
               <Loader2 className="w-8 h-8 animate-spin text-[#C4A853]" />
-              <span className="ml-3 text-[#E8E8D8]">Loading leagues...</span>
+              <span className="ml-3 text-[#E8E8D8]">{handoffCheckPending ? "Checking completed draft..." : "Loading leagues..."}</span>
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
               <AlertCircle className="w-8 h-8 text-[#DD0000] mb-3" />
               <p className="text-[#DD0000] mb-2">Failed to load leagues</p>
               <p className="text-xs text-[#E8E8D8]/70">{error}</p>
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                className="mt-4 inline-flex items-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-2 text-xs font-bold text-[#4A6A42]"
+              >
+                <RefreshCw className="h-4 w-4" /> RETRY LEAGUES
+              </button>
+            </div>
+          ) : requestedCompletionError ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <AlertCircle className="w-8 h-8 text-[#DD0000] mb-3" />
+              <p className="font-bold text-[#DD0000] mb-2">DRAFT HANDOFF COULD NOT LOAD</p>
+              <p className="text-xs text-[#E8E8D8]/70">{requestedCompletionError}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <button type="button" onClick={() => setDraftCompletionRevision((current) => current + 1)} className="inline-flex items-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-2 text-xs font-bold text-[#4A6A42]">
+                  <RefreshCw className="h-4 w-4" /> RETRY DRAFT HANDOFF
+                </button>
+                <button type="button" onClick={() => navigate(`/league-builder/staff-hire?leagueId=${encodeURIComponent(requestedLeagueId ?? "")}`)} className="border-4 border-[#E8E8D8] px-4 py-2 text-xs font-bold text-[#E8E8D8]">
+                  BACK TO STAFFING
+                </button>
+              </div>
+            </div>
+          ) : requestedHandoffBlocker ? (
+            <div className="flex flex-col items-center justify-center h-64 text-center">
+              <AlertCircle className="w-8 h-8 text-[#FFD27A] mb-3" />
+              <p className="font-bold text-[#FFD27A] mb-2">DRAFT HANDOFF NOT READY</p>
+              <p className="text-xs text-[#E8E8D8]/75">{requestedHandoffBlocker}</p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <button type="button" onClick={() => setDraftCompletionRevision((current) => current + 1)} className="inline-flex items-center gap-2 border-4 border-[#E8E8D8] bg-[#C4A853] px-4 py-2 text-xs font-bold text-[#4A6A42]">
+                  <RefreshCw className="h-4 w-4" /> RECHECK DRAFTS
+                </button>
+                <button type="button" onClick={() => navigate(`/league-builder/staff-hire?leagueId=${encodeURIComponent(requestedLeagueId ?? "")}`)} className="border-4 border-[#E8E8D8] px-4 py-2 text-xs font-bold text-[#E8E8D8]">
+                  BACK TO STAFFING
+                </button>
+              </div>
             </div>
           ) : leagues.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -499,12 +676,37 @@ export function FranchiseSetup() {
                 <PostFreezeSummaryPanel summary={postFreezeSummary} />
               ) : (
                 <>
-                  {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} draftedLeagueIds={draftedLeagueIds} />}
-                  {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
-                  {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
-                  {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
-                  {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
-                  {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagues={leagues} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} livingSeasonEnabled={livingSeasonEnabled} setLivingSeasonEnabled={setLivingSeasonEnabled} />}
+                  {draftHandoffMode ? (
+                    <>
+                      {currentStep === 1 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
+                      {currentStep === 2 && <DraftHandoffConfirm
+                        config={config}
+                        setConfig={setConfig}
+                        leagueTeams={leagueTeams}
+                        farmScoutingReport={farmScoutingReport}
+                        farmScoutingLoading={farmScoutingLoading}
+                        farmScoutingError={farmScoutingError}
+                        onRetryHandoff={() => setFarmValidationRevision((current) => current + 1)}
+                        livingSeasonEnabled={livingSeasonEnabled}
+                        setLivingSeasonEnabled={setLivingSeasonEnabled}
+                      />}
+                    </>
+                  ) : (
+                    <>
+                      {Object.keys(draftCompletionErrors).length > 0 ? (
+                        <div className="mb-5 border-4 border-[#FFD27A] bg-[#6B3A3A] p-3 text-xs font-bold text-[#FFE8B0]">
+                          DRAFT STATUS COULD NOT LOAD FOR {Object.keys(draftCompletionErrors).length} LEAGUE{Object.keys(draftCompletionErrors).length === 1 ? "" : "S"}.
+                          <button type="button" onClick={() => setDraftCompletionRevision((current) => current + 1)} className="ml-3 underline">RETRY</button>
+                        </div>
+                      ) : null}
+                      {currentStep === 1 && <Step1SelectLeague config={config} setConfig={setConfig} expandedLeague={expandedLeague} setExpandedLeague={setExpandedLeague} leagues={leagues} teams={teams} draftedLeagueIds={draftedLeagueIds} />}
+                      {currentStep === 2 && <Step2SeasonSettings config={config} setConfig={setConfig} />}
+                      {currentStep === 3 && <Step3PlayoffSettings config={config} setConfig={setConfig} />}
+                      {currentStep === 4 && <Step4TeamControl config={config} setConfig={setConfig} leagueTeams={leagueTeams} />}
+                      {currentStep === 5 && <Step5RosterMode config={config} setConfig={setConfig} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} />}
+                      {currentStep === 6 && <Step6Confirm config={config} setConfig={setConfig} jumpToStep={jumpToStep} leagueTeams={leagueTeams} farmScoutingReport={farmScoutingReport} farmScoutingLoading={farmScoutingLoading} farmScoutingError={farmScoutingError} livingSeasonEnabled={livingSeasonEnabled} setLivingSeasonEnabled={setLivingSeasonEnabled} />}
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -512,11 +714,11 @@ export function FranchiseSetup() {
         </div>
 
         {/* Footer */}
-        <div className="border-t-[6px] border-[#E8E8D8] px-8 py-5 flex items-center justify-end gap-3 bg-[#4A6A42]">
-          {postFreezeSummary ? (
+        <div className="border-t-[6px] border-[#E8E8D8] px-4 sm:px-8 py-5 flex flex-wrap items-center justify-end gap-3 bg-[#4A6A42]">
+          {handoffGateStopped ? null : postFreezeSummary ? (
             <button
               onClick={handleEnterFranchise}
-              className="px-8 py-3 border-4 border-[#E8E8D8] bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] font-bold text-sm tracking-wide flex items-center gap-2 transition-all"
+              className="min-w-0 px-4 sm:px-8 py-3 border-4 border-[#E8E8D8] bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)] font-bold text-sm tracking-wide flex items-center gap-2 transition-all"
               style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}
             >
               <Gamepad2 className="w-4 h-4" />
@@ -524,27 +726,29 @@ export function FranchiseSetup() {
             </button>
           ) : (
             <>
-              {currentStep > 1 && (
+              {(currentStep > 1 || draftHandoffMode) && (
                 <button
-                  onClick={handleBack}
-                  className="px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
+                  onClick={currentStep > 1 ? handleBack : handleCancel}
+                  className="min-w-0 px-4 sm:px-6 py-3 bg-transparent border-4 border-[#E8E8D8] text-[#E8E8D8] hover:bg-[#E8E8D8]/10 transition-all active:scale-95 font-bold text-sm tracking-wide flex items-center gap-2"
                   style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  BACK
+                  {currentStep > 1 ? "BACK" : "BACK TO STAFFING"}
                 </button>
               )}
-              <button
-                onClick={handleCancel}
-                className="px-6 py-3 text-[#DD0000] hover:text-[#FF0000] transition-all font-bold text-sm tracking-wide"
-                style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
-              >
-                CANCEL
-              </button>
+              {!draftHandoffMode ? (
+                <button
+                  onClick={handleCancel}
+                  className="px-6 py-3 text-[#DD0000] hover:text-[#FF0000] transition-all font-bold text-sm tracking-wide"
+                  style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.5)' }}
+                >
+                  CANCEL
+                </button>
+              ) : null}
               <button
                 onClick={currentStep === totalSteps ? () => setShowFreezeConfirm(true) : handleNext}
                 disabled={!canAdvance}
-                className={`px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
+                className={`min-w-0 px-4 sm:px-8 py-3 border-4 border-[#E8E8D8] font-bold text-sm tracking-wide transition-all flex items-center gap-2 ${
                   canAdvance
                     ? "bg-[#C4A853] text-[#4A6A42] hover:bg-[#B59A4A] active:scale-95 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.3)]"
                     : "bg-[#3A5A32] text-[#8A9A82] border-[#8A9A82] cursor-not-allowed"
@@ -677,6 +881,7 @@ function Step1SelectLeague({
   draftedLeagueIds: Set<string>;
 }) {
   const navigate = useNavigate();
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const selectLeague = (leagueId: string) => {
     setConfig((current) => buildConfigForSelectedLeague(current, leagueId, leagues, teams) ?? current);
@@ -684,8 +889,17 @@ function Step1SelectLeague({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SELECT A LEAGUE</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6">Choose the league template for your franchise</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SELECT A LEAGUE</h2>
+        <button type="button" aria-label="LEAGUE SELECTION HELP" aria-expanded={helpOpen} onClick={() => setHelpOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]">
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+      {helpOpen ? (
+        <aside aria-label="League selection instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs text-[#E8E8D8]/80">
+          CHOOSE THE LEAGUE TEMPLATE FOR THIS FRANCHISE. A DRAFT COMPLETE BADGE MEANS BOTH DRAFT LEGS HAVE COHERENT COMPLETION RECORDS.
+        </aside>
+      ) : null}
 
       <div className="space-y-4">
         {leagues.map((league) => {
@@ -699,8 +913,9 @@ function Step1SelectLeague({
           return (
             <div
               key={league.id}
-              onClick={() => selectLeague(league.id)}
-              className={`border-4 p-4 transition-all cursor-pointer ${
+              onClick={isDrafted ? () => selectLeague(league.id) : undefined}
+              aria-disabled={!isDrafted}
+              className={`border-4 p-4 transition-all ${isDrafted ? "cursor-pointer" : "cursor-not-allowed opacity-80"} ${
                 isSelected
                   ? "border-[#C4A853] bg-[#C4A853]/10"
                   : "border-[#E8E8D8] bg-[#4A6A42] hover:border-[#C4A853]"
@@ -722,7 +937,23 @@ function Step1SelectLeague({
                       <span className="border-2 border-[#C4A853] bg-[#243024] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#FFD27A]">
                         Draft complete
                       </span>
-                    ) : null}
+                    ) : (
+                      <>
+                        <span className="border-2 border-[#FFD27A] bg-[#6B3A3A] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#FFE8B0]">
+                          Draft required
+                        </span>
+                        <button
+                          type="button"
+                          className="border-2 border-[#E8E8D8] bg-[#C4A853] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#243024]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(draftSetupRouteForLeague(league));
+                          }}
+                        >
+                          Open draft setup
+                        </button>
+                      </>
+                    )}
                   </div>
                   <div className="h-[1px] bg-[#E8E8D8]/30 mb-2" />
                   <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
@@ -845,23 +1076,18 @@ function Step2SeasonSettings({
   const isCustomGamesActive = !GAMES_PER_TEAM_PRESETS.includes(config.season.gamesPerTeam);
   const isCustomInningsActive = !INNINGS_PER_GAME_PRESETS.includes(config.season.inningsPerGame);
 
-  const [customGamesText, setCustomGamesText] = useState(String(config.season.gamesPerTeam));
-  const [customInningsText, setCustomInningsText] = useState(String(config.season.inningsPerGame));
-
-  useEffect(() => {
-    setCustomGamesText(String(config.season.gamesPerTeam));
-  }, [config.season.gamesPerTeam]);
-
-  useEffect(() => {
-    setCustomInningsText(String(config.season.inningsPerGame));
-  }, [config.season.inningsPerGame]);
+  const [customGamesDraft, setCustomGamesDraft] = useState<string | null>(null);
+  const [customInningsDraft, setCustomInningsDraft] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const customGamesText = customGamesDraft ?? String(config.season.gamesPerTeam);
+  const customInningsText = customInningsDraft ?? String(config.season.inningsPerGame);
 
   const commitCustomGames = () => {
     const parsed = Number.parseInt(customGamesText, 10);
     const clamped = Number.isFinite(parsed)
       ? clampSeasonInt(parsed, GAMES_PER_TEAM_MIN, GAMES_PER_TEAM_MAX)
       : config.season.gamesPerTeam;
-    setCustomGamesText(String(clamped));
+    setCustomGamesDraft(null);
     if (clamped !== config.season.gamesPerTeam) {
       setConfig({ ...config, season: { ...config.season, gamesPerTeam: clamped } });
     }
@@ -872,7 +1098,7 @@ function Step2SeasonSettings({
     const clamped = Number.isFinite(parsed)
       ? clampSeasonInt(parsed, INNINGS_PER_GAME_MIN, INNINGS_PER_GAME_MAX)
       : config.season.inningsPerGame;
-    setCustomInningsText(String(clamped));
+    setCustomInningsDraft(null);
     if (clamped !== config.season.inningsPerGame) {
       setConfig({ ...config, season: { ...config.season, inningsPerGame: clamped } });
     }
@@ -887,8 +1113,24 @@ function Step2SeasonSettings({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SEASON SETTINGS</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6">Configure how the regular season will be played</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SEASON SETTINGS</h2>
+        <button
+          type="button"
+          aria-label="FRANCHISE SETUP HELP"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen((current) => !current)}
+          className="flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]"
+        >
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+      {helpOpen ? (
+        <aside aria-label="Franchise setup instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs leading-5 text-[#E8E8D8]/80">
+          <p>PRESETS FILL THE GAMES AND INNINGS VALUES; CUSTOM VALUES ALLOW {GAMES_PER_TEAM_MIN}–{GAMES_PER_TEAM_MAX} GAMES AND {INNINGS_PER_GAME_MIN}–{INNINGS_PER_GAME_MAX} INNINGS.</p>
+          <p className="mt-2">THE FRANCHISE STARTS WITH AN EMPTY SCHEDULE. ADD GAMES MANUALLY OR IMPORT A CSV FROM THE LIVING SEASON SCHEDULE SCREEN.</p>
+        </aside>
+      ) : null}
 
       {/* Quick Presets */}
       <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4 mb-6">
@@ -913,7 +1155,6 @@ function Step2SeasonSettings({
             );
           })}
         </div>
-        <p className="text-[10px] text-[#E8E8D8]/50 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Selecting a preset auto-fills settings below</p>
       </div>
 
       {/* Games Per Team */}
@@ -960,7 +1201,7 @@ function Step2SeasonSettings({
               min={GAMES_PER_TEAM_MIN}
               max={GAMES_PER_TEAM_MAX}
               value={customGamesText}
-              onChange={(e) => setCustomGamesText(e.target.value)}
+              onChange={(e) => setCustomGamesDraft(e.target.value)}
               onBlur={commitCustomGames}
               onKeyDown={commitOnEnter(commitCustomGames)}
               className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
@@ -968,9 +1209,6 @@ function Step2SeasonSettings({
             />
           </div>
         </div>
-        <p className="text-[10px] text-[#E8E8D8]/50 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-          Custom range: {GAMES_PER_TEAM_MIN}–{GAMES_PER_TEAM_MAX} games per team.
-        </p>
       </div>
 
       {/* Innings Per Game */}
@@ -1017,7 +1255,7 @@ function Step2SeasonSettings({
               min={INNINGS_PER_GAME_MIN}
               max={INNINGS_PER_GAME_MAX}
               value={customInningsText}
-              onChange={(e) => setCustomInningsText(e.target.value)}
+              onChange={(e) => setCustomInningsDraft(e.target.value)}
               onBlur={commitCustomInnings}
               onKeyDown={commitOnEnter(commitCustomInnings)}
               className="w-14 bg-transparent border-0 outline-none text-sm font-bold text-inherit"
@@ -1025,9 +1263,6 @@ function Step2SeasonSettings({
             />
           </div>
         </div>
-        <p className="text-[10px] text-[#E8E8D8]/50 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-          Custom range: {INNINGS_PER_GAME_MIN}–{INNINGS_PER_GAME_MAX} innings.
-        </p>
       </div>
 
       {/* Extra Innings Rule */}
@@ -1105,17 +1340,8 @@ function Step2SeasonSettings({
         </div>
       </div>
 
-      {/* Schedule Policy */}
-      <div className="mb-6">
-        <p className="text-xs text-[#E8E8D8] font-bold mb-3 tracking-wide" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>SCHEDULE POLICY</p>
-        <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-4">
-          <p className="text-xs text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-            Manual schedule entry. New franchise seasons start empty.
-          </p>
-          <p className="text-[10px] text-[#C4A853] mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-            Add SMB4 games from the Franchise Schedule tab as you play them.
-          </p>
-        </div>
+      <div className="mb-6 border-4 border-[#E8E8D8] bg-[#4A6A42] p-4">
+        <p className="text-xs font-bold tracking-wide text-[#E8E8D8]">SCHEDULE AT LAUNCH: EMPTY</p>
       </div>
 
     </div>
@@ -1132,11 +1358,23 @@ function Step3PlayoffSettings({
 }) {
   const leagueTeamCount = config.leagueDetails?.teams || 16;
   const playoffTeamCountOptions = getValidPlayoffTeamCountOptions(leagueTeamCount);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>PLAYOFF SETTINGS (playoffs deferred -- settings saved for later)</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Configure the postseason structure</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>PLAYOFF SETTINGS (playoffs deferred -- settings saved for later)</h2>
+        <button type="button" aria-label="PLAYOFF SETTINGS HELP" aria-expanded={helpOpen} onClick={() => setHelpOpen((current) => !current)} className="flex h-11 w-11 shrink-0 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]">
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+      {helpOpen ? (
+        <aside aria-label="Playoff settings instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs leading-5 text-[#E8E8D8]/80">
+          <p>THESE DEFERRED SETTINGS SAVE A FUTURE POSTSEASON STRUCTURE.</p>
+          <p className="mt-2">BRACKET IS A TRADITIONAL ELIMINATION TOURNAMENT.</p>
+          <p className="mt-2">2-3-2 GIVES THE HIGHER SEED GAMES 1-2 AND 6-7 AT HOME; THE LOWER SEED HOSTS GAMES 3-5.</p>
+        </aside>
+      ) : null}
 
       {/* Teams Qualifying */}
       <div className="mb-6">
@@ -1209,7 +1447,6 @@ function Step3PlayoffSettings({
               );
             })}
           </div>
-          <p className="text-[10px] text-[#C4A853]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>ℹ️ Bracket: Traditional elimination tournament</p>
         </div>
       </div>
 
@@ -1290,10 +1527,6 @@ function Step3PlayoffSettings({
               </button>
             ))}
           </div>
-          <div className="text-[10px] text-[#C4A853] space-y-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>
-            <p>ℹ️ 2-3-2: Higher seed hosts G1-2 and G6-7</p>
-            <p className="ml-7">Lower seed hosts G3-4-5</p>
-          </div>
         </div>
       </div>
 
@@ -1342,17 +1575,27 @@ function Step4TeamControl({
   setConfig: (config: FranchiseConfig) => void;
   leagueTeams: Team[];
 }) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const defaultSeatId = config.teams.seats?.[0]?.id ?? "seat-you";
   const toggleTeam = (teamId: string) => {
     const isSelected = config.teams.selectedTeams.includes(teamId);
     const newSelected = isSelected
       ? config.teams.selectedTeams.filter((id) => id !== teamId)
       : [...config.teams.selectedTeams, teamId];
+    const team = leagueTeams.find((candidate) => candidate.id === teamId);
+    const priorOwner = config.teams.playerAssignments[teamId];
 
     setConfig({
       ...config,
       teams: {
         ...config.teams,
         selectedTeams: newSelected,
+        playerAssignments: {
+          ...config.teams.playerAssignments,
+          [teamId]: isSelected
+            ? "cpu"
+            : team?.gmSeatId || (priorOwner && priorOwner !== "cpu" ? priorOwner : defaultSeatId),
+        },
       },
     });
   };
@@ -1363,6 +1606,12 @@ function Step4TeamControl({
       teams: {
         ...config.teams,
         selectedTeams: leagueTeams.map((t) => t.id),
+        playerAssignments: Object.fromEntries(leagueTeams.map((team) => [
+          team.id,
+          team.gmSeatId
+            || (config.teams.playerAssignments[team.id] !== "cpu" ? config.teams.playerAssignments[team.id] : undefined)
+            || defaultSeatId,
+        ])),
       },
     });
   };
@@ -1373,6 +1622,7 @@ function Step4TeamControl({
       teams: {
         ...config.teams,
         selectedTeams: [],
+        playerAssignments: Object.fromEntries(leagueTeams.map((team) => [team.id, "cpu"])),
       },
     });
   };
@@ -1392,10 +1642,17 @@ function Step4TeamControl({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SELECT YOUR TEAM(S)</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-        Click teams you want to control. Unselected teams remain uncontrolled and use manual score entry.
-      </p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>SELECT YOUR TEAM(S)</h2>
+        <button type="button" aria-label="TEAM CONTROL HELP" aria-expanded={helpOpen} onClick={() => setHelpOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]">
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+      {helpOpen ? (
+        <aside aria-label="Team control instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs text-[#E8E8D8]/80">
+          SELECT THE TEAMS YOU CONTROL. UNSELECTED TEAMS USE MANUAL SCORE ENTRY.
+        </aside>
+      ) : null}
 
       {/* Quick Select */}
       <div className="bg-[#4A6A42] border-4 border-[#E8E8D8] p-3 mb-6 flex gap-2 flex-wrap">
@@ -1547,6 +1804,7 @@ function Step5RosterMode({
   farmScoutingError: string | null;
 }) {
   const navigate = useNavigate();
+  const [helpOpen, setHelpOpen] = useState(false);
   const farmStatusText = farmScoutingLoading
     ? "Checking League Builder farm/scouting handoff..."
     : farmScoutingError
@@ -1561,8 +1819,35 @@ function Step5RosterMode({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>ROSTER MODE</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Choose how team rosters will be populated</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>ROSTER MODE</h2>
+        <button
+          type="button"
+          aria-label="ROSTER MODE HELP"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen((open) => !open)}
+          className="inline-flex items-center gap-2 border-2 border-[#C4A853] bg-[#3A5A32] px-3 py-2 text-xs font-bold text-[#C4A853] hover:bg-[#4A6A42]"
+        >
+          <CircleHelp className="h-4 w-4" /> HELP
+        </button>
+      </div>
+
+      {helpOpen ? (
+        <aside className="mb-5 border-2 border-[#C4A853] bg-[#3A5A32] p-4 text-xs text-[#E8E8D8]/80" role="note">
+          <p className="mb-3 font-bold text-[#C4A853]">Choose how team rosters will be populated.</p>
+          <div className="space-y-2">
+            <p>Start with the current rosters from League Builder. Teams keep their assigned players.</p>
+            <p>Franchise creation validates all {leagueTeams.length} teams. Required contract: 22 MLB + 10 FARM players per team.</p>
+            <p>Startup farm/scouting belongs to League Builder. Franchise Setup validates and copies prepared state.</p>
+            <p>{farmStatusText}</p>
+            <p>Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time.</p>
+            <p>Franchise Setup does not auto-fill farms. It only validates and copies prepared League Builder state.</p>
+            <p>Drafted prospects keep true ratings and hidden personality modifiers hidden until call-up.</p>
+            <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
+            <p>Franchise v1 uses existing League Builder MLB rosters. Fantasy MLB drafting stays deferred.</p>
+          </div>
+        </aside>
+      ) : null}
 
       {/* Existing Rosters Option */}
       <div
@@ -1589,10 +1874,7 @@ function Step5RosterMode({
             {config.roster.mode === "existing" && <div className="w-full h-full rounded-full bg-[#4A6A42] scale-50" />}
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>USE EXISTING ROSTERS</h3>
-            <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Start with the current rosters from League Builder.</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Teams keep their assigned players.</p>
+            <h3 className="text-sm font-bold text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>USE EXISTING ROSTERS</h3>
           </div>
         </button>
 
@@ -1601,25 +1883,12 @@ function Step5RosterMode({
             <p className="text-xs text-[#E8E8D8]/70 mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>ROSTER SUMMARY</p>
             <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
             <div className="space-y-2 mb-3">
-              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Franchise creation validates all {leagueTeams.length} teams</p>
-              <p className="text-xs text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>✓ Required contract: 22 MLB + 10 FARM players per team</p>
-              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Startup farm/scouting belongs to League Builder. Franchise Setup validates and copies prepared state.</p>
-              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>{farmStatusText}</p>
+              <p className="text-xs font-bold text-[#00CC00]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>22 MLB + 10 FARM</p>
+              <p className="text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
+                HANDOFF: {farmScoutingLoading ? "CHECKING" : farmScoutingReport?.status === "prepared" ? "PREPARED" : farmScoutingError ? "UNAVAILABLE" : "BLOCKED"}
+              </p>
             </div>
             <button onClick={() => navigate('/league-builder/players')} className="text-xs text-[#C4A853] hover:text-[#FFD700] underline" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>[Review League Builder Players]</button>
-          </div>
-        )}
-
-        {config.roster.mode === "existing" && (
-          <div className="mt-4 bg-[#3A5A32] border-2 border-[#C4A853] p-4">
-            <p className="text-xs text-[#C4A853] font-bold mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>STARTUP PROSPECT DRAFT</p>
-            <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-            <div className="space-y-2 text-xs text-[#E8E8D8]/70" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>
-              <p>Use League Builder Draft to hire one scout for every team, then draft FARM prospects one pick at a time.</p>
-              <p>Franchise Setup does not auto-fill farms. It only validates and copies prepared League Builder state.</p>
-              <p>Drafted prospects keep true ratings and hidden personality modifiers hidden until call-up.</p>
-              <p>No fantasy MLB draft, AI game simulation, or generated regular-season schedule is enabled.</p>
-            </div>
           </div>
         )}
       </div>
@@ -1636,12 +1905,147 @@ function Step5RosterMode({
             className="w-6 h-6 rounded-full border-4 flex-shrink-0 mt-1 border-[#E8E8D8] bg-transparent"
           />
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-[#E8E8D8] mb-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT (DEFERRED)</h3>
-            <div className="h-[1px] bg-[#E8E8D8]/30 mb-3" />
-            <p className="text-xs text-[#E8E8D8]/70 mb-1" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Franchise v1 uses existing League Builder MLB rosters.</p>
-            <p className="text-xs text-[#E8E8D8]/70 mb-4" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>The final startup farm/scouting workflow belongs in League Builder; fantasy MLB drafting stays deferred.</p>
+            <h3 className="text-sm font-bold text-[#E8E8D8]" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}>FANTASY DRAFT (DEFERRED)</h3>
           </div>
         </button>
+      </div>
+    </div>
+  );
+}
+
+function DraftHandoffConfirm({
+  config,
+  setConfig,
+  leagueTeams,
+  farmScoutingReport,
+  farmScoutingLoading,
+  farmScoutingError,
+  onRetryHandoff,
+  livingSeasonEnabled,
+  setLivingSeasonEnabled,
+}: {
+  config: FranchiseConfig;
+  setConfig: (config: FranchiseConfig) => void;
+  leagueTeams: Team[];
+  farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
+  farmScoutingLoading: boolean;
+  farmScoutingError: string | null;
+  onRetryHandoff: () => void;
+  livingSeasonEnabled: boolean;
+  setLivingSeasonEnabled: (enabled: boolean) => void;
+}) {
+  const [helpOpen, setHelpOpen] = useState(false);
+  const selectedTeams = leagueTeams.filter((team) => config.teams.selectedTeams.includes(team.id));
+  const handoffReady = farmScoutingReport?.status === "prepared" && !farmScoutingError;
+
+  return (
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold tracking-[0.16em] text-[#C4A853]">DRAFT HANDOFF</p>
+          <h2 className="mt-1 text-lg font-bold tracking-wide text-[#E8E8D8]" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>CONFIRM &amp; LAUNCH</h2>
+        </div>
+        <button
+          type="button"
+          aria-label="FRANCHISE SETUP HELP"
+          aria-expanded={helpOpen}
+          onClick={() => setHelpOpen((current) => !current)}
+          className="flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]"
+        >
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+
+      {helpOpen ? (
+        <aside aria-label="Franchise launch instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs leading-5 text-[#E8E8D8]/80">
+          <p>THE COMPLETED MLB AND FARM DRAFTS SUPPLY THE ROSTERS. THEY CANNOT BE CHANGED IN FRANCHISE SETUP.</p>
+          <p className="mt-2">PLAYOFF SETUP IS DEFERRED. THE FRANCHISE LAUNCHES WITH NO SCHEDULE; ADD GAMES MANUALLY OR IMPORT A CSV FROM THE LIVING SEASON SCHEDULE SCREEN.</p>
+          <p className="mt-2">LIVING SEASON LETS RATINGS, FAME, MORALE, RELATIONSHIPS, AND NARRATIVE CHANGE AS GAMES ARE PLAYED. THIS CHOICE LOCKS AT CREATION.</p>
+          <p className="mt-2">THE GM NAME APPEARS ON ROSTER AND DRAFT MOVES. LEAVE IT BLANK TO GENERATE ONE.</p>
+        </aside>
+      ) : null}
+
+      <section className="mb-6 border-4 border-[#E8E8D8] bg-[#3A5A32] p-4" aria-label="Completed draft handoff">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold tracking-wide text-[#E8E8D8]">{config.leagueDetails?.name ?? "LEAGUE"}</p>
+            <p className="mt-1 text-[10px] font-bold text-[#C4A853]">MLB + FARM DRAFT PICKS COMPLETE</p>
+          </div>
+          <p className={`text-xs font-bold ${handoffReady ? "text-[#9FE0A0]" : "text-[#FFD27A]"}`}>
+            {farmScoutingLoading ? "CHECKING HANDOFF" : handoffReady ? "ROSTERS READY" : "ROSTER HANDOFF BLOCKED"}
+          </p>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {selectedTeams.map((team) => (
+            <div
+              key={team.id}
+              className="flex min-w-[150px] items-center gap-2 border-2 bg-[#2A4A22] p-2"
+              style={{ borderColor: team.colors?.primary || '#E8E8D8' }}
+            >
+              {team.logoUrl ? (
+                <img alt="" src={team.logoUrl} className="h-9 w-9 object-contain" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 text-[10px] font-bold"
+                  style={{
+                    backgroundColor: team.colors?.primary || '#666',
+                    borderColor: team.colors?.secondary || '#E8E8D8',
+                    color: team.colors?.secondary || '#E8E8D8',
+                  }}
+                >
+                  {team.abbreviation}
+                </span>
+              )}
+              <span className="text-[10px] font-bold text-[#E8E8D8]">{team.name}</span>
+            </div>
+          ))}
+        </div>
+        {!farmScoutingLoading && !handoffReady ? (
+          <div className="mt-4 border-2 border-[#FFD27A] bg-[#6B3A3A] p-3">
+            <p className="text-xs font-bold text-[#FFE8B0]">{farmScoutingError ?? farmScoutingReport?.blockers.join(' ') ?? "THE COMPLETED FARM HANDOFF COULD NOT BE VERIFIED."}</p>
+            <button type="button" onClick={onRetryHandoff} className="mt-3 inline-flex items-center gap-2 border-2 border-[#E8E8D8] bg-[#C4A853] px-3 py-2 text-xs font-bold text-[#1A1A1A]">
+              <RefreshCw className="h-4 w-4" /> RECHECK HANDOFF
+            </button>
+          </div>
+        ) : null}
+      </section>
+
+      <label className="mb-5 block text-xs font-bold tracking-wide text-[#E8E8D8]">
+        FRANCHISE NAME
+        <input
+          type="text"
+          value={config.franchiseName}
+          onChange={(event) => setConfig({ ...config, franchiseName: event.target.value })}
+          className="mt-2 w-full border-4 border-[#E8E8D8] bg-[#2A4A22] px-4 py-3 text-sm text-[#E8E8D8]"
+        />
+      </label>
+
+      <label className="mb-5 block text-xs font-bold tracking-wide text-[#E8E8D8]">
+        GM NAME
+        <input
+          type="text"
+          value={config.gmName ?? ''}
+          onChange={(event) => setConfig({ ...config, gmName: event.target.value })}
+          className="mt-2 w-full border-4 border-[#E8E8D8] bg-[#2A4A22] px-4 py-3 text-sm text-[#E8E8D8]"
+        />
+      </label>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={livingSeasonEnabled}
+        onClick={() => setLivingSeasonEnabled(!livingSeasonEnabled)}
+        className={`mb-5 flex w-full items-center justify-between border-4 p-4 text-left ${livingSeasonEnabled ? "border-[#C4A853] bg-[#3A5A32]" : "border-[#E8E8D8] bg-[#4A6A42]"}`}
+      >
+        <span className="text-xs font-bold tracking-[0.16em] text-[#E8E8D8]">LIVING SEASON</span>
+        <span className="text-xs font-bold text-[#C4A853]">{livingSeasonEnabled ? "ON" : "OFF"}</span>
+      </button>
+
+      <div className="grid gap-2 border-4 border-[#E8E8D8] bg-[#3A5A32] p-4 text-xs font-bold text-[#E8E8D8] sm:grid-cols-3">
+        <span>{config.season.gamesPerTeam} GAMES</span>
+        <span>{config.season.inningsPerGame} INNINGS</span>
+        <span>SCHEDULE: EMPTY</span>
       </div>
     </div>
   );
@@ -1652,7 +2056,6 @@ function Step6Confirm({
   config,
   setConfig,
   jumpToStep,
-  leagues,
   leagueTeams,
   farmScoutingReport,
   farmScoutingLoading,
@@ -1663,7 +2066,6 @@ function Step6Confirm({
   config: FranchiseConfig;
   setConfig: (config: FranchiseConfig) => void;
   jumpToStep: (step: number) => void;
-  leagues: LeagueTemplate[];
   leagueTeams: Team[];
   farmScoutingReport: LeagueBuilderFarmScoutingValidationReport | null;
   farmScoutingLoading: boolean;
@@ -1671,6 +2073,7 @@ function Step6Confirm({
   livingSeasonEnabled: boolean;
   setLivingSeasonEnabled: (enabled: boolean) => void;
 }) {
+  const [helpOpen, setHelpOpen] = useState(false);
   const selectedTeams = leagueTeams.filter((t) => config.teams.selectedTeams.includes(t.id));
   const farmScoutingSummary = farmScoutingLoading
     ? "Checking League Builder farm/scouting handoff"
@@ -1686,8 +2089,19 @@ function Step6Confirm({
 
   return (
     <div>
-      <h2 className="text-lg font-bold text-[#E8E8D8] mb-2 tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>CONFIRM & START</h2>
-      <p className="text-xs text-[#E8E8D8]/70 mb-6" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>Review your settings and begin your franchise</p>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-[#E8E8D8] tracking-wide" style={{ textShadow: '2px 2px 0px rgba(0,0,0,0.3)' }}>CONFIRM &amp; START</h2>
+        <button type="button" aria-label="FRANCHISE CONFIRM HELP" aria-expanded={helpOpen} onClick={() => setHelpOpen((current) => !current)} className="flex h-11 w-11 items-center justify-center border-4 border-[#E8E8D8] bg-[#4A6A42]">
+          <CircleHelp className="h-5 w-5" />
+        </button>
+      </div>
+      {helpOpen ? (
+        <aside aria-label="Franchise confirmation instructions" className="mb-6 border-4 border-[#C4A853] bg-[#3A5A32] p-4 text-xs leading-5 text-[#E8E8D8]/80">
+          <p>REVIEW THE SAVED SETTINGS BEFORE STARTING THE FRANCHISE.</p>
+          <p className="mt-2">LIVING SEASON LETS RATINGS, FAME, MORALE, RELATIONSHIPS, AND NARRATIVE CHANGE AS GAMES ARE PLAYED. THIS CHOICE LOCKS AT CREATION.</p>
+          <p className="mt-2">THE GM NAME APPEARS ON ROSTER AND DRAFT MOVES. LEAVE IT BLANK TO GENERATE ONE.</p>
+        </aside>
+      ) : null}
 
       {/* Franchise Name */}
       <div className="mb-6">
@@ -1733,9 +2147,6 @@ function Step6Confirm({
             <span className="block text-xs font-bold tracking-[0.16em] text-[#E8E8D8]">
               LIVING SEASON
             </span>
-            <span className="mt-1 block text-xs leading-5 text-[#E8E8D8]/70">
-              Ratings, fame, morale, relationships, and narrative evolve as you play. Locked in at creation for this season.
-            </span>
           </span>
         </span>
       </button>
@@ -1756,7 +2167,6 @@ function Step6Confirm({
           style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.3)' }}
           placeholder="Enter your GM name (or leave blank for a generated one)..."
         />
-        <p className="text-xs text-[#E8E8D8]/60 mt-2" style={{ textShadow: '1px 1px 0px rgba(0,0,0,0.2)' }}>You are the GM — your name appears on roster &amp; draft moves.</p>
       </div>
 
       {/* Settings Summary */}

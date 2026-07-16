@@ -535,3 +535,68 @@ Pitcher-batting luxury rows remain enabled with unchanged juiced caps:
 | 2.0x tierCap ($2,411,672) | $1,907,231 | all identities PASS within ±10% |
 
 Status: **V117-FIX complete**.
+
+## 2026-07-15 ADDENDUM — usage-aware pitcher secondary tax and Two Way split
+
+This addendum supersedes the raw pitcher-batting cap values above for newly generated luxury tables.
+The full IV/workbook anchor path predates later KBL positional re-blessings, so the canonical analyzer
+now has a deterministic `--luxury-only` path. It re-derives rating caps from current stock players while
+preserving the already-ratified tier salary caps, tax dollar coefficients, flat adders, and curves.
+
+Ordinary pitcher POW/CON/SPD/FLD is measured at role exposure. SP exposure is `.19625/.19625/.31625/.25`;
+SP/RP is `.15/.15/.25/.18`; RP is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Tax FLD deliberately uses
+defensive start/range exposure; salary/IV retains its separate full pitcher-FLD value. Two Way pitchers
+enter hitter POW/CON/SPD/FLD at full use, remain in pitcher VEL/JNK/ACC, and are excluded from pitcher
+secondary rows. SP/RP arms are assigned exactly once from the complete roster by the settlement
+engine's pure-starters-first rule. Pitcher ARM remains excluded.
+
+### Re-derived pitcher-secondary caps
+
+| Tier | rot POW | rot CON | rot SPD | rot FLD | pen POW | pen CON | pen SPD | pen FLD |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Juiced | 17.5 | 17.3 | 35.3 | 64.8 | 6.9 | 7.0 | 22.1 | 23.6 |
+| Standard | 16.7 | 16.6 | 33.7 | 61.9 | 6.6 | 6.7 | 21.1 | 22.5 |
+| Nerfed | 16.0 | 15.9 | 32.3 | 59.3 | 6.3 | 6.4 | 20.2 | 21.6 |
+
+The Two Way cohort also moves the Juiced hitter-CON cap from `607.2` to `616.0` (Standard `587.8`,
+Nerfed `563.2`). Other hitter and pitcher VEL/JNK/ACC cap inputs remain on their prior basis. Every new
+row carries `pitcher-role-usage-v1`; markerless saved rows retain legacy raw-rating behavior.
+
+Verification: the luxury-only generator is byte-deterministic (`tierParams.ts` SHA-256
+`de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`). The 24-archetype rerun,
+including stock SP/RP Two Way Norm Fenomeno and an absolute solvency gate, builds legal and solvent
+rosters for all 24 identities and leaves them within ±10%: Juiced max `4.9%`, Standard max `2.8%`,
+Nerfed max `3.5%`.
+
+## 2026-07-16 ADDENDUM — starter-hitting ablation and relief-role proof
+
+The four starter-hitting identities were rerun against otherwise-identical versions with rotation
+POW/CON shifts set to zero. The pre-usage reference was reproduced directly at `9e5901d7`, not
+estimated from its documentation. Usage weighting reduced the economic shelter sharply: for example,
+at Standard and a 50-point raw rotation overage, the original +10% POW axis relieved `$164,194`, while
+the corrected +10% axis relieves `$5,809`. Literal restoration of the old everyday-player dollars was
+rejected because it would contradict actual playing time.
+
+Bash Brothers' existing +15% rotation POW and Launch & Leather's +10% rotation POW/CON still selected
+meaningfully stronger-hitting rotations in both Standard and Nerfed. Flamethrowers' +10% POW/CON and
+HDH Royals' +10% CON were flat against their zero-axis rosters in at least one priority tier. The
+smallest simple ladder values that produced a positive combined starter-hitting selection difference
+in both tiers were:
+
+| Archetype | Final rotation-hitting shift | Standard raw-equivalent headroom | Nerfed raw-equivalent headroom |
+|---|---:|---:|---:|
+| Bash Brothers | POW +15% (unchanged) | POW +12.8 | POW +12.2 |
+| Launch & Leather | POW +10%, CON +10% (unchanged) | POW +8.5, CON +8.5 | POW +8.2, CON +8.1 |
+| Flamethrowers | POW +30%, CON +30% | POW +25.5, CON +25.4 | POW +24.5, CON +24.3 |
+| HDH Royals | CON +40% | CON +33.8 | CON +32.4 |
+
+No other boost, sacrifice, cap, coefficient, roster rule, optimizer objective, or tier budget changed.
+The full parity result remains Juiced `4.9%`, Standard `2.8%`, and Nerfed `3.5%` maximum deviation,
+with every roster legal and solvent.
+
+Relievers use the same exposure law rather than an everyday-player shortcut. RP weights are
+POW/CON/SPD/FLD `.08/.08/.16/.06`; CP weights are `.05/.05/.11/.05`. In the authoritative Standard
+settlement, one 80-rated RP plus one 80-rated CP contributes only `10.4/10.4/21.6/8.8` to bullpen
+POW/CON/SPD/FLD. Against the real caps, only POW, CON, and SPD bind, at rounded tax `$7,780`, `$4,630`,
+and `$2,933`; FLD does not bind. A Two Way reliever's POW/CON/SPD/FLD instead enters hitter rows at full
+use and is rejected from bullpen secondary rows, while VEL/JNK/ACC remains in the bullpen group.

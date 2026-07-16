@@ -21,18 +21,18 @@ below proves.
 
 ### The six flavors
 Every archetype is built from shifts across six areas: **Power · Contact · Speed · Defense** (fielding + arm) **·
-Rotation** (starter velo/junk/command) **· Bullpen** (reliever velo/junk/command). The 24 are spread across all six
+Rotation** (starter batting power/contact plus velo/junk/command) **· Bullpen** (reliever velo/junk/command). The 24 are spread across all six
 so a GM has real variety in every direction, not just the pitching-heavy skew the original 15 leaned toward.
 
 ### How these are balanced (and why it's trustworthy)
 1. **Equal total value.** Each archetype builds its best-possible 22-man roster from the same player pool; every
    archetype's total team value lands within **±10%** of the group average, across all three difficulty tiers
-   (max deviation observed, per tier, live gate as of ARCHLOCK 2026-07-09: **7.7%** juiced / **3.8%** standard /
-   **7.9%** nerfed — supersedes the earlier single-figure "4.4%" headline, which predated the 2026-07-04/05 economy
-   retunes). No identity can build a richer roster than any other.
-2. **Legal rosters only.** That comparison is run on **real, fieldable SMB4 rosters** — 8 field starters (one of
+   (max deviation observed, per tier, live gate as of 2026-07-15: **4.9%** juiced / **2.8%** standard /
+   **3.5%** nerfed). Standard and Nerfed are the product calibration priorities; Juiced remains a compatibility
+   guard inside the same band. No identity can build a richer roster than any other.
+2. **Legal, solvent rosters only.** That comparison is run on **real, fieldable SMB4 rosters** — 8 field starters (one of
    each position), a required backup catcher, 4 starters, 4–5 relievers, a 4–5-man bench (14 position + 8 pitchers,
-   or 13 + 9). So the result translates to an actual auction draft, not to impossible teams. (Canonical definition:
+   or 13 + 9) — and every salary-plus-tax bill is inside the tier budget. So the result translates to an actual auction draft, not to impossible teams. (Canonical definition:
    `src/data/rosterConstruction.ts`.)
 3. **Deferred:** a full head-to-head *win-rate* simulation (do equal-value teams win at equal rates when they
    actually play?) is a later project — see the decision record. v1 ships on equal-value + legal rosters.
@@ -61,8 +61,8 @@ Launch-angle thunder: 430 feet or a whiff. **+power → −contact −speed.**
 > Power +6 (cap +10%) · Contact −9 (cap −15%) · Speed −7 (cap −12%)
 
 ### Bash Brothers — *1989 Athletics · 1996 Mariners*
-Forearm-bashing bombs and cannon arms; the pitching leaks. **+power +arm → −command (rotation & bullpen).**
-> Power +5 (cap +7.5%) · Arm +7 (cap +12%) · Rotation command −15 (cap −25%) · Bullpen command −9 (cap −15%)
+Forearm-bashing bombs — even the starters can take you deep, but nobody locates. **+power +arm +starter power → −command (rotation & bullpen).**
+> Power +5 (cap +7.5%) · Arm +7 (cap +12%) · Starter batting power +13 raw-equivalent rotation points at Standard (usage-weighted rotation POW cap +15%) · Rotation command −15 (cap −25%) · Bullpen command −9 (cap −15%)
 >
 > *Corrected 2026-07-09: bullpen command re-banded (−18 / cap −30% → −9 / cap −15%) — retuned for
 > value-parity during the 2026-07-04 economy work (require-a-closer, commit `f71059ec`; companion
@@ -71,8 +71,8 @@ Forearm-bashing bombs and cannon arms; the pitching leaks. **+power +arm → −
 > blows the ±10% band (Bash −13.9% nerfed) while the current value sits in band at all three tiers.*
 
 ### Launch & Leather — *2016 Cubs · 2021 Astros*
-Mash and pick it clean; if the staff could find the zone they'd be unbeatable. **+power +defense → −command.**
-> Power +5 (cap +7.5%) · Fielding +13 (cap +22%) · Rotation command −12 (cap −20%) · Bullpen command −10.8 (cap −18%)
+Mash and pick it clean — even the starters hit, but the staff still cannot find the zone. **+power +defense +complete starter bats → −command.**
+> Power +5 (cap +7.5%) · Fielding +13 (cap +22%) · Starter batting power +9 raw-equivalent rotation points at Standard (usage-weighted rotation POW cap +10%) · Starter batting contact +8 raw-equivalent rotation points at Standard (usage-weighted rotation CON cap +10%) · Rotation command −12 (cap −20%) · Bullpen command −10.8 (cap −18%)
 > *CONTRACT_TAXSWING_2026-07-10 Amendment 1 parity retune; identity direction and flavor unchanged.*
 
 ### Gap-to-Gap — *2003 Red Sox · 1996 Indians*
@@ -149,8 +149,8 @@ Maddux–Glavine: paint corners, change speeds; ordinary bats. **+rotation comma
 > Rotation command +23 (cap +37.5%) · Rotation junk +18 (cap +30%) · Power −3 (cap −5%) · Rotation velo −10 (cap −16%)
 
 ### Flamethrowers — *1963 Dodgers (Koufax/Drysdale)*
-Koufax–Drysdale heat; the lineup is along for the ride. **+rotation velocity → −power −contact.**
-> Rotation velo +19 (cap +32%) · Power −3 (cap −5%) · Contact −6 (cap −10%)
+Koufax–Drysdale heat, with just enough damage from the pitcher spot. **+rotation velocity +starter hitting → −lineup power −contact.**
+> Rotation velo +19 (cap +32%) · Starter batting power +26 raw-equivalent rotation points at Standard (usage-weighted rotation POW cap +30%) · Starter batting contact +25 raw-equivalent rotation points at Standard (usage-weighted rotation CON cap +30%) · Power −3 (cap −5%) · Contact −6 (cap −10%)
 
 ### Dead-Ball Suppressors — *1906 Cubs · 1907 Tigers*
 Win 2–1: a bunt, a steal, and a junkballer who never gives in. **+rotation finesse +contact → −power −bullpen velo.**
@@ -169,8 +169,8 @@ Bullpenning: relievers over starters. **+bullpen → −rotation.**
 > Bullpen velo +18 (cap +30%) · Bullpen junk +21 (cap +35%) · Rotation velo −14 (cap −24%) · Rotation command −15 (cap −25%)
 
 ### HDH Royals — *2014–15 Royals*
-Shorten the game: a lockdown pen and fast gloves. **+bullpen command +speed → −power −rotation command.**
-> Bullpen command +5 (cap +9%) · Speed +7 (cap +12%) · Power −2 (cap −2.5%) · Rotation command −4 (cap −6.25%)
+The starters put the ball in play, then a precise bullpen shortens the game. **+bullpen command +speed +starter contact → −power −rotation command.**
+> Bullpen command +5 (cap +9%) · Speed +7 (cap +12%) · Starter batting contact +34 raw-equivalent rotation points at Standard (usage-weighted rotation CON cap +40%) · Power −2 (cap −2.5%) · Rotation command −4 (cap −6.25%)
 >
 > *Corrected 2026-07-09: retuned (bullpen command +27 / cap +45% → +5 / cap +9%; power −5 / cap −7.5%
 > → −2 / cap −2.5%; rotation command −15 / cap −25% → −4 / cap −6.25%; speed unchanged) for
@@ -185,9 +185,32 @@ Shorten the game: a lockdown pen and fast gloves. **+bullpen command +speed → 
 
 ## Methodology notes
 
+- **Starter batting axes are role-specific.** They shift only the top-four rotation POW/CON tax rows and
+  affect only startable pitchers in exact team-fit scoring. They never widen hitter or bullpen caps.
+- **Pitcher secondary tax is usage-adjusted.** Ordinary pitcher POW/CON/SPD/FLD is multiplied by
+  canonical role exposure before entering rotation/bullpen top-four rows. Two Way pitcher batting
+  instead enters hitter POW/CON/SPD/FLD at full use and is omitted from those pitcher-secondary rows;
+  VEL/JNK/ACC stays in the proper pitcher group. SP/RP arms are assigned once from the complete roster
+  by the same pure-starters-first rule used at tax settlement. Pitcher ARM remains excluded.
+- **2026-07-16 recalibration:** an exact `9e5901d7` versus usage-aware zero-axis ablation showed that
+  Bash Brothers' +15% starter POW and Launch & Leather's +10% starter POW/CON still changed their
+  selected rotations in both priority tiers, so increasing them would overcorrect. Flamethrowers'
+  +10% POW/CON and HDH's +10% CON were flat against their zero-axis builds in at least one priority
+  tier. The smallest simple multipliers with a visible Standard and Nerfed roster effect are
+  Flamethrowers **+30% rotation POW/CON** and HDH **+40% rotation CON**. No other identity lever changed.
+- **Ordinary relief hitting is already discounted, not taxed as everyday offense.** RP exposure is
+  POW/CON/SPD/FLD `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Two Way relievers instead enter hitter
+  POW/CON/SPD/FLD at full use and are excluded from the bullpen secondary rows, preventing double tax.
+- **2026-07-16 measured results after the retune (Juiced / Standard / Nerfed):** Bash Brothers
+  **+0.5 / −0.5 / +0.4%**; Launch & Leather **+0.4 / +0.2 / +0.4%**; Flamethrowers
+  **+0.4 / +0.3 / −0.1%**; HDH Royals **−0.1 / +0.2 / +0.4%**. Every simulated roster is legal
+  and solvent; all 24 remain in band with maximum deviations of **4.9 / 2.8 / 3.5%**.
+
 - **Estimated rating points** = the archetype's cap-shift fraction for that area × ~60 (a typical rostered rating),
-  rounded. It's a rough translation of *tax-free headroom* onto the 0–99 rating scale — a design feel, not a
-  per-player buff. The **cap shift %** beside it is the exact, tunable design value
+  rounded. Starter POW/CON instead reports the usage-weighted cap headroom converted back into raw
+  four-man-rotation points at Standard, because those ratings are not everyday-player inputs. Both are rough
+  translations of *tax-free headroom* onto the 0–99 rating scale — design feel, not a per-player buff.
+  The **cap shift %** beside it is the exact, tunable design value
   (`spec` × `ARCHETYPE_STAT_UNIT` in `historicalArchetypes.ts`).
 - **Value calibration.** `ARCHETYPE_STAT_UNIT` is deliberately *inverse to value* — small for premium stats
   (Power 0.05), large for cheap ones (Fielding 0.22, Bullpen junk 0.35) — so a "1.0" boost is roughly

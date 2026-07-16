@@ -2,6 +2,16 @@
 # LAYERED DOCUMENT: later sections supersede earlier on any conflict.
 # Layer order: v5 core → v5.1 versions addendum → v5-FINAL redline → JK closing rulings.
 
+> **CURRENT RULING (2026-07-14):** FARM draft-pick trades are retired. MLB draft-pick
+> trades remain part of the guide and commissioner flow. In-season player trades are a
+> separate Living Season system and are unchanged. Any older FARM-trade sentence below is
+> preserved as historical design evidence and superseded by this ruling.
+
+> **IMPLEMENTATION STATUS (2026-07-14; code commit `f8ca392d`):** the approved v1 vision and
+> subsequent intelligence/UI hardening are built and independently automated-verified. Final
+> gates are 686 passed files / 10,227 passed tests and 17/17 browser journeys. JK's hands-on
+> browser walk remains the sole product-acceptance gate.
+
 # THE KBL SNAKE DRAFT — THE VISION v5 (integrates JK's prediction-engine + tax-core rulings)
 # Supersedes v4. New/changed sections marked [v5]. Everything else carried whole from v4.
 
@@ -103,7 +113,7 @@ planning-side money view — clearly labeled as the PLAN's bill, not today's.
 ## THE FARM SNAKE (carried)
 Short snake, fog (scout bands; SCOUT'S CALL), slotted rookie salaries by absolute pick,
 positional rankings + board under fog, no survival reads (public pressure counts only),
-guide+commissioner trades. [v5] The rational room runs on farm using SCOUT-VISIBLE data
+no draft-pick trades. [v5] The rational room runs on farm using SCOUT-VISIBLE data
 only (no truth leakage through risk reads — the model sees what a scout sees).
 
 ## SEASON HANDOFF (carried; built + proven)

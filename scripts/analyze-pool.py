@@ -80,6 +80,18 @@ LUXURY_CAP_PERCENTILE = 0.65
 EV_FLATNESS_TOLERANCE = 0.10
 N_TEAMS = 20  # contention ladder depth = league size the 440 pool implies (440/22)
 
+# JK ruling 2026-07-15: pitcher POW/CON stay active at their empirical top-four caps,
+# but their response is a quadratic KBL override instead of the workbook's linear cliff.
+PITCHER_SECONDARY_BATTING_ROWS = {
+    ("rotation", "POW"),
+    ("rotation", "CON"),
+    ("bullpen", "POW"),
+    ("bullpen", "CON"),
+}
+PITCHER_SECONDARY_BATTING_PENALTY_CURVE = 2.0
+PITCHER_SECONDARY_BATTING_STATS = {"POW", "CON", "SPD", "FLD"}
+LUXURY_TAX_RATING_BASIS = "pitcher-role-usage-v1"
+
 
 # §3.9 registry-style inputs. The script stores the derivation inputs, then emits the
 # calibrated weights; downstream kblIV never consumes opaque hand-picked role weights.
@@ -97,6 +109,21 @@ def role_usage_weights(role):
     bat = inp["startShare"] * inp["paRatio"] + inp["phFloor"]
     spd = min(1.0, bat + inp["prFloor"] + inp["rangeFloor"])
     return {"POW": bat, "CON": bat, "SPD": spd, "FLD": 1.0}
+
+
+def luxury_tax_role_usage_weights(role):
+    """Playing-time exposure for pitcher secondary-rating luxury tax.
+
+    IV retains full pitcher fielding value. Tax uses defensive start/range exposure so
+    a starter who appears once per rotation turn is not treated as an everyday fielder.
+    """
+    weights = role_usage_weights(role)
+    inp = USAGE_WEIGHT_INPUTS[role]
+    return {**weights, "FLD": max(inp["startShare"], inp["rangeFloor"])}
+
+
+def is_two_way(p):
+    return any(trait in TWO_WAY_TRAIT_POS for trait in p.get("traits", []))
 
 
 def emit_usage_weights():
@@ -173,9 +200,9 @@ def parse_curves():
         curves[pos] = attrs
     if len(curves) != 18:
         fail(f"ivCurves.ts: expected 18 position blocks, parsed {len(curves)}: {sorted(curves)}")
-    # spec §3.3 anchor
+    # D17 KBL-reblessed positional-scarcity anchor (not the pre-D17 workbook value).
     c_pow = curves["C"]["POW"]["primary"]
-    if (c_pow["min"], c_pow["curve1"], c_pow["mid"], c_pow["midSal"], c_pow["curve2"], c_pow["sal100"]) != (0, 1, 50, 8000, 1.5, 56000):
+    if (c_pow["min"], c_pow["curve1"], c_pow["mid"], c_pow["midSal"], c_pow["curve2"], c_pow["sal100"]) != (0, 1, 50, 8960, 1.5, 62720):
         fail(f"ivCurves.ts C/POW anchor mismatch: {c_pow}")
     for pos in HITTER_POS:
         if set(curves[pos]) != {"POW", "CON", "SPD", "FLD", "ARM"}:
@@ -822,6 +849,12 @@ def load_luxury(wbpath):
         row = next(r for r in rows if r["group"] == g and r["stat"] == s)
         if (row["curve"], row["topN"], row["xblCap"], row["per100"], row["minAdder"]) != (cv, n, cap, p100, ma):
             fail(f"Luxury Cap row {g}/{s} disagrees with spec §5.3: {row}")
+    # Preserve the workbook as the raw source, then apply the approved KBL product override.
+    # This happens before R4/R5 so analysis, generated data, and runtime all use one curve.
+    for row in rows:
+        if (row["group"], row["stat"]) in PITCHER_SECONDARY_BATTING_ROWS:
+            row["curve"] = PITCHER_SECONDARY_BATTING_PENALTY_CURVE
+
     # 44 modifications, AT:BE = cols 46 (name) + 47-57 (11 deltas); header at row 2
     mod_stats = ["POW", "CON", "SPD", "FLD", "ARM", "RVEL", "RJNK", "RACC", "PVEL", "PJNK", "PACC"]
     hdr = [ws.cell(row=2, column=c).value for c in range(46, 58)]
@@ -1021,12 +1054,15 @@ def r3_caps(ivs, scales):
 
 def subpool_stat(pool, group, stat):
     if group == "hitters":
-        return sorted((p["bat"][stat] for p in pool if not p["isPitcher"]), reverse=True)
+        return sorted((p["bat"][stat] for p in pool
+                       if not p["isPitcher"]
+                       or (is_two_way(p) and stat in PITCHER_SECONDARY_BATTING_STATS)), reverse=True)
     roles = {"rotation": ("SP", "SP/RP"), "bullpen": ("RP", "CP", "SP/RP")}[group]
     sel = [p for p in pool if p["isPitcher"] and p["role"] in roles]
     if stat in ("VEL", "JNK", "ACC"):
         return sorted((p["pit"][stat] for p in sel), reverse=True)
-    return sorted((p["bat"][stat] for p in sel), reverse=True)
+    return sorted((p["bat"][stat] * luxury_tax_role_usage_weights(p["role"])[stat]
+                   for p in sel if not is_two_way(p)), reverse=True)
 
 
 def contention_ladder(values_desc, top_n, n_teams=N_TEAMS):
@@ -1047,11 +1083,16 @@ def stock_team_sums(pool, group, stat, top_n):
     for t in teams:
         members = [p for p in pool if p["team"] == t]
         if group == "hitters":
-            vals = [p["bat"][stat] for p in members if not p["isPitcher"]]
+            vals = [p["bat"][stat] for p in members
+                    if not p["isPitcher"]
+                    or (is_two_way(p) and stat in PITCHER_SECONDARY_BATTING_STATS)]
         else:
             roles = {"rotation": ("SP", "SP/RP"), "bullpen": ("RP", "CP", "SP/RP")}[group]
             sel = [p for p in members if p["isPitcher"] and p["role"] in roles]
-            vals = [p["pit"][stat] if stat in ("VEL", "JNK", "ACC") else p["bat"][stat] for p in sel]
+            vals = ([p["pit"][stat] for p in sel]
+                    if stat in ("VEL", "JNK", "ACC")
+                    else [p["bat"][stat] * luxury_tax_role_usage_weights(p["role"])[stat]
+                          for p in sel if not is_two_way(p)])
         out.append(sum(sorted(vals, reverse=True)[:top_n]))
     return out
 
@@ -1066,7 +1107,7 @@ def r4_luxury(pool, lux_rows, mods, mod_stats, scales, anchors_median):
     print(f"\nPenalty-$ scale: sigma(juiced) = pool median IV / XBL anchor median salary "
           f"= {med_iv:,.0f} / {anchors_median:,.0f} = {sigma_j:.4f}")
     print("(keeps tax bite per overage point proportional to this pool's salary scale;")
-    print(" penalty CURVES (exponents) port unchanged - they are the 'shape' D13 protects.)\n")
+    print(" penalty CURVES port unchanged except the approved quadratic pitcher POW/CON KBL override.)\n")
     derived = []
     print("Two candidate 'best-plausible top-N sum' distributions were derived; the STOCK-TEAM")
     print("basis is ADOPTED (rationale + the rejected alternative documented in T3_POOL_ANALYSIS.md §R4):")
@@ -1105,6 +1146,89 @@ def r4_luxury(pool, lux_rows, mods, mod_stats, scales, anchors_median):
         print(f"| {d['group']}/{d['stat']:<4} | {percentile(ts, .5):>4,.0f} | {d['capJuiced']:>14,.1f} | "
               f"{percentile(ts, .75):>4,.0f} | {percentile(ts, .9):>4,.0f} |")
     return derived, sigma_j
+
+
+def emit_luxury_only(lux_derived):
+    """Rewrite only the luxury interface/table against the already-ratified tier economy.
+
+    The committed salary tiers and tax dollar coefficients were re-blessed after the legacy
+    workbook anchors. This path re-derives rating caps without silently rebuilding those unrelated
+    economics from stale workbook salary examples.
+    """
+    src = open(OUT_TS).read()
+    table_start = src.index("export const LUXURY_CAP_TABLES")
+    table_end = src.index("\n};", table_start) + len("\n};")
+    row_pattern = re.compile(
+        r"\{ group: '([^']+)', stat: '([^']+)', topN: (\d+), cap: ([\d.]+), "
+        r"penaltyCurve: ([^,]+), penaltyPer100: (\d+), minAdder: (\d+)(?:, ratingBasis: [^}]+)? \}",
+    )
+    existing = {tier: {} for tier in ("juiced", "standard", "nerfed")}
+    table_src = src[table_start:table_end]
+    tier_matches = list(re.finditer(r"^  (juiced|standard|nerfed): \[$", table_src, re.M))
+    for index, match in enumerate(tier_matches):
+        tier = match.group(1)
+        end = tier_matches[index + 1].start() if index + 1 < len(tier_matches) else len(table_src)
+        for row in row_pattern.finditer(table_src[match.end():end]):
+            group, stat, top_n, cap, curve, per100, min_adder = row.groups()
+            existing[tier][(group, stat)] = {
+                "topN": int(top_n), "cap": float(cap), "curve": curve.strip(),
+                "per100": int(per100), "minAdder": int(min_adder),
+            }
+    if any(len(existing[tier]) != 19 for tier in existing):
+        fail(f"tierParams.ts: could not parse existing 19-row tier tables: "
+             f"{[(tier, len(rows)) for tier, rows in existing.items()]}")
+
+    rating_scales = {
+        tier: {
+            key: existing[tier][key]["cap"] / existing["juiced"][key]["cap"]
+            for key in existing[tier]
+        }
+        for tier in existing
+    }
+    interface_start = src.index("export interface LuxuryCapRow")
+    replacement_end = src.index("\n\n/** Pitcher-BATTING luxury rows", table_end)
+    lines = [
+        "export interface LuxuryCapRow {",
+        "  group: 'hitters' | 'rotation' | 'bullpen';",
+        "  stat: 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'VEL' | 'JNK' | 'ACC';",
+        "  topN: number;",
+        "  cap: number;              // tier-scaled neutral cap (rating-sum)",
+        "  penaltyCurve: number;     // response shape; approved KBL tuning may supersede the XBL source curve",
+        "  penaltyPer100: number;    // $ per (overage/100)^curve - sigma-scaled to this pool",
+        "  minAdder: number;         // flat $ when over - sigma-scaled",
+        f"  ratingBasis?: '{LUXURY_TAX_RATING_BASIS}'; // absent means legacy raw pitcher-secondary ratings",
+        "}",
+        "",
+        "/**",
+        " * Pitcher POW/CON are useful secondary skills, but should not price like dominant pitching.",
+        " * Use playing-time-adjusted stock-team caps and a soft quadratic ramp so modest",
+        " * overages stay modest and only deliberate stacking becomes expensive.",
+        " */",
+        f"export const PITCHER_SECONDARY_BATTING_PENALTY_CURVE = {fmt(PITCHER_SECONDARY_BATTING_PENALTY_CURVE)};",
+        f"export const LUXURY_TAX_RATING_BASIS = '{LUXURY_TAX_RATING_BASIS}' as const;",
+        "",
+        "export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {",
+    ]
+    for tier in ("juiced", "standard", "nerfed"):
+        lines.append(f"  {tier}: [")
+        for derived in lux_derived:
+            if not derived["enabled"]:
+                continue
+            key = (derived["group"], derived["stat"])
+            old = existing[tier][key]
+            curve = ("PITCHER_SECONDARY_BATTING_PENALTY_CURVE"
+                     if key in PITCHER_SECONDARY_BATTING_ROWS else old["curve"])
+            cap = derived["capJuiced"] * rating_scales[tier][key]
+            lines.append(
+                f"    {{ group: '{key[0]}', stat: '{key[1]}', topN: {old['topN']}, "
+                f"cap: {round(cap, 1)}, penaltyCurve: {curve}, penaltyPer100: {old['per100']}, "
+                f"minAdder: {old['minAdder']}, ratingBasis: LUXURY_TAX_RATING_BASIS }},"
+            )
+        lines.append("  ],")
+    lines.append("};")
+    with open(OUT_TS, "w") as output:
+        output.write(src[:interface_start] + "\n".join(lines) + src[replacement_end:])
+    print("[write] src/data/tierParams.ts luxury tables only; salary tiers and dollar coefficients preserved")
 
 
 def invert_mean_rating_ratio(pool, engine, scales):
@@ -1237,9 +1361,10 @@ ROSTER_SHAPE = {
 
 def roster_tax(roster, caps_by_rowkey, lux_rows):
     """Taxed-mode luxury bill for a 22-man roster (base ratings, §5.3)."""
-    hitters = [p for p in roster if not p["isPitcher"]]
-    rot = [p for p in roster if p["isPitcher"] and p["role"] in ("SP", "SP/RP")]
-    pen = [p for p in roster if p["isPitcher"] and p["role"] in ("RP", "CP", "SP/RP")]  # JK ruling 2026-06-10: SP/RP counts toward pen concentration (T3-AUDIT MAJOR fix)
+    hitters = [p for p in roster if not p["isPitcher"] or is_two_way(p)]
+    # This canonical 22 shape already has four pure starters, so its one SP/RP settles in the pen.
+    rot = [p for p in roster if p["isPitcher"] and p["role"] == "SP"]
+    pen = [p for p in roster if p["isPitcher"] and p["role"] in ("RP", "CP", "SP/RP")]
     total = 0.0
     binding = []
     for row in lux_rows:
@@ -1247,13 +1372,16 @@ def roster_tax(roster, caps_by_rowkey, lux_rows):
             continue
         g, st, n = row["group"], row["stat"], row["topN"]
         if g == "hitters":
-            vals = sorted((p["bat"][st] for p in hitters), reverse=True)[:n]
+            vals = sorted((p["bat"][st] for p in hitters
+                           if not p["isPitcher"] or st in PITCHER_SECONDARY_BATTING_STATS), reverse=True)[:n]
         elif g == "rotation":
-            vals = sorted((p["pit"][st] if st in ("VEL", "JNK", "ACC") else p["bat"][st]
-                           for p in rot), reverse=True)[:n]
+            vals = sorted((p["pit"][st] if st in ("VEL", "JNK", "ACC")
+                           else p["bat"][st] * luxury_tax_role_usage_weights(p["role"])[st]
+                           for p in rot if st in ("VEL", "JNK", "ACC") or not is_two_way(p)), reverse=True)[:n]
         else:
-            vals = sorted((p["pit"][st] if st in ("VEL", "JNK", "ACC") else p["bat"][st]
-                           for p in pen), reverse=True)[:n]
+            vals = sorted((p["pit"][st] if st in ("VEL", "JNK", "ACC")
+                           else p["bat"][st] * luxury_tax_role_usage_weights(p["role"])[st]
+                           for p in pen if st in ("VEL", "JNK", "ACC") or not is_two_way(p)), reverse=True)[:n]
         cap = max(caps_by_rowkey[(g, st)], 0.0)
         over = sum(vals) - cap
         if over > 0:
@@ -1537,7 +1665,8 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a(" *     ignore-budget contention ladder was derived too and REJECTED: caps so high the")
     a(" *     tax layer never binds - see T3_POOL_ANALYSIS.md §R4).")
     a(" *   - penalty $ scale sigma = pool median IV / XBL workbook anchor median salary;")
-    a(" *     penalty curve exponents port unchanged (D13 'ratios and shapes').")
+    a(" *     workbook curve shapes port unchanged except the approved quadratic pitcher")
+    a(" *     rotation/bullpen POW/CON override (JK ruling 2026-07-15).")
     a(" *   - modification deltas: stored as FRACTIONS of the XBL cap they shift (tier-invariant),")
     a(" *     plus per-tier absolute tables (fraction x tier cap) (§5.3, §6.2).")
     a(" *   - farm nerf: one grade step left of the league tier (§7.4); no new free parameter.")
@@ -1591,10 +1720,19 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a("  stat: 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'VEL' | 'JNK' | 'ACC';")
     a("  topN: number;")
     a("  cap: number;              // tier-scaled neutral cap (rating-sum)")
-    a("  penaltyCurve: number;     // XBL shape, ports unchanged")
+    a("  penaltyCurve: number;     // response shape; approved KBL tuning may supersede the XBL source curve")
     a("  penaltyPer100: number;    // $ per (overage/100)^curve - sigma-scaled to this pool")
     a("  minAdder: number;         // flat $ when over - sigma-scaled")
+    a(f"  ratingBasis?: '{LUXURY_TAX_RATING_BASIS}'; // absent means legacy raw pitcher-secondary ratings")
     a("}")
+    a("")
+    a("/**")
+    a(" * Pitcher POW/CON are useful secondary skills, but should not price like dominant pitching.")
+    a(" * Use their playing-time-adjusted stock-team caps and a soft quadratic")
+    a(" * ramp so modest overages stay modest and only deliberate stacking becomes expensive.")
+    a(" */")
+    a(f"export const PITCHER_SECONDARY_BATTING_PENALTY_CURVE = {fmt(PITCHER_SECONDARY_BATTING_PENALTY_CURVE)};")
+    a(f"export const LUXURY_TAX_RATING_BASIS = '{LUXURY_TAX_RATING_BASIS}' as const;")
     a("")
     a("export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {")
     for tier in ["juiced", "standard", "nerfed"]:
@@ -1605,9 +1743,13 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
             if not d["enabled"]:
                 continue
             cap = d["capJuiced"] * rs
+            curve = ("PITCHER_SECONDARY_BATTING_PENALTY_CURVE"
+                     if (d["group"], d["stat"]) in PITCHER_SECONDARY_BATTING_ROWS
+                     else fmt(d["curve"]))
             a(f"    {{ group: '{d['group']}', stat: '{d['stat']}', topN: {d['topN']}, "
-              f"cap: {round(cap, 1)}, penaltyCurve: {fmt(d['curve'])}, "
-              f"penaltyPer100: {round(d['per100'] * sigma * s)}, minAdder: {round(d['minAdder'] * sigma * s)} }},")
+              f"cap: {round(cap, 1)}, penaltyCurve: {curve}, "
+              f"penaltyPer100: {round(d['per100'] * sigma * s)}, minAdder: {round(d['minAdder'] * sigma * s)}, "
+              f"ratingBasis: LUXURY_TAX_RATING_BASIS }},")
         a("  ],")
     a("};")
     a("")
@@ -1627,9 +1769,9 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a("/** §6.2 modification deltas as FRACTIONS of the XBL cap of the luxury row each shifts.")
     a(" *  Tier-invariant ('+337 FLD' == +57.6% of the FLD cap at any tier). Apply as:")
     a(" *  shiftedCap = cap x (1 + sum(increases) - sum(decreases)). */")
-    a("export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';")
+    a("export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RPOW' | 'RCON' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';")
     a("")
-    a("export const CAP_MODIFICATION_FRACTIONS: Record<string, Record<ModStat, number>> = {")
+    a("export const CAP_MODIFICATION_FRACTIONS: Record<string, Partial<Record<ModStat, number>>> = {")
     for name in mods:
         fr = ", ".join(f"{st}: {mods[name][st] / xbl_caps[st]:.6f}" for st in mod_stats)
         a(f"  {name!r}: {{ {fr} }},")
@@ -1656,6 +1798,11 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
 def main():
     parser = argparse.ArgumentParser(description="Analyze the KBL stock player pool and derive tier parameters.")
     parser.add_argument("--dump-oracle", help="Write a frozen T4 IV oracle JSON after the golden anchor gate passes.")
+    parser.add_argument(
+        "--luxury-only",
+        action="store_true",
+        help="Regenerate luxury rating caps while preserving the committed salary tiers and tax dollar coefficients.",
+    )
     args = parser.parse_args()
 
     curves = parse_curves()
@@ -1675,10 +1822,21 @@ def main():
     engine = IVEngine(curves, traits, pitches, switch, secpos, angles)
     emit_usage_weights()
 
-    # BOOTSTRAP GATE - abort before analysis if the workbook anchors don't reproduce
     anchors = load_anchors()
-    anchor_count = run_anchor_gate(engine, anchors)
     anchors_median = percentile(sorted(a["expected"] for a in anchors), 0.5)
+    if args.luxury_only:
+        if args.dump_oracle:
+            fail("--dump-oracle cannot be combined with --luxury-only")
+        for p in pool:
+            p["parts"] = engine.pool_iv(p)
+            p["iv"] = p["parts"]["total"]
+        lux_rows, mods, mod_stats = load_luxury(WORKBOOK)
+        lux_derived, _ = r4_luxury(pool, lux_rows, mods, mod_stats, {}, anchors_median)
+        emit_luxury_only(lux_derived)
+        return
+
+    # BOOTSTRAP GATE - abort before full analysis if the workbook anchors don't reproduce
+    anchor_count = run_anchor_gate(engine, anchors)
 
     for p in pool:
         p["rawParts"] = engine.pool_raw_iv(p)

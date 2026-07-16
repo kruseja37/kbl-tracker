@@ -1,20 +1,25 @@
 import "fake-indexeddb/auto";
 
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { LEAGUE_MINIMUM_SALARY } from "../../../data/rosterEngineConstants";
 import { gradeToTwentyEighty } from "../../../engines/gradeEngine";
 import { archetypeBandValueRange } from "../../../engines/scoutValueRange";
 import {
+  advanceLot,
   deriveAuctionSessionNominationSeed,
   lotOpeningAsk,
+  passBid,
+  recordBid,
+  resolveLot,
   seededNominationOrder,
   surfaceNextPlayer,
 } from "../../../engines/auctionStateMachine";
 import { buildFarmAuctionSession } from "../../../utils/farmAuctionSession";
 import {
   __resetLeagueBuilderDatabaseForTests,
+  clearAllLeagueBuilderData,
   createFarmAuctionSessionId,
   deleteScoutProfilesForLeague,
   saveScoutProfile,
@@ -28,10 +33,8 @@ import {
   type LeagueBuilderProspectPlayerDto,
   type ProspectScoutDescriptor,
 } from "../../../utils/prospectScoutingDraftEngine";
-import {
-  LeagueBuilderFarmAuctionDraft,
-  buildFarmBridgeHeadline,
-} from "../../app/pages/LeagueBuilderFarmAuctionDraft";
+import { LeagueBuilderFarmAuctionDraft } from "../../app/pages/LeagueBuilderFarmAuctionDraft";
+import { buildFarmBridgeHeadline } from "../../app/pages/LeagueBuilderFarmAuctionDraft.helpers";
 import {
   useLeagueBuilderData,
   type LeagueTemplate,
@@ -65,7 +68,6 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
   };
 });
 
-const DB_NAME = "kbl-league-builder";
 const LEAGUE_ID = "farm-page";
 const TEAM_IDS = ["team-a", "team-b"] as const;
 
@@ -83,15 +85,6 @@ const SCOUTS_BY_TEAM_ID: Record<string, ProspectScoutDescriptor> = {
     weaknesses: ["1B"],
   },
 };
-
-function deleteDatabase(name: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.deleteDatabase(name);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => resolve();
-  });
-}
 
 function makeLeague(): LeagueTemplate {
   return {
@@ -256,20 +249,58 @@ function openEngineLot(session: ReturnType<typeof buildFarmAuctionSession>["sess
   return result.session;
 }
 
+function seedWithEqualConsecutiveOpeningAsks(teams: readonly Team[]): string {
+  for (let index = 0; index < 2_000; index += 1) {
+    const seed = `farm-equal-lot-seed-${index}`;
+    const built = buildFarmAuctionSession({
+      leagueId: LEAGUE_ID,
+      seasonNumber: 1,
+      teams: teams.map((team) => ({ teamId: team.id, teamName: teamDisplayName(team) })),
+      scoutsByTeamId: SCOUTS_BY_TEAM_ID,
+      seed,
+      config: {
+        nominationOrderSeed: seed,
+        cpuShillCount: 0,
+        bidIncrement: 1000,
+        turnTimerSeconds: null,
+        excludeFromLeague: true,
+        nominationWeightExponent: 3,
+        flatReserveFloor: LEAGUE_MINIMUM_SALARY,
+      },
+      sessionId: createFarmAuctionSessionId(LEAGUE_ID, 1),
+      sessionLaunchNonce: TEST_SESSION_LAUNCH_NONCE,
+    });
+    const first = surfaceNextPlayer(built.session);
+    if (!first.ok || first.session.state !== "OPEN_BIDDING" || !first.session.currentLot?.bidTurnTeamId) continue;
+    const firstOpeningAsk = first.session.currentLot.openingAsk;
+    const bid = recordBid(first.session, first.session.currentLot.bidTurnTeamId, firstOpeningAsk);
+    if (!bid.ok || bid.session.state !== "OPEN_BIDDING" || !bid.session.currentLot?.bidTurnTeamId) continue;
+    const passed = passBid(bid.session, bid.session.currentLot.bidTurnTeamId);
+    if (!passed.ok) continue;
+    const resolved = resolveLot(passed.session);
+    if (!resolved.ok) continue;
+    const advanced = advanceLot(resolved.session);
+    if (!advanced.ok) continue;
+    const second = surfaceNextPlayer(advanced.session);
+    if (second.ok && second.session.currentLot?.openingAsk === firstOpeningAsk) return seed;
+  }
+  throw new Error("No deterministic farm seed produced equal consecutive opening asks.");
+}
+
 describe("LeagueBuilderFarmAuctionDraft", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     window.history.pushState({}, "", "/league-builder/farm-auction-draft");
     vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(TEST_SESSION_LAUNCH_NONCE);
     __resetLeagueBuilderDatabaseForTests();
-    await deleteDatabase(DB_NAME).catch(() => undefined);
+    await clearAllLeagueBuilderData();
     await seedScoutProfiles();
   });
 
   afterEach(async () => {
+    cleanup();
     vi.restoreAllMocks();
     __resetLeagueBuilderDatabaseForTests();
-    await deleteDatabase(DB_NAME).catch(() => undefined);
   });
 
   test("renders the obscured farm auction flow with positions and scout ranges only", async () => {
@@ -597,6 +628,30 @@ describe("LeagueBuilderFarmAuctionDraft", () => {
     for (const trait of [target.prospect.trait1, target.prospect.trait2].filter(Boolean)) {
       expect(screen.queryByText(trait!)).not.toBeInTheDocument();
     }
+  });
+
+  test("starts consecutive same-minimum FARM lots with independent bid drafts", async () => {
+    const { teams } = mockLeagueData();
+    const seed = seedWithEqualConsecutiveOpeningAsks(teams);
+    window.history.pushState({}, "", `/league-builder/farm-auction-draft?leagueId=${LEAGUE_ID}&devSeed=${encodeURIComponent(seed)}`);
+
+    render(<LeagueBuilderFarmAuctionDraft />);
+
+    const initialBidText = (await screen.findByText(/your bid · \$[\d,]+/i)).textContent;
+    const initialOnClockText = screen.getByTestId("on-the-clock-banner").textContent;
+    fireEvent.click(screen.getByTestId("whisper-strip"));
+    fireEvent.click(screen.getByRole("button", { name: "+$2,000" }));
+    expect(screen.getByText(/your bid · \$[\d,]+/i).textContent).not.toBe(initialBidText);
+    fireEvent.click(screen.getByRole("button", { name: /BID/i }));
+    await waitFor(() => {
+      expect(screen.getByTestId("on-the-clock-banner").textContent).not.toBe(initialOnClockText);
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /Let prospect go/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "NEXT LOT" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/your bid · \$[\d,]+/i).textContent).toBe(initialBidText);
+    });
   });
 });
 

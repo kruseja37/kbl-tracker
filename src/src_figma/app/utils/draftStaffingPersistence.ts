@@ -5,13 +5,14 @@ import {
 } from "../../../data/farmArchetypeScoutConfidence";
 import type { ReporterAvatarEra, ReporterPersonality, VoiceStyle } from "../../../types/reporter";
 import {
-  deleteScoutProfilesForLeague,
-  saveScoutProfile,
+  replaceScoutProfilesForLeague,
   saveTeam,
   type LeagueBuilderScoutProfile,
   type Team,
 } from "../../../utils/leagueBuilderStorage";
 import {
+  getManagerAssignment,
+  getManagerProfile,
   LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
   saveManagerAssignment,
   saveManagerProfile,
@@ -267,12 +268,11 @@ export async function persistScoutHiresForLeague(input: PersistScoutHiresInput):
     return toScoutProfileInput(candidate, team.id, index + 1);
   });
 
-  await deleteScoutProfilesForLeague(input.leagueId);
-  const savedScouts: LeagueBuilderScoutProfile[] = [];
-  for (const scoutInput of scoutInputs) {
-    savedScouts.push(await saveScoutProfile(scoutInput));
-  }
-  return savedScouts;
+  return replaceScoutProfilesForLeague(input.leagueId, scoutInputs);
+}
+
+function stableDraftManagerId(leagueId: string, teamId: string): string {
+  return `manager-draft-${hashStringToUint32(`${leagueId}:${teamId}`).toString(16).padStart(8, "0")}`;
 }
 
 export async function persistDraftStaffForLeague(input: PersistDraftStaffInput): Promise<PersistDraftStaffResult> {
@@ -283,7 +283,16 @@ export async function persistDraftStaffForLeague(input: PersistDraftStaffInput):
   for (const staff of input.staff) {
     const managerName = trimOrFallback(staff.managerName, `${staff.team.name} Manager`);
     const reporterName = trimOrFallback(staff.reporterName, `${staff.team.name} Beat`);
+    const existingAssignment = await getManagerAssignment({
+      teamId: staff.team.id,
+      mode: "franchise",
+      instanceId: LEAGUE_BUILDER_MANAGER_INSTANCE_ID,
+    });
+    const existingAssignedProfile = existingAssignment
+      ? await getManagerProfile(existingAssignment.managerId)
+      : null;
     const manager = await saveManagerProfile({
+      managerId: existingAssignedProfile?.managerId ?? stableDraftManagerId(input.leagueId, staff.team.id),
       displayName: managerName,
       createdByUser: true,
       defaultManager: false,

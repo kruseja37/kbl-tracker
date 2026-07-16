@@ -685,10 +685,10 @@ describe('buildBest22Target', () => {
     expect(playerIdsForKind(rawPicks, slots, 'sp')).toEqual(['sp-1', 'sp-3', 'sp-2', 'sp-0']);
     expect(playerIdsForKind(rawPicks, slots, 'rp')).toEqual(['rp-1', 'rp-2', 'rp-0']);
     expect(playerIdsForKind(rawPicks, slots, 'cp')).toEqual(['cp-0']);
-    expect(playerIdsForKind(target.picks, slots, 'sp')).toEqual(['sp-0', 'sp-3', 'sp-2', 'sp-1']);
+    expect(playerIdsForKind(target.picks, slots, 'sp')).toEqual(['sp-0', 'sp-2', 'sp-3', 'sp-1']);
     expect(playerIdsForKind(target.picks, slots, 'rp')).toEqual(['rp-0', 'rp-2', 'rp-1']);
     expect(playerIdsForKind(target.picks, slots, 'cp')).toEqual(['cp-0']);
-    expect(target.picks[10]).toMatchObject({ slotId: 'SP2', playerId: 'sp-3', pinned: true });
+    expect(target.picks[11]).toMatchObject({ slotId: 'SP3', playerId: 'sp-3', pinned: true });
     expect(target.pins).toEqual({ honored: [{ slotId: 'SP2', playerId: 'sp-3' }], dropped: [] });
 
     const nonArmTarget = target.picks
@@ -714,6 +714,52 @@ describe('buildBest22Target', () => {
     expect(target.allIn).toBe(rawBuild.totalSalary + rawBuild.totalTax);
     expect(target.feasible).toBe(rawBuild.legalRoster && rawBuild.solvent && rawBuild.floorMet);
     expect(target.asksHonored).toEqual({ honored: 0, asked: 0 });
+  });
+
+  it('A6: presentation puts the highest-IV legal catcher first without changing pinned membership', () => {
+    const slots = buildDefaultDesignSlots();
+    const pool = legalPool()
+      .filter((player) => player.id !== 'backup-c')
+      .map((player) => player.id === 'c' ? { ...player, iv: 10_000 } : player)
+      .concat(simPlayer('c-high', { position: 'C', isPitcher: false }, 60));
+    pool.find((player) => player.id === 'c-high')!.iv = 90_000;
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      20,
+      new Map([['C', 'c'], ['backupC', 'c-high']]),
+    );
+
+    expect(target.picks[0]).toMatchObject({ slotId: 'C', playerId: 'c-high', pinned: true });
+    expect(target.picks[8]).toMatchObject({ slotId: 'backupC', playerId: 'c', pinned: true });
+    expect(new Set(target.picks.map((pick) => pick.playerId)).size).toBe(22);
+  });
+
+  it('A7: presentation puts a higher-IV same-position flex player in the starter slot', () => {
+    const slots = buildDefaultDesignSlots();
+    const pool = legalPool().map((player) => {
+      if (player.id === '1b') return { ...player, iv: 10_000 };
+      if (player.id === 'backup-c') return { ...player, iv: 90_000 };
+      return player;
+    });
+    const target = buildBest22Target(
+      slots,
+      pool,
+      classifiedById(pool),
+      NEUTRAL_ARCHETYPE,
+      TIER,
+      SOLVENT_BUDGET,
+      20,
+      new Map([['1B', '1b'], ['FLEX1', 'backup-c']]),
+    );
+
+    expect(target.picks[1]).toMatchObject({ slotId: '1B', playerId: 'backup-c', pinned: true });
+    expect(target.picks[17]).toMatchObject({ slotId: 'FLEX1', playerId: '1b', pinned: true });
+    expect(new Set(target.picks.map((pick) => pick.playerId)).size).toBe(22);
   });
 
   it('B1: value-seeded builds report each player under their true identity slot', () => {

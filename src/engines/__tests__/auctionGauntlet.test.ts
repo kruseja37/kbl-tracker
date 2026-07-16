@@ -326,11 +326,6 @@ function addTo(map: Map<string, number>, key: string, amount: number): void {
   map.set(key, (map.get(key) ?? 0) + amount);
 }
 
-function transitionOrThrow(result: AuctionTransitionResult): CpuShillAuctionSession {
-  if (!result.ok) throw new Error(`Auction transition rejected: ${result.reason}`);
-  return result.session as CpuShillAuctionSession;
-}
-
 function buildRegisteredPool(input: {
   id: string;
   tier: TierKey;
@@ -675,7 +670,7 @@ function instrumentTransition(input: {
 function activePassedCompletionPool(session: CpuShillAuctionSession): CompletionCandidate[] {
   const seen = new Set<string>();
   const pool: CompletionCandidate[] = [];
-  session.results.forEach((result, index) => {
+  session.results.forEach((result) => {
     if (result.disposition !== 'PASSED') return;
     if (result.supersededByResultIndex !== undefined) return;
     if (seen.has(result.playerId)) return;
@@ -897,12 +892,12 @@ describe('auction gauntlet -- real luxury tax completion proof', () => {
     // TAXSWING Amendment 1: preserve the real-tax reachability gate across the full six-draft run.
     expect(allRows.some((row) => row.chargedTax > 0)).toBe(true);
 
-    // CONTRACT_TAXSWING_2026-07-10 Amendment 1: honest assignment + ruled retunes move normalized
-    // 8-club D5 below every cap; summarizeDraft still pins every observed drain to the product helper.
+    // Usage-aware pitcher tax makes D5 an honest low-tax (not zero-tax) room. Preserve reachability
+    // and pin every incremental charge to the independently recomputed final liability.
     const d5Rows = allRows.filter((row) => row.draft === 'D5');
     expect(d5Rows.length).toBeGreaterThan(0);
-    expect(d5Rows.every((row) => row.chargedTax === 0)).toBe(true);
-    expect(d5Rows.every((row) => row.impliedFinalLiability === 0)).toBe(true);
+    expect(d5Rows.some((row) => row.chargedTax > 0)).toBe(true);
+    expect(d5Rows.every((row) => row.liabilityMinusCharged === 0)).toBe(true);
 
     // CONTRACT_TAXSWING_2026-07-10 Amendment 1: the ruled identity retunes shift the normalized
     // tax-crossing fixture from D5 to D6; the 20-team tripwire still protects the established contract.

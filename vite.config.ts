@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
@@ -6,6 +5,7 @@ import path from 'path'
 import { execSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import type { Plugin } from 'vite'
+import { companionAddressPlugin } from './scripts/viteCompanionAddress'
 
 const packageJson = JSON.parse(
   readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
@@ -70,6 +70,7 @@ export default defineConfig({
   plugins: [
     react(),
     buildMetadataPlugin(),
+    companionAddressPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icon-192.png', 'icon-512.png', 'apple-touch-icon.png'],
@@ -132,7 +133,16 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src/src_figma'),
     },
   },
+  // Module workers can code-split; Vite's default IIFE worker output cannot.
+  worker: {
+    format: 'es',
+  },
   server: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: true,
+  },
+  preview: {
     host: '0.0.0.0',
     port: 5173,
     allowedHosts: true,

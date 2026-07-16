@@ -49,6 +49,30 @@
   padding: 2rem;
 }
 
+/* Mac/laptop draft rooms use the document as the only vertical scroll owner.
+ * Touch-first layouts keep their compact independent panes from the utility classes. */
+@media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .snake-workspace-page .snake-private-workspace {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .snake-workspace-page .snake-selected-pane {
+    top: 1rem !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto;
+  }
+
+  .snake-workspace-page .snake-board-pane {
+    height: auto !important;
+    min-height: 0;
+    overflow: visible !important;
+    overscroll-behavior: auto;
+  }
+}
+
 .ballpark-shell-header {
   display: flex;
   align-items: center;

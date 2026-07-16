@@ -1,0 +1,3 @@
+# CONTRACT — SNAKE REPAIR: POST-DRAFT JOURNEY AND HELP LAW
+
+Make post-draft setup consume the completed draft handoff instead of re-asking roster/draft choices; remove/defer playoff and redundant roster-mode steps for this path; preserve zero-schedule launch and schedule entry only inside Living Season. Put instructional prose behind ratified Help affordances on Scout Hire, companion approval/claim, Franchise Setup, and schedule import. Fix snake back labels, retryable load errors, and team branding where data already exists. Retire the routable superseded snake POC without deleting historical code. Add focused tests. Builder must not audit its own diff.

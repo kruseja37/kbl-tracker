@@ -57,6 +57,10 @@ function ratingForStat(player: SimPlayer, stat: ArchetypeStat): number {
     case 'FLD':
     case 'ARM':
       return player.bat[stat] ?? 0;
+    case 'ROT_POW':
+      return player.bat.POW ?? 0;
+    case 'ROT_CON':
+      return player.bat.CON ?? 0;
     case 'ROT_VEL':
     case 'PEN_VEL':
       return player.pit?.VEL ?? 0;
@@ -111,10 +115,11 @@ function buildSyntheticPool(): SimPlayer[] {
       bat: { POW: rating, CON: rating, SPD: rating, FLD: rating, ARM: rating },
     });
   });
-  const starters = Array.from({ length: 4 }, (_, index) => syntheticPlayer(`sp-${index}`, {
+  const starters = Array.from({ length: 9 }, (_, index) => syntheticPlayer(`sp-${index}`, {
     isPitcher: true,
     role: 'SP',
     position: 'SP',
+    bat: { POW: index + 1, CON: index + 1, SPD: 0, FLD: 0, ARM: 0 },
     pit: { VEL: index + 1, JNK: index + 1, ACC: index + 1 },
   }));
   const relievers = Array.from({ length: 5 }, (_, index) => syntheticPlayer(`rp-${index}`, {
@@ -151,6 +156,30 @@ describe('pool feasibility analyzer', () => {
     expect(report.results.map((result) => result.archetypeId)).toEqual(HISTORICAL_ARCHETYPES.map((arch) => arch.id));
     expect(report.results.every((result) => result.support === 'supported')).toBe(true);
     expect(report.results.every((result) => result.activationPrompt === null)).toBe(true);
+  });
+
+  it('requires the same starters to carry every boosted pitcher-hitting axis', () => {
+    const reference = buildSyntheticPool();
+    const complete = archetype('complete-starters', 'Complete Starters', 'ROT_POW');
+    complete.boosts = ['ROT_POW', 'ROT_CON'];
+    complete.spec = { ROT_POW: 1, ROT_CON: 1 };
+    const stripped = reference.map((player) => {
+      if (player.id === 'sp-8' || player.id === 'sp-6') return { ...player, bat: { ...player.bat, CON: 0 } };
+      if (player.id === 'sp-7') return { ...player, bat: { ...player.bat, POW: 0 } };
+      return player;
+    });
+
+    const starved = getResult(analyzePoolFeasibility(stripped, [complete], 'standard', 2, reference), complete.id);
+    const joint = starved.shortfalls.find((row) => row.jointStats?.length === 2);
+    expect(joint).toMatchObject({ binding: true, needCount: 3, supply: 0 });
+    expect(starved.support).toBe('starved');
+
+    const restored = getResult(analyzePoolFeasibility(reference, [complete], 'standard', 2, reference), complete.id);
+    expect(restored.shortfalls.find((row) => row.jointStats?.length === 2)).toMatchObject({
+      binding: true,
+      needCount: 0,
+      supply: 3,
+    });
   });
 
   it('flags FLD shortfalls in glove-stripped archetypes against the full-pool reference', () => {

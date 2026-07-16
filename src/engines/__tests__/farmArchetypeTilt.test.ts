@@ -96,6 +96,17 @@ describe('farmArchetypeTilt RB-9b-2 band weights', () => {
     expectStrictMax(weights, 'Power');
     expect(BANDS.every((band) => weights[band] >= 0 && weights[band] <= 1)).toBe(true);
   });
+
+  test('keeps starter batting power in Rotation instead of leaking into lineup Power', () => {
+    const weights = archetypeBandWeights({
+      increase: ['POW'],
+      decrease: [],
+      rawShift: { RPOW: 0.1 } as TeamCapIdentity['rawShift'],
+    });
+
+    expect(weights.Rotation).toBe(1);
+    expect(weights.Power).toBe(0);
+  });
 });
 
 describe('tiltAnalyzerFindings', () => {

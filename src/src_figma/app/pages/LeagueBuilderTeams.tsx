@@ -81,7 +81,7 @@ const CAP_IDENTITY_MOD_OPTIONS = Object.keys(CAP_MODIFICATION_FRACTIONS)
 
 const CAP_IDENTITY_STAT_GROUPS: Array<{ label: string; stats: ModStat[] }> = [
   { label: "Hitters", stats: ["POW", "CON", "SPD", "FLD", "ARM"] },
-  { label: "Rotation", stats: ["RVEL", "RJNK", "RACC"] },
+  { label: "Rotation", stats: ["RPOW", "RCON", "RVEL", "RJNK", "RACC"] },
   { label: "Bullpen", stats: ["PVEL", "PJNK", "PACC"] },
 ];
 
@@ -91,6 +91,8 @@ const CAP_IDENTITY_STAT_LABELS: Record<ModStat, string> = {
   SPD: "SPD",
   FLD: "FLD",
   ARM: "ARM",
+  RPOW: "BAT POW",
+  RCON: "BAT CON",
   RVEL: "VEL",
   RJNK: "JNK",
   RACC: "ACC",

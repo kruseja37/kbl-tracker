@@ -27,16 +27,18 @@ const RATIFIED_SHIFTS: Record<string, Record<string, number>> = {
   'murderers-row': { 'hitters/POW': 0.075, 'hitters/CON': 0.10, 'hitters/SPD': -0.18 },
   'bomba-squad': { 'hitters/POW': 0.10, 'hitters/CON': -0.15, 'hitters/SPD': -0.12 },
   // Re-banded in f71059ec (PEN_ACC −0.30 → −0.15, require-a-closer work); re-verified 2026-07-09.
-  'bash-brothers': { 'hitters/POW': 0.075, 'hitters/ARM': 0.12, 'rotation/ACC': -0.25, 'bullpen/ACC': -0.15 },
+  'bash-brothers': { 'hitters/POW': 0.075, 'hitters/ARM': 0.12, 'rotation/POW': 0.15, 'rotation/ACC': -0.25, 'bullpen/ACC': -0.15 },
   'whiteyball': { 'hitters/SPD': 0.18, 'hitters/FLD': 0.33, 'hitters/POW': -0.10 },
   'go-go-small-ball': { 'hitters/CON': 0.15, 'hitters/FLD': 0.22, 'hitters/POW': -0.10 },
   'dead-ball-suppressors': { 'rotation/JNK': 0.45, 'hitters/CON': 0.10, 'hitters/POW': -0.10, 'bullpen/VEL': -0.20 },
   'billy-ball-burners': { 'hitters/SPD': 0.24, 'hitters/POW': -0.075, 'rotation/ACC': -0.25 },
   'junkball-surgeons': { 'rotation/ACC': 0.375, 'rotation/JNK': 0.30, 'hitters/POW': -0.05, 'rotation/VEL': -0.16 },
-  'flamethrowers': { 'rotation/VEL': 0.32, 'hitters/POW': -0.05, 'hitters/CON': -0.10 },
+  // SNAKE-PITCHER-HITTING-RECALIBRATION-30: usage-aware zero-axis ablation retune from 0.10/0.10.
+  'flamethrowers': { 'rotation/VEL': 0.32, 'rotation/POW': 0.30, 'rotation/CON': 0.30, 'hitters/POW': -0.05, 'hitters/CON': -0.10 },
   'nasty-boys': { 'bullpen/VEL': 0.40, 'bullpen/ACC': -0.45 },
   // Retuned in 057f4525 (value-parity re-pin during the reliever repricing); re-verified 2026-07-09.
-  'hdh-royals': { 'bullpen/ACC': 0.09, 'hitters/SPD': 0.12, 'hitters/POW': -0.025, 'rotation/ACC': -0.0625 },
+  // SNAKE-PITCHER-HITTING-RECALIBRATION-30: usage-aware zero-axis ablation retune from 0.10.
+  'hdh-royals': { 'bullpen/ACC': 0.09, 'hitters/SPD': 0.12, 'rotation/CON': 0.40, 'hitters/POW': -0.025, 'rotation/ACC': -0.0625 },
   'the-opener': { 'bullpen/VEL': 0.30, 'bullpen/JNK': 0.35, 'rotation/VEL': -0.24, 'rotation/ACC': -0.25 },
   'the-oriole-way': { 'hitters/FLD': 0.33, 'rotation/ACC': 0.375, 'hitters/SPD': -0.12, 'bullpen/VEL': -0.20 },
   // CONTRACT_TAXSWING_2026-07-10 Amendment 1: bullpen-command cap shift retuned from -0.30.
@@ -48,7 +50,7 @@ const RATIFIED_SHIFTS: Record<string, Record<string, number>> = {
   'gap-to-gap': { 'hitters/CON': 0.15, 'hitters/POW': 0.05, 'rotation/ACC': -0.25, 'bullpen/VEL': -0.20 },
   'web-gems': { 'hitters/FLD': 0.44, 'hitters/ARM': 0.12, 'hitters/POW': -0.075, 'hitters/CON': -0.05 },
   // CONTRACT_TAXSWING_2026-07-10 Amendment 1: command cap shifts retuned from -0.25/-0.30.
-  'launch-and-leather': { 'hitters/POW': 0.075, 'hitters/FLD': 0.22, 'rotation/ACC': -0.20, 'bullpen/ACC': -0.18 },
+  'launch-and-leather': { 'hitters/POW': 0.075, 'hitters/FLD': 0.22, 'rotation/POW': 0.10, 'rotation/CON': 0.10, 'rotation/ACC': -0.20, 'bullpen/ACC': -0.18 },
   'no-glove-offense': { 'hitters/POW': 0.05, 'hitters/CON': 0.10, 'hitters/FLD': -0.33, 'hitters/ARM': -0.18 },
   'wheels-and-cannons': { 'hitters/SPD': 0.18, 'hitters/ARM': 0.12, 'hitters/POW': -0.10 },
   'rangy-defenders': { 'hitters/SPD': 0.12, 'hitters/ARM': 0.12, 'hitters/FLD': 0.22, 'hitters/POW': -0.075, 'hitters/CON': -0.05 },

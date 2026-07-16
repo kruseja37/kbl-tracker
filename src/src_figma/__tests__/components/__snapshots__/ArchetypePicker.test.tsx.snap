@@ -205,7 +205,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
       <div
         class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
-        Forearm-bashing bombs and cannon arms; the pitching leaks.
+        Forearm-bashing bombs — even the starters can take you deep, but nobody locates.
       </div>
       <div
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
@@ -221,6 +221,12 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         >
           +
           Arm
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting power
         </span>
         <span
           class="text-[var(--ballpark-chalk)]/40"
@@ -583,7 +589,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
       <div
         class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
-        Koufax–Drysdale heat; the lineup is along for the ride.
+        Koufax–Drysdale heat, with just enough damage from the pitcher spot.
       </div>
       <div
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
@@ -593,6 +599,18 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         >
           +
           Rotation velocity
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting power
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting contact
         </span>
         <span
           class="text-[var(--ballpark-chalk)]/40"
@@ -697,7 +715,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
       <div
         class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
-        Shorten the game: a lockdown pen and fast gloves.
+        The starters put the ball in play, then a precise bullpen shortens the game.
       </div>
       <div
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
@@ -713,6 +731,12 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         >
           +
           Speed
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting contact
         </span>
         <span
           class="text-[var(--ballpark-chalk)]/40"
@@ -1351,7 +1375,7 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
       <div
         class="text-[12px] text-[var(--ballpark-chalk)]/70 leading-snug mb-3 min-h-[34px]"
       >
-        Mash and pick it clean; if the staff could find the zone they would be unbeatable.
+        Mash and pick it clean — even the starters hit, but the staff still cannot find the zone.
       </div>
       <div
         class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-bold"
@@ -1367,6 +1391,18 @@ exports[`ArchetypePicker draftability > B4 absent draftability prop preserves th
         >
           +
           Defense
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting power
+        </span>
+        <span
+          class="text-[var(--ballpark-boost-green)]"
+        >
+          +
+          Starter batting contact
         </span>
         <span
           class="text-[var(--ballpark-chalk)]/40"

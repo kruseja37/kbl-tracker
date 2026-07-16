@@ -56,6 +56,8 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         divisions: [],
         defaultRulesPreset: 'preset-1',
         draftFormat: 'auction',
+        poolSizeMultiplier: 1.45,
+        includeUnassignedSourcePlayers: true,
         color: '#5A8352',
         createdDate: '2026-01-15T00:00:00.000Z',
       },
@@ -67,6 +69,9 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
         divisions: [],
         defaultRulesPreset: 'preset-1',
         draftFormat: 'snake',
+        poolAssemblyMode: 'full-sources',
+        poolSizeMultiplier: 1.35,
+        includeUnassignedSourcePlayers: false,
         color: '#CC44CC',
         createdDate: '2026-01-20T00:00:00.000Z',
       },
@@ -134,6 +139,8 @@ describe('LeagueBuilderLeagues Component', () => {
           divisions: [],
           defaultRulesPreset: 'preset-1',
           draftFormat: 'auction',
+          poolSizeMultiplier: 1.45,
+          includeUnassignedSourcePlayers: true,
           color: '#5A8352',
           createdDate: '2026-01-15T00:00:00.000Z',
         },
@@ -145,6 +152,9 @@ describe('LeagueBuilderLeagues Component', () => {
           divisions: [],
           defaultRulesPreset: 'preset-1',
           draftFormat: 'snake',
+          poolAssemblyMode: 'full-sources',
+          poolSizeMultiplier: 1.35,
+          includeUnassignedSourcePlayers: false,
           color: '#CC44CC',
           createdDate: '2026-01-20T00:00:00.000Z',
         },
@@ -385,8 +395,43 @@ describe('LeagueBuilderLeagues Component', () => {
       expect(deleteButtons.length).toBe(2);
     });
 
+    test('keeps system source libraries read-only and out of every draft-target action', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      const current = vi.mocked(useLeagueBuilderData).getMockImplementation()!();
+      vi.mocked(useLeagueBuilderData).mockReturnValue({
+        ...current,
+        leagues: [
+          ...current.leagues,
+          {
+            id: 'legends-library-draft',
+            name: 'Legends Library — Draft',
+            description: 'System source library for Historical Legends draft-pool selection.',
+            teamIds: [],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            draftFormat: 'snake',
+            sourceLibrary: { kind: 'historical-legends', profileType: 'Draft Pool' },
+            color: '#C9A84C',
+            createdDate: '2026-07-15T00:00:00.000Z',
+          },
+        ],
+      });
+
+      render(<LeagueBuilderLeagues />);
+      await waitFor(() => {
+        expect(screen.getByText('Legends Library — Draft')).toBeInTheDocument();
+      });
+
+      expect(screen.getAllByTitle('Draft setup')).toHaveLength(2);
+      expect(screen.getAllByTitle('Edit league')).toHaveLength(2);
+      expect(screen.getAllByTitle('Duplicate league')).toHaveLength(2);
+      expect(screen.getAllByTitle('Delete league')).toHaveLength(2);
+      expect(screen.getByTitle('System source library')).toHaveTextContent('SOURCE LIBRARY');
+    });
+
     test('draft route helper maps each format to its own draft entry', () => {
-      expect(draftRouteForFormat('snake')).toBe('/snake-setup');
+      expect(draftRouteForFormat('snake')).toBe('/snake-room');
       expect(draftRouteForFormat('auction')).toBe('/league-builder/auction-draft');
       expect(draftRouteForFormat(undefined)).toBe('/league-builder/auction-draft');
       expect(farmDraftRouteForFormat('snake')).toBe('/snake-room');
@@ -396,7 +441,7 @@ describe('LeagueBuilderLeagues Component', () => {
 
     test('per-league Draft action opens Draft Setup threading leagueId; snake leagues route to the snake setup', async () => {
       expect(draftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
-        '/snake-setup?leagueId=league-2',
+        '/snake-room?leagueId=league-2',
       );
       expect(farmDraftRouteForLeague({ id: 'league-2', draftFormat: 'snake' })).toBe(
         '/snake-room?leagueId=league-2&phase=farm',
@@ -421,6 +466,21 @@ describe('LeagueBuilderLeagues Component', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Edit League')).toBeInTheDocument();
+      });
+    });
+
+    test('hydrates and preserves a saved snake draft format when editing', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      const editButtons = screen.getAllByTitle('Edit league');
+      fireEvent.click(editButtons[1]);
+
+      expect(await screen.findByLabelText('Draft format')).toHaveValue('snake');
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => {
+        expect(mockUpdateLeague).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 'league-2', draftFormat: 'snake' }),
+        );
       });
     });
 
@@ -818,6 +878,59 @@ describe('LeagueBuilderLeagues Component', () => {
           expect.objectContaining({ draftFormat: 'auction' })
         );
       });
+    });
+
+    test('creating a snake league starts with full sources and the competitive size guide', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      await openCreateLeagueModal();
+      fireEvent.change(screen.getByPlaceholderText('e.g., Kruse Baseball League'), {
+        target: { value: 'Snake Draft League' },
+      });
+      fireEvent.change(screen.getByLabelText('Draft format'), { target: { value: 'snake' } });
+      fireEvent.click(screen.getByRole('button', { name: /^create league$/i }));
+
+      await waitFor(() => {
+        expect(mockCreateLeague).toHaveBeenCalledWith(expect.objectContaining({
+          draftFormat: 'snake',
+          poolAssemblyMode: 'full-sources',
+          snakePoolSizeMultiplier: 1.35,
+          snakeIncludeUnassignedSourcePlayers: false,
+        }));
+      });
+    });
+
+    test('Auction to Snake keeps Auction pool preferences isolated and creates Snake-only defaults', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      fireEvent.click(screen.getAllByTitle('Edit league')[0]);
+      fireEvent.change(await screen.findByLabelText('Draft format'), { target: { value: 'snake' } });
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => expect(mockUpdateLeague).toHaveBeenCalled());
+      const saved = mockUpdateLeague.mock.calls.at(-1)?.[0];
+      expect(saved).toEqual(expect.objectContaining({
+        draftFormat: 'snake',
+        poolSizeMultiplier: 1.45,
+        includeUnassignedSourcePlayers: true,
+        snakePoolSizeMultiplier: 1.35,
+        snakeIncludeUnassignedSourcePlayers: false,
+      }));
+    });
+
+    test('legacy Snake to Auction migrates leaked settings and restores Auction defaults', async () => {
+      await renderSettledLeagueBuilderLeagues();
+      fireEvent.click(screen.getAllByTitle('Edit league')[1]);
+      fireEvent.change(await screen.findByLabelText('Draft format'), { target: { value: 'auction' } });
+      fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+
+      await waitFor(() => expect(mockUpdateLeague).toHaveBeenCalled());
+      const saved = mockUpdateLeague.mock.calls.at(-1)?.[0];
+      expect(saved).toEqual(expect.objectContaining({
+        draftFormat: 'auction',
+        poolSizeMultiplier: 1.5,
+        includeUnassignedSourcePlayers: true,
+        snakePoolSizeMultiplier: 1.35,
+        snakeIncludeUnassignedSourcePlayers: false,
+      }));
     });
   });
 

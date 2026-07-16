@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 
-import { applyLiveBoardRankOverlay, computeBoardAutoAdvanceLine } from "../../app/pages/LeagueBuilderAuctionDraft";
+import {
+  applyLiveBoardRankOverlay,
+  computeBoardAutoAdvanceLine,
+} from "../../app/pages/LeagueBuilderAuctionDraft.helpers";
 import type { BoardEntry, RosterIntelligencePayload } from "../../../engines/rosterIntelligencePayload";
 import type { Team } from "../../hooks/useLeagueBuilderData";
 

@@ -8,6 +8,8 @@ import {
   rankArchetypeDraftability,
 } from '../draftabilityRanker';
 import { archetypeCapShift, HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
+import { LUXURY_CAP_TABLES } from '../../data/tierParams';
+import { snakeLuxuryCaps } from '../snakeLuxuryTax';
 
 /**
  * Snipe-test draftability verdicts (RATIFIED formula, DECISIONS_LOG 2026-07-01) on DETERMINISTIC
@@ -117,6 +119,25 @@ function deepPool(): SimPlayer[] {
   return pool;
 }
 
+function exactLegalRosterPool(): SimPlayer[] {
+  const hitters = [
+    'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF',
+    'C', '1B', '2B', 'LF', 'RF',
+  ].map((position, index) => ({
+    ...mkHitter(`exact-h-${index}`, position, index),
+    bat: { POW: 99, CON: 40, SPD: 40, FLD: 40, ARM: 40 },
+    iv: 50,
+    salary: 50,
+  }));
+  const pitchers = [
+    ...Array.from({ length: 4 }, (_, index) => mkPitcher(`exact-sp-${index}`, 'SP', index)),
+    ...Array.from({ length: 3 }, (_, index) => mkPitcher(`exact-rp-${index}`, 'RP', index)),
+    mkPitcher('exact-cp', 'CP', 0),
+    mkPitcher('exact-swing', 'SP/RP', 0),
+  ].map((player) => ({ ...player, iv: 50, salary: 50 }));
+  return [...hitters, ...pitchers];
+}
+
 describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   it('a buildable pool ranks without LOCKED verdicts and orders bands best-first', () => {
     const rows = rankArchetypeDraftability(syntheticPool(8), SUBSET, 'standard', { realTeamCount: 20, minEmbodimentZ: -1 });
@@ -163,6 +184,43 @@ describe('rankArchetypeDraftability — snipe-test verdicts', () => {
   it('tuning dials are the ratified defaults (§16-tunable)', () => {
     expect(DRAFTABILITY_TUNING.maxRebuilds).toBe(3);
     expect(DRAFTABILITY_TUNING.greenNoTaxBuilds).toBe(2);
+  });
+
+  it('caller-owned Snake tax caps make draftability invariant to room size', () => {
+    const pool = deepPool();
+    const taxCaps = snakeLuxuryCaps([...LUXURY_CAP_TABLES.standard]);
+    const twoClub = rankArchetypeDraftability(pool, SUBSET, 'standard', {
+      realTeamCount: 2,
+      minEmbodimentZ: -1,
+      taxCaps,
+    });
+    const twentyClub = rankArchetypeDraftability(pool, SUBSET, 'standard', {
+      realTeamCount: 20,
+      minEmbodimentZ: -1,
+      taxCaps,
+    });
+    expect(twentyClub).toEqual(twoClub);
+  }, 30_000);
+
+  it('treats caller-owned Snake caps as a base law and still applies each archetype shift', () => {
+    const archetypes = HISTORICAL_ARCHETYPES.filter((archetype) =>
+      archetype.id === 'murderers-row' || archetype.id === 'whiteyball');
+    const rows = rankArchetypeDraftability(exactLegalRosterPool(), archetypes, 'standard', {
+      realTeamCount: 8,
+      budgetOverride: 1_000_000,
+      minEmbodimentZ: -1,
+      taxCaps: [{
+        group: 'hitters',
+        stat: 'POW',
+        topN: 8,
+        cap: 600,
+        penaltyCurve: 1,
+        penaltyPer100: 1_000,
+        minAdder: 0,
+      }],
+    });
+    const headroom = new Map(rows.map((row) => [row.archetypeId, row.taxHeadroom]));
+    expect(headroom.get('murderers-row')).toBeGreaterThan(headroom.get('whiteyball') ?? Infinity);
   });
 });
 

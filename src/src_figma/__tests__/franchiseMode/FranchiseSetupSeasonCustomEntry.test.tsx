@@ -33,6 +33,24 @@ vi.mock('../../../utils/leagueBuilderFarmScoutingHandoff', () => ({
     mockValidatePreparedLeagueBuilderFarmScoutingState(...args),
 }));
 
+vi.mock('../../../utils/mlbDraftCompletion', () => ({
+  readMlbDraftCompletion: vi.fn(async () => ({
+    auctionSession: { session: { state: 'AUCTION_COMPLETE' } },
+    snakeSession: null,
+    auctionComplete: true,
+    snakeComplete: false,
+    complete: true,
+  })),
+  isCompletedLegacySnakeDraftSession: vi.fn(() => false),
+}));
+
+vi.mock('../../../utils/leagueBuilderStorage', () => ({
+  getLeagueTemplate: vi.fn(async (leagueId: string) => ({ id: leagueId, draftFormat: 'auction' })),
+  getMlbDraftSession: vi.fn(async () => null),
+  getAuctionSessionById: vi.fn(async () => ({ session: { state: 'AUCTION_COMPLETE' } })),
+  createFarmAuctionSessionId: (leagueId: string, seasonNumber = 1) => `farm-auction-${leagueId}-${seasonNumber}`,
+}));
+
 vi.mock('../../hooks/useLeagueBuilderData', () => ({
   useLeagueBuilderData: vi.fn(() => ({
     leagues: [
@@ -88,9 +106,11 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 
 async function renderSeasonStep() {
   render(<FranchiseSetup />);
+  await screen.findAllByText('Draft complete');
   await act(async () => {
     fireEvent.click(screen.getByText('KRUSE BASEBALL LEAGUE'));
   });
+  await waitFor(() => expect(screen.getByRole('button', { name: /NEXT/i })).not.toBeDisabled());
   await act(async () => {
     fireEvent.click(screen.getByRole('button', { name: /NEXT/i }));
   });

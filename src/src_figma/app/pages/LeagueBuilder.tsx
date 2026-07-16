@@ -1,32 +1,62 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Loader2, Download, CheckCircle, AlertCircle, Wrench } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { isRecoverableHistoricalLegendsOwnershipCollision } from "../../../utils/historicalLegendsImport";
 import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
   const navigate = useNavigate();
-  const { leagues, teams, players, isLoading, error, seedSMB4Data, isSMB4Seeded, seedMLBData, isMLBSeeded } = useLeagueBuilderData();
+  const {
+    leagues,
+    teams,
+    players,
+    isLoading,
+    error,
+    seedSMB4Data,
+    isSMB4Seeded,
+    seedMLBData,
+    isMLBSeeded,
+    seedHistoricalLegendsData,
+    repairHistoricalLegendsData,
+    isHistoricalLegendsSeeded,
+  } = useLeagueBuilderData();
 
-  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | null>(null);
-  const [seedResult, setSeedResult] = useState<{ source: string; teams: number; players: number } | null>(null);
+  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | 'legends' | 'legends-repair' | null>(null);
+  const [seedResult, setSeedResult] = useState<{
+    source: string;
+    players: number;
+    teams?: number;
+    playerGroups?: number;
+  } | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [canRepairLegendsImport, setCanRepairLegendsImport] = useState(false);
   const [isSMLSeeded, setIsSMLSeeded] = useState(false);
   const [isMLBSeededState, setIsMLBSeededState] = useState(false);
+  const [areLegendsSeeded, setAreLegendsSeeded] = useState(false);
+  const smlPlayerCount = players.filter((player) => player.sourceDatabase === 'SMB4').length;
+  const mlbPlayerCount = players.filter((player) => player.sourceDatabase === 'MLB').length;
 
   // Check if already seeded on mount
   useEffect(() => {
     isSMB4Seeded().then(setIsSMLSeeded);
     isMLBSeeded().then(setIsMLBSeededState);
-  }, [isSMB4Seeded, isMLBSeeded, players]);
+    isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
+  }, [isSMB4Seeded, isMLBSeeded, isHistoricalLegendsSeeded, players]);
 
-  const handleSeedDatabase = async (source: 'sml' | 'mlb') => {
+  const handleSeedDatabase = async (source: 'sml' | 'mlb' | 'legends') => {
     if (isSeeding) return;
 
-    const label = source === 'sml' ? 'Super Mega League (20 teams)' : 'Major League Baseball (30 teams)';
+    const label = source === 'sml'
+      ? 'Super Mega League (20 teams)'
+      : source === 'mlb'
+        ? 'Major League Baseball (30 teams)'
+        : 'Historical Legends (345 players / 835 cards / 3 source libraries)';
     const confirmed = window.confirm(
-      `This will import all ${label} teams and players into the League Builder database.\n\n` +
-      `Any existing ${source.toUpperCase()} teams/players will be refreshed. Other leagues are preserved.\n\n` +
+      `${source === 'legends'
+        ? `This will import all ${label} into the League Builder player database.`
+        : `This will import all ${label} teams and players into the League Builder database.`}\n\n` +
+      `Existing ${source === 'legends' ? 'Historical Legends cards' : `${source.toUpperCase()} teams/players`} will be refreshed. Other data is preserved.\n\n` +
       'Continue?'
     );
 
@@ -35,21 +65,57 @@ export function LeagueBuilder() {
     setIsSeeding(source);
     setSeedResult(null);
     setSeedError(null);
+    setCanRepairLegendsImport(false);
 
     try {
       const result = source === 'sml'
         ? await seedSMB4Data(true)
-        : await seedMLBData(true);
+        : source === 'mlb'
+          ? await seedMLBData(true)
+          : await seedHistoricalLegendsData();
       setSeedResult({ source: label, ...result });
       if (source === 'sml') setIsSMLSeeded(true);
-      else setIsMLBSeededState(true);
-      // Re-check both since clearing replaces all data
+      else if (source === 'mlb') setIsMLBSeededState(true);
+      else setAreLegendsSeeded(true);
+      // Re-check all import states after storage changes.
       isSMB4Seeded().then(setIsSMLSeeded);
       isMLBSeeded().then(setIsMLBSeededState);
+      isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
     } catch (err) {
       console.error(`Failed to seed ${source} database:`, err);
       const message = err instanceof Error ? err.message : 'Unknown error';
       setSeedError(message);
+      setCanRepairLegendsImport(
+        source === 'legends' && isRecoverableHistoricalLegendsOwnershipCollision(err),
+      );
+    } finally {
+      setIsSeeding(null);
+    }
+  };
+
+  const handleRepairLegendsImport = async () => {
+    if (isSeeding || !canRepairLegendsImport) return;
+    const confirmed = window.confirm(
+      'This will reclaim only unassigned, verified Historical Legends cards left behind as League Builder players, then complete the Draft / Career / Peak import. Other players and leagues are preserved.\n\nContinue?'
+    );
+    if (!confirmed) return;
+
+    setIsSeeding('legends-repair');
+    setSeedResult(null);
+    try {
+      const result = await repairHistoricalLegendsData();
+      setSeedError(null);
+      setCanRepairLegendsImport(false);
+      setSeedResult({
+        source: 'Historical Legends (345 players / 835 cards / 3 source libraries)',
+        ...result,
+      });
+      setAreLegendsSeeded(true);
+      isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
+    } catch (err) {
+      console.error('Failed to repair Historical Legends import:', err);
+      setSeedError(err instanceof Error ? err.message : 'Unknown error');
+      setCanRepairLegendsImport(false);
     } finally {
       setIsSeeding(null);
     }
@@ -59,7 +125,7 @@ export function LeagueBuilder() {
     <BallparkShell onBack={() => navigate("/")} title="LEAGUE BUILDER">
 
         {/* Database Import Banners */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
           {/* SML Import */}
           <div className="bg-[#556B55] border-[4px] border-[#C4A853] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
             <div className="flex items-center justify-between gap-3">
@@ -69,7 +135,7 @@ export function LeagueBuilder() {
                   <div className="text-sm font-bold text-[#E8E8D8]">Super Mega League</div>
                   <div className="text-xs text-[#E8E8D8]/70">
                     {isSMLSeeded
-                      ? '20 teams, ~440 players'
+                      ? `20 teams, ${smlPlayerCount} players`
                       : 'Import 20 SML teams + players'}
                   </div>
                 </div>
@@ -106,7 +172,7 @@ export function LeagueBuilder() {
                   <div className="text-sm font-bold text-[#E8E8D8]">Major League Baseball</div>
                   <div className="text-xs text-[#E8E8D8]/70">
                     {isMLBSeededState
-                      ? '30 teams, ~660 players'
+                      ? `30 teams, ${mlbPlayerCount} players`
                       : 'Import 30 MLB teams + players'}
                   </div>
                 </div>
@@ -133,6 +199,43 @@ export function LeagueBuilder() {
               </button>
             </div>
           </div>
+
+          {/* Historical Legends Import */}
+          <div className="bg-[#556B55] border-[4px] border-[#D4A020] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Database className="w-6 h-6 text-[#D4A020] shrink-0" />
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-[#E8E8D8]">Historical Legends</div>
+                  <div className="text-xs text-[#E8E8D8]/70">
+                    {areLegendsSeeded
+                      ? '345 players · Draft / Career / Peak source libraries'
+                      : 'Import Draft / Career / Peak Legends libraries'}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleSeedDatabase('legends')}
+                disabled={!!isSeeding}
+                className={`flex items-center gap-2 px-4 py-2 border-4 font-bold text-xs transition-all active:scale-95 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] shrink-0 ${
+                  isSeeding
+                    ? 'bg-[#4A6844] border-[#E8E8D8]/30 text-[#E8E8D8]/50 cursor-wait'
+                    : areLegendsSeeded
+                      ? 'bg-[#4A6844] border-[#D4A020] text-[#E8E8D8] hover:bg-[#5A8352]'
+                      : 'bg-[#D4A020] border-[#E8E8D8] text-[#1A1A1A] hover:bg-[#E4B030]'
+                }`}
+              >
+                {isSeeding === 'legends' ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> IMPORTING...</>
+                ) : areLegendsSeeded ? (
+                  <><CheckCircle className="w-4 h-4" /> REIMPORT</>
+                ) : (
+                  <><Download className="w-4 h-4" /> IMPORT LEGENDS</>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* Import status messages */}
@@ -140,13 +243,30 @@ export function LeagueBuilder() {
           <div className="mb-8 -mt-4">
             {seedResult && (
               <div className="bg-[#556B55] border-[2px] border-[#4CAF50] p-3 text-xs text-[#4CAF50]">
-                Successfully imported {seedResult.source}: {seedResult.teams} teams and {seedResult.players} players!
+                Successfully imported {seedResult.source}:{' '}
+                {seedResult.playerGroups !== undefined
+                  ? `${seedResult.players} cards across ${seedResult.playerGroups} players`
+                  : `${seedResult.teams ?? 0} teams and ${seedResult.players} players`}!
               </div>
             )}
             {seedError && (
-              <div className="bg-[#556B55] border-[2px] border-[#F44336] p-3 text-xs text-[#F44336] flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Import failed: {seedError}</span>
+              <div className="bg-[#556B55] border-[2px] border-[#F44336] p-3 text-xs text-[#F44336]">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Import failed: {seedError}</span>
+                </div>
+                {canRepairLegendsImport && (
+                  <button
+                    type="button"
+                    onClick={handleRepairLegendsImport}
+                    disabled={!!isSeeding}
+                    className="mt-3 min-h-11 px-4 border-[3px] border-[#E8E8D8] bg-[#D4A020] text-[#1A1A1A] font-bold flex items-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95 disabled:opacity-50"
+                  >
+                    {isSeeding === 'legends-repair'
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> REPAIRING...</>
+                      : <><Wrench className="w-4 h-4" /> REPAIR LEGENDS IMPORT</>}
+                  </button>
+                )}
               </div>
             )}
           </div>

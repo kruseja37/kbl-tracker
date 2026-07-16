@@ -1186,3 +1186,85 @@ merged, S7 plus the companion stitch still open, and JK's browser walkthrough ne
 This lane adds a branch-local UNIFYSETUP status above it: implementation and focused
 firewalls are green, but the one-worker full suite has two non-amended failures, so
 the lane is stopped pending a captain ruling rather than marked complete.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 final Snake close
+
+The prior live header recorded the combined Snake branch after Amendment 9: 681 passed
+files / 10,120 passed tests, responsive Playwright 4/4, and the live UI crawl still next.
+The final close then completed that crawl, repaired every resulting finding through
+FINDING-185 under builder-auditor separation, and advanced the exact code tree to commit
+`f8ca392d` with a larger clean repository and browser proof.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake browser-walk repair close
+
+The prior live header recorded code commit `f8ca392d` as ready for JK's walk with a
+686-file / 10,227-test clean baseline and 17/17 browser proof. JK's next live pass then
+found the board recalculation loop, unavailable/weak Assistant GM state, incorrect
+drafted-player board/pool handling, an incomplete unnumbered pick log, and a companion
+address/auth failure. This close supersedes that header with the independently approved
+repair at `00fd64fe`; JK's browser walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-14 Snake companion/economy/responsive close
+
+The prior live header recorded code commit `00fd64fe` as ready for JK's re-walk after
+closing the board loop, archetype fallback, drafted-player truth, numbered log, and LAN
+address repairs. JK's physical companion pass then found lag, false permanent calculation,
+missing Assistant boards, incorrect zero projected tax, suspect team fit, and desktop
+nested-scroll friction; he also approved companion pick intent with Hotseat confirmation
+and questioned the no-clock Pause action. This close supersedes that header with the
+independently approved repair at `6ae55543`. JK's Mac/iPad walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 unified setup and exact Snake money close
+
+The prior live header recorded code commit `6ae55543` after the companion/economy/responsive
+repair. JK's next review exposed disconnected Auction/Snake pool and archetype setup, doubtful
+fit/tax and legal-finish math, Assistant slot errors, duplicate legend-name display, and missing
+home navigation. This close supersedes that header with independently approved code commit
+`00e7f09e`: one shared setup surface, exact signed roster-local money and slot proof, corrected
+Assistant plan structure/IV ordering, duplicate nickname suppression, and the SMB home button.
+JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 Legends libraries and Snake soul handoff close
+
+The prior live header recorded code commit `00e7f09e` after unified Draft Setup and exact
+Snake money/slot repair. JK then approved version-grouped Legends source libraries and asked
+for distinct Legend/non-Legend personality initialization plus Snake MLB/FARM player morale
+and roster-archetype fan morale for Living Season launch. This close supersedes that header
+with independently approved code commit `2efcef63`; JK's League Builder and Mac/iPad Snake
+walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 starter-hitting identity close
+
+The prior live header recorded code commit `c5ca1e9c` after the pitcher secondary-tax ramp was
+softened and held pitcher-hitting identity for simulation. JK then ruled Standard and Nerfed as
+the product tiers and approved testing four distinct existing-archetype extensions instead of a
+25th archetype. This close supersedes that header with independently approved code commit
+`9e5901d7`; JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 usage-aware pitcher-tax close
+
+The prior live header recorded code commit `9e5901d7` after starter-hitting identities were ratified.
+JK then approved playing-time-weighted pitcher secondary tax and separate Two Way hitter/pitcher
+treatment. This close supersedes that header with runtime commits through `e26f9970`: exact role
+exposure, roster-level single assignment for SP/RP arms, shared Assistant/Auction/Snake fit, frozen
+legacy-row compatibility, and an absolute solvency gate. The independent oracle run proves all 72
+tier/archetype rosters legal and solvent. JK's League Builder and Mac/iPad Snake walk remains the sole
+acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-16 pitcher-hitting recalibration close
+
+The prior live header recorded runtime commits through `e26f9970` after ordinary pitcher secondary
+ratings became usage-aware and Two Way players received exact single-path treatment. JK then asked
+whether the starter-hitting identities still delivered meaningful value after that discount and
+explicitly required the same usage law to be proven for relievers. This builder close records
+implementation commit `9ace5857`: Bash Brothers and Launch & Leather stay unchanged, Flamethrowers
+moves to +30% rotation POW/CON, HDH Royals moves to +40% rotation CON, and exact RP/CP and Two Way
+proof is pinned. Independent audit and JK's League Builder/Mac/iPad Snake walk remain open gates.
+
+## Outgoing Live Header Snapshot — before 2026-07-16 recalibration audit close
+
+The prior live header recorded implementation commit `9ace5857` and builder close `5a3021b7`, with
+the separate audit still open. The non-builder audit then independently reproduced the exact old-model
+ablation, current lower-bound sweep, 72 legal/solvent parity rosters, 48 legal/solvent identity rosters,
+RP/CP usage settlement, and Two Way no-double-tax treatment. Its verdict is VERIFIED with no Major or
+Minor findings. This close leaves only JK's League Builder and Mac/iPad Snake walk as the product gate.

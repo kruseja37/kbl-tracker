@@ -1,52 +1,77 @@
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
-import type { SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
-import { DeskCandidateCard } from './DeskCandidateCard';
+import { SNAKE_BOARD_SLOT_IDS } from '../../../../../utils/leagueBuilderStorage';
+import { DeskCandidateRow } from './DeskCandidateRow';
+import { DraftTruthStrip } from './DraftTruthStrip';
+import { buildPlanLedger, type ChemistryStripRow, type DraftMoneyLedger } from './draftTruthModel';
 import type { DeskCandidate, TaxCoreRow } from './deskModel';
 
 export function BoardView(props: {
   candidates: readonly DeskCandidate[];
-  boardSlots: Partial<Record<SnakeBoardSlotId, string>>;
-  brokenSlots: readonly SnakeBoardSlotId[];
+  boardSlots: Readonly<Record<string, string | undefined>>;
+  brokenSlots: readonly string[];
   planBill: SnakePlanBill | null;
+  planLedger?: DraftMoneyLedger | null;
+  planTitle?: string;
+  planChemistry?: readonly ChemistryStripRow[];
   taxCoreRows: readonly TaxCoreRow[];
-  slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
-  resolveLegalFinishLine?: (candidateId: string) => string;
+  slotDepth: Readonly<Record<string, number | undefined>>;
+  selectedCandidateId?: string | null;
+  onSelectCandidate?: (candidateId: string) => void;
   showHelp?: boolean;
+  readOnly?: boolean;
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
+  const ledger = props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null);
   return (
-    <div>
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(props.boardSlots).map(([slotId, playerId]) => (
-          <div key={slotId} className="border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] p-2">
-            <p className="text-[10px] font-bold text-[var(--ballpark-brass)]">{slotId}</p>
-            {byId.get(playerId)
-              ? <DeskCandidateCard candidate={byId.get(playerId)!} boardSlot={slotId} legalFinishLine={props.resolveLegalFinishLine?.(playerId)} />
-              : <p className="font-bold">{playerId}</p>}
-            {props.brokenSlots.includes(slotId as SnakeBoardSlotId) && <p className="text-sm font-black text-[var(--ballpark-warn-text)]">PLAN BROKEN</p>}
-            {(props.slotDepth[slotId as SnakeBoardSlotId] ?? 3) <= 2 && !props.brokenSlots.includes(slotId as SnakeBoardSlotId) && (
-              <p className="mt-2 text-xs font-black text-[var(--ballpark-warn-text)]">YOUR {slotId} SLOT IS DOWN TO DEPTH — {props.slotDepth[slotId as SnakeBoardSlotId]} LEFT YOU'VE RANKED</p>
-            )}
-          </div>
-        ))}
-      </div>
-      {props.planBill && (
-        <div className="mt-4 border-4 border-[var(--ballpark-brass)] p-3 text-center">
-          <div className="grid grid-cols-3 gap-2">
-            <div><p className="text-xs font-bold">PLAN COST</p><strong>${Math.round(props.planBill.planCost).toLocaleString()}</strong></div>
-            <div><p className="text-xs font-bold">PLAN TAX</p><strong>${Math.round(props.planBill.planTax).toLocaleString()}</strong></div>
-            <div><p className="text-xs font-bold">PLAN CUSHION</p><strong>${Math.round(props.planBill.planCushion).toLocaleString()}</strong></div>
-          </div>
-          {props.showHelp ? <p className="mt-2 border-l-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] px-3 py-2 text-xs">PLAN CUSHION IS THE MONEY LEFT IF THESE 22 ARE STILL THERE.</p> : null}
-        </div>
+    <div data-testid={props.readOnly ? 'assistant-board-view' : 'my-board-view'}>
+      {ledger && props.planChemistry ? (
+        <div className="mb-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={ledger} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
+      ) : (
+        <section className="mb-4 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" data-testid={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'}>
+          <h3 className="text-xs font-black tracking-[0.14em] text-[var(--ballpark-brass)]">{props.planTitle ?? '22-PLAYER PLAN'}</h3>
+          <p className="mt-2 font-black">PLAN TRUTH UNAVAILABLE</p>
+        </section>
       )}
-      <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
-        <summary className="cursor-pointer font-black">YOUR TAX CORE</summary>
-        <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p>
+      <div
+        className="grid grid-cols-1 gap-1"
+        data-testid="board-slot-grid"
+      >
+        {SNAKE_BOARD_SLOT_IDS.map((slotId) => {
+          const playerId = props.boardSlots[slotId];
+          const candidate = playerId ? byId.get(playerId) : undefined;
+          const state = props.brokenSlots.includes(slotId)
+            ? 'PLAN BROKEN'
+            : !playerId
+              ? 'MISSING'
+              : !candidate
+                ? 'UNKNOWN PLAYER'
+                : candidate.draftedByActiveTeam
+                  ? 'COMMITTED'
+                  : candidate.drafted
+                  ? 'UNAVAILABLE'
+                  : (props.slotDepth[slotId] ?? 3) <= 2
+                    ? `${props.slotDepth[slotId]} LEFT`
+                    : null;
+          return <div key={slotId} data-board-slot={slotId} data-board-state={state ?? 'READY'}>
+            {candidate
+              ? <DeskCandidateRow
+                  candidate={candidate}
+                  prefix={slotId}
+                  selected={props.selectedCandidateId === playerId}
+                  onSelect={props.onSelectCandidate}
+                  warning={state}
+                />
+              : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotId}</span>{state}</p>}
+          </div>
+        })}
+      </div>
+      {!props.readOnly ? <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3">
+        <summary className="flex min-h-11 cursor-pointer items-center font-black">YOUR TAX CORE</summary>
+        {props.showHelp ? <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p> : null}
         <div className="mt-3 space-y-2">
           {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
         </div>
-      </details>
+      </details> : null}
     </div>
   );
 }

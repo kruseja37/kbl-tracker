@@ -17,7 +17,7 @@ export const FARM_ARCHETYPE_TILT_TUNING = {
   tiltStrength: 0.6,
 } as const;
 
-type CapModificationDeltas = Record<ModStat, number>;
+type CapModificationDeltas = Partial<Record<ModStat, number>>;
 
 function emptyBandWeights(): Record<Band, number> {
   const weights = {} as Record<Band, number>;
@@ -28,7 +28,7 @@ function emptyBandWeights(): Record<Band, number> {
 }
 
 function positiveBandDelta(deltas: CapModificationDeltas, band: Band): number {
-  return BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat], 0), 0);
+  return BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat] ?? 0, 0), 0);
 }
 
 function finiteNonNegative(value: number | undefined): number {
@@ -38,7 +38,11 @@ function finiteNonNegative(value: number | undefined): number {
 export function archetypeBandWeights(identity: TeamCapIdentity | undefined): Record<Band, number> {
   const raw = emptyBandWeights();
 
-  if (identity?.increase?.length) {
+  if (identity?.rawShift) {
+    for (const band of BANDS) {
+      raw[band] = positiveBandDelta(identity.rawShift, band);
+    }
+  } else if (identity?.increase?.length) {
     for (const elementName of identity.increase) {
       const deltas = CAP_MODIFICATION_FRACTIONS[elementName];
       if (!deltas) continue;

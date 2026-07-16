@@ -1,104 +1,59 @@
-import {
-  CHEMISTRY_CODES,
-  CHEMISTRY_CODE_TO_WORD,
-  CHEMISTRY_TARGET_DISTRIBUTION,
-  type ChemistryCode,
-} from '../data/chemistryCanonical';
-import type { Chemistry, Personality, Player } from '../utils/leagueBuilderStorage';
+import { HISTORICAL_LEGENDS_SOURCE_DATABASE } from '../data/historicalLegendsAppData';
+import type { Personality, Player } from '../utils/leagueBuilderStorage';
 import {
   generateHiddenPersonalityModifiers,
   PERSONALITY_WEIGHTS,
   pickWeighted,
-  randomUnit,
 } from '../utils/prospectScoutingDraftEngine';
 
-// PERSONALITY_WEIGHTS values are canonical Personality words (validated by
-// leaguePoolAxisRegen.test.ts); cast narrows the generic string weights to the Player field type.
+// Personality weights are the canonical seven visible personality words.
 const PERSONALITY_WEIGHT_ENTRIES = PERSONALITY_WEIGHTS as Array<[Personality, number]>;
 
-function buildChemistryQuotaCodes(playerCount: number): ChemistryCode[] {
-  if (playerCount <= 0) {
-    return [];
+function stablePlayerIdentity(player: Player): string {
+  if (player.sourceDatabase === HISTORICAL_LEGENDS_SOURCE_DATABASE) {
+    return player.sourceId
+      ?? player.historicalSourceId
+      ?? player.historicalLegend?.playerId
+      ?? player.id;
   }
-
-  const quotaRows = CHEMISTRY_CODES.map((code, orderIndex) => {
-    const exactCount = playerCount * CHEMISTRY_TARGET_DISTRIBUTION[code];
-    const floorCount = Math.floor(exactCount);
-    return {
-      code,
-      orderIndex,
-      count: floorCount,
-      remainder: exactCount - floorCount,
-    };
-  });
-
-  let assignedCount = quotaRows.reduce((sum, row) => sum + row.count, 0);
-  const remainders = [...quotaRows].sort((left, right) => {
-    const remainderDiff = right.remainder - left.remainder;
-    if (remainderDiff !== 0) return remainderDiff;
-    return left.orderIndex - right.orderIndex;
-  });
-
-  for (let index = 0; assignedCount < playerCount; index += 1) {
-    const row = remainders[index % remainders.length];
-    row.count += 1;
-    assignedCount += 1;
-  }
-
-  const chemistryCodes: ChemistryCode[] = [];
-  for (const code of CHEMISTRY_CODES) {
-    const count = quotaRows.find((row) => row.code === code)?.count ?? 0;
-    for (let index = 0; index < count; index += 1) {
-      chemistryCodes.push(code);
-    }
-  }
-
-  return chemistryCodes;
+  return `${player.sourceDatabase ?? (player.isCustom ? 'CUSTOM' : 'UNSOURCED')}:${player.id}`;
 }
 
-function shuffleChemistryCodes(codes: ChemistryCode[], seed: string): ChemistryCode[] {
-  const shuffled = [...codes];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.min(
-      index,
-      Math.floor(randomUnit(`${seed}:shuffle:${index}`) * (index + 1)),
-    );
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-  }
-  return shuffled;
-}
-
-function buildChemistryAssignments(players: readonly Player[], leagueId: string): Map<string, Chemistry> {
-  const shuffledCodes = shuffleChemistryCodes(
-    buildChemistryQuotaCodes(players.length),
-    `${leagueId}:chemistry-rebalance`,
-  );
-  const sortedPlayers = players
-    .map((player, inputIndex) => ({ player, inputIndex }))
-    .sort((left, right) => {
-      const idDiff = left.player.id.localeCompare(right.player.id);
-      if (idDiff !== 0) return idDiff;
-      return left.inputIndex - right.inputIndex;
-    });
-
-  const assignments = new Map<string, Chemistry>();
-  sortedPlayers.forEach(({ player }, index) => {
-    const code = shuffledCodes[index] ?? CHEMISTRY_CODES[0];
-    assignments.set(player.id, CHEMISTRY_CODE_TO_WORD[code] as Chemistry);
-  });
-  return assignments;
-}
-
-export function regenerateLeaguePoolPlayerAxes(players: Player[], leagueId: string): Player[] {
-  const chemistryAssignments = buildChemistryAssignments(players, leagueId);
-
+/**
+ * Initialize draft personality truth without making it league-global mutable state.
+ *
+ * - Legends keep their authored visible personality and any curated hidden values.
+ *   Missing hidden values receive a stable person-level fallback shared by all card versions.
+ * - Custom players keep the visible personality the user selected and receive hidden values once.
+ * - Generated FARM prospects already own both axes and pass through byte-identically.
+ * - Other imported/non-Legends players receive a stable randomized visible personality and hidden
+ *   values only when hidden values are absent. Once present, a later lock is a no-op.
+ * - Chemistry is source-authored and is never rewritten here.
+ *
+ * `leagueId` remains in the signature for the lock adapter, but is deliberately excluded from the
+ * seed. The same global player may appear in more than one draft without one league changing the
+ * personality truth observed by another.
+ */
+export function initializeDraftPoolPlayerAxes(players: Player[], leagueId: string): Player[] {
+  void leagueId;
   return players.map((player) => {
-    const seed = `${leagueId}:${player.id}`;
+    const stableIdentity = stablePlayerIdentity(player);
+    const isLegend = player.sourceDatabase === HISTORICAL_LEGENDS_SOURCE_DATABASE;
+
+    if (player.hiddenPersonalityModifiers) {
+      return { ...player };
+    }
+
+    const seed = isLegend
+      ? `historical-legend:${stableIdentity}`
+      : `draft-player:${stableIdentity}`;
+
     return {
       ...player,
-      personality: pickWeighted(`${seed}:personality`, PERSONALITY_WEIGHT_ENTRIES),
+      personality: isLegend || player.isCustom
+        ? player.personality
+        : pickWeighted(`${seed}:personality`, PERSONALITY_WEIGHT_ENTRIES),
       hiddenPersonalityModifiers: generateHiddenPersonalityModifiers(seed),
-      chemistry: chemistryAssignments.get(player.id) ?? (CHEMISTRY_CODE_TO_WORD[CHEMISTRY_CODES[0]] as Chemistry),
     };
   });
 }

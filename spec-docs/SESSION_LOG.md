@@ -7110,3 +7110,461 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next session must start with the captain ruling on the two non-amended Gate 5 failures;
   do not silently characterize them. If unblocked, rerun Gate 5 once, then dispatch the
   required independent builder≠auditor review before any landing.
+
+## 2026-07-12/13 (Codex, resumed after app crash) — snake mock-draft assembly and hostile close
+
+- Re-fetched `origin/main` before every current-state ruling. The isolated branch
+  `codex/snake-mock-draft-ready` remains based directly on `origin/main` `ea66830e`; this work is
+  not on `main` until the branch is merged.
+- Completed the approved functional path: shared Draft Setup → canonical snake room → explicit
+  MLB recap confirmation → Scout Hire → farm snake room/recap → staffing → compact Franchise
+  Setup → Franchise launch with zero schedule rows. Living Season remains the owner of later CSV
+  upload or manual schedule entry.
+- Closed the team-room contract: covered team-first desks, off-clock board work, full-pool search
+  and inspection, overall and position rankings over one saved ordering, explicit 22-player plan,
+  separate live roster, all non-zero player ratings, positions, traits, personality, archetype,
+  team fit, exact salary/tax/true-cost effects, and five chemistry aggregates. Pronouns remain in
+  engine data and do not render.
+- Hardened persistence and privacy: atomic pick/trade/correction/companion writes; immutable MLB
+  and farm manifests; exact roster-handoff proof; cloud-safe Run It Back receipts; version-aware
+  player identity; farm scouting fog and frozen absolute-slot salaries; hidden farm true-value
+  rows excluded while salary and morale reach Franchise launch.
+- Ruthless repo/UI crawling removed the retired POC page and engine, noncanonical route ownership,
+  stale whole-session races, terminal retry paths, privacy auto-reveal, recap/correction dead ends,
+  touch/focus/selected-state defects, explanatory-text violations, and iPad layout failures.
+- The final audit itself found and fixed 71 stale fixtures or regression expectations exposed by
+  the production corrections, then caught stale stock MLB/FARM assignments, first-confirm recap
+  revision races, same-name ambiguity, missing farm search/TOP, stranded Scout Hire recovery,
+  narrow-layout overflow, and checksum-only snake launch ownership. A stable full-repository run
+  then passed 674 test files with 8 skipped (682 total): 9,955 tests passed, 15 skipped (9,970
+  total), 0 failed.
+  TypeScript, production build, focused ESLint, and `git diff --check` are clean.
+- During the last recheck, macOS purged several `/private/tmp` directories under disk pressure,
+  including the uncommitted worktree. The ten committed checkpoints stayed safe. The exact final
+  tree was reconstructed from this task's retained ordered patch ledger, compared across all 107
+  touched files, and re-cleared through TypeScript plus the 11-file/89-test high-risk gate before
+  the independent closing audit resumed. No source was guessed from memory.
+- Automated evidence can make the build ready, not accept it. JK's browser walk remains the sole
+  product gate.
+- 2026-07-13 browser-walk repair: League Settings correctly wrote a selected Snake format, but the
+  Edit League modal always reopened with Auction and a later save overwrote the stored value.
+  Hydration now preserves `league.draftFormat` with Auction only as the legacy fallback. Live proof
+  on Super Mega League: save Snake, reopen still Snake, enter `Snake Draft — Super Mega League`.
+  Independent audit APPROVE; focused gate 4 files / 89 tests, TypeScript, scoped ESLint, and
+  `git diff --check` clean.
+
+## 2026-07-14 (Codex, unattended continuation) — Snake combined-repo close green; live UI crawl next
+
+- Fresh-fetch state remained `origin/main` `ea66830e`; the isolated Snake branch is still not on
+  `main`, and no automated result was treated as JK acceptance.
+- The independent combined-branch auditor returned NOT VERIFIED with three majors: covered
+  companion advice survived as retained hook state, assistant/guide render identity disagreed with
+  worker identity, and missing player/team fallbacks could expose placeholders or internal keys.
+- Repair 1 was independently rejected. Amendment 9 established a real privacy epoch, aligned hook
+  state and workers on semantic request keys, and completed the exact `UNKNOWN PLAYER` / `UNKNOWN
+  TEAM` sweep. A replacement independent auditor then returned VERIFIED, zero major and zero minor,
+  after direct mutation attacks and 9 files / 131 focused tests.
+- Closing evidence on the exact audited tree: combined changed tests 266/266; Snake matrix 48 files
+  / 383 tests; responsive iPad Playwright 4/4; exact changed-file no-inline lint 0 errors / 0
+  warnings; TypeScript, production build, and diff hygiene green. The required post-audit serial
+  repository gate passed 681 files with 8 skipped (689 total): 10,120 tests passed, 15 skipped
+  (10,135 total), zero failed.
+- Next: commit the exact audited tree after a fresh fetch, obtain one final hostile whole-branch
+  verdict on the commit, then crawl the live production Snake, companion, farm, recap, and
+  zero-schedule handoff paths. Every live finding still requires a separate builder and auditor.
+  JK's browser walk remains the sole product-acceptance gate.
+
+## 2026-07-14 (Codex, final continuation) — Snake repo/UI crawl closed; ready for JK walk
+
+- Fresh-fetched `origin/main` before final state and commit: `ea66830e0305d999f4140a101d452417f7d9152e`.
+  The isolated branch was 43 ahead / 0 behind before code commit `f8ca392d`; main did not move.
+- Completed the full hostile repository and UI crawl under builder-auditor separation. Every new
+  defect was booked before repair. FINDING-152 through FINDING-185 in the Snake lane are now fixed
+  and independently verified; rejected first repairs remained recorded rather than hidden.
+- Closed the final tail: FARM has no draft-pick trades and a frozen club-local 75%/3x salary
+  envelope; clean-device sync cannot bootstrap invalid season-2 authority; backup owns the v10
+  schema without stealing content migration or leaking a connection; the guide worker builds
+  without dragging storage/sync/backup code into its graph; final lifecycle fixtures are type-honest.
+- Final serial repository gate: 686 passed files / 8 skipped (694 total); 10,227 passed tests /
+  15 skipped (10,242 total); zero failures in 816.95 seconds.
+- Final live gate: 17/17 Playwright journeys across 1024x768, 768x1024, and 430x932. The full
+  production path completed MLB and FARM, staffing, Franchise launch with zero schedule rows, then
+  accepted manual and CSV schedule rows inside Living Season. Privacy epochs, board persistence,
+  exact trade transfer, recap/restart, and duplicate-pick prevention all passed.
+- Strict lint across every changed TypeScript file, TypeScript, production build, and diff integrity
+  are green. Production build transformed 2,718 modules and emitted every Snake worker.
+- Decisions preserved: FARM draft-pick trades retired; MLB draft-pick trades live; in-season player
+  trades separate; Help-button law canon; schedule is entered after launch for testing; no Legends
+  Library work belongs in this lane.
+- Code/test tree committed as `f8ca392d` (`feat: complete snake draft mock flow`). This documentation
+  close is the required separate session-end commit.
+- **Pending / next start:** run JK's hands-on browser walk against the frozen preview, including a
+  physical companion-device pass. Automated green is not acceptance; JK's walk is the only gate.
+
+## 2026-07-14 (Codex, JK browser-repair continuation) — reported Snake defects closed
+
+- Fresh-fetched `origin/main` before acting and again before close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. The repair is isolated on
+  `codex/snake-mock-draft-ready`, code commit `00fd64fe`.
+- Reproduced the blinking/hanging board failure to render-phase state writes plus stale worker
+  callbacks. Replaced it with ordered effect epochs, stale-result rejection, and cover/null
+  clearing; repeated rapid Optimize clicks settle on one ready 22-player Assistant GM board.
+- Restored real fit identity for older Snake setups by falling back to each team's saved MLB
+  archetype. An explicit Balanced selection remains Balanced.
+- Own drafted players now stay COMMITTED on My Board; rival picks are removed/backfilled; every
+  drafted player is absent from every Player Pool. The Assistant GM no longer says an own rostered
+  player is gone. Committed rows use settled salary plus current marginal tax.
+- Recent Picks now expands to the complete numbered pick-by-pick log. FARM uses numbered picks too.
+- Vite now binds for same-Wi-Fi devices and publishes its actual LAN origin to the companion Help
+  card; the room code travels in the URL and prefills the claim screen. Raw Safari `Load failed`
+  becomes an honest auth-service-unreachable state. External finding remains: the configured
+  Supabase hostname does not resolve and the connected account exposes no project, so real
+  companion login needs an active project URL/key; local code cannot manufacture that service.
+- Independent auditor first returned REJECT on committed-player tax being computed from a roster
+  that already contained that player. The repair removes the committed player from the comparison
+  basis and pins `$10,700` / `TAX +$700`; re-audit returned APPROVE with no other blocker.
+- Final evidence: 9 changed test files / 133 tests green; exact-tree Playwright 17/17 including the
+  full MLB→FARM→staffing→zero-schedule Franchise→manual/CSV schedule lifecycle; strict changed-file
+  lint, TypeScript, production build (2,719 modules), and diff checks green. Full repository runs
+  reached 10,235 passed / 15 skipped; three unrelated batch-load reds across two files passed in
+  their exact solo subsets (8/8) and were not widened into this repair.
+- **Pending / next start:** JK walks the frozen build. Browser acceptance remains JK's only gate;
+  physical companion sign-in waits on the external Supabase project connection.
+
+## 2026-07-14 (Codex, companion/economy/responsive continuation) — second Snake repair wave closed
+
+- Fresh-fetched `origin/main` before state rulings and before code freeze; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work remains isolated on
+  `codex/snake-mock-draft-ready`; code commit `6ae55543` is not on main until merged.
+- Closed JK's physical-device feedback without widening into generic hardening. Recurring main/companion
+  refresh is serialized and narrow, calculation labels are limited to actually requested players, and
+  Assistant GM worker transport now has an equivalent validated local fallback rather than hanging or
+  displaying unavailable.
+- Made Snake tax explicitly roster-local. My Board and Assistant GM Board each calculate their own live
+  22-player salary/tax/all-in/money-left truth from the team's exact archetype; identical rosters are invariant
+  across 2-, 8-, and 20-team rooms. Role-aware exact archetype fit restores strong high-velocity relief fit for
+  Nasty Boys and preserves distinct eight-team boards through one systematic engine.
+- Added safe companion pick submission: an approved on-clock GM may send intent, but the Hotseat owns the
+  authoritative pick and atomically revalidates the request, live pick/player/team, device, claim, approval,
+  and revision. FARM remains without companion picks or draft-pick trades.
+- Wide fine-pointer Mac/laptop layouts now use one page scroll; iPad retains bounded touch panes. The room has
+  no normal Pause control because it has no clock. A contextual `RESUME ROOM` appears only for automatic or
+  legacy saved stopped state, preserving recovery without advertising a purposeless action.
+- The independent auditor's first pass rejected five details: stopped-room recovery, stale companion approval,
+  unequal Assistant fallback behavior, destructive cloud replacement without rollback, and stale auction-size
+  tax test input. All five were repaired. Delta re-audit: **APPROVE**, zero blocker/major/minor findings, 5 files
+  / 168 tests independently green.
+- Final builder evidence: full Snake/companion 54 files / 499 tests; sync/SyncModal 112/112; production build
+  2,720 modules; `git diff --check` clean. Live 1440x1000 preview: no normal Pause/Resume, false `CALCULATING`,
+  Assistant-unavailable state, or horizontal overflow. JK's browser walk remains the sole acceptance gate.
+- **Pending / next start:** JK tests the actual League Builder Snake path on Mac plus a physical iPad companion,
+  including board editing, Assistant GM, projected 22-player tax/fit, and submit-choice→Hotseat approval. The
+  dev server remains running on port 5173. Automated proof is not product acceptance.
+
+## 2026-07-15 (Codex, unified setup + exact Snake money/slot repair) — approved tree committed; JK walk next
+
+- Read the Snake brief and standard ritual, loaded `working-with-jk`, and fetched before every
+  current-state ruling. Final pre-code-commit `origin/main` was
+  `ea66830e0305d999f4140a101d452417f7d9152e`; work stayed isolated on
+  `codex/snake-legends-integration` and was committed as `00e7f09e`.
+- Connected Auction and Snake setup instead of duplicating it: one League Builder Draft Setup now
+  owns saved format, source leagues, grouped Career/Peak/Draft versions, manual add/remove, and
+  team MLB/farm archetypes. Lock/unlock restores only versions retired by the current lock and
+  preserves deliberate GM removals across repeated cycles.
+- Replaced inconsistent Snake affordability checks with one signed `1e-6`-tolerant money law
+  across seating proof, Assistant GM, best-22 feasibility, rational room, setup seeding, decisions,
+  and main/companion display. Exact legal-finish search distinguishes proven `BLOCKED` from bounded
+  `OPEN`; signed tax refunds remain visible.
+- Corrected roster intelligence: fit and projected tax use the complete team-specific 22-player
+  plan and exact before/after tax; dual-role pitchers use their worst applicable group. Assistant
+  plans require a backup catcher and sort same-role C/SP/RP/flex slots by IV. Duplicate legend
+  nickname display is suppressed and a compact SMB home button restores navigation.
+- Builder gates: 23 files / 370 tests; TypeScript, changed-file ESLint, 2,724-module production
+  build, and diff integrity green. Independent frozen-tree auditor: **APPROVE**, zero
+  blocker/major/minor findings, 22 files / 327 tests, plus its own TypeScript/lint/build/diff gates.
+- Dev server PID 77758 is listening on port 5173 from
+  `/private/tmp/kbl-snake-legends-integration`. **Pending / only acceptance gate:** JK's real
+  League Builder and Snake-room Mac/iPad browser walk. No push or merge was performed.
+
+## 2026-07-15 (Codex, Legends libraries + Snake soul handoff) — independently approved; JK walk next
+
+- Fetched current `origin/main` before state claims and again before freeze; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration` and was committed as `2efcef63`.
+- Historical Legends import now provisions read-only Career, Draft, and Peak source libraries.
+  The original 242 identities use the same eleven stable 22-player cohorts in all three; later
+  additions remain free agents in their matching library. Draft Setup supports source-level
+  selection, explicit unassigned-player inclusion, manual player edits, and visible version badges.
+- Legends preserve authored primary personality and person-level curated hidden modifiers; missing
+  Legend hidden truth gets a stable fallback shared across versions. Other non-Legends initialize a
+  seeded visible personality and hidden modifiers once at draft-pool registration. Hidden modifier
+  values do not render or enter Snake workers, logs, recaps, or manifests.
+- Snake MLB and FARM morale now uses actual pick versus frozen expected talent rank with pay neutral.
+  FARM ranks the complete frozen 3× source pool, but stores only drafted-player morale outputs.
+  MLB fan morale uses cumulative relative roster-to-archetype alignment, updates privately after
+  every pick, and freezes the same final result into franchise initialization.
+- The independent auditor rejected the first repair because the FARM manifest exposed exact hidden
+  prospect ranks. The bounded repair removed those ranks and made validation reject their presence;
+  delta re-audit returned **APPROVE** with no residual findings.
+- Builder proof: 303 focused/auction regression tests across the changed paths, including the real
+  8-club MLB→FARM→Franchise gauntlet; strict changed-file ESLint, TypeScript, production build, and
+  diff integrity green. Auditor proof: 120 focused tests, 49 Auction tests, then a 25-test repair delta.
+- Live League Builder proof imported 835 cards across 345 people, rendered the three source
+  libraries/version labels, logged zero console errors, and had no horizontal overflow at iPad Pro
+  landscape size. **Pending / only acceptance gate:** JK's real Mac/iPad browser walk on port 5173.
+
+## 2026-07-15 (Codex, Snake pool assembly + optimizer truth close) — independently approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before implementation and again before final state claims; it
+  remained `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `498be692`.
+- Added two honest Snake assembly modes on the unified Draft Setup surface: exact `FULL SOURCES`
+  and team-shaped `TIGHT` / `COMPETITIVE` / `LOOSE`. Eight-club targets are exactly 212 / 238 /
+  264. Hand adds, hand removes, and pins are durable across reload, source changes, and reshapes.
+- Isolated saved pool preferences and generation knobs by draft format. Auction keeps its prior
+  generation semantics. Snake hydration now blocks early edits/bootstrap so saved manual intent
+  cannot be overwritten during mount.
+- Made the exact roster-local simultaneous seating proof Snake's sole lock authority. Count and the
+  legacy Auction salary-only diagnostic cannot veto a Snake room. Production-source simulations
+  proved all eight tested archetypes can finish legal tax-aware 22-player rosters at every preset.
+- Corrected the Assistant GM's advertised value guard to use literal frozen IV. Its objective is now
+  explicit: legality/solvency first, archetype identity next, then contextual value, while frozen IV
+  stays at least 90% of the best-IV legal build. My Board remains the GM's own order.
+- Verified current pitcher-tax canon without changing it: pitcher POW/CON/SPD/FLD enter the base
+  top-four rotation and bullpen rows; pitcher ARM is excluded; archetype shifts affect hitter rows
+  and pitcher VEL/JNK/ACC only.
+- Independent audit first halted on six correctness defects; all were repaired. Re-audit found one
+  incomplete source-player fingerprint; the final repair fingerprints every roster/IV adapter input
+  and a regression proves the stale visible verdict disappears before recomputation. Final verdict:
+  **APPROVE**.
+- Closing proof: focused 15 files / 252 tests; Playwright pool journey 2/2 on Mac 1440×1000 and iPad
+  1024×768; responsive room journey 16/16 across main/companion; changed-file ESLint, TypeScript,
+  2,728-module production build, and diff integrity green. The broader suite's one isolated FARM
+  fixture failure predates this lane and remains outside its scope.
+- **Pending / only acceptance gate:** JK walks the actual League Builder Snake setup and room on Mac
+  and iPad. The port-5173 dev server runs from `/private/tmp/kbl-snake-legends-integration`.
+
+## 2026-07-15 (Codex, pitcher secondary-tax correction + identity analysis) — approved
+
+- Fresh fetch before final state booking confirmed `origin/main` remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`; the branch was 60 ahead / 0 behind before this docs
+  commit.
+- Changed the active top-four rotation and bullpen POW/CON tax rows from a linear response to a
+  quadratic response at Juiced, Standard, and Nerfed. Caps, coefficients, flat adders, salary/IV,
+  pitcher SPD/FLD, primary pitching rows, hitter rows, and roster assignment did not change.
+- At Standard, a ten-point overage now taxes rotation POW/CON at $22,278 / $14,045 and bullpen
+  POW/CON at $25,184 / $15,498. A fifty-point overage remains material at $487,211 / $293,005 and
+  $513,364 / $317,705. New/rebuilt pools receive the new curve; locked/saved rooms keep their
+  frozen `luxuryCaps`.
+- The first independent audit rejected the hand-edited generated output. The repair put the ruling
+  into `scripts/analyze-pool.py`, added complete non-target-row mutation protection, and documented
+  frozen saved-pool behavior. Re-audit verdict: **APPROVE**, no residual finding. The full legacy
+  generator still aborts earlier on unrelated pre-existing IV/workbook anchor drift; this narrow
+  economy change did not rewrite those anchors.
+- Builder proof: 7 focused files / 96 tests, Python syntax, TypeScript, changed-file ESLint,
+  2,728-module production build, and diff integrity green. The earlier full-repository run had one
+  unrelated solo-reproducing FARM fixture failure caused by missing frozen farm IV.
+- A separate read-only tracer recommended no 25th archetype yet. If pitcher hitting becomes a team
+  identity, test it as a Flamethrowers extension: keep rotation velocity, add rotation POW/CON
+  headroom, and retain the lineup POW/CON sacrifice. Current production axes, fit, embodiment, and
+  pool-supply logic cannot express that safely; a three-tier and contested-pool simulation is the
+  ratification gate.
+
+## 2026-07-15 (Codex, starter-hitting archetype ratification) — independently approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before implementation close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `9e5901d7`.
+- Added rotation-only POW/CON identity axes and carried them through the canonical cap bridge,
+  balance simulator, pool shaping/sufficiency, setup, My Board, Companion, Assistant GM, Rational
+  Room, and team-facing catalog. Hitter and bullpen identity rows remain separate.
+- Ratified four distinct extensions: Bash Brothers +15% rotation POW; Launch & Leather +10%
+  rotation POW/CON; Flamethrowers +10% rotation POW/CON behind its velocity identity; HDH Royals
+  +10% rotation CON. No 25th archetype and no other existing archetype changed.
+- Product tuning now centers Standard and Nerfed. All 24 identities remain inside ±10% with maximum
+  deviations 3.6% and 3.3%, respectively. Juiced stays compatibility-only.
+- Contested eight-club production proof is green for every Standard preset and Nerfed Competitive,
+  Loose, and Full Sources. Nerfed Tight honestly returns HDH as locked in both the identity and
+  tax-aware finish gates; it does not manufacture a readiness claim.
+- The independent auditor rejected one role-neutral fallback that allowed a Flamethrowers reliever
+  to inherit generic Rotation fit. Exact neutral-role handling and downstream/production regressions
+  repaired it; final delta verdict: **APPROVE**, no remaining finding.
+- Closing proof: 11 files / 147 focused tests plus 6 production-shape tests; TypeScript,
+  changed-file ESLint, and diff integrity green. A clean production build transforms 2,726 modules
+  but then hits the pre-existing Vite/PWA `worker.format = iife` code-splitting conflict in the
+  unchanged rational-room worker path (FINDING-212); repair belongs to a separate build-plumbing
+  ticket.
+- **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
+  archetype presentation should be regenerated from `9e5901d7`, covering every boost/sacrifice for
+  all 24 identities and rebuilding every Standard/Nerfed roster and tax panel from current truth.
+
+## 2026-07-15 (Codex, usage-aware pitcher tax + exact Two Way optimizer close) — runtime approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before final state booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`. Runtime commits are `d9bc2711`, `1621b9d5`, `2b33b477`, and
+  `e26f9970`; canonical result docs are `9e6fdd9e`.
+- Ordinary pitcher POW/CON/SPD/FLD now uses canonical role exposure in tax, projection, fit, and
+  optimization. Tax FLD uses defensive start/range exposure; salary/IV retains full pitcher FLD;
+  pitcher ARM remains excluded.
+- Two Way POW/CON/SPD/FLD is full-use hitter value and tax; VEL/JNK/ACC remains pitcher value and tax.
+  The same batting ratings never enter pitcher-secondary rows. SP/RP assignment is roster-level and
+  identical to settlement: pure SPs first, only needed swings promoted, all remaining swings bullpen.
+- New cap rows carry `pitcher-role-usage-v1`; markerless saved cap rows retain exact legacy raw-rating
+  behavior. The deterministic luxury-only generator reproduces `tierParams.ts` at SHA-256
+  `de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`.
+- The independent auditor rejected three runtime defects in sequence: the optimizer's old Two Way
+  split, stock Norm Fenomeno's SP/RP assignment, and a non-absolute simulator budget penalty. All were
+  repaired. Its exact oracle rerun proved all 72 tier/archetype rosters legal and solvent with maximum
+  deviations Juiced 4.902856%, Standard 2.777809%, Nerfed 3.528558%, and no runtime Major or Minor.
+- Final affected proof: 17 files / 278 tests, TypeScript, changed-file ESLint with zero errors, and diff
+  integrity green. A post-final full-suite attempt was blocked before tests by machine `ENOSPC`; an
+  earlier pre-audit full suite was green. Production packaging remains separately blocked by the known
+  Vite/PWA `worker.format = iife` conflict after 2,726 transformed modules.
+- **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
+  Standard/Nerfed presentation built from `9e5901d7` is economically stale and must be regenerated from
+  the final usage-aware tax and optimizer model.
+
+## 2026-07-16 (Codex, pitcher-hitting identity recalibration) — builder complete; audit pending
+
+- Fresh-fetched moving `origin/main` before close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `9ace5857`.
+- Reproduced the exact pre-usage `9e5901d7` starter-hitting economics, then ablated the corrected
+  usage-aware identities against otherwise-identical zero-axis versions at Standard and Nerfed.
+  Bash Brothers +15% rotation POW and Launch & Leather +10% rotation POW/CON still produced a
+  visible rotation selection effect and remain unchanged. The smallest simple values that restored
+  a visible effect in both priority tiers are Flamethrowers +30% rotation POW/CON and HDH Royals
+  +40% rotation CON.
+- Explicitly proved ordinary relievers are not taxed as everyday hitters. RP POW/CON/SPD/FLD weights
+  are `.08/.08/.16/.06`; CP weights are `.05/.05/.11/.05`. Two Way relievers enter hitter rows at
+  full use and are excluded from bullpen-secondary rows, so the same batting rating is not taxed
+  twice. No bullpen-hitting archetype axis was added or retuned.
+- All 72 tier/archetype value rosters and all 48 Standard/Nerfed identity rosters are legal and
+  solvent. All 24 identities remain inside +/-10% at all tiers: Juiced maximum deviation 4.9%,
+  Standard 2.8%, Nerfed 3.5%. Focused proof is 6/6 plus 136/136 surrounding tests; the eight-team
+  production-shape test also passed solo. TypeScript, zero-warning changed-file ESLint, and diff
+  integrity are green.
+- Two unrelated existing reds remain untouched: Bomba Squad's negative `boostZ` expectation in
+  `archetypeIdentityEmbodiment.test.ts`, and production packaging's Vite/PWA `worker.format = iife`
+  code-splitting conflict after 2,726 transformed modules.
+- **Pending gates:** a separate non-builder audits `9ace5857`; JK walks the actual League Builder and
+  Snake Room on Mac/iPad. Builder and auditor remain separate, and only JK's browser walk accepts the
+  product.
+
+## 2026-07-16 (Codex, pitcher-hitting recalibration) — independent audit close
+
+- The separate non-builder audit inspected exact HEAD `5a3021b7` and implementation `9ace5857`, then
+  returned **VERIFIED with no Major or Minor findings**. It made no edits.
+- It independently reproduced the exact `9e5901d7` ablation and lower-candidate landscape:
+  Flamethrowers stays flat at Standard through +29% and first moves at +30%; HDH stays flat at Nerfed
+  through +37%, first moves at +38%, and +40% is the smallest simple round setting. Bash Brothers and
+  Launch & Leather already move their rotations in both priority tiers and remain unchanged.
+- Audit proof: 6/6 recalibration, 1/1 detached old-model ablation, 186/186 surrounding tests, all 72
+  parity rosters and 48 identity rosters legal/solvent, exact RP/CP and Two Way settlement agreement,
+  TypeScript, zero-warning changed-source lint, and diff integrity. The eight-team whole-file run had
+  five passes plus one fixed 180-second timeout; its exact gate-only retry passed in 172.46 seconds.
+- The auditor independently reproduced and isolated both known unrelated reds. Bomba Squad retains its
+  pre-existing `boostZ = -0.013142...` failure with its engine/test blobs unchanged. Production packaging
+  reaches 2,726 transformed modules and hits the existing Vite/PWA `worker.format = iife` conflict; the
+  failing worker, Vite config, package manifest, and lockfile are byte-identical to the pre-retune base.
+- **Only remaining product gate:** JK walks the actual League Builder and Snake Room on Mac/iPad.
+
+## 2026-07-16 (Codex, multi-team companion desks) — builder complete; audit pending
+
+- Fresh-fetched moving `origin/main` before final state booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `0d28e63f`.
+- Draft Setup now treats duplicate normalized companion GM names as intentional multi-team packages.
+  The ceiling remains three distinct active packages/devices, so the eight-club table can use two
+  Hotseat clubs plus three two-club companion packages without inventing extra accounts or devices.
+- Companion claims, approvals, recovery, replacement, revocation, takeover, and persistence are exact
+  per `(deviceId, teamId)`. Hotseat can approve/refuse each team without erasing siblings. A fourth
+  unique device stays blocked, and approval for one team never authorizes another.
+- The companion switcher lists only approved teams and exposes one desk. Every switch invalidates old
+  private work, covers before rendering the next desk, and requires explicit open. Board, Assistant
+  GM, MLB trade, and pick-intent writes perform the same exact active-team guard after cloud pull and
+  inside the atomic write. Companion picks remain Hotseat-confirmed intent; FARM trades remain absent.
+- Deterministic browser proof rearranged independent Beewolves and Buzzards boards in both directions
+  and proved cover-before-reveal plus no cross-team state bleed. Its first full-file run caught the
+  switcher's 36px select target; the bounded repair raised it to 44px and the complete responsive file
+  passed 17/17 across Mac/iPad main and companion surfaces.
+- Closing builder proof: focused companion/setup/persistence 12 files / 140 tests; full Vitest exit 0;
+  TypeScript, changed-file ESLint, production build, and diff integrity green.
+- **Pending gates:** a separate non-builder audits `0d28e63f`; JK's real same-Wi-Fi device walkthrough
+  remains the sole product acceptance gate.
+
+## 2026-07-16 (Codex, multi-team companion desks) — independent audit VERIFIED
+
+- Refreshed moving `origin/main` before final booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Branch was 83 ahead / 0 behind before this docs commit.
+- Separate non-builder audit found zero production correctness, privacy, persistence, authorization,
+  touch-target, Supabase, or farm-trade findings in `0d28e63f`.
+- The auditor did identify one Minor proof gap: the browser journey switched and edited both desks but
+  did not submit an on-clock companion pick through Hotseat confirmation. Builder repair `888c144d`
+  changed only the allowed preview and responsive journey files. It sends Buzzards #19 Max Backstop,
+  renders the exact seat-bound request in the real approval card, runs
+  `assertCompanionPickRequestApprovable`, clears the request, records public truth, and advances to #20.
+- Final independent gates: companion/setup/persistence 97/97; standalone snake-room persistence 60/60;
+  repaired pick-handoff UI/persistence 22/22; responsive browser 17/17; TypeScript, focused lint,
+  production build, and diff integrity green. The 704-file audit run passed 10,217 tests; remaining
+  failures were ENOSPC startup casualties or unchanged unrelated archetype/auction/franchise fixtures.
+- **Final verdict:** VERIFIED, Major 0 / Minor 0. Only JK's actual same-Wi-Fi Mac/iPad/phone latency and
+  privacy walkthrough can accept the product.
+
+## 2026-07-16 (Codex, safe Legends import recovery) — builder complete; audit pending
+
+- Implemented contract `LEGENDS-IMPORT-RECOVERY-32` without weakening ordinary import collision
+  refusal. The importer now carries a structured repair-eligibility result derived from a complete
+  read-only preflight, while preserving the existing user-facing collision message.
+- The explicit repair validates the hash-pinned payload before reading stored players, then requires
+  every non-Legends `hl:` row to be an exact incoming card owned by exactly `League Builder` with no
+  assignments. Any assigned, SMB4, MLB, custom, mixed, or non-payload row blocks before the first
+  write. Eligible rows are adopted and reconciled through the normal complete importer.
+- League Builder shows `REPAIR LEGENDS IMPORT` only for the structured eligible state. It uses a
+  44px target, requires confirmation, preserves the error on cancellation, refreshes after success,
+  and hides itself for blocked or unrelated failures.
+- Focused tests prove partial Draft/Peak to complete Draft/Career/Peak recovery, the real pinned
+  835-card payload and all three source libraries, idempotence, preservation, zero-write adversarial
+  cases, UI visibility/cancel/success. TypeScript, changed-file lint, and diff integrity are green.
+  Production packaging transformed all 2,726 modules and then reproduced the unchanged known
+  Vite/PWA `worker.format = iife` conflict in the rational-room worker.
+- **Pending:** a separate non-builder audits the implementation; JK then retries the import and repair
+  action in the actual League Builder browser.
+
+## 2026-07-16 (Codex, production module-worker packaging repair) — builder complete; audit pending
+
+- Reproduced the production failure after 2,726 transformed modules: Vite's default IIFE worker
+  output cannot package the code-split rational-room module worker.
+- Set the single canonical Vite worker output to `es`, matching every affected worker's existing
+  `{ type: 'module' }` runtime declaration. Worker product logic, PWA behavior, Supabase, and draft
+  engines are unchanged.
+- Production build now succeeds after 2,728 transformed modules, renders the rational-room,
+  scarcity-verifier, Assistant GM, recommendation, and draftability worker chunks, then generates
+  the PWA manifest, service worker, and Workbox runtime. Focused worker/desk tests pass 56/56;
+  TypeScript, changed-file lint, and diff integrity are green.
+- Browser compatibility is unchanged for the supported modern Mac/iPad path: the app already
+  requested module workers. Browsers without module-worker support remain outside this runtime path.
+- **Pending:** a separate non-builder audits the one-setting release repair; JK's browser walk remains
+  the product-acceptance gate.
+
+## 2026-07-16 (Codex, deterministic release-suite repairs) — builder complete; audit pending
+
+- Reproduced the six reported files. Five produced actionable isolated failures; `poolFromDemand`
+  passed 63/63 alone and again inside the surrounding regression run, so its product/test code was
+  deliberately left unchanged rather than guessing at a contention failure.
+- Repaired the real Bomba Squad identity defect. After legality, solvency, and the posture IV floor,
+  the builder now prefers a feasible candidate with positive boosted-cohort embodiment before the
+  complete boost-and-sacrifice score. All 24 Standard identities pass; Bomba's result is positive
+  `boostZ` while retaining 98% of baseline IV.
+- Kept the production Snake-to-Franchise handoff fail-closed and repaired only its stale fixture by
+  adding the required frozen farm prospect snapshot. Updated only the four snapshot sections already
+  changed by ratified starter-hitting copy/axes.
+- Replaced D5's stale zero-tax claim with current usage-aware proof: two teams pay $7,079.52 combined,
+  with every charge matching independently recomputed final liability. No tax product code changed.
+- The unchanged eight-team Standard/Nerfed x Tight/Competitive/Loose/Full proof passed 6/6. Its heavy
+  gate measured 206.778s (219.864s whole file), so the explicit bound is 300s instead of 180s.
+  Auction gauntlet passed in 66.159s. Surrounding identity/pool/farm/UI proof passed 129/129.
+- Final TypeScript, changed-file lint, and fresh production packaging are green; the build transformed
+  2,728 modules and emitted the PWA service worker normally.
+- **Pending:** separate non-builder audit and bounded release-suite rerun.

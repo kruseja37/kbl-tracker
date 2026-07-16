@@ -7,6 +7,14 @@
 
 ## July 2026
 
+### 2026-07-12 (snake completion law): recorded beat auto-advances; final pick stops at a durable recap and explicit roster commit
+
+**The ruling:** every non-final snake pick displays its recorded-pick beat and then advances automatically; there is no redundant manual next-pick button. The final MLB and farm picks never auto-advance. They stop at `VIEW DRAFT RECAP`, and the recap is recoverable directly from the completed saved session after reload. League Builder rosters are not written merely by rendering the recap: `CONFIRM MLB DRAFT` commits and routes to Scout Hire, while `CONFIRM FARM DRAFT` commits and routes to Staff Hire. A failed commit stays on a retryable recap and never navigates. **Rationale:** the draft ceremony remains readable without turning every pick into extra tapping, and finalization can no longer be lost in React-only state or silently mutate rosters before the commissioner confirms what was drafted.
+
+### 2026-07-12 (draft-to-franchise schedule law): no schedule is required to finish the draft or launch a franchise
+
+**JK's ruling:** for mock-draft testing and the real product path, the MLB and farm drafts must be allowed to finish with no schedule present. The app shows the completed-draft recap, continues through Franchise Setup, and launches the franchise with zero schedule rows. Once inside Living Season, `SCHEDULE NEEDED` is a normal actionable state: the user may upload the schedule CSV or enter games manually there. **Consequences:** schedule presence is never a draft-completion, recap, Franchise Setup, or franchise-initialization gate; regular-season play and schedule-dependent systems remain unavailable until valid schedule rows exist. The existing empty-schedule initialization and Living Season CSV/manual entry surfaces are the canonical destination, not a setup-time schedule workaround.
+
 ### 2026-07-11 (snake resume law): resuming a saved snake draft goes to the ROOM, never back to setup's GO
 
 **The finding:** JK's live browser walkthrough hit a live-data-loss bug — resuming a snake draft already in progress (closing the browser mid-draft and coming back) routed the user back into the SETUP screen instead of the room. Pressing GO on that setup screen a second time would silently create a brand-new draft session, overwriting the real saved one, with no warning to the user. **The ruling:** resuming an existing snake draft must always land the user in the room, never in a screen whose own GO button can create a fresh session. This is now built into the unified setup/room routing (PR #96 hotfix, later carried into PR #97's unified GO path) and treated as a standing law for any future setup/resume work on either draft format — a resume path and a fresh-start path must never share a control that can silently clobber saved progress. Full record: `spec-docs/contracts/CONTRACT_ROOMFIX_2026-07-11.md`, `CONTRACT_UNIFYSETUP_2026-07-11.md`.
@@ -3759,3 +3767,333 @@ and are unchanged. Checkpoint cadence must stop being an input to relationship v
 
 **Build:** contract `spec-docs/contracts/CONTRACT_RELORGANIC_2026-07-11.md` (Codex Sol lane,
 flag-gated L13 dark path, no store-shape change).
+
+## 2026-07-12 — Snake draft board is one overall ranking with position views
+
+JK approved the mock-draft recommendations. Each team owns one persisted overall player ranking and
+position views of that same universe; a player appears in every valid stored primary/secondary
+position. Reordering either view immediately refits the 22-slot plan and recalculates its existing
+money and legality consequences. Drafted or retired players backfill every saved team board without
+revealing another team's private information. The implementation must preserve scarce-role
+feasibility, especially catcher depth and the required `SP/RP` swing slot.
+
+**Clarification after the iPad crawl:** moving a player in an overall or position ranking changes
+preference order only; it must never silently rewrite the team's exact 22-player plan. The initial
+top 22 seeds that plan once. Thereafter only an explicit board/what-if add, remove, or replacement
+changes plan membership and recalculates money, tax, fit, chemistry, and legality. Automatic
+availability backfill may replace a drafted/retired member without revealing another team's board.
+
+## 2026-07-12 — Snake private work is team-first and may happen off-clock
+
+The live pick owner and selected private desk are separate concepts. On the shared device, any club
+may select its covered private desk and work on its board off-clock, but only the live pick owner may
+arm or record a player. A new live pick returns the shared device to that club under cover. Approved
+companions remain pinned to their claimed team and may perform the same overall/position refits
+under existing freshness and own-board-only write guards.
+
+## 2026-07-12 — Snake plan truth and drafted-roster truth stay separate
+
+The draft room shows two canonical states. The 22-player plan reads only saved board membership;
+the drafted roster reads only persisted picks. Each owns its own salary, full-roster tax, all-in,
+money-left, and five-family chemistry display. Selected-player fit is a color signal beside exact
+current marginal tax, never a fabricated future tax charge. Persisted pick tax, plan tax, and
+candidate tax all use the session-locked archetype identity.
+
+## 2026-07-12 — Farm snake uses private fog-safe boards and frozen slot money
+
+Each farm club owns a covered scout-conditioned overall ranking, position views, and planned class.
+Only prospect ids and order persist; true ratings, true grade, IV, and rival scout reads stay outside
+the farm board record. Candidate ordering never changes money: salary remains attached to the
+absolute pick, including after valid pick trades.
+
+## 2026-07-12 — Confirmed snake drafts freeze one immutable launch record
+
+MLB and farm confirmation each persist one validated draft manifest before any roster write. That
+record, not later room state, owns pick order, selected players, teams, frozen money, pool
+provenance, engine/workflow versions, and the phase-appropriate team archetypes. Retries reuse the
+first persisted record byte-for-byte; stale room or generic saves cannot remove or replace it.
+
+The MLB record freezes public IV for every active-pool player. The farm record stores no true IV
+and retains scout fog; salaries remain the frozen absolute-slot amounts. Franchise setup stores
+both manifests as launch provenance and still begins with zero schedule rows. Schedule CSV upload
+and manual entry remain inside Living Season.
+
+## 2026-07-13 — Snake My Board, Asst GM Board, and actionable trade advice (JK ruling)
+
+This ruling supersedes the 2026-07-12 post-iPad clarification that ranking changes must leave the
+22-player plan untouched, and it narrows/supersedes the old Snake First Law and S4 no-target-nudge
+rule where they conflict.
+
+1. **My Board follows the GM's rankings.** Reordering overall or position rankings immediately
+   refits the team's unique legal 22-player plan on both main and approved companion devices and
+   recalculates its existing salary, tax, chemistry, fit, and legality consequences. The action is
+   undoable. Availability backfill remains own-board-only and privacy-safe.
+2. **Asst GM Board is separate and derived.** It may optimize its own live 22 from current roster,
+   availability, player/team fit, salary/tax, chemistry, scarcity, replacement quality, and legal
+   finish. It never silently overwrites My Board and never records a pick. The GM may inspect it,
+   optimize around a selected player, or deliberately copy useful choices.
+3. **Actionable advice is allowed.** The Asst GM may issue TAKE / WAIT / TRADE / PASS calls and may
+   recommend a target pick plus an executable posted-price package when a valued player is unlikely
+   to survive. It never executes the trade; the GMs decide and the commissioner remains the writer.
+4. **Availability must be honest.** A single deterministic playout may remain an input, but a
+   displayed probability/range requires a documented public-information scenario ensemble and
+   calibration. No fabricated precision.
+5. **Screen value law.** Every persistent element must support a repeat strategic or practical GM
+   decision. Neutral/no-action assistant noise is hidden; explanations live only behind Help. Team
+   privacy, team branding, pronoun non-display, and the ratified Help-Button UI Law remain canon.
+
+Binding implementation contract: `spec-docs/contracts/CONTRACT_SNAKE_INTELLIGENCE_2026-07-13.md`.
+
+## 2026-07-13 — Snake posted pick value and guide execution rails
+
+For MLB snake, posted pick value is opportunity surplus from the current frozen player pool, not the
+raw IV of the player currently ranked at that pick. For pick `p`, use the mean IV of the forward
+one-round cohort beginning at `p`, subtract the first undrafted cohort after the complete MLB draft,
+and apply a positive late floor equal to the observed final-drafted-to-replacement gap (minimum 1).
+The chart must remain deterministic, monotone, and exactly as long as the MLB draft.
+
+Trade-up guidance searches every authorized equal-count 1–3 pick package. A buyer may not underpay
+the seller at current posted value; the existing 15% imbalance ceiling still applies. Choose the
+smallest nonnegative posted-value gap before fewer pieces. Balancing return picks are expected.
+Execution rejects duplicate or overlapping picks, self-trades, target mismatches, stale ownership,
+and caller-tampered totals, then recomputes the current canonical values before writing. The shared
+farm `validateTrade` behavior is unchanged.
+
+Finite input must produce finite chart output even at JavaScript numeric extremes; cohort means use a
+scale-safe calculation rather than a naive sum. Both live registered-pool construction paths pass the
+league's explicit club count. `PoolConfig` may retain an inference fallback only for legacy/direct test
+callers, but live app registration must not infer club count from roster slots.
+
+## 2026-07-13 — Snake assistant-board truth and direct player consequences
+
+The Asst GM Board is one shared, worker-backed, read-only derived 22 for both main and companion. It
+pins every player already drafted by the selected club, may additionally pin the selected available
+player for `OPTIMIZE AROUND`, and fills only from the current version-valid frozen pool. Completed picks
+carry settled salary; available players carry frozen IV. A result is shown only when all pins are honored
+and the canonical roster is exactly 22, unique, legal, and solvent. It has no persistence revision and
+cannot silently become My Board.
+
+The selected-player decision replaces the detached slot/player What-If. The engine tests every legal
+one-player displacement and complete canonical reassignment, chooses deterministically from the GM's
+rankings and contextual value, and shows the exact displaced player plus before/after salary, tax,
+all-in, money-left, five chemistry families, fit, and legal-finish truth. Main and companion must return
+the same result. Cover, revoke, team switch, stale revisions, incomplete money, or worker failure remove
+the prior result and fail closed. No explanatory prose or pronouns appear outside Help.
+
+## 2026-07-13 — Snake public availability ensemble, viable scarcity, and action calls
+
+Availability remains public-model advice, not a probability claim. Run one deterministic `BASE` rival
+playout plus one `RIVAL_SECOND:<teamId>` local-sensitivity scenario for every distinct rival scheduled
+before the asking club's next pick. In that rival's scenario, its first intervening selection takes its
+second-highest legal, affordable, completion-safe choice; every other choice remains canonical. Stable
+team/pick order is mandatory. Stop at the asking club's next pick; do not simulate the asking club.
+
+A player is `SAFE TO WAIT` only when every valid scenario leaves that version group available,
+`LIKELY GONE` only when every valid scenario selects it before the asking turn, and `AT RISK` when the
+scenarios split. Missing next-pick truth, missing inputs, no scenarios, or engine failure is unavailable,
+never safe. Show the earliest threat through the latest threat or `YOUR #N`; do not display a numeric
+percentage until an empirical calibration program exists. Interested-club count is the number of unique
+rival team ids that select the version group in at least one scenario.
+
+Position scarcity counts version-unique players who are canonically applicable to the role and can be
+added while preserving that club's solvency and constructive legal finish. It reports viable people left,
+public clubs still needing the role, the next-turn viable cost range, and the contextual-worth drop to the
+best replacement (or `NO REPLACEMENT`). Raw card counts are not scarcity truth.
+
+The private action resolver is fail-closed and sparse. `PASS` requires an infeasible/insolvent pin or
+strict Pareto domination. `SAFE TO WAIT` requires assistant priority, a real next pick, known legal finish,
+and survival in every scenario. `TAKE NOW` additionally requires the asking club to own the live pick and
+the target to be gone/at-risk without an equivalent replacement. Off-clock, the same urgency may produce
+`TRADE TO #N` only with the latest viable destination before the earliest threat and a current Batch 2
+posted-value package. A trade action opens and prefills the guide; it never posts or executes. Any state
+outside these proofs emits no persistent advice.
+
+## 2026-07-13 — Snake MLB room is one team-first, four-job draft desk
+
+The shared iPad has one `TEAM` selector. Changing it covers and tears down the prior private DOM before
+the next club can be revealed. The live pick window is public status only and may not double as a private
+seat selector; the duplicate all-club button cloud is removed. The selected club's branding, private board,
+drafted roster, and owned picks remain the lens. Only the live pick owner can record a pick.
+
+The private MLB desk has four durable jobs: `MY BOARD`, `ASST GM BOARD`, `PLAYER POOL`, and `TRADE PICKS`.
+`PLAYER POOL` owns overall/position rankings, search, and player selection. `ACTIVITY` appears only when it
+contains meaningful history; empty or neutral assistant output is absent. The retired dropdown What-If is
+deleted after the direct selected-player replacement is verified. Farm snake remains unchanged.
+
+Plan salary/tax/all-in/money-left and five chemistry families appear before the canonical 22 slots. All 22
+slots render in canonical order, including missing, broken, and unavailable states; raw storage ids never
+reach the screen. One selected-player card owns the identity/profile, direct consequences, Asst GM action,
+Keep/Revert, and the existing guarded draft action. The surrounding room may not repeat the identity or
+split its decision consequence into detached cards.
+
+The GM trade guide exists once, inside the selected team's private `TRADE PICKS` tab; the commissioner tool
+remains separate because it performs the room write. Every proposed/open package shows the counterparty,
+`YOU GIVE`, `YOU GET`, both current posted totals, and seller premium. A recommendation may prefill the guide
+but cannot post. The full chart remains collapsed by default.
+
+On companion, order and recent activity become one compact live strip, active-desk Help is always reachable,
+and `FORGET ROOM` is limited to covered/recovery screens. On the shared room, correction is absent when
+unavailable and recent picks are a compact/collapsed rail. Existing KBL palette and club primary/secondary
+colors, 44px touch targets, keyboard operation, privacy cover, and Help-only explanation remain mandatory.
+
+## 2026-07-14 — Snake tax is roster-local; room size is irrelevant
+
+My Board and Assistant GM Board each represent one team's independent live 22-player roster projection.
+Salary and luxury tax are computed from that roster's players, ratings, position groups, and the team's exact
+archetype cap identity. The number of clubs in the draft room never normalizes or otherwise changes these
+thresholds. A candidate's displayed tax effect is marginal to the current projected 22, so it can change when
+the board changes or another club removes a player from the pool. Fit remains the early warning for future
+roster-tax risk. All teams use the same algorithm with different team-owned inputs.
+
+## 2026-07-14 — Companion picks are requests; Hotseat remains authoritative
+
+An approved companion seat may submit one MLB player choice only when its club is on the clock. Submission
+does not advance the draft. The shared Hotseat device must approve the exact request, and the atomic pick
+transaction must revalidate player, pick, team, device, claim, approval state, and session revision. Any drift
+makes the request stale. FARM companion pick submission remains absent.
+
+## 2026-07-14 — No clock means no normal Pause control
+
+The Snake room has no draft clock, so a normal Pause button has no user job and is removed. Automatic
+plan-broken safety stops and old saved paused sessions remain recoverable through a contextual `RESUME ROOM`
+control that appears only while the persisted room is actually stopped.
+## 2026-07-15 — Snake pool assembly and competition-depth guide
+
+Snake Draft Setup offers two honest assembly laws inside the selected source universe. `FULL SOURCES`
+loads the exact source union, subject only to explicit hand removals/additions and active hard pins.
+`SHAPE TO TEAMS` runs the existing demand/archetype curve and keeps the same manual override law.
+For eight clubs (176 required roster slots), the shaped competition guide is Tight 1.20x = 212,
+Competitive 1.35x = 238 (recommended starting point), and Loose 1.50x = 264. Full Sources remains
+unrestricted. These are target counts, not readiness promises: the shared simultaneous Snake seating
+proof must still show that every club can finish a legal, affordable, archetype-credible 22 under its
+own roster-local tax caps. Draft-room size never rescales those caps.
+
+## 2026-07-15 — Pitcher POW/CON use a soft tax ramp, not a premium-pitching cliff
+
+Pitcher POW/CON remain active top-four rotation and top-four bullpen luxury-tax rows. Their
+stock-team-derived caps, dollar coefficients, and flat adders remain unchanged, but their penalty
+curve changes from linear (`1`) to quadratic (`2`) at every roster tier. A modest overage therefore
+stays modest, while deliberately stacking several elite-hitting pitchers still becomes expensive.
+
+Pitcher SPD/FLD, pitcher VEL/JNK/ACC, hitter rows, archetype cap shifts, tier salary caps, salary/IV,
+and rotation/bullpen assignment are unchanged. This applies anywhere the shared tier tables are
+used, including example archetype rosters, Draft Setup, Snake boards, and Auction tax settlement.
+Newly registered or rebuilt pools receive this curve. Already locked or saved drafts keep their
+frozen `luxuryCaps`; there is no mid-draft economics migration.
+
+## 2026-07-15 — Starter hitting is a role-specific identity axis for four archetypes
+
+`ROT_POW` and `ROT_CON` are canonical archetype axes stored inside the existing exact `rawShift`
+identity. They widen only rotation POW/CON tax rows and value those ratings only on startable arms;
+they do not change hitter or bullpen caps, add a seventh public band, or change persistence shape.
+Exact role-specific fit is shared by My Board, Assistant GM, rational-room reads, Draft Setup
+auto-assignment, farm tilt, identity construction, and pool feasibility. Mixed identities score each
+boost against its own player cohort. Pools that claim to support multiple starter-hitting axes must
+have the same starters satisfy the combined traits.
+
+The four treatments are deliberately different: Bash Brothers gets +15% starter POW; Launch &
+Leather gets +10% starter POW and +10% starter CON; Flamethrowers gets +10% each as a secondary layer
+behind rotation velocity; HDH Royals gets +10% starter CON. Standard and Nerfed are the calibration
+priorities. Their final 24-team maximum deviations are 3.6% and 3.3%; Juiced remains inside the
+compatibility guard at 8.3%.
+
+## 2026-07-15 — Pitcher secondary-rating tax follows playing time; Two Way is split once
+
+The prior raw-rating pitcher-batting cap law is superseded. Ordinary pitchers' POW, CON, SPD,
+and FLD now enter their rotation or bullpen top-four tax rows at canonical role exposure rather
+than as everyday ratings. POW/CON use batting-appearance exposure, SPD adds running/range exposure,
+and tax FLD uses defensive start/range exposure. Salary/IV keeps its separate full pitcher-FLD
+valuation. Pitcher ARM remains excluded.
+
+A true `Two Way (C/IF/OF)` pitcher is an everyday hitter for hitter POW/CON/SPD/FLD tax and remains
+a pitcher for rotation/bullpen VEL/JNK/ACC tax. The same batting ratings are excluded from pitcher
+secondary rows, so they are never charged twice; hitter ARM still does not inherit a stored pitcher
+ARM rating. Archetype fit follows the same split and the same roster-level single assignment for
+SP/RP arms: pure starters fill the rotation first, then only the swing arms needed to reach four;
+every other swing arm belongs to the bullpen.
+
+The stock-team 65th-percentile method was rerun in this usage-adjusted rating space. Salary caps,
+tax dollar coefficients, flat adders, penalty curves, roster law, and archetype shifts are unchanged.
+New generated cap rows carry `pitcher-role-usage-v1`. Locked or saved tables without that marker keep
+legacy raw-rating behavior, so no draft changes economics midstream. The rerun keeps all 24 identities
+legal, solvent, and inside ±10%: Standard maximum deviation 2.8%; Nerfed 3.5% (Juiced compatibility
+maximum 4.9%). Solvency is lexicographic: no IV gain may trade through any positive budget overage.
+
+## 2026-07-16 — Starter-hitting value recalibrated; ordinary relievers stay usage-discounted
+
+JK ruled that preserving similar raw-rating headroom was insufficient if the playing-time correction
+made a unique archetype axis economically decorative. The exact `9e5901d7` reference and the corrected
+usage-aware base were therefore ablated against otherwise-identical identities with rotation POW/CON
+set to zero at Standard and Nerfed.
+
+Bash Brothers' existing +15% rotation POW and Launch & Leather's existing +10% rotation POW/CON still
+changed the selected starter bats in both priority tiers, so they remain unchanged. Flamethrowers'
++10% rotation POW/CON and HDH Royals' +10% rotation CON were flat in at least one priority tier. The
+smallest simple increments with a visible combined starter-hitting selection effect in both tiers are
+Flamethrowers +30% rotation POW/CON and HDH Royals +40% rotation CON. No balancing sacrifice or other
+archetype axis changed; all 24 remain legal, solvent, and within ±10% at all three tiers.
+
+This retune does not revive everyday-player taxation. Ordinary RP and CP POW/CON/SPD/FLD already enter
+bullpen secondary rows only at canonical relief exposure: RP `.08/.08/.16/.06`, CP
+`.05/.05/.11/.05`. Two Way relievers are full-use hitters in hitter POW/CON/SPD/FLD and are excluded
+from bullpen secondary rows, so the same batting rating is never charged twice. There is no bullpen
+POW/CON archetype axis in the locked 24 and therefore no reliever-hitting identity retune.
+
+## 2026-07-16 — Companion capacity is device-first; one device may hold multiple covered desks
+
+Duplicate normalized GM names on companion clubs intentionally define one multi-team package in
+Snake Draft Setup. Capacity remains three distinct active companion device IDs/packages, not three
+team claims. A package request creates one pending exact `(deviceId, teamId)` claim per team. Hotseat
+approves or refuses each team separately; sibling approvals survive per-team refusal, revocation,
+refresh, recovery, replacement, and takeover. One team may have only one active device.
+
+An approved companion exposes exactly one active team desk. Its switcher lists only teams approved
+for that device. Choosing another team immediately invalidates the prior private epoch and every
+transient team-derived result, covers the device, and reveals nothing from the new desk until the user
+explicitly opens it. Active-team revocation covers before selecting an approved fallback; with no
+approved team remaining, the device returns to claim/pending state.
+
+Every companion board, Assistant GM, MLB trade, and pick-intent read/write is authorized against the
+currently active exact tuple. A team switch during pull or atomic persistence makes the old operation
+stale rather than letting it land or restore old UI. Companion picks remain requests only and require
+normal Hotseat confirmation. Same-account Supabase, room codes, the three-device ceiling, farm
+no-trade, draft legality, and salary/tax/archetype calculations are unchanged.
+
+## 2026-07-16 — Multi-team companion requires covered switching and Hotseat-confirmed browser proof
+
+The separate audit ratified the implementation with zero Major and zero Minor findings. A unit-only
+pick-intent proof was not sufficient: the deterministic browser journey must carry the active team's
+choice through the real companion action, real Hotseat approval card, production request assertion,
+public pick record, and next-pick advance. Test-only commit `888c144d` supplies that proof without
+changing production storage, Supabase, schema/RLS, farm-trade, economy, or draft-engine code.
+
+The accepted product boundary is exact: multiple approved desks may live on one physical device, but
+only one active `(deviceId, teamId)` may render or act; every switch is cover-gated; and a companion
+can request but never authoritatively commit a draft pick. JK's real same-Wi-Fi device walk remains
+the only acceptance gate because automated proof cannot certify room-specific latency.
+
+## 2026-07-16 — Legends import recovery is explicit, hash-pinned, and ownership-exact
+
+The ordinary Historical Legends importer remains fail-closed whenever an incoming `hl:` card ID is
+owned by a non-Legends source. A separate repair action is available only after the importer has
+loaded and validated the pinned payload and completed a read-only preflight proving that every
+non-Legends `hl:` row is an exact incoming card, is owned by exactly `League Builder`, and has no
+league assignment. One assigned, unknown, SMB4, MLB, custom-source, or non-payload row blocks the
+entire repair before its first write.
+
+Approved repair adopts only those proven legacy rows into Historical Legends ownership, then runs
+the normal complete importer to restore Draft, Career, and Peak source libraries. It never clears
+the League Builder, infers identity from names or ratings, or deletes unrelated data. The page shows
+the 44px repair action only from a structured, fully preflighted eligible collision; cancellation
+does nothing, and any changed or newly blocked state fails closed on the repair's own fresh preflight.
+
+## 2026-07-16 — Identity rosters must visibly express a boost before optimizing full fit
+
+The identity builder's order is legality, solvency, and the posture IV floor first. When both of its
+candidate rosters clear those gates, a roster whose boosted cohort is above the source-pool mean
+takes priority over one whose boosted cohort is still below it; only then does the complete
+boost-and-sacrifice fit score choose between equivalent candidates. This preserves every sacrifice
+and value constraint while preventing a nominally optimized roster from failing to visibly embody
+its headline strength. Bomba Squad is the proved boundary: its positive-power candidate keeps 98%
+of baseline IV and is selected over a marginally higher aggregate-fit candidate with negative power
+embodiment.

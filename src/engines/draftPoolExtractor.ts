@@ -309,7 +309,7 @@ export function extractDraftPool(
   // Audit C1B-2 (single-math): the fill/eviction scorer is the builder's EXACT posture-weighted
   // fit function — one scoring rule for seeds, fill, and eviction.
   const fitScorers = new Map(
-    selected.map((a) => [a.id, archetypeFitScorer(simArchetypes.get(a.id)!, tier, posture)]),
+    selected.map((a) => [a.id, archetypeFitScorer(simArchetypes.get(a.id)!, tier, posture, canonicalSource)]),
   );
   const sourceBudget = options.budgetPerTeam ?? computePoolTierCap(canonicalSource.map((p) => p.iv), tier);
 

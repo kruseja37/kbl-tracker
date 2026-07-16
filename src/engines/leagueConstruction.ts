@@ -1,12 +1,15 @@
 import {
+  deriveLuxuryTaxUsageWeights,
   POOL_SURPLUS_MAX,
+  type PitcherRoleKey,
   SOLVENCY_RED_MARGIN,
   SOLVENCY_SEVERE_TAX_FRAC,
   TRADE_TOLERANCE_BAND,
 } from '../data/rosterEngineConstants';
-import { LEGAL_ROSTER } from '../data/rosterConstruction';
+import { LEGAL_ROSTER, type TwoWayVariant } from '../data/rosterConstruction';
 import {
   CAP_MODIFICATION_FRACTIONS,
+  LUXURY_TAX_RATING_BASIS,
   LUXURY_CAP_TABLES,
   T3_DERIVATION_INPUTS,
   TIER_CAPS,
@@ -31,6 +34,8 @@ export type PoolConfig = {
   tier: TierKey;
   balanceMode: BalanceMode;
   totalSlots: number;
+  /** Explicit live league club count. Legacy/direct callers may omit and use slot inference. */
+  teamCount?: number;
   players: PoolPlayerPriced[];
   salaryCap?: number;
 };
@@ -65,6 +70,7 @@ export type ConstructionPlayer = {
   id: string;
   isPitcher: boolean;
   role?: 'SP' | 'SP/RP' | 'RP' | 'CP';
+  twoWayVariant?: TwoWayVariant | null;
   bat: { POW: number; CON: number; SPD: number; FLD: number; ARM: number };
   pit?: { VEL: number; JNK: number; ACC: number };
 };
@@ -81,7 +87,7 @@ export const BAND_STATS: Record<Band, readonly ModStat[]> = {
   Contact: ['CON'],
   Speed: ['SPD'],
   Defense: ['FLD', 'ARM'],
-  Rotation: ['RVEL', 'RJNK', 'RACC'],
+  Rotation: ['RPOW', 'RCON', 'RVEL', 'RJNK', 'RACC'],
   Bullpen: ['PVEL', 'PJNK', 'PACC'],
 };
 
@@ -91,6 +97,8 @@ export const MOD_STAT_TO_LUX: Record<ModStat, { group: LuxuryGroup; stat: Luxury
   SPD: { group: 'hitters', stat: 'SPD' },
   FLD: { group: 'hitters', stat: 'FLD' },
   ARM: { group: 'hitters', stat: 'ARM' },
+  RPOW: { group: 'rotation', stat: 'POW' },
+  RCON: { group: 'rotation', stat: 'CON' },
   RVEL: { group: 'rotation', stat: 'VEL' },
   RJNK: { group: 'rotation', stat: 'JNK' },
   RACC: { group: 'rotation', stat: 'ACC' },
@@ -107,6 +115,8 @@ const MOD_STAT_XBL_CAP: Record<ModStat, number> = {
   SPD: 550,
   FLD: 585,
   ARM: 565,
+  RPOW: 120,
+  RCON: 160,
   RVEL: 100,
   RJNK: 260,
   RACC: 260,
@@ -132,8 +142,8 @@ function bandScores(): Record<string, BandScore> {
     const pos = {} as Record<Band, number>;
     const net = {} as Record<Band, number>;
     for (const band of BANDS) {
-      pos[band] = BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat], 0), 0);
-      net[band] = BAND_STATS[band].reduce((sum, stat) => sum + deltas[stat], 0);
+      pos[band] = BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat] ?? 0, 0), 0);
+      net[band] = BAND_STATS[band].reduce((sum, stat) => sum + (deltas[stat] ?? 0), 0);
     }
     out[name] = { pos, net };
   }
@@ -143,7 +153,7 @@ function bandScores(): Record<string, BandScore> {
 function rawDeltaMagnitude(name: string): number {
   const deltas = CAP_MODIFICATION_FRACTIONS[name];
   if (!deltas) return Number.NEGATIVE_INFINITY;
-  return MOD_STATS.reduce((sum, stat) => sum + Math.abs(deltas[stat] * MOD_STAT_XBL_CAP[stat]), 0);
+  return MOD_STATS.reduce((sum, stat) => sum + Math.abs((deltas[stat] ?? 0) * MOD_STAT_XBL_CAP[stat]), 0);
 }
 
 function pickIncrease(weight: BandPriorities, taken: Set<string>, scores: Record<string, BandScore>): string | undefined {
@@ -220,14 +230,14 @@ export function identityCapShift(identity: IdentityComposition): Record<ModStat,
   for (const name of normalized.increase) {
     const deltas = CAP_MODIFICATION_FRACTIONS[name];
     for (const stat of MOD_STATS) {
-      net[stat] += deltas[stat];
+      net[stat] += deltas[stat] ?? 0;
     }
   }
 
   for (const name of normalized.decrease) {
     const deltas = CAP_MODIFICATION_FRACTIONS[name];
     for (const stat of MOD_STATS) {
-      net[stat] -= deltas[stat];
+      net[stat] -= deltas[stat] ?? 0;
     }
   }
 
@@ -243,11 +253,60 @@ export function shiftLuxuryCaps(caps: LuxuryCapRow[], identity: IdentityComposit
   });
 }
 
-function playerRating(player: ConstructionPlayer, stat: LuxuryStat): number {
+export const PITCHER_ROLE_USAGE_RATING_BASIS = LUXURY_TAX_RATING_BASIS;
+
+export function luxuryCapsUsePitcherRoleUsage(caps: readonly LuxuryCapRow[]): boolean {
+  return caps.some((row) => row.ratingBasis === PITCHER_ROLE_USAGE_RATING_BASIS);
+}
+
+export function isPitcherSecondaryBattingStat(
+  stat: LuxuryStat,
+): stat is 'POW' | 'CON' | 'SPD' | 'FLD' {
+  return stat === 'POW' || stat === 'CON' || stat === 'SPD' || stat === 'FLD';
+}
+
+function isTwoWayPitcher(player: ConstructionPlayer): boolean {
+  return player.isPitcher && player.twoWayVariant != null;
+}
+
+export function playerEligibleForLuxuryRow(
+  player: ConstructionPlayer,
+  row: LuxuryCapRow,
+  caps: readonly LuxuryCapRow[],
+): boolean {
+  if (!luxuryCapsUsePitcherRoleUsage(caps)) {
+    return row.group === 'hitters' ? !player.isPitcher : player.isPitcher;
+  }
+  if (row.group === 'hitters') {
+    if (!player.isPitcher) return true;
+    return isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat);
+  }
+  if (!player.isPitcher) return false;
+  return !(isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat));
+}
+
+export function luxuryRowPlayerRating(
+  player: ConstructionPlayer,
+  row: LuxuryCapRow,
+  caps: readonly LuxuryCapRow[],
+): number {
+  const stat = row.stat;
   if (stat === 'VEL' || stat === 'JNK' || stat === 'ACC') {
     return player.pit?.[stat] ?? 0;
   }
-  return player.bat[stat];
+  const raw = player.bat[stat];
+  if (
+    !luxuryCapsUsePitcherRoleUsage(caps)
+    || row.group === 'hitters'
+    || !player.isPitcher
+    || isTwoWayPitcher(player)
+    || !isPitcherSecondaryBattingStat(stat)
+  ) {
+    return raw;
+  }
+  const role = player.role;
+  if (!role) return 0;
+  return raw * deriveLuxuryTaxUsageWeights(role as PitcherRoleKey)[stat];
 }
 
 export type LuxuryTaxPitchingGroups = {
@@ -291,16 +350,16 @@ export function assignLuxuryTaxPitchingGroups(roster: ConstructionRoster): Luxur
 }
 
 export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode: BalanceMode): TaxResult {
-  const hitters = roster.filter((player) => !player.isPitcher);
   const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
 
   let wouldBeTax = 0;
   const binding: TaxBinding[] = [];
 
   for (const row of caps) {
-    const group = row.group === 'hitters' ? hitters : row.group === 'rotation' ? rotation : bullpen;
+    const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const vals = group
-      .map((player) => playerRating(player, row.stat))
+      .filter((player) => playerEligibleForLuxuryRow(player, row, caps))
+      .map((player) => luxuryRowPlayerRating(player, row, caps))
       .sort((left, right) => right - left)
       .slice(0, row.topN);
     const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);
@@ -320,10 +379,69 @@ export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode
   };
 }
 
-export function derivePickValueChart(ivsDesc: number[]): PickValue[] {
-  return [...ivsDesc]
-    .sort((left, right) => right - left)
-    .map((value, index) => ({ pick: index + 1, value }));
+export function derivePickValueChart(
+  frozenIvs: readonly number[],
+  draftPickCount: number,
+  teamCount: number,
+): PickValue[] {
+  if (!Number.isInteger(draftPickCount) || draftPickCount < 0) {
+    throw new Error('Draft pick count must be a non-negative integer.');
+  }
+  if (!Number.isInteger(teamCount) || teamCount <= 0) {
+    throw new Error('Team count must be a positive integer.');
+  }
+  if (draftPickCount === 0) return [];
+
+  const sorted = frozenIvs.filter(Number.isFinite).sort((left, right) => right - left);
+  const rankedIvs = sorted.length > 0 ? sorted : [0];
+  const finalIv = rankedIvs[rankedIvs.length - 1];
+  const expectedIv = (pick: number): number => {
+    let total = 0;
+    const cohort: number[] = [];
+    for (let offset = 0; offset < teamCount; offset += 1) {
+      const value = rankedIvs[pick - 1 + offset] ?? finalIv;
+      cohort.push(value);
+      total += value;
+    }
+    if (Number.isFinite(total)) return total / teamCount;
+
+    // Canonical IV cohorts take the direct path above byte-for-byte. Only a finite-input overflow
+    // enters this scaled path, where normalizing before summation keeps the represented mean finite.
+    const scale = cohort.reduce((maximum, value) => Math.max(maximum, Math.abs(value)), 0);
+    if (scale === 0) return 0;
+    const normalizedTotal = cohort.reduce((sum, value) => sum + (value / scale), 0);
+    const normalizedMean = Math.max(-1, Math.min(1, normalizedTotal / teamCount));
+    const scaledMean = normalizedMean * scale;
+    if (Number.isFinite(scaledMean)) return scaledMean;
+    return normalizedMean < 0 ? -Number.MAX_VALUE : Number.MAX_VALUE;
+  };
+  const nonnegativeFiniteDifference = (higher: number, lower: number): number => {
+    const difference = higher - lower;
+    if (Number.isFinite(difference)) return Math.max(0, difference);
+    if (difference === Number.NEGATIVE_INFINITY) return 0;
+    if (difference === Number.POSITIVE_INFINITY) return Number.MAX_VALUE;
+    if (higher === lower) return 0;
+    return higher > lower ? Number.MAX_VALUE : 0;
+  };
+  const roundedPositiveFinite = (value: number): number => {
+    const bounded = Number.isFinite(value)
+      ? Math.min(Number.MAX_VALUE, Math.max(0, value))
+      : Number.MAX_VALUE;
+    const rounded = Math.round(bounded);
+    return Math.max(1, Number.isFinite(rounded) ? rounded : Number.MAX_VALUE);
+  };
+  const replacementIv = expectedIv(draftPickCount + 1);
+  const lateFloor = roundedPositiveFinite(
+    nonnegativeFiniteDifference(expectedIv(draftPickCount), replacementIv),
+  );
+
+  let priorValue = Number.MAX_VALUE;
+  return Array.from({ length: draftPickCount }, (_, index) => {
+    const surplus = nonnegativeFiniteDifference(expectedIv(index + 1), replacementIv);
+    const value = Math.min(priorValue, roundedPositiveFinite(Math.max(lateFloor, surplus)));
+    priorValue = value;
+    return { pick: index + 1, value };
+  });
 }
 
 const MLB_ROSTER_SLOTS_PER_TEAM = LEGAL_ROSTER.size;
@@ -349,6 +467,8 @@ export function computePoolTierCap(ivs: number[], tier: TierKey): number {
 }
 
 export function registerPool(cfg: PoolConfig): RegisteredPool {
+  const teamCount = cfg.teamCount
+    ?? Math.max(1, Math.ceil(cfg.totalSlots / MLB_ROSTER_SLOTS_PER_TEAM));
   return {
     leagueId: cfg.leagueId,
     tier: cfg.tier,
@@ -356,7 +476,11 @@ export function registerPool(cfg: PoolConfig): RegisteredPool {
     players: cfg.players,
     tierCap: cfg.salaryCap ?? computePoolTierCap(cfg.players.map((player) => player.iv), cfg.tier),
     luxuryCaps: LUXURY_CAP_TABLES[cfg.tier],
-    pickValueChart: derivePickValueChart(cfg.players.map((player) => player.iv)),
+    pickValueChart: derivePickValueChart(
+      cfg.players.map((player) => player.iv),
+      cfg.totalSlots,
+      teamCount,
+    ),
     totalSlots: cfg.totalSlots,
     poolSurplusWarning: cfg.players.length > cfg.totalSlots * POOL_SURPLUS_MAX,
   };

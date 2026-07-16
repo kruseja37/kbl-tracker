@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "@/app/components/ui/popover";
+import { HISTORICAL_LEGENDS_SOURCE_DATABASE } from "../../../../data/historicalLegendsAppData";
 import { buildDraftProfileModel, type DraftProfileFullRatings } from "../../../../utils/draftProfileModel";
 import type { Player } from "../../../../utils/leagueBuilderStorage";
 
@@ -82,6 +83,58 @@ function RatingsGrid({ ratings }: { ratings: DraftProfileFullRatings }) {
   );
 }
 
+function firstText(record: Record<string, unknown>, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function legendConnectionLabel(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const name = firstText(record, ["rivalName", "playerName", "targetName", "name", "opponent"]);
+  const relationship = firstText(record, ["relationship", "connectionType", "type", "kind"]);
+  if (relationship && name) return `${relationship}: ${name}`;
+  return name ?? relationship;
+}
+
+function HistoricalLegendContext({ player }: { player: Player }) {
+  if (player.sourceDatabase !== HISTORICAL_LEGENDS_SOURCE_DATABASE || !player.historicalLegend) return null;
+  const metadata = player.historicalLegend;
+  const loreBackstory = firstText(metadata.lore, ["backstory", "story", "summary"]);
+  const backstory = player.backstory?.trim() || loreBackstory;
+  const connections = metadata.rivalries.map(legendConnectionLabel).filter((value): value is string => Boolean(value));
+  const confidence = typeof metadata.confidence.overall === "number" && Number.isFinite(metadata.confidence.overall)
+    ? `${metadata.confidence.overall}/99`
+    : "Not scored";
+
+  return (
+    <section aria-label="Historical Legend context" className="space-y-3 border-t border-[#D3BF84]/35 pt-4">
+      <div className="flex flex-wrap gap-2">
+        <Chip tone="brass">Version: {metadata.profileType}</Chip>
+        <Chip tone="chalk">Overall confidence: {confidence}</Chip>
+      </div>
+      {backstory ? (
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#F7D883]">Backstory</div>
+          <p className="mt-1 text-[11px] leading-5 text-[#E8E8D8]">{backstory}</p>
+        </div>
+      ) : null}
+      {connections.length > 0 ? (
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.14em] text-[#F7D883]">Connections &amp; rivalries</div>
+          <ul className="mt-1 space-y-1 text-[11px] leading-5 text-[#E8E8D8]">
+            {connections.map((connection, index) => <li key={`${connection}:${index}`}>{connection}</li>)}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function PlayerProfilePopover({ player, revealFull, children }: PlayerProfilePopoverProps) {
   const model = buildDraftProfileModel(player, { revealFull });
   return (
@@ -122,6 +175,7 @@ export function PlayerProfilePopover({ player, revealFull, children }: PlayerPro
                   <span className="text-[11px] uppercase tracking-[0.12em] text-[#C9C2A3]/70">No listed traits</span>
                 )}
               </div>
+              <HistoricalLegendContext player={player} />
             </>
           ) : (
             <div className="space-y-3">

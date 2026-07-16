@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useCallback, type ReactNode } from "react";
 import { Building2, User } from "lucide-react";
-import { useOffseasonData, type OffseasonTeam, type OffseasonPlayer } from "@/hooks/useOffseasonData";
+import { useOffseasonData, type OffseasonPlayer } from "@/hooks/useOffseasonData";
 import { useSeasonStats, type BattingLeaderEntry, type PitchingLeaderEntry } from '../../../hooks/useSeasonStats';
-import { useFranchiseDataContext } from "@/app/pages/FranchiseHome";
+import { useFranchiseDataContext } from "@/app/pages/FranchiseHomeContext";
 import {
   getAllFranchisePlayers,
   getFranchisePlayer,
@@ -54,10 +54,6 @@ import {
 } from "../../../utils/scheduleStorage";
 import { getSeasonIdForScope } from "../../../utils/franchisePersistenceContract";
 import {
-  buildFranchiseAnalyticsTrustReport,
-  type FranchiseAnalyticsTrustReport,
-} from "../../../utils/franchiseAnalyticsTrust";
-import {
   buildFranchiseValueInputRows,
   type FranchiseValueInputReport,
 } from "../../../utils/franchiseValueInputs";
@@ -90,16 +86,11 @@ import {
 } from "../../../utils/franchiseSalary";
 import {
   buildFranchiseMoraleRelationshipTrustReport,
-  type FranchiseMoraleRelationshipTrustReport,
 } from "../../../utils/franchiseMoraleRelationshipTrust";
 import {
   buildFranchiseRelationshipContextPreview,
   type FranchiseRelationshipContextPreviewReport,
 } from "../../../utils/franchiseRelationshipContextPreview";
-import {
-  buildFranchiseNarrativeEventEligibilityReport,
-  type FranchiseNarrativeEventEligibilityReport,
-} from "../../../utils/franchiseNarrativeEventEligibility";
 import {
   buildFranchiseStadiumFoundationReport,
   filterAndSortFranchiseSprayChartRows,
@@ -154,7 +145,6 @@ import { analyzeFranchiseTeamRoster } from "../../../utils/rosterAnalyzerFranchi
 import type {
   Chemistry,
   Grade,
-  LineupSlot,
   Personality,
   Player,
   Position,
@@ -168,19 +158,11 @@ import {
   buildOptimalLineupSnapshot,
   confirmEngineOptimalLineupSnapshot,
   isOfficialOptimalLineupSnapshot,
-  markOptimalLineupSnapshotsStaleForChange,
-  OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
   optimalLineupField,
-  optimalLineupFieldsForDh,
   summarizeLineupSnapshotComparison,
   type LineupSnapshotComparison,
-  type OptimalLineupCandidate,
-  type OptimalLineupSnapshotField,
 } from "../../../utils/optimalLineup";
-import type {
-  OpposingPitcherHand,
-  OptimalLineupSnapshot,
-} from "../../../types/managerWpa";
+import type { OpposingPitcherHand } from "../../../types/managerWpa";
 import { OptimalLineupComparisonPanel } from "./OptimalLineupComparisonPanel";
 import { FranchiseLineupRotationEditor } from "./FranchiseLineupRotationEditor";
 import {
@@ -605,13 +587,6 @@ function franchiseDirectoryPositionMatches(row: FranchiseDirectoryRow, filter: s
   return row.primaryPosition === filter;
 }
 
-function formatFranchiseShortName(player: Player): string {
-  return [player.firstName, player.lastName]
-    .filter(Boolean)
-    .map((part, index) => index === 0 ? `${part[0]}.` : part)
-    .join(' ') || player.id;
-}
-
 function isFarmFranchisePlayerForTeam(player: Player, teamId: string, leagueId?: string): boolean {
   return player.leagueAssignments?.some((assignment) =>
     assignment.teamId === teamId &&
@@ -981,6 +956,9 @@ export function TeamHubContent() {
   const seasonNumber = franchiseData.seasonNumber || 1;
   const seasonId = getSeasonIdForScope(franchiseId, seasonNumber);
   const seasonStats = useSeasonStats(seasonId, { franchiseId });
+  const seasonStatsLoading = seasonStats.isLoading;
+  const getSeasonBattingLeaders = seasonStats.getBattingLeaders;
+  const getSeasonPitchingLeaders = seasonStats.getPitchingLeaders;
 
   // Build team → W-L record lookup from real standings (case-insensitive)
   const teamRecordMap = useMemo(() => {
@@ -1008,7 +986,6 @@ export function TeamHubContent() {
   const [activeHubTab, setActiveHubTab] = useState<TeamHubTab>("team");
   const [selectedTeam, setSelectedTeam] = useState<string>("");
   const [selectedStadium, setSelectedStadium] = useState<string>("");
-  const [selectedStatsPlayer, setSelectedStatsPlayer] = useState<string>("J. Rodriguez");
   const [statsView, setStatsView] = useState<"table" | "spraychart">("table");
   const [rosterSortColumn, setRosterSortColumn] = useState<RosterSortColumn>("name");
   const [rosterSortDirection, setRosterSortDirection] = useState<"asc" | "desc">("asc");
@@ -1340,21 +1317,6 @@ export function TeamHubContent() {
     };
   }, [franchiseId, seasonId, seasonNumber]);
 
-  const analyticsTrustReport = useMemo(() => {
-    if (!valueInputReport) return null;
-    return buildFranchiseAnalyticsTrustReport({
-      valueInputReport,
-      completedGames: franchiseCompletedGames,
-      scheduledGames: franchiseScheduleGames,
-      teamStints: franchisePlayerTeamStints,
-    });
-  }, [
-    franchiseCompletedGames,
-    franchisePlayerTeamStints,
-    franchiseScheduleGames,
-    valueInputReport,
-  ]);
-
   const moraleRelationshipTrustReport = useMemo(() => {
     if (!valueInputReport) return null;
     return buildFranchiseMoraleRelationshipTrustReport({
@@ -1369,23 +1331,6 @@ export function TeamHubContent() {
     franchiseCompletedGames,
     franchiseScheduleGames,
     franchiseTransactionHistory,
-    valueInputReport,
-  ]);
-
-  const narrativeEventEligibilityReport = useMemo(() => {
-    if (!analyticsTrustReport) return null;
-    return buildFranchiseNarrativeEventEligibilityReport({
-      analyticsTrustReport,
-      valueInputReport: valueInputReport ?? undefined,
-      salaryLifecycleReport: salaryLifecycleReport ?? undefined,
-      designationEligibilityReport: designationEligibilityReport ?? undefined,
-      moraleRelationshipTrustReport: moraleRelationshipTrustReport ?? undefined,
-    });
-  }, [
-    analyticsTrustReport,
-    designationEligibilityReport,
-    moraleRelationshipTrustReport,
-    salaryLifecycleReport,
     valueInputReport,
   ]);
 
@@ -1996,26 +1941,26 @@ export function TeamHubContent() {
   // Build lookup maps from season stats for real WAR
   const battingByPlayer = useMemo(() => {
     const map = new Map<string, BattingLeaderEntry>();
-    if (!seasonStats.isLoading) {
+    if (!seasonStatsLoading) {
       // Get all batting leaders (large limit to capture all players)
-      const allBatters = seasonStats.getBattingLeaders('totalWAR', 500);
+      const allBatters = getSeasonBattingLeaders('totalWAR', 500);
       for (const b of allBatters) {
         map.set(b.playerId, b);
       }
     }
     return map;
-  }, [seasonStats.isLoading, seasonStats.getBattingLeaders]);
+  }, [getSeasonBattingLeaders, seasonStatsLoading]);
 
   const pitchingByPlayer = useMemo(() => {
     const map = new Map<string, PitchingLeaderEntry>();
-    if (!seasonStats.isLoading) {
-      const allPitchers = seasonStats.getPitchingLeaders('pWAR', 500);
+    if (!seasonStatsLoading) {
+      const allPitchers = getSeasonPitchingLeaders('pWAR', 500);
       for (const p of allPitchers) {
         map.set(p.playerId, p);
       }
     }
     return map;
-  }, [seasonStats.isLoading, seasonStats.getPitchingLeaders]);
+  }, [getSeasonPitchingLeaders, seasonStatsLoading]);
 
   const moraleSnapshotByPlayerId = useMemo(() => {
     const map = new Map<string, FranchiseMoraleSnapshot>();
@@ -2160,11 +2105,20 @@ export function TeamHubContent() {
 
   const getSortedStats = () => {
     const sorted = [...statsData].sort((a, b) => {
-      let aVal: any = a[statsSortColumn as keyof typeof a];
-      let bVal: any = b[statsSortColumn as keyof typeof b];
-
-      if (aVal < bVal) return statsSortDirection === "asc" ? -1 : 1;
-      if (aVal > bVal) return statsSortDirection === "asc" ? 1 : -1;
+      const aVal = a[statsSortColumn as keyof typeof a];
+      const bVal = b[statsSortColumn as keyof typeof b];
+      let comparison = 0;
+      if (typeof aVal === "string" && typeof bVal === "string") {
+        if (aVal < bVal) comparison = -1;
+        else if (aVal > bVal) comparison = 1;
+      } else {
+        const aNumber = Number(aVal);
+        const bNumber = Number(bVal);
+        if (aNumber < bNumber) comparison = -1;
+        else if (aNumber > bNumber) comparison = 1;
+      }
+      if (comparison < 0) return statsSortDirection === "asc" ? -1 : 1;
+      if (comparison > 0) return statsSortDirection === "asc" ? 1 : -1;
       return 0;
     });
     return sorted;
@@ -2751,7 +2705,9 @@ export function TeamHubContent() {
                       <th className="text-center py-2 px-2 text-[var(--franchise-text)]/70 cursor-pointer hover:text-[var(--franchise-text)]" onClick={() => handleStatsSort("fwar")}>
                         fWAR {statsSortColumn === "fwar" && (statsSortDirection === "asc" ? "↑" : "↓")}
                       </th>
-                      <th className="text-center py-2 px-2 text-[var(--franchise-text)]/70">PRIMARY</th>
+                      <th className="text-center py-2 px-2 text-[var(--franchise-text)]/70 cursor-pointer hover:text-[var(--franchise-text)]" onClick={() => handleStatsSort("avg")}>
+                        PRIMARY {statsSortColumn === "avg" && (statsSortDirection === "asc" ? "↑" : "↓")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3998,14 +3954,6 @@ function formatTruthStatus(status: string): string {
   return status.replace(/-/g, ' ').toUpperCase();
 }
 
-function formatPreviewNumber(value: number | null | undefined, digits = 1): string {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
-  return value.toLocaleString(undefined, {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
-}
-
 function foundationStatusClass(status: string): string {
   if (status === 'trusted' || status === 'active' || status === 'eligible-context' || status === 'stable-baseline' || status === 'valid-draft' || status === 'confirmed-manual-change') {
     return 'border-[var(--franchise-win-text)]/60 text-[var(--franchise-win-text)]';
@@ -4092,7 +4040,9 @@ function FranchiseStadiumFoundationPanel({
       sortDirection: 'desc',
     });
   }, [effectiveSprayStadiumId, report]);
-  useEffect(() => {
+  const [validatedSprayRows, setValidatedSprayRows] = useState(stadiumFilteredRows);
+  if (validatedSprayRows !== stadiumFilteredRows) {
+    setValidatedSprayRows(stadiumFilteredRows);
     if (sprayPlayerId !== 'all' && !stadiumFilteredRows.some((row) => row.playerId === sprayPlayerId)) {
       setSprayPlayerId('all');
     }
@@ -4105,7 +4055,7 @@ function FranchiseStadiumFoundationPanel({
     if (sprayZoneId !== 'all' && !stadiumFilteredRows.some((row) => row.zoneId === sprayZoneId)) {
       setSprayZoneId('all');
     }
-  }, [sprayOutcome, sprayPlayerId, sprayTeamId, sprayZoneId, stadiumFilteredRows]);
+  }
   const selectedRowsByRole = (role: FranchiseSprayChartRole) =>
     selectedRows.filter((row) => row.role === role).length;
   const stadiumFilterOptions = useMemo(() => {

@@ -96,4 +96,14 @@ describe('toConstructionPlayer', () => {
       },
     });
   });
+
+  test('carries a pitcher Two Way trait into construction tax identity', () => {
+    const player = makePlayer({
+      id: 'two-way-pitcher',
+      primaryPosition: 'SP',
+      trait1: 'Two Way (OF)',
+    });
+
+    expect(toConstructionPlayer(player).twoWayVariant).toBe('OF');
+  });
 });

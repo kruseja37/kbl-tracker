@@ -719,6 +719,18 @@ export function derivePositionSupplyFloorTargets(teamCount: number): PositionSup
   return targets.filter((target) => target.needed > 0);
 }
 
+/**
+ * Necessary legal supply only. Competitive/hoarding slack belongs to pool
+ * shaping, never to the start gate for a constructively seatable room.
+ */
+export function deriveHardPositionSupplyFloorTargets(teamCount: number): PositionSupplyFloorTarget[] {
+  return derivePositionSupplyFloorTargets(teamCount).map((target) => ({
+    ...target,
+    slack: 0,
+    needed: target.teams * target.minimumPerTeam,
+  }));
+}
+
 export function matchesPositionSupplyFloor(
   player: RosterSlotPlayer,
   target: Pick<PositionSupplyFloorTarget, 'kind' | 'position'>,
@@ -738,6 +750,21 @@ export function matchesPositionSupplyFloor(
 }
 
 export function evaluatePositionSupplyFloors(
+  players: readonly RosterSlotPlayer[],
+  teamCount: number,
+): PositionSupplyFloorResult[] {
+  return deriveHardPositionSupplyFloorTargets(teamCount).map((target) => {
+    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    return {
+      ...target,
+      available,
+      missing: Math.max(0, target.needed - available),
+    };
+  });
+}
+
+/** Production-shape target, including competitive/hoarding depth. */
+export function evaluateCompetitivePositionSupplyFloors(
   players: readonly RosterSlotPlayer[],
   teamCount: number,
 ): PositionSupplyFloorResult[] {
@@ -780,7 +807,7 @@ export function enforcePositionSupplyFloors(options: {
 
   for (const target of derivePositionSupplyFloorTargets(options.teams)) {
     const currentPlayers = [...current.values()];
-    const floor = evaluatePositionSupplyFloors(currentPlayers, options.teams)
+    const floor = evaluateCompetitivePositionSupplyFloors(currentPlayers, options.teams)
       .find((candidate) => candidate.kind === target.kind && candidate.position === target.position);
     const missing = floor?.missing ?? 0;
     if (missing <= 0) continue;
@@ -803,7 +830,7 @@ export function enforcePositionSupplyFloors(options: {
   }
 
   const players = [...current.values()].sort((a, b) => a.id.localeCompare(b.id));
-  const floors = evaluatePositionSupplyFloors(players, options.teams);
+  const floors = evaluateCompetitivePositionSupplyFloors(players, options.teams);
   const shortfalls = floors.flatMap((floor) => {
     if (floor.missing <= 0) return [];
     const universeAvailable = options.universe
@@ -1393,10 +1420,11 @@ function makeMaxFitOf(
   selectedArchetypes: readonly HistoricalArchetype[],
   tier: TierKey,
   posture: RosterPosture,
+  universe: readonly DemandUniversePlayer[],
 ): (player: DemandUniversePlayer) => number {
   if (selectedArchetypes.length === 0) return () => 0;
   const scorers = selectedArchetypes.map((archetype) =>
-    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture),
+    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture, universe),
   );
   return (player) => Math.max(...scorers.map((score) => score(player)));
 }
@@ -1676,7 +1704,7 @@ export function repairG1PoolForSizing(options: {
   const maxRepairSize = requiredRosterDemand > 0
     ? Math.max(targetSize, Math.floor(requiredRosterDemand * maxRepairSlackFactor))
     : Number.POSITIVE_INFINITY;
-  let current = new Map(options.players.map((player) => [player.id, player]));
+  const current = new Map(options.players.map((player) => [player.id, player]));
   let g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), options.teams, options.budget);
   const messages: string[] = [];
   const injectedIds: string[] = [];
@@ -2055,7 +2083,7 @@ export function extractPoolFromDemand(
   let g1: PoolG1Result | undefined;
   let numericShape: NumericPoolShapeDiagnostics | undefined;
   let positionSupplyFloors: PositionSupplyFloorResult[] = [];
-  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
+  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture, universe);
 
   if (sizingEnabled) {
     const target = resolvePoolSizingTarget({

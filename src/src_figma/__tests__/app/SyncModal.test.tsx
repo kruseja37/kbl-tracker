@@ -151,6 +151,22 @@ describe("SyncModal diagnostics status", () => {
     });
   });
 
+  test("confirmed upload replaces the existing cloud snapshot", async () => {
+    mocks.replaceCloudWithLocal.mockResolvedValue(undefined);
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /UPLOAD TO CLOUD/i }));
+    fireEvent.click(screen.getByRole("button", { name: "CONFIRM" }));
+
+    await waitFor(() => {
+      expect(mocks.replaceCloudWithLocal).toHaveBeenCalledWith(
+        expect.any(Function),
+        { replaceExisting: true },
+      );
+    });
+  });
+
   test("does not keep a green headline when a diagnostic refresh fails after a clean snapshot", async () => {
     mocks.getDiagnostics
       .mockResolvedValueOnce(matchedDiagnostics())

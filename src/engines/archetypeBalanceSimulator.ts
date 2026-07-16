@@ -19,13 +19,17 @@
  * higher-value roster under the same algorithm reveals a real imbalance.
  */
 import {
+  assignLuxuryTaxPitchingGroups,
   luxuryTax,
+  luxuryRowPlayerRating,
+  playerEligibleForLuxuryRow,
   shiftLuxuryCaps,
   computePoolTierCap,
   type ConstructionPlayer,
 } from './leagueConstruction';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../data/tierParams';
 import { normalizeAuctionLuxuryCapsForLeagueSize } from './auctionLuxuryTax';
+import { snakeMoneyNonnegative } from './snakeMoney';
 import {
   LEGAL_ROSTER,
   canCover,
@@ -184,18 +188,23 @@ interface SlotPick {
   player: SimPlayer;
 }
 
-/** Over-budget penalty (IV per $ over). Large enough to force feasibility, then maximise value. */
-const OVER_BUDGET_PENALTY = 4;
-
 function rosterCost(players: SimPlayer[], caps: LuxuryCapRow[]): number {
   return players.reduce((s, p) => s + p.salary, 0) + taxOf(players, caps);
 }
 
-/** Objective the hill-climb maximises: total value minus a stiff penalty for exceeding the budget. */
-function objective(players: SimPlayer[], caps: LuxuryCapRow[], budget: number): number {
+type ValueObjective = { over: number; iv: number };
+
+/** Solvency is lexicographically absolute; value breaks ties only after overage is minimized to zero. */
+function objective(players: SimPlayer[], caps: LuxuryCapRow[], budget: number): ValueObjective {
   const iv = players.reduce((s, p) => s + p.iv, 0);
   const over = Math.max(0, rosterCost(players, caps) - budget);
-  return iv - OVER_BUDGET_PENALTY * over;
+  return { over, iv };
+}
+
+function betterObjective(candidate: ValueObjective, current: ValueObjective): boolean {
+  if (candidate.over < current.over - 1e-9) return true;
+  if (candidate.over > current.over + 1e-9) return false;
+  return candidate.iv > current.iv + 1;
 }
 
 /**
@@ -222,7 +231,26 @@ function shortlist(
  * when a player loads the bands the archetype RAISED and stays light where it LOWERED them. The shift
  * fraction is read straight off the shifted-vs-base caps so it tracks whatever the archetype does.
  */
-function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => number {
+type AssignedPitchingGroup = 'rotation' | 'bullpen';
+
+function assignedPitchingGroupById(players: readonly SimPlayer[]): ReadonlyMap<string, AssignedPitchingGroup> {
+  const assigned = assignLuxuryTaxPitchingGroups([...players]);
+  return new Map<string, AssignedPitchingGroup>([
+    ...assigned.rotation.map((player) => [player.id, 'rotation'] as const),
+    ...assigned.bullpen.map((player) => [player.id, 'bullpen'] as const),
+  ]);
+}
+
+function defaultPitchingGroup(player: SimPlayer): AssignedPitchingGroup {
+  if (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP') return 'bullpen';
+  return 'rotation';
+}
+
+function makeFitScore(
+  caps: LuxuryCapRow[],
+  tier: TierKey,
+  pitchingGroupById?: ReadonlyMap<string, AssignedPitchingGroup>,
+): (p: SimPlayer) => number {
   const base = LUXURY_CAP_TABLES[tier];
   const frac = new Map<string, number>();
   caps.forEach((row, i) => {
@@ -231,21 +259,19 @@ function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => nu
   });
   const f = (group: string, stat: string) => frac.get(`${group}/${stat}`) ?? 0;
   return (p: SimPlayer) => {
-    if (!p.isPitcher) {
-      return (
-        p.bat.POW * f('hitters', 'POW') +
-        p.bat.CON * f('hitters', 'CON') +
-        p.bat.SPD * f('hitters', 'SPD') +
-        p.bat.FLD * f('hitters', 'FLD') +
-        p.bat.ARM * f('hitters', 'ARM')
-      );
-    }
-    const grp = p.role === 'RP' || p.role === 'CP' ? 'bullpen' : 'rotation';
-    return (
-      (p.pit?.VEL ?? 0) * f(grp, 'VEL') +
-      (p.pit?.JNK ?? 0) * f(grp, 'JNK') +
-      (p.pit?.ACC ?? 0) * f(grp, 'ACC')
-    );
+    const pitcherGroup = pitchingGroupById?.get(p.id) ?? defaultPitchingGroup(p);
+    return caps.reduce((score, row) => {
+      if (p.isPitcher && row.group !== 'hitters' && row.group !== pitcherGroup) return score;
+      if (!playerEligibleForLuxuryRow(p, row, caps)) return score;
+      return score + luxuryRowPlayerRating(p, row, caps) * f(row.group, row.stat);
+    }, 0);
+  };
+}
+
+function makeRosterFitScore(caps: LuxuryCapRow[], tier: TierKey): (players: SimPlayer[]) => number {
+  return (players) => {
+    const fitScore = makeFitScore(caps, tier, assignedPitchingGroupById(players));
+    return players.reduce((sum, player) => sum + fitScore(player), 0);
   };
 }
 
@@ -264,9 +290,8 @@ function greedyStart(pool: SimPlayer[], score: (p: SimPlayer) => number): SlotPi
 }
 
 /**
- * Hill-climb from a starting roster: repeatedly accept the single best slot-swap that improves
- * `objective` (value minus a stiff over-budget penalty). The penalty first drives the roster under
- * budget, then maximises value within it. Because a swap can replace a cap-BUSTING star with a
+ * Hill-climb from a starting roster: repeatedly accept the single best slot-swap that first reduces
+ * over-budget dollars to zero, then maximises value without leaving solvency. Because a swap can replace a cap-BUSTING star with a
  * same-position player who FITS the archetype's caps (sheds tax for little value), the climb finds each
  * archetype's natural roster shape rather than punishing the counterintuitive ones.
  */
@@ -293,7 +318,7 @@ function climb(
         if (repl.id === current.id) continue;
         players[idx] = repl;
         const obj = objective(players, caps, budget);
-        if (obj > bestObj + 1) {
+        if (betterObjective(obj, bestObj)) {
           bestObj = obj;
           bestRepl = repl;
         }
@@ -331,7 +356,7 @@ export function buildBestRoster(
 
   const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, fitScore);
   const fromFit = climb(greedyStart(pool, fitScore), pool, caps, budget, fitScore);
-  const best = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+  const best = betterObjective(objOf(fromFit), objOf(fromValue)) ? fromFit : fromValue;
 
   const players = best.map((p) => p.player);
   const totalIv = players.reduce((s, p) => s + p.iv, 0);
@@ -470,15 +495,21 @@ function weightedCaps(caps: LuxuryCapRow[], tier: TierKey, boostWeight: number):
   });
 }
 
-function cohortOf(key: string, players: SimPlayer[]): number[] {
+function cohortOf(
+  key: string,
+  players: SimPlayer[],
+  tier: TierKey,
+  pitchingGroupById: ReadonlyMap<string, AssignedPitchingGroup>,
+): number[] {
   const [group, stat] = key.split('/');
-  if (group === 'hitters') {
-    return players.filter((p) => !p.isPitcher).map((p) => p.bat[stat as keyof SimPlayer['bat']] ?? 0);
-  }
-  const wantRotation = group === 'rotation';
-  return players
-    .filter((p) => (wantRotation ? canStart(p) : canRelieve(p)))
-    .map((p) => p.pit?.[stat as 'VEL' | 'JNK' | 'ACC'] ?? 0);
+  const caps = LUXURY_CAP_TABLES[tier];
+  const row = caps.find((candidate) => candidate.group === group && candidate.stat === stat);
+  if (!row) return [];
+  return players.filter((player) => {
+    if (!playerEligibleForLuxuryRow(player, row, caps)) return false;
+    if (group === 'hitters') return true;
+    return pitchingGroupById.get(player.id) === group;
+  }).map((player) => luxuryRowPlayerRating(player, row, caps));
 }
 
 function meanStd(xs: number[]): { mean: number; std: number } {
@@ -501,9 +532,11 @@ export function identityEmbodiment(
   pool: SimPlayer[],
 ): EmbodimentReport {
   const frac = capShiftFractions(archetypeCaps(archetype, tier), tier);
+  const rosterPitchingGroupById = assignedPitchingGroupById(players);
+  const poolPitchingGroupById = assignedPitchingGroupById(pool);
   const rowFor = (key: string): EmbodimentRow => {
-    const rosterCohort = cohortOf(key, players);
-    const poolCohort = cohortOf(key, pool);
+    const rosterCohort = cohortOf(key, players, tier, rosterPitchingGroupById);
+    const poolCohort = cohortOf(key, pool, tier, poolPitchingGroupById);
     const rosterMean = meanStd(rosterCohort).mean;
     const { mean: poolMean, std: poolStd } = meanStd(poolCohort);
     return { key, rosterMean, poolMean, poolStd, z: poolStd > 0 ? (rosterMean - poolMean) / poolStd : 0 };
@@ -689,6 +722,7 @@ function constrainedIdentityClimb(
   budget: number,
   floorIv: number,
   fitScore: (p: SimPlayer) => number,
+  rosterFitScore: (players: SimPlayer[]) => number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
   pinnedSlots?: ReadonlySet<number>,
 ): SlotPick[] {
@@ -701,8 +735,8 @@ function constrainedIdentityClimb(
     const over = Math.max(0, rosterCost(players, caps) - budget);
     const short = Math.max(0, floorIv - iv);
     const illegal = players.length === LEGAL_ROSTER.size && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
-    const fit = players.reduce(
-      (s, p, idx) => s + fitScore(p) + (slotBonus?.(p.id, picks[idx].slotIndex) ?? 0),
+    const fit = rosterFitScore(players) + players.reduce(
+      (sum, player, idx) => sum + (slotBonus?.(player.id, picks[idx].slotIndex) ?? 0),
       0,
     );
     return { violation: illegal + over + short, fit };
@@ -752,6 +786,10 @@ function constrainedIdentityClimb(
 export interface BuildIdentityOptions {
   /** Real non-shill league clubs. Required so advisory tax can never silently fall back to 20. */
   realTeamCount: number;
+  /** Optional already-resolved team tax caps. Snake uses this roster-local seam. */
+  taxCaps?: readonly LuxuryCapRow[];
+  /** Snake rooms use the shared sub-cent affordability law; other builders remain strict. */
+  affordabilityLaw?: 'strict' | 'snake-money';
   posture?: RosterPosture;
   /** Override the posture's value floor (fraction of the value-max baseline). */
   valueFloorOverride?: number;
@@ -800,7 +838,9 @@ export function buildIdentityRoster(
   const params = POSTURE_PARAMS[posture];
   const pool = options.banned?.size ? fullPool.filter((p) => !options.banned!.has(p.id)) : fullPool;
 
-  const caps = archetypeTaxCaps(archetype, tier, options.realTeamCount);
+  const caps = options.taxCaps
+    ? [...options.taxCaps]
+    : archetypeTaxCaps(archetype, tier, options.realTeamCount);
   const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
 
   // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
@@ -808,12 +848,16 @@ export function buildIdentityRoster(
   const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
   const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, valueFit);
   const fromFit = climb(greedyStart(pool, valueFit), pool, caps, budget, valueFit);
-  const baselinePicks = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+  const baselinePicks = betterObjective(objOf(fromFit), objOf(fromValue)) ? fromFit : fromValue;
   const baselineIv = baselinePicks.reduce((s, p) => s + p.player.iv, 0);
 
   const valueFloor = options.valueFloorOverride ?? params.valueFloor;
   const floorIv = baselineIv * valueFloor;
   const fitScore = makeFitScore(
+    weightedCaps(archetypeCaps(archetype, tier), tier, params.boostFitWeight),
+    tier,
+  );
+  const rosterFitScore = makeRosterFitScore(
     weightedCaps(archetypeCaps(archetype, tier), tier, params.boostFitWeight),
     tier,
   );
@@ -828,6 +872,7 @@ export function buildIdentityRoster(
     budget,
     floorIv,
     fitScore,
+    rosterFitScore,
     slotBonus,
     pinnedSlots,
   );
@@ -842,6 +887,7 @@ export function buildIdentityRoster(
     budget,
     floorIv,
     fitScore,
+    rosterFitScore,
     slotBonus,
     pinnedSlots,
   );
@@ -857,9 +903,11 @@ export function buildIdentityRoster(
       totalIv,
       totalSalary,
       totalTax,
-      solvent: totalSalary + totalTax <= budget,
+      solvent: options.affordabilityLaw === 'snake-money'
+        ? snakeMoneyNonnegative(budget - totalSalary - totalTax)
+        : totalSalary + totalTax <= budget,
       floorMet: totalIv >= floorIv - 1e-9,
-      fit: players.reduce((s, p) => s + fitScore(p), 0),
+      fit: rosterFitScore(players),
     };
   };
   const a = evaluate(idFromFit);
@@ -870,7 +918,29 @@ export function buildIdentityRoster(
     x.players.length === ROSTER_SIZE && isLegalRoster(x.players) && x.solvent && x.floorMet;
   const feasibleA = feasible(a);
   const feasibleB = feasible(b);
-  const chosen = feasibleA === feasibleB ? (a.fit >= b.fit ? a : b) : feasibleA ? a : b;
+  let chosen = feasibleA === feasibleB ? (a.fit >= b.fit ? a : b) : feasibleA ? a : b;
+  let chosenEmbodiment = identityEmbodiment(
+    chosen.players,
+    archetype,
+    tier,
+    options.embodimentReference ?? fullPool,
+  );
+  // Identity is not embodied when the roster's boosted cohort still sits below the source mean.
+  // When both starts are otherwise feasible, require that visible boost before optimizing the full
+  // boost-and-sacrifice fit score. This keeps legality, solvency, and the IV floor ahead of identity.
+  if (feasibleA && feasibleB && chosenEmbodiment.boostZ <= 0) {
+    const alternate = chosen === a ? b : a;
+    const alternateEmbodiment = identityEmbodiment(
+      alternate.players,
+      archetype,
+      tier,
+      options.embodimentReference ?? fullPool,
+    );
+    if (alternateEmbodiment.boostZ > 0) {
+      chosen = alternate;
+      chosenEmbodiment = alternateEmbodiment;
+    }
+  }
 
   return {
     name: archetype.name,
@@ -887,7 +957,7 @@ export function buildIdentityRoster(
     baselineIv,
     valueFloor,
     floorMet: chosen.floorMet,
-    embodiment: identityEmbodiment(chosen.players, archetype, tier, options.embodimentReference ?? fullPool),
+    embodiment: chosenEmbodiment,
   };
 }
 
@@ -900,7 +970,12 @@ export function archetypeFitScorer(
   archetype: SimArchetype,
   tier: TierKey,
   posture: RosterPosture = 'optimal',
+  assignmentContext?: readonly SimPlayer[],
 ): (p: SimPlayer) => number {
   const caps = archetypeCaps(archetype, tier);
-  return makeFitScore(weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight), tier);
+  return makeFitScore(
+    weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight),
+    tier,
+    assignmentContext ? assignedPitchingGroupById(assignmentContext) : undefined,
+  );
 }

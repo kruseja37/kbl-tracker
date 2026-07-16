@@ -36,24 +36,30 @@ import {
   getRegisteredPool as getRegisteredPoolFromStorage,
   getMlbDraftSession as getMlbDraftSessionFromStorage,
   saveMlbDraftSession as saveMlbDraftSessionToStorage,
-  deleteMlbDraftSession as deleteMlbDraftSessionFromStorage,
   seedFromSMB4Database,
   isSMB4DatabaseSeeded,
   seedFromMLBDatabase,
   isMLBDatabaseSeeded,
   type LeagueTemplate,
-  type LeagueAssignment,
   type Team,
   type Player,
   type RulesPreset,
   type TeamRoster,
   type LeagueBuilderMlbDraftSession,
+  type SaveMlbDraftSessionOptions,
 } from '../../utils/leagueBuilderStorage';
 import type { ConstructionPlayer, RegisteredPool } from '../../engines/leagueConstruction';
 import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegistration';
 import { copyLeaguePoolMembership } from '../../utils/leagueBuilderPoolBuilder';
 import { isMlbDraftComplete } from '../../utils/mlbDraftCompletion';
 import type { PlayerForSalary } from '../../engines/salaryCalculator';
+import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
+import {
+  isHistoricalLegendsDatabaseSeeded,
+  repairHistoricalLegendsDatabase,
+  seedHistoricalLegendsDatabase,
+  type HistoricalLegendsImportResult,
+} from '../../utils/historicalLegendsImport';
 
 // Re-export types for convenience
 export type {
@@ -107,8 +113,8 @@ export interface UseLeagueBuilderDataReturn {
       createdDate?: string;
       lastModified?: string;
     },
+    options?: SaveMlbDraftSessionOptions,
   ) => Promise<LeagueBuilderMlbDraftSession>;
-  deleteMlbDraftSession: (leagueId: string, seasonNumber?: number) => Promise<void>;
 
   // Team operations
   getTeamById: (id: string) => Promise<Team | null>;
@@ -143,6 +149,11 @@ export interface UseLeagueBuilderDataReturn {
   seedMLBData: (clearExisting?: boolean) => Promise<{ teams: number; players: number }>;
   isMLBSeeded: () => Promise<boolean>;
 
+  // Historical Legends Database Import
+  seedHistoricalLegendsData: () => Promise<HistoricalLegendsImportResult>;
+  repairHistoricalLegendsData: () => Promise<HistoricalLegendsImportResult>;
+  isHistoricalLegendsSeeded: () => Promise<boolean>;
+
   // Utility
   replaceLeagueLocal: (league: LeagueTemplate) => void;
   replaceTeamsLocal: (teams: readonly Team[]) => void;
@@ -166,11 +177,15 @@ export function toConstructionPlayer(player: Player): ConstructionPlayer {
     || player.primaryPosition === 'CP'
     || player.primaryPosition === 'SP/RP'
     || player.primaryPosition === 'P';
+  const twoWayVariant = isPitcher
+    ? twoWayVariantFromTraits([player.trait1, player.trait2])
+    : null;
 
   return {
     id: player.id,
     isPitcher,
     role: isPitcher ? toPitcherRole(player.primaryPosition) : undefined,
+    ...(twoWayVariant ? { twoWayVariant } : {}),
     bat: {
       POW: player.power,
       CON: player.contact,
@@ -385,7 +400,6 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
           missingTeamIds,
         });
       }
-      const originalTeamIds = new Set(originalTeams.map((team) => team.id));
       for (const division of original.divisions) {
         for (const teamId of division.teamIds) {
           if (!original.teamIds.includes(teamId)) {
@@ -433,6 +447,19 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
           rivalries: _rivalries,
           ...teamCopyInput
         } = originalTeam;
+        void [
+          _teamId,
+          _teamCreatedDate,
+          _teamLastModified,
+          _lineupWithDH,
+          _lineupWithoutDH,
+          _startingRotation,
+          _optimalLineupVsRHPWithDH,
+          _optimalLineupVsLHPWithDH,
+          _optimalLineupVsRHPWithoutDH,
+          _optimalLineupVsLHPWithoutDH,
+          _rivalries,
+        ];
         const copiedTeam = await saveTeam({
           ...teamCopyInput,
           id: undefined,
@@ -557,12 +584,9 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
       createdDate?: string;
       lastModified?: string;
     },
+    options?: SaveMlbDraftSessionOptions,
   ) => {
-    return saveMlbDraftSessionToStorage(session);
-  }, []);
-
-  const deleteMlbDraftSession = useCallback(async (leagueId: string, seasonNumber = 1) => {
-    return deleteMlbDraftSessionFromStorage(leagueId, seasonNumber);
+    return saveMlbDraftSessionToStorage(session, options);
   }, []);
 
   // ============================================
@@ -785,6 +809,40 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     return isMLBDatabaseSeeded();
   }, []);
 
+  const seedHistoricalLegendsData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const result = await seedHistoricalLegendsDatabase();
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to import Historical Legends data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
+  const repairHistoricalLegendsData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const result = await repairHistoricalLegendsDatabase();
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to repair Historical Legends data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
+  const isHistoricalLegendsSeeded = useCallback(async () => {
+    return isHistoricalLegendsDatabaseSeeded();
+  }, []);
+
   return {
     // State
     leagues,
@@ -804,7 +862,6 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     getRegisteredPool,
     getMlbDraftSession,
     saveMlbDraftSession,
-    deleteMlbDraftSession,
 
     // Team operations
     getTeamById,
@@ -838,6 +895,11 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     // MLB Database Seeding
     seedMLBData,
     isMLBSeeded,
+
+    // Historical Legends Database Import
+    seedHistoricalLegendsData,
+    repairHistoricalLegendsData,
+    isHistoricalLegendsSeeded,
 
     // Utility
     replaceLeagueLocal,

@@ -12,6 +12,7 @@ import {
 import { persistScoutHiresForLeague } from "../../app/utils/draftStaffingPersistence";
 
 const mockNavigate = vi.fn();
+const mockRefresh = vi.fn(async () => undefined);
 
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
@@ -33,6 +34,7 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
   );
   return {
     ...actual,
+    getMlbDraftSession: vi.fn(async () => ({ id: "completed-mlb-snake" })),
     getScoutProfilesForLeague: vi.fn(async () => [
       {
         id: "live-scout-league-page-1",
@@ -50,6 +52,10 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
     ]),
   };
 });
+
+vi.mock("../../../utils/snakeRosterHandoff", () => ({
+  assertSnakeRosterHandoffReady: vi.fn(async () => undefined),
+}));
 
 vi.mock("../../app/utils/draftStaffingPersistence", async () => {
   const actual = await vi.importActual<typeof import("../../app/utils/draftStaffingPersistence")>(
@@ -94,14 +100,15 @@ function makeTeam(id: string): Team {
   };
 }
 
-function mockLeagueData() {
+function mockLeagueData(league = makeLeague(), team = makeTeam("team-a")) {
   vi.mocked(useLeagueBuilderData).mockReturnValue({
-    leagues: [makeLeague()],
-    teams: [makeTeam("team-a")],
+    leagues: [league],
+    teams: [team],
     players: [],
     rulesPresets: [],
     isLoading: false,
     error: null,
+    refresh: mockRefresh,
   } as unknown as UseLeagueBuilderDataReturn);
 }
 
@@ -126,6 +133,12 @@ describe("ScoutHire", () => {
     expect(screen.getByText(/SCOUT REVEAL/i)).toBeInTheDocument();
     expect(screen.getByText(/Fielding \/ Arm/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Hire for/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Each club's scout is assigned/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SCOUT HIRE HELP" }));
+    expect(screen.getByText(/Each club's scout is assigned/i)).toBeInTheDocument();
+
+    const card = screen.getByTestId("scout-card-team-a");
+    expect(card).toHaveStyle({ borderColor: "#000000" });
 
     fireEvent.click(screen.getByRole("button", { name: /Confirm Scouts/i }));
 
@@ -141,6 +154,53 @@ describe("ScoutHire", () => {
     fireEvent.click(screen.getByRole("button", { name: /Back to MLB auction/i }));
 
     expect(mockNavigate).toHaveBeenCalledWith("/league-builder/auction-draft?leagueId=league-page&shills=3");
+  });
+
+  test("uses a snake-aware back label and route for a snake league", async () => {
+    mockLeagueData(makeLeague({ draftFormat: "snake" }));
+    render(<ScoutHire />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Confirm Scouts/i })).toBeEnabled();
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Back to MLB snake draft/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/snake-room?leagueId=league-page");
+  });
+
+  test("offers a retry when scout hire cannot load", () => {
+    vi.mocked(useLeagueBuilderData).mockReturnValue({
+      leagues: [],
+      teams: [],
+      players: [],
+      rulesPresets: [],
+      isLoading: false,
+      error: "OFFLINE",
+      refresh: mockRefresh,
+    } as unknown as UseLeagueBuilderDataReturn);
+    render(<ScoutHire />);
+
+    fireEvent.click(screen.getByRole("button", { name: /RETRY/i }));
+
+    expect(mockRefresh).toHaveBeenCalledOnce();
+  });
+
+  test("never strands an invalid scout-hire route", () => {
+    vi.mocked(useLeagueBuilderData).mockReturnValue({
+      leagues: [],
+      teams: [],
+      players: [],
+      rulesPresets: [],
+      isLoading: false,
+      error: null,
+      refresh: mockRefresh,
+    } as unknown as UseLeagueBuilderDataReturn);
+    render(<ScoutHire />);
+
+    fireEvent.click(screen.getByRole("button", { name: "RETRY" }));
+    expect(mockRefresh).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "BACK TO DRAFT SETUP" }));
+    expect(mockNavigate).toHaveBeenCalledWith("/league-builder/draft-setup");
   });
 
   test("auto scout assignment is deterministic and archetype-specific", () => {

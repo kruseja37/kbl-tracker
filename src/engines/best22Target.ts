@@ -10,7 +10,7 @@ import {
   type DesignSlot,
 } from './rosterDesignFeasibility';
 import type { ShapeClassification } from './playerArchetypeClassifier';
-import type { TierKey } from '../data/tierParams';
+import type { LuxuryCapRow, TierKey } from '../data/tierParams';
 
 export const BEST22_TUNING = {
   shapePrimaryMatch: 2.0,
@@ -63,52 +63,93 @@ function playerName(player: SimPlayer): string | undefined {
 }
 
 type ValidatedBuildPin = { slotId: string; slotIndex: number; playerId: string };
-type ArmSlotKind = 'sp' | 'rp' | 'cp';
 
-function armPickValue(pick: Best22TargetPick, ivByPlayerId: ReadonlyMap<string, number>): number {
+function pickValue(pick: Best22TargetPick, ivByPlayerId: ReadonlyMap<string, number>): number {
   return pick.playerId === '' ? Number.NEGATIVE_INFINITY : ivByPlayerId.get(pick.playerId) ?? Number.NEGATIVE_INFINITY;
 }
 
-function compareArmPicksByValue(
+function comparePicksByValue(
   a: Best22TargetPick,
   b: Best22TargetPick,
   ivByPlayerId: ReadonlyMap<string, number>,
 ): number {
-  const valueDelta = armPickValue(b, ivByPlayerId) - armPickValue(a, ivByPlayerId);
+  const valueDelta = pickValue(b, ivByPlayerId) - pickValue(a, ivByPlayerId);
   if (valueDelta !== 0) return valueDelta;
   if (a.playerId === '' && b.playerId !== '') return 1;
   if (b.playerId === '' && a.playerId !== '') return -1;
-  const salaryDelta = b.salary - a.salary;
-  if (salaryDelta !== 0) return salaryDelta;
-  return a.playerId.localeCompare(b.playerId);
+  // Equal IV is already correctly ordered by the legal builder. Preserve that stable order so
+  // presentation does not move pins, asks, or arbitrary same-value flex players.
+  return 0;
 }
 
-function reorderArmSlotsByValue(
+function reorderSlotGroupByValue(
+  reordered: Best22TargetPick[],
+  slotIndices: readonly number[],
+  slots: readonly DesignSlot[],
+  playerById: ReadonlyMap<string, SimPlayer>,
+  ivByPlayerId: ReadonlyMap<string, number>,
+): void {
+  if (slotIndices.length <= 1) return;
+  const groupPicks = slotIndices.map((index) => reordered[index]);
+  if (groupPicks.some((pick) => !pick?.playerId || !playerById.has(pick.playerId))) return;
+  const sorted = [...groupPicks].sort((left, right) => comparePicksByValue(left, right, ivByPlayerId));
+
+  const assign = (offset: number, remaining: readonly Best22TargetPick[]): Best22TargetPick[] | null => {
+    if (offset >= slotIndices.length) return [];
+    const slot = slots[slotIndices[offset]];
+    for (const candidate of remaining) {
+      const player = playerById.get(candidate.playerId)!;
+      if (!isDesignPlayerEligibleForSlot(slot, {
+        profile: { isPitcher: player.isPitcher, primaryPosition: player.position },
+        slotPlayer: player,
+      })) continue;
+      const tail = assign(offset + 1, remaining.filter((pick) => pick !== candidate));
+      if (tail) return [candidate, ...tail];
+    }
+    return null;
+  };
+
+  const assignment = assign(0, sorted);
+  if (!assignment) return;
+  slotIndices.forEach((slotIndex, index) => {
+    reordered[slotIndex] = {
+      ...assignment[index],
+      slotId: reordered[slotIndex].slotId,
+    };
+  });
+}
+
+function reorderValueGroups(
   picks: readonly Best22TargetPick[],
   slots: readonly DesignSlot[],
+  simPool: readonly SimPlayer[],
   ivByPlayerId: ReadonlyMap<string, number>,
 ): Best22TargetPick[] {
   const reordered = [...picks];
-
-  for (const kind of ['sp', 'rp', 'cp'] satisfies ArmSlotKind[]) {
-    const slotIndices = slots
-      .map((slot, index) => (slot.kind === kind ? index : -1))
-      .filter((index) => index >= 0);
-    if (slotIndices.length <= 1) continue;
-
-    const freeIndices = slotIndices.filter((index) => !picks[index]?.pinned);
-    if (freeIndices.length <= 1) continue;
-
-    const sortedFreePicks = freeIndices
-      .map((index) => picks[index])
-      .sort((a, b) => compareArmPicksByValue(a, b, ivByPlayerId));
-
-    freeIndices.forEach((slotIndex, freeIndex) => {
-      reordered[slotIndex] = {
-        ...sortedFreePicks[freeIndex],
-        slotId: picks[slotIndex].slotId,
-      };
+  const playerById = new Map(simPool.map((player) => [player.id, player]));
+  const flexIndices = slots
+    .map((slot, index) => (slot.kind === 'flex' ? index : -1))
+    .filter((index) => index >= 0);
+  for (const starterIndex of slots
+    .map((slot, index) => (slot.kind === 'pos' && slot.position ? index : -1))
+    .filter((index) => index >= 0)) {
+    const position = slots[starterIndex].position;
+    const samePositionFlexIndices = flexIndices.filter((index) => {
+      const pick = reordered[index];
+      return Boolean(pick?.playerId && playerById.get(pick.playerId)?.position === position);
     });
+    const indices = [
+      starterIndex,
+      ...(position === 'C'
+        ? slots.map((slot, index) => (slot.kind === 'backupC' ? index : -1)).filter((index) => index >= 0)
+        : []),
+      ...samePositionFlexIndices,
+    ];
+    reorderSlotGroupByValue(reordered, indices, slots, playerById, ivByPlayerId);
+  }
+  for (const kind of ['sp', 'rp'] as const) {
+    const indices = slots.map((slot, index) => (slot.kind === kind ? index : -1)).filter((index) => index >= 0);
+    reorderSlotGroupByValue(reordered, indices, slots, playerById, ivByPlayerId);
   }
 
   return reordered;
@@ -167,8 +208,11 @@ export function buildBest22Target(
   realTeamCount: number,
   pins?: ReadonlyMap<string, string>,
   rankOverrides?: ReadonlyMap<string, readonly string[]>,
+  taxCaps?: readonly LuxuryCapRow[],
+  displayIvByPlayerId?: ReadonlyMap<string, number>,
+  affordabilityLaw: 'strict' | 'snake-money' = 'strict',
 ): Best22Target {
-  const fitScore = archetypeFitScorer(archetype, tier, 'optimal');
+  const fitScore = archetypeFitScorer(archetype, tier, 'optimal', simPool);
   const u = meanStd(simPool.map(fitScore)).std || 1;
   const { report: pinValidationReport, buildPins } = validatePins(slots, simPool, pins);
 
@@ -218,6 +262,8 @@ export function buildBest22Target(
     posture: 'optimal',
     slotPreferenceBonus,
     pinned: buildPins,
+    taxCaps,
+    affordabilityLaw,
   });
 
   let asked = 0;
@@ -271,8 +317,8 @@ export function buildBest22Target(
       pinned: pinnedPlayerBySlotIndex.get(index) === player.id,
     };
   });
-  const ivByPlayerId = new Map(simPool.map((player) => [player.id, player.iv]));
-  const reorderedPicks = reorderArmSlotsByValue(picks, slots, ivByPlayerId);
+  const ivByPlayerId = displayIvByPlayerId ?? new Map(simPool.map((player) => [player.id, player.iv]));
+  const reorderedPicks = reorderValueGroups(picks, slots, simPool, ivByPlayerId);
 
   return {
     picks: reorderedPicks,

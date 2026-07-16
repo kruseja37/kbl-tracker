@@ -3,58 +3,21 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
-  buildIdentityAutoAssignPlan,
-  comparePlayersByIvDesc,
-  draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
-import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
-import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
-import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
+import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
-import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
-import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
-import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
-import { poolDemandModel } from "../../../engines/auctionPoolSizing";
-import {
-  useLeagueBuilderData,
-  type LeagueTemplate,
-  type Player,
-  type Team,
-  type UseLeagueBuilderDataReturn,
-} from "../../hooks/useLeagueBuilderData";
-import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
-  RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
-  resetCompletedDraftArc,
-} from "../../../utils/leagueBuilderAuctionPipeline";
-import {
-  addPlayersToLeaguePool,
-  computePlayerIv,
   lockLeaguePool,
-  removePlayersFromLeaguePool,
   unlockLeaguePool,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
-import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
 vi.setConfig({ testTimeout: 15000 });
 
 const mockNavigate = vi.fn();
-
-type LeaguePoolRecord = {
-  leagueId: string;
-  tier: "standard";
-  balanceMode: "taxed";
-  players: Array<{ id: string; iv: number; salary: number }>;
-  tierCap: number;
-  luxuryCaps: never[];
-  pickValueChart: never[];
-  totalSlots: number;
-  poolSurplusWarning: boolean;
-  locked?: boolean;
-};
 
 vi.mock("react-router", () => ({
   useLocation: () => ({ search: window.location.search }),
@@ -163,11 +126,8 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
 });
 
 import {
-  DEFAULT_TEST_POOL_SIZE,
-  capFitDiagnosticText,
   clickDraftSetupButton,
   clickSlot,
-  extractPoolOptions,
   fiveGradedSsPlayers,
   globalBoardOrder,
   makeBest22Target,
@@ -177,15 +137,11 @@ import {
   makeLegalRosterPlayers,
   makeLockedRosterDesign,
   makePlayer,
-  makePlayers,
   makePool,
-  makeQualityRosterPlayerSet,
   makeTeam,
   mockLeagueData,
   shortlistLines,
-  waitForExtractPoolOptions,
   type ExtractPoolOptions,
-  type LeaguePoolRecord,
 } from "./LeagueBuilderDraftSetup.testUtils";
 
 describe("LeagueBuilderDraftSetup", () => {
@@ -1050,22 +1006,57 @@ describe("LeagueBuilderDraftSetup", () => {
 
       const { unmount } = render(<LeagueBuilderDraftSetup />);
 
-      fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
+      await clickDraftSetupButton(/^Grounded$/i);
       await waitFor(() => {
-        expect(window.sessionStorage.getItem("kbl:draft-pool-balance-preset:league-page:pool-first")).toBe("grounded");
+        expect(window.sessionStorage.getItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first")).toBe("grounded");
       });
 
       unmount();
       vi.mocked(extractPoolFromDemand).mockClear();
 
       render(<LeagueBuilderDraftSetup />);
-      fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+      await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
       await waitFor(() => {
         expect(extractPoolFromDemand).toHaveBeenCalled();
       });
       const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as { poolBalancePreset?: string };
       expect(options.poolBalancePreset).toBe("grounded");
+    });
+
+    test("REPRO (d): asynchronously resolving the active league preserves every keyed setup preference", async () => {
+      const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
+        makeLegalRosterPlayerSet(prefix, 10_000),
+      );
+      window.sessionStorage.setItem("kbl:draft-pool-source-mode:league-page:auction:pool-first", "full-pool");
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "74");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first", "grounded");
+      window.sessionStorage.setItem("kbl:draft-reserve-price-k:league-page:auction:pool-first", "0.8");
+      window.sessionStorage.setItem("kbl:draft-identity-auto-fill-nonce:league-page", "7");
+      mockLeagueData({
+        league: makeLeague({
+          teamIds: ["team-a", "team-b", "team-c", "team-d"],
+          draftPoolMode: "pool-first",
+        }),
+        teams: ["team-a", "team-b", "team-c", "team-d"].map((teamId) => makeTeam(teamId)),
+        players: currentPlayers,
+        pool: makePool({
+          locked: false,
+          players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+          totalSlots: currentPlayers.length,
+        }),
+      });
+
+      render(<LeagueBuilderDraftSetup />);
+      await clickDraftSetupButton(/Regenerate production-shaped pool/i);
+
+      await waitFor(() => expect(extractPoolFromDemand).toHaveBeenCalled());
+      const options = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[4] as ExtractPoolOptions;
+      expect(options.poolSourceMode).toBe("full-pool");
+      expect(options.poolQualityCenter).toBe(74);
+      expect(options.poolBalancePreset).toBe("grounded");
+      expect(window.sessionStorage.getItem("kbl:draft-reserve-price-k:league-page:auction:pool-first")).toBe("0.8");
+      expect(window.sessionStorage.getItem("kbl:draft-identity-auto-fill-nonce:league-page")).toBe("7");
     });
 
     test("SURPRISE FIX: switching pool-first (with lock residue) to design-first clears the basis instead of leaking it across modes", async () => {
@@ -1112,8 +1103,8 @@ describe("LeagueBuilderDraftSetup", () => {
       // basis implicitly assumed.
       const extractedPlayers = makeFinalizedDesignFirstPlayers();
       const extractedAt = "2026-01-05T00:00:00.000Z";
-      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "76");
-      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:pool-first", "juiced");
+      window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "76");
+      window.sessionStorage.setItem("kbl:draft-pool-balance-preset:league-page:auction:pool-first", "juiced");
       mockLeagueData({
         league: makeLeague({
           draftPoolMode: "pool-first",

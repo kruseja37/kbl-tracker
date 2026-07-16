@@ -39,7 +39,7 @@ import {
   type UseLeagueBuilderDataReturn,
 } from "../../../hooks/useLeagueBuilderData";
 import { applyAuctionLuxuryTaxForLot, useAuctionDraft } from "../useAuctionDraft";
-import { buildMarketBandPrioritiesByTeamId } from "../../pages/LeagueBuilderAuctionDraft";
+import { buildMarketBandPrioritiesByTeamId } from "../../pages/LeagueBuilderAuctionDraft.helpers";
 
 vi.mock("../../../../utils/syncEngine", () => ({
   syncEngine: {
@@ -735,7 +735,9 @@ describe("useAuctionDraft", () => {
     expect(persisted?.session.currentLot).toBeNull();
 
     const nominator = result.current.currentNominatorTeamId!;
-    const playerId = result.current.session?.availablePlayerIds[0]!;
+    const playerId = result.current.session?.availablePlayerIds[0];
+    expect(playerId).toBeDefined();
+    if (!playerId) throw new Error("Expected an available player after auction initialization.");
     await act(async () => {
       await result.current.nominate(nominator, playerId, 5_000);
     });
@@ -802,7 +804,9 @@ describe("useAuctionDraft", () => {
     });
     const nominator = result.current.currentNominatorTeamId!;
     const rival = teamIds.find((teamId) => teamId !== nominator)!;
-    const playerId = result.current.session?.availablePlayerIds[0]!;
+    const playerId = result.current.session?.availablePlayerIds[0];
+    expect(playerId).toBeDefined();
+    if (!playerId) throw new Error("Expected an available player after auction initialization.");
     await act(async () => {
       await result.current.nominate(nominator, playerId, 5_000);
     });
@@ -840,7 +844,9 @@ describe("useAuctionDraft", () => {
     expect(result.current.session?.state).toBe("NOMINATION");
     const nominator = result.current.currentNominatorTeamId!;
     const rival = teamIds.find((teamId) => teamId !== nominator)!;
-    const playerId = result.current.session?.availablePlayerIds[0]!;
+    const playerId = result.current.session?.availablePlayerIds[0];
+    expect(playerId).toBeDefined();
+    if (!playerId) throw new Error("Expected an available player after auction initialization.");
     expect(result.current.controlledCpuTeamIds).toContain(nominator);
     expect(result.current.session?.currentLot).toBeNull();
 

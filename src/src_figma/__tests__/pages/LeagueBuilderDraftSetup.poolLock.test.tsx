@@ -1,34 +1,15 @@
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   LeagueBuilderDraftSetup,
-  buildIdentityAutoAssignPlan,
-  comparePlayersByIvDesc,
-  draftSetupSolvencyBannerText,
 } from "../../app/pages/LeagueBuilderDraftSetup";
-import { buildRosterDesignPool } from "../../app/components/leagueBuilder/RosterDesigner";
-import { describeRosterLawGaps } from "../../../engines/auctionExitGate";
-import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
+import { comparePlayersByIvDesc } from "../../app/pages/LeagueBuilderDraftSetup.helpers";
+import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
-import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
-import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
-import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
-import { poolDemandModel } from "../../../engines/auctionPoolSizing";
-import {
-  useLeagueBuilderData,
-  type LeagueTemplate,
-  type Player,
-  type Team,
-  type UseLeagueBuilderDataReturn,
-} from "../../hooks/useLeagueBuilderData";
-import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
-import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
-import {
-  RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
-  resetCompletedDraftArc,
-} from "../../../utils/leagueBuilderAuctionPipeline";
+import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate } from "../../../utils/leagueBuilderStorage";
+import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
   addPlayersToLeaguePool,
   computePlayerIv,
@@ -36,24 +17,10 @@ import {
   removePlayersFromLeaguePool,
 } from "../../../utils/leagueBuilderPoolBuilder";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
-import { SALARY_CAP_FLOOR, salaryCapHardError } from "../../app/utils/salaryCapInput";
 
 vi.setConfig({ testTimeout: 15000 });
 
 const mockNavigate = vi.fn();
-
-type LeaguePoolRecord = {
-  leagueId: string;
-  tier: "standard";
-  balanceMode: "taxed";
-  players: Array<{ id: string; iv: number; salary: number }>;
-  tierCap: number;
-  luxuryCaps: never[];
-  pickValueChart: never[];
-  totalSlots: number;
-  poolSurplusWarning: boolean;
-  locked?: boolean;
-};
 
 vi.mock("react-router", () => ({
   useLocation: () => ({ search: window.location.search }),
@@ -163,12 +130,7 @@ vi.mock("../../hooks/useLeagueBuilderData", async () => {
 
 import {
   DEFAULT_TEST_POOL_SIZE,
-  capFitDiagnosticText,
   clickDraftSetupButton,
-  clickSlot,
-  extractPoolOptions,
-  fiveGradedSsPlayers,
-  globalBoardOrder,
   makeBest22Target,
   makeFinalizedDesignFirstPlayers,
   makeLeague,
@@ -178,13 +140,9 @@ import {
   makePlayer,
   makePlayers,
   makePool,
-  makeQualityRosterPlayerSet,
   makeTeam,
   mockLeagueData,
-  shortlistLines,
   waitForExtractPoolOptions,
-  type ExtractPoolOptions,
-  type LeaguePoolRecord,
 } from "./LeagueBuilderDraftSetup.testUtils";
 
 describe("LeagueBuilderDraftSetup", () => {
@@ -380,8 +338,8 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /^Grounded$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/^Grounded$/i);
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalled();
@@ -449,7 +407,7 @@ describe("LeagueBuilderDraftSetup", () => {
   });
 
   test("pool quality center restores from session and feeds regeneration", async () => {
-    window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:pool-first", "74");
+    window.sessionStorage.setItem("kbl:draft-pool-quality-center:league-page:auction:pool-first", "74");
     const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) =>
       makeLegalRosterPlayerSet(prefix, 10_000),
     );
@@ -475,10 +433,13 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    // The league id resolves one render before session-backed pool preferences hydrate. Prove the
+    // restored quality signal is visible before driving Regenerate so the click cannot race the
+    // preference commit and permanently launch extraction with the default center.
+    expect(await screen.findByText("highest")).toBeInTheDocument();
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitForExtractPoolOptions((options) => options.poolQualityCenter === 74);
-    expect(screen.getByText("highest")).toBeInTheDocument();
   });
 
   test("repeated pool-first regenerate is idempotent for engine-generated players", async () => {
@@ -512,7 +473,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(addPlayersToLeaguePool).toHaveBeenCalled();
@@ -552,7 +513,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(extractPoolFromDemand).toHaveBeenCalledTimes(2);
@@ -684,7 +645,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: currentPlayers.map((player) => player.id),
       userAddedIds: [],
       manualExcludedIds: [pinnedPlayer.id],
@@ -740,7 +701,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: currentPlayers.map((player) => player.id).filter((id) => id !== userAdded.id),
       userAddedIds: [userAdded.id],
       manualExcludedIds: [manualExcluded.id],
@@ -763,8 +724,8 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "72" }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton("72");
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     const options = await waitForExtractPoolOptions((candidate) => (
       candidate.poolQualityCenter === 72
@@ -839,7 +800,7 @@ describe("LeagueBuilderDraftSetup", () => {
         leagueAssignments: [],
       })),
     );
-    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:pool-first", JSON.stringify({
+    window.sessionStorage.setItem("kbl:draft-pool-provenance:league-page:auction:pool-first", JSON.stringify({
       engineGeneratedIds: [...generatedPlayers, ...extraGeneratedPlayers].map((player) => player.id),
       userAddedIds: [],
       manualExcludedIds: [],
@@ -912,7 +873,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
     await waitFor(() => {
       expect(addPlayersToLeaguePool).toHaveBeenCalled();
     });
@@ -952,8 +913,8 @@ describe("LeagueBuilderDraftSetup", () => {
     });
     rerender(<LeagueBuilderDraftSetup />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Grounded$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /Regenerate production-shaped pool/i }));
+    await clickDraftSetupButton(/^Grounded$/i);
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
 
     await waitFor(() => {
       expect(removePlayersFromLeaguePool).toHaveBeenCalled();
@@ -988,7 +949,8 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText((content) =>
       content.includes("Manual pool: Balanced") && content.includes("legal no"),
     )).toBeInTheDocument();
-    expect(screen.getByText(/Pool cannot legally seat every club at 22 under the cap/i)).toBeInTheDocument();
+    expect(screen.getByText(/The source universe itself is short on/i)).toBeInTheDocument();
+    expect(screen.queryByText(/raise the cap/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /LOCK POOL/i })).toBeDisabled();
   });
 

@@ -17,7 +17,7 @@ import {
   registerLeaguePoolForLeague,
   toSalaryPlayer,
 } from './leagueBuilderPoolRegistration';
-import { regenerateAndPersistLeaguePoolAxes } from './leaguePoolAxisRegenPersist';
+import { initializeAndPersistDraftPoolPlayerAxes } from './leaguePoolAxisRegenPersist';
 import { calculateIvBaseSalary } from '../engines/salaryCalculator';
 import {
   getAllPlayers,
@@ -78,6 +78,12 @@ export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'sourceLeagu
   return league.sourceLeagueIds ?? null;
 }
 
+export function resolveIncludeUnassignedSourcePlayers(
+  league: Pick<LeagueTemplate, 'includeUnassignedSourcePlayers'>,
+): boolean {
+  return league.includeUnassignedSourcePlayers ?? true;
+}
+
 /**
  * True if the player is a candidate for THIS league's draft-pool extraction under the checked
  * source-league set (§2). Forward-compat dedup placeholder (§3): player identity in this app is a
@@ -94,8 +100,14 @@ export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'sourceLeagu
  * production regression this filter must not introduce — it only needs to narrow the universe
  * among players some OTHER league has already claimed, not orphan players nobody has claimed yet.
  */
-export function isPlayerInSourceUniverse(player: Player, sourceLeagueIds: readonly string[]): boolean {
-  if (!player.leagueAssignments || player.leagueAssignments.length === 0) return true;
+export function isPlayerInSourceUniverse(
+  player: Player,
+  sourceLeagueIds: readonly string[],
+  includeUnassignedSourcePlayers = true,
+): boolean {
+  if (!player.leagueAssignments || player.leagueAssignments.length === 0) {
+    return includeUnassignedSourcePlayers;
+  }
   return sourceLeagueIds.some((leagueId) => isPlayerInLeaguePool(player, leagueId));
 }
 
@@ -346,18 +358,16 @@ export async function importRosteredPlayersToLeaguePool(leagueId: string): Promi
 }
 
 /**
- * Lock the pool: register the pool first (authoritative membership + IV compute), regenerate the
- * league-scoped player axes (personality / chemistry / hidden personality modifiers) over that
- * exact registered membership, then stamp `locked`/`lockedAt`. After this the snapshot is frozen
+ * Lock the pool: register the pool first (authoritative membership + IV compute), initialize any
+ * missing draft personality truth over that exact registered membership, then stamp
+ * `locked`/`lockedAt`. After this the snapshot is frozen
  * and pool edits are rejected; the auction consumes this exact snapshot.
  *
- * CHEM-POTENCY ruling 5 (JK 2026-07-02): hidden modifiers are generated when the draft pool
- * is generated — the lock is the common chokepoint for BOTH draft formats. The axis regen is
- * deterministic in `${leagueId}:${player.id}`, so the auction-init regen (useAuctionDraft)
- * re-stamps byte-identical values over the same locked ids, and the franchise-freeze backfill
- * remains a no-op guard for leagues that never pass through a draft. Axes do not feed IV, so
- * registering before regen does not perturb the IV snapshot; it guarantees regen covers the
- * frozen membership itself.
+ * Hidden modifiers are generated when the draft pool is locked — the common chokepoint for BOTH
+ * draft formats. Initialization is source-aware and player-stable: Legends/custom visible
+ * personalities survive, curated hidden values survive, and a second league lock cannot rewrite
+ * the first league's global player truth. Axes do not feed IV, so registering before initialization
+ * does not perturb the IV snapshot.
  */
 export async function lockLeaguePool(
   leagueId: string,
@@ -371,7 +381,7 @@ export async function lockLeaguePool(
       throw new Error('Draft pool changed while locking. Regenerate the pool, then lock the displayed list.');
     }
   }
-  await regenerateAndPersistLeaguePoolAxes(leagueId, pool.players.map((p) => p.id));
+  await initializeAndPersistDraftPoolPlayerAxes(leagueId, pool.players.map((p) => p.id));
   const locked: RegisteredPool = { ...pool, locked: true, lockedAt: Date.now() };
   await saveRegisteredPool(locked);
   return locked;
