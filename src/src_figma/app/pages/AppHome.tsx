@@ -43,7 +43,7 @@ export function AppHome() {
         <div className="space-y-4">
           <Link
             to="/franchise/select"
-            className="bg-[#5599FF] h-[72px] relative block w-[260px]"
+            className="bg-[#5599FF] h-[72px] relative block w-[270px]"
           >
             <div aria-hidden="true" className="absolute border-[#3366CC] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start p-5 relative size-full">
@@ -55,7 +55,7 @@ export function AppHome() {
 
           <Link
             to="/exhibition"
-            className="bg-[#1A44CC] h-[72px] relative block w-[260px]"
+            className="bg-[#1A44CC] h-[72px] relative block w-[250px]"
           >
             <div aria-hidden="true" className="absolute border-[#113399] border-4 border-solid inset-0 pointer-events-none shadow-[6px_6px_0px_0px_rgba(0,0,0,0.8)]" />
             <div className="content-stretch flex flex-col items-start p-5 relative size-full">

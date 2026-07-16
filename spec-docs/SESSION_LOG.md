@@ -7568,3 +7568,15 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Final TypeScript, changed-file lint, and fresh production packaging are green; the build transformed
   2,728 modules and emitted the PWA service worker normally.
 - **Pending:** separate non-builder audit and bounded release-suite rerun.
+
+## 2026-07-16 (Codex, home-menu bar proportions) — independently verified; JK visual gate pending
+
+- Applied JK's screenshot ruling to the live home screen only: Living Season is 270px wide and
+  Exhibition is 250px wide; every other bar, route, color, label, height, and shadow is unchanged.
+- Focused ESLint and the 2,728-module production build passed. A clean headless-browser probe measured
+  the rendered bars at exactly 270px and 250px with zero console/page errors.
+- A separate read-only auditor returned VERIFIED with zero Major and zero Minor findings. JK's live
+  browser remains the visual acceptance gate.
+- Safe cache cleanup removed only obsolete Playwright browser downloads and rebuildable npm cache,
+  recovering available disk space from 137MiB to 2.4GiB. Codex session history and all worktrees were
+  preserved; the 30GiB recent session-history store remains the dominant space consumer.

@@ -31845,3 +31845,35 @@ Stop rather than clearing all League Builder data, deleting arbitrary unassigned
 assigned cards, broadening the source allowlist beyond exact `League Builder`, bypassing payload hash
 verification, changing Legends card content, or weakening the normal import collision guard.
 <!-- ===== END CONTRACT: LEGENDS-IMPORT-RECOVERY-32 ===== -->
+
+<!-- ===== RETRO-LOGGED CONTRACT: HOMEBAR-1 ===== -->
+## ROUTE
+Codex | medium reasoning
+
+## GOAL
+Make the Living Season home-menu bar slightly wider than Exhibition and make Exhibition slightly narrower.
+
+## SOURCE OF TRUTH
+JK's 2026-07-16 screenshot ruling: Living Season should extend a touch beyond Exhibition, while Exhibition should shorten a touch.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/AppHome.tsx`
+- `spec-docs/PROMPT_CONTRACTS.md`
+- required session-close status/log documents
+
+## REQUIRED BEHAVIOR
+- Living Season changes from 260px to 270px.
+- Exhibition changes from 260px to 250px.
+- Colors, height, copy, routes, shadows, and all other menu bars remain unchanged.
+
+## VERIFICATION
+- Focused ESLint on `AppHome.tsx`.
+- Production build.
+- Separate read-only diff audit.
+- JK's browser remains the visual acceptance gate.
+
+## STOP CONDITIONS
+Stop if the adjustment requires changing shared layout behavior or any other home-menu item.
+
+Use medium reasoning effort.
+<!-- ===== END CONTRACT: HOMEBAR-1 ===== -->
