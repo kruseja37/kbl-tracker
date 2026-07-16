@@ -7424,3 +7424,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
   Standard/Nerfed presentation built from `9e5901d7` is economically stale and must be regenerated from
   the final usage-aware tax and optimizer model.
+
+## 2026-07-16 (Codex, pitcher-hitting identity recalibration) — builder complete; audit pending
+
+- Fresh-fetched moving `origin/main` before close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `9ace5857`.
+- Reproduced the exact pre-usage `9e5901d7` starter-hitting economics, then ablated the corrected
+  usage-aware identities against otherwise-identical zero-axis versions at Standard and Nerfed.
+  Bash Brothers +15% rotation POW and Launch & Leather +10% rotation POW/CON still produced a
+  visible rotation selection effect and remain unchanged. The smallest simple values that restored
+  a visible effect in both priority tiers are Flamethrowers +30% rotation POW/CON and HDH Royals
+  +40% rotation CON.
+- Explicitly proved ordinary relievers are not taxed as everyday hitters. RP POW/CON/SPD/FLD weights
+  are `.08/.08/.16/.06`; CP weights are `.05/.05/.11/.05`. Two Way relievers enter hitter rows at
+  full use and are excluded from bullpen-secondary rows, so the same batting rating is not taxed
+  twice. No bullpen-hitting archetype axis was added or retuned.
+- All 72 tier/archetype value rosters and all 48 Standard/Nerfed identity rosters are legal and
+  solvent. All 24 identities remain inside +/-10% at all tiers: Juiced maximum deviation 4.9%,
+  Standard 2.8%, Nerfed 3.5%. Focused proof is 6/6 plus 136/136 surrounding tests; the eight-team
+  production-shape test also passed solo. TypeScript, zero-warning changed-file ESLint, and diff
+  integrity are green.
+- Two unrelated existing reds remain untouched: Bomba Squad's negative `boostZ` expectation in
+  `archetypeIdentityEmbodiment.test.ts`, and production packaging's Vite/PWA `worker.format = iife`
+  code-splitting conflict after 2,726 transformed modules.
+- **Pending gates:** a separate non-builder audits `9ace5857`; JK walks the actual League Builder and
+  Snake Room on Mac/iPad. Builder and auditor remain separate, and only JK's browser walk accepts the
+  product.

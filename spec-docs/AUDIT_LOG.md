@@ -15,15 +15,15 @@
 
 ---
 
-## Current Phase: Snake pitcher-hitting identities COMPLETE — JK walk next
+## Current Phase: Snake pitcher-hitting recalibration BUILT — independent audit + JK walk next
 
-The 24-archetype engine now treats starter POW/CON as explicit rotation-only identity axes for
-Bash Brothers, Launch & Leather, Flamethrowers, and HDH Royals. Standard and Nerfed are the tuned
-product tiers; all 24 stay inside the ±10% parity band. Snake setup, pool feasibility, My Board,
-Companion, Assistant GM, Rational Room, and tax projection consume the same role-specific truth.
-The final independent audit repaired one generic-fit fallthrough and returned APPROVE with no
-remaining finding. Next action: JK's hands-on League Builder and Snake-room walk; it remains the
-sole product gate.
+The usage-aware builder rerun keeps starter POW/CON as explicit rotation-only identity axes for
+Bash Brothers, Launch & Leather, Flamethrowers, and HDH Royals, while restoring a visible
+Standard/Nerfed selection effect for Flamethrowers and HDH. Exact RP/CP proof confirms ordinary
+reliever batting remains role-usage-discounted; Two Way relief batting is full-use but never charged
+again in bullpen-secondary rows. All 24 identities stay inside the +/-10% parity band. Next action:
+a separate non-builder audits implementation commit `9ace5857`; JK's hands-on League Builder and
+Snake-room walk remains the sole product gate.
 
 ---
 
@@ -36,7 +36,7 @@ sole product gate.
 | 2 | Seams Audit | NOT STARTED | — | — |
 | 3 | Known Bug Verification | NOT STARTED | — | — |
 | 4 | Debt Inventory | NOT STARTED | — | — |
-| SNAKE-1 | Snake mock draft close | BROWSER REPAIR COMPLETE — JK RE-WALK PENDING | 2026-07-13 | 2026-07-14 |
+| SNAKE-1 | Snake mock draft close | PITCHER-HITTING RECALIBRATION BUILT — AUDIT + JK RE-WALK PENDING | 2026-07-13 | 2026-07-14 |
 
 ---
 
@@ -1265,3 +1265,15 @@ Nerfed are the tuned product tiers; Juiced remains compatibility-only. Independe
 
 The identity diff is independently approved and does not touch the failing worker or Vite config.
 Dev/test/type gates are green; JK's browser walk remains the product-acceptance gate.
+
+### 2026-07-16 Usage-aware pitcher-hitting recalibration — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-213 | 2026-07-16 | BUILT-AWAITING-INDEPENDENT-AUDIT | Starter-hitting identity value | Verify the exact zero-axis ablation, final +30% Flamethrowers POW/CON and +40% HDH CON values, and unchanged Bash/Launch values. |
+
+Contract: `PROMPT_CONTRACTS.md` section `SNAKE-PITCHER-HITTING-RECALIBRATION-30`.
+Implementation commit: `9ace5857`. Builder proof is 6/6 focused plus 136/136 surrounding tests,
+48/48 priority-tier identity rosters legal/solvent, all 72 value rosters legal/solvent, the contested
+eight-team production-shape gate solo-green, TypeScript, lint, and diff integrity. RP/CP and Two Way
+relief cases are pinned. The separate non-builder audit and JK browser walk remain open.

@@ -1250,3 +1250,13 @@ exposure, roster-level single assignment for SP/RP arms, shared Assistant/Auctio
 legacy-row compatibility, and an absolute solvency gate. The independent oracle run proves all 72
 tier/archetype rosters legal and solvent. JK's League Builder and Mac/iPad Snake walk remains the sole
 acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-16 pitcher-hitting recalibration close
+
+The prior live header recorded runtime commits through `e26f9970` after ordinary pitcher secondary
+ratings became usage-aware and Two Way players received exact single-path treatment. JK then asked
+whether the starter-hitting identities still delivered meaningful value after that discount and
+explicitly required the same usage law to be proven for relievers. This builder close records
+implementation commit `9ace5857`: Bash Brothers and Launch & Leather stay unchanged, Flamethrowers
+moves to +30% rotation POW/CON, HDH Royals moves to +40% rotation CON, and exact RP/CP and Two Way
+proof is pinned. Independent audit and JK's League Builder/Mac/iPad Snake walk remain open gates.
