@@ -304,7 +304,7 @@ test('main and companion show the same drafted roster money and chemistry truth'
 
 test('one companion device keeps two covered team desks private and independent', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
-  await page.goto('/__preview/snake-responsive?surface=companion');
+  await page.goto('/__preview/snake-responsive?surface=companion&proof=handoff');
 
   await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
   await expect(page.getByRole('button', { name: 'RETURN TO DESK' })).toContainText('OPEN BEEWOLVES DESK');
@@ -343,6 +343,22 @@ test('one companion device keeps two covered team desks private and independent'
   await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
   await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('nora curveball');
   await expect(page.locator('[aria-label="OVERALL ranking search results"]')).not.toContainText('#1');
+
+  await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('buz');
+  await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
+  await page.getByRole('button', { name: 'RETURN TO DESK' }).click();
+  await expect(page.getByTestId('selected-player-action-strip')).toContainText(/MAX BACKSTOP/i);
+  await page.getByRole('button', { name: 'SEND PICK TO HOTSEAT' }).click();
+  await expect(page.getByTestId('companion-pick-waiting')).toContainText('PICK #19 WAITING FOR HOTSEAT');
+
+  await page.getByRole('button', { name: 'HOTSEAT DEVICE' }).click();
+  await expect(page.getByTestId('snake-responsive-preview')).toHaveAttribute('data-proof-device', 'hotseat');
+  await expect(page.getByTestId('snake-companion-frame')).toHaveCount(0);
+  await expect(page.getByTestId('companion-pick-request')).toContainText('#19 · BUZZARDS · MAX BACKSTOP');
+  await page.getByRole('button', { name: 'APPROVE PICK' }).click();
+  await expect(page.getByTestId('companion-pick-request')).toHaveCount(0);
+  await expect(page.getByTestId('preview-hotseat-public-truth')).toContainText('#19 · BUZZARDS · MAX BACKSTOP');
+  await expect(page.getByTestId('preview-hotseat-public-truth')).toContainText('NEXT PICK · #20');
 });
 
 test('a recorded pick becomes unavailable everywhere and cannot be drafted twice', async ({ page }) => {

@@ -6,11 +6,14 @@ import type { SimultaneousSnakeSeatingInput } from '../../../engines/snakeSeatin
 import type { SnakeGuidePackage } from '../../../engines/snakeGuideTrade';
 import {
   SNAKE_BOARD_SLOT_IDS,
+  assertCompanionPickRequestApprovable,
   type LeagueBuilderMlbDraftSession,
+  type SnakeCompanionPickRequest,
   type SnakeOpenTradeOffer,
   type SnakeSeatBoardRecord,
 } from '../../../utils/leagueBuilderStorage';
 import { SnakeDraftRoomView } from '../components/snake/SnakeDraftRoomView';
+import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { CompanionCoveredScreen, SnakeCompanionFrame } from '../components/snake/companion/SnakeCompanionFrame';
 import { DraftTruthStrip } from '../components/snake/desk/DraftTruthStrip';
 import { PrivateDesk } from '../components/snake/desk/PrivateDesk';
@@ -900,7 +903,10 @@ function MainPreview() {
 
 function CompanionPreview() {
   const [state, dispatch] = useReducer(previewDraftReducer, false, createPreviewDraftState);
+  const proofEnabled = new URLSearchParams(window.location.search).get('proof') === 'handoff';
+  const [proofDevice, setProofDevice] = useState<'companion' | 'hotseat'>('companion');
   const [activeTeamId, setActiveTeamId] = useState('bew');
+  const [pickRequest, setPickRequest] = useState<SnakeCompanionPickRequest | null>(null);
   const [privacy, setPrivacy] = useState<{ covered: boolean; epoch: number; message: string | null }>({
     covered: true,
     epoch: 0,
@@ -921,6 +927,50 @@ function CompanionPreview() {
     currentPickIndex: state.currentPickIndex,
     buyerTeamId: teamId,
   }), [state.currentPickIndex, state.order, state.ownedPicks, teamId]);
+  const currentSlot = state.order[state.currentPickIndex];
+  const previewSessionRevision = 100
+    + state.currentPickIndex
+    + Object.values(state.boards).reduce((sum, entry) => sum + entry.revision, 0);
+  const companionSession = useMemo<LeagueBuilderMlbDraftSession>(() => ({
+    ...previewGuideSession(state.ownedPicks, state.currentPickIndex),
+    id: 'snake-responsive-preview-companion',
+    pickOrder: state.order.map((slot) => ({
+      round: Math.ceil(slot.pick / PREVIEW_TEAMS.length),
+      pick: slot.pick,
+      teamId: slot.teamId,
+    })),
+    completedPicks: state.recordedPicks.map((pick) => ({
+      round: Math.ceil(pick.pick / PREVIEW_TEAMS.length),
+      pick: pick.pick,
+      teamId: pick.teamId,
+      playerId: pick.id,
+    })),
+    seatBoards: state.boards,
+    snakeSetup: {
+      poolPlayerIds: PREVIEW_CANDIDATES.map((candidate) => candidate.id),
+      versionSelections: {},
+      clubs: PREVIEW_TEAMS.map((entry) => ({
+        teamId: entry.id,
+        gmName: 'Preview GM',
+        hotseat: false,
+      })),
+      orderSeed: 'preview-companion-proof',
+    },
+    snakeCompanions: {
+      roomCode: '4821',
+      claims: PREVIEW_TEAMS.map((entry) => ({
+        claimId: `preview-claim-${entry.id}`,
+        claimVersion: 2,
+        deviceId: 'preview-companion-device',
+        gmName: 'Preview GM',
+        teamId: entry.id,
+        status: 'approved' as const,
+      })),
+      ...(pickRequest ? { pickRequest } : {}),
+    },
+    revision: pickRequest ? pickRequest.sessionRevision + 1 : previewSessionRevision,
+    currentPickIndex: state.currentPickIndex,
+  }), [pickRequest, previewSessionRevision, state]);
   const draftedTruth = previewRosterTruth((state.rosters[teamId] ?? []).map((player) => player.id));
   const privateGuide = (showHelp?: boolean) => <PrivateTradeGuide
     teamId={teamId}
@@ -937,6 +987,8 @@ function CompanionPreview() {
   const resetAndCover = (message: string) => {
     dispatch({ type: 'RESET_PRIVATE' });
     setActiveTeamId('bew');
+    setPickRequest(null);
+    setProofDevice('companion');
     setPrivacy({ covered: true, epoch: 0, message });
   };
   const coverPrivateDesk = () => {
@@ -959,7 +1011,85 @@ function CompanionPreview() {
       message: null,
     }));
   };
+  const submitPreviewPickRequest = (playerId: string) => {
+    if (!proofEnabled) return;
+    const claim = companionSession.snakeCompanions?.claims.find((entry) => (
+      entry.deviceId === 'preview-companion-device'
+      && entry.teamId === teamId
+      && entry.status === 'approved'
+    ));
+    if (!claim) throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
+    if (!currentSlot || currentSlot.teamId !== teamId) throw new Error('YOUR CLUB IS NOT ON THE CLOCK.');
+    if (unavailable.has(playerId)) throw new Error('THAT PLAYER HAS ALREADY BEEN DRAFTED.');
+    setPickRequest({
+      id: `preview-pick-request-${currentSlot.pick}`,
+      teamId,
+      playerId,
+      pick: currentSlot.pick,
+      submittedAt: '2026-07-16T12:00:00.000Z',
+      deviceId: claim.deviceId,
+      claimId: claim.claimId,
+      sessionRevision: companionSession.revision ?? 0,
+    });
+    setPrivacy((current) => ({ ...current, message: 'PICK SENT TO HOTSEAT.' }));
+  };
+  const approvePreviewPickRequest = (request: SnakeCompanionPickRequest) => {
+    const liveSlot = state.order[state.currentPickIndex];
+    if (!liveSlot) throw new Error('THIS DRAFT IS COMPLETE.');
+    assertCompanionPickRequestApprovable({
+      session: companionSession,
+      request,
+      teamId: liveSlot.teamId,
+      playerId: request.playerId,
+      pick: liveSlot.pick,
+    });
+    if (unavailable.has(request.playerId)) throw new Error('THAT PLAYER HAS ALREADY BEEN DRAFTED.');
+    dispatch({ type: 'RECORD_PICK', teamId: liveSlot.teamId, playerId: request.playerId });
+    setPickRequest(null);
+  };
+  const openProofHotseat = () => {
+    if (!proofEnabled) return;
+    if (!privacy.covered) coverPrivateDesk();
+    setProofDevice('hotseat');
+  };
+  const proofNavigation = proofEnabled ? <nav className="mb-3 flex flex-wrap gap-2" aria-label="Preview proof device">
+    <button
+      type="button"
+      className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+      aria-pressed={proofDevice === 'companion'}
+      onClick={() => setProofDevice('companion')}
+    >COMPANION DEVICE</button>
+    <button
+      type="button"
+      className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+      aria-pressed={proofDevice === 'hotseat'}
+      onClick={openProofHotseat}
+    >HOTSEAT DEVICE</button>
+  </nav> : null;
+
+  if (proofEnabled && proofDevice === 'hotseat') {
+    const publicPicks = state.recordedPicks.slice().reverse();
+    return <div data-testid="snake-responsive-preview" data-surface="companion" data-proof-device="hotseat">
+      {proofNavigation}
+      <CompanionApprovalCard
+        session={companionSession}
+        teams={PREVIEW_TEAMS}
+        playerName={(playerId) => PREVIEW_CANDIDATES.find((candidate) => candidate.id === playerId)?.name ?? playerId}
+        onApprovePick={approvePreviewPickRequest}
+        onChange={() => undefined}
+      />
+      <section className="ballpark-panel mt-3" data-testid="preview-hotseat-public-truth">
+        <h2 className="ballpark-title text-xl">PUBLIC DRAFT TRUTH</h2>
+        <p className="mt-2 font-black">NEXT PICK · #{state.order[state.currentPickIndex]?.pick ?? 'COMPLETE'}</p>
+        {publicPicks.map((pick) => <p key={`${pick.pick}:${pick.id}`} className="mt-2 font-black">
+          #{pick.pick} · {PREVIEW_TEAMS.find((entry) => entry.id === pick.teamId)?.name.toUpperCase() ?? pick.teamId.toUpperCase()} · {pick.name.toUpperCase()}
+        </p>)}
+      </section>
+    </div>;
+  }
+
   return <div data-testid="snake-responsive-preview" data-surface="companion">
+    {proofNavigation}
     {privacy.covered ? <CompanionCoveredScreen
       onReturn={() => {
         setPrivacy((current) => ({
@@ -983,6 +1113,7 @@ function CompanionPreview() {
           teamName: PREVIEW_TEAMS.find((team) => team.id === slot.teamId)?.name ?? slot.teamId,
         }))}
         ticker={state.recordedPicks.slice(-3).reverse().map((pick) => `${PREVIEW_TEAMS.find((team) => team.id === pick.teamId)?.name.toUpperCase() ?? pick.teamId.toUpperCase()} SELECTED ${pick.name}`)}
+        message={privacy.message}
         selectedPlayer={<PreviewSelected
           board={board}
           teamId={teamId}
@@ -1001,6 +1132,14 @@ function CompanionPreview() {
             type: 'TRADE_PREFILL',
             key: tradeProposal ? `${teamId}:${selectedCandidate.id}:${tradeProposal.targetPick}` : null,
           })}
+          draftAction={proofEnabled && currentSlot?.teamId === teamId && !pickRequest ? <button
+            type="button"
+            className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11"
+            onClick={() => submitPreviewPickRequest(selectedCandidate.id)}
+          >SEND PICK TO HOTSEAT</button> : proofEnabled && pickRequest?.teamId === teamId ? <span
+            className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black"
+            data-testid="companion-pick-waiting"
+          >PICK #{pickRequest.pick} WAITING FOR HOTSEAT</span> : null}
         />}
         draftedTruth={<DraftTruthStrip
           title="DRAFTED ROSTER"
