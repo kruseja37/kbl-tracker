@@ -31598,3 +31598,87 @@ migrating legacy saved cap rows.
 
 Use extra-high reasoning effort.
 <!-- ===== END CONTRACT: SNAKE-PITCHER-USAGE-TAX-29 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-PITCHER-HITTING-RECALIBRATION-30 ===== -->
+# SNAKE-PITCHER-HITTING-RECALIBRATION-30 — RESTORE MEANINGFUL USAGE-AWARE IDENTITY VALUE
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-16 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+The builder must measure the isolated Standard/Nerfed value of the starter POW/CON boosts on Bash
+Brothers, Launch & Leather, Flamethrowers, and HDH Royals after the playing-time correction, then
+apply the smallest evidence-backed retune needed to keep those axes strategically meaningful without
+breaking the complete identity, legality, solvency, or the locked +/-10% balance band.
+
+## SOURCE OF TRUTH
+JK ruled on 2026-07-16 that preserving a similar raw-rating headroom is not enough if usage weighting
+made the unique tax relief economically decorative. The pre-usage `9e5901d7` treatment is the reference
+for what the four boosts were intended to contribute; `1406bb06` is the corrected usage-aware base.
+Standard and Nerfed are the product tiers. Juiced is compatibility-only.
+
+## ALLOWED FILES
+- `src/data/historicalArchetypes.ts`
+- one focused diagnostic/regression test under `src/engines/__tests__/`
+- `src/engines/__tests__/historicalArchetypes.test.ts`
+- `src/engines/__tests__/archetypeIdentityEmbodiment.test.ts`
+- `src/engines/__tests__/leagueConstruction.test.ts`
+- `src/data/__tests__/pitcherSecondaryTaxTuning.test.ts`
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- `spec-docs/TEAM_ARCHETYPES_24.md`
+- `spec-docs/T3_POOL_ANALYSIS.md`
+- `spec-docs/NOW/SNAKE_DRAFT.md`
+- required session-close status/log documents
+
+## DO NOT TOUCH
+Do not change role-usage weights, base cap tables, salary/IV, tax coefficients/curves/adders, roster
+law, optimizer objectives, Two Way treatment, SP/RP assignment, pool shaping, draft budgets, UI,
+persistence, Auction/Snake routing, the 24 archetype names, or any archetype outside the four named
+above. Do not weaken or delete an existing assertion to make the retune pass.
+
+## REQUIRED MEASUREMENT
+For each of the four archetypes and each priority tier, compare the complete identity with an otherwise
+identical identity whose `ROT_POW`/`ROT_CON` shifts are zero. Record at minimum:
+
+1. shifted rotation POW/CON cap headroom in usage-weighted and SP raw-equivalent points;
+2. tax relief over a representative overage ladder, using the authoritative quadratic settlement law;
+3. legal/solvent best-22 total IV, salary, tax, and all-in cost;
+4. selected rotation POW/CON and identity-embodiment change;
+5. the complete archetype's deviation from the 24-archetype mean.
+
+Also prove the same usage law already protects ordinary relievers: RP and CP POW/CON/SPD/FLD must
+enter bullpen secondary rows only at their canonical relief-role exposure, never as everyday-player
+ratings. Pin the exact RP/CP weights and authoritative settlement result for representative raw ratings.
+Two Way relievers must remain full-use hitters while their batting ratings are excluded from the
+bullpen secondary rows, so no rating is charged twice. There is no reliever-hitting archetype retune
+in this contract because the canonical set has no `PEN_POW`/`PEN_CON` identity axis.
+
+Reproduce the comparable pre-usage reference from `9e5901d7`; do not estimate it from prose. If the
+optimizer's discrete roster choice makes a metric flat, report that honestly and use the overage-ladder
+and embodiment evidence rather than inventing precision.
+
+## RETUNE RULE
+Change only the four `ROT_POW`/`ROT_CON` multipliers, and only when the ablation proves the corrected
+boost is materially weaker than its pre-usage identity contribution. Use the smallest simple increments
+that restore a visible roster/tax/embodiment effect in both Standard and Nerfed. Do not attempt to restore
+the old everyday-player tax dollars literally if that would contradict playing time. If added relief
+would require changing another boost/sacrifice to preserve balance, STOP and report the measured tradeoff
+before widening the edit.
+
+## REQUIRED PROOF
+- Focused red/green regression pins the final four multiplier values and their isolated effects.
+- All 48 Standard/Nerfed identity rosters are legal and solvent; all 24 archetypes remain within +/-10%.
+- Juiced remains within +/-10% but does not drive the tuning.
+- The four identities show non-decorative starter-hitting differences from their zero-axis ablations.
+- Existing exact cap-shift, fit, Assistant GM, rational-room, pool-feasibility, and usage-tax tests pass.
+- Explicit RP/CP cases prove ordinary reliever hitting is usage-discounted and Two Way relief hitting
+  is full-use but never double-taxed.
+- TypeScript, production build, changed-file lint, and `git diff --check` pass.
+- A separate auditor reruns the ablation and tries to disprove the selected multipliers.
+
+## STOP CONDITIONS
+Stop if restoring meaningful value requires a non-pitcher-hitting identity change, a base-economy change,
+an unrelated archetype retune, or a weakened gate. Report the exact measured conflict instead of tuning
+around it silently.
+<!-- ===== END CONTRACT: SNAKE-PITCHER-HITTING-RECALIBRATION-30 ===== -->
