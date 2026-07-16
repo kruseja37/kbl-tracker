@@ -10,6 +10,7 @@ import {
 import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { poolDemandModel } from "../../../engines/auctionPoolSizing";
+import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
 import { getAuctionSession, getMlbDraftSession, getRegisteredPool, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
 import {
@@ -214,6 +215,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     const snakeMethod = await screen.findByRole("button", { name: "SNAKE DRAFT", exact: true });
     expect(screen.getByRole("button", { name: "AUCTION DRAFT", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(snakeMethod).toBeEnabled());
     fireEvent.click(snakeMethod);
 
     await waitFor(() => {
@@ -247,6 +249,35 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: "ENTER SNAKE DRAFT" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Increase shill bidders" })).not.toBeInTheDocument();
     expect(screen.queryByText(/START SNAKE DRAFT \(POC\)/i)).not.toBeInTheDocument();
+  });
+
+  test("opens the requested snake league without an intermediate select-league state", async () => {
+    mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(screen.queryByText("Select a league first.")).not.toBeInTheDocument();
+    expect(await screen.findByText("Snake Draft — Page League")).toBeInTheDocument();
+  });
+
+  test("does not auto-build and certify a snake pool while Draft Setup is mounting", async () => {
+    const players = makePositionDiversePlayers(300, 8, "mount-pool");
+    mockLeagueData({
+      league: makeLeague({
+        draftFormat: "snake",
+        draftPoolMode: "pool-first",
+        poolAssemblyMode: "shape-to-teams",
+        salaryCap: 10_000_000,
+      }),
+      players,
+      pool: makePool({ locked: false, players: [], totalSlots: 176 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+    expect(await screen.findByTestId("snake-setup-adapter")).toBeInTheDocument();
+    await act(async () => undefined);
+
+    expect(extractPoolFromDemand).not.toHaveBeenCalled();
+    expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
   });
 
   test("snake format keeps source leagues, manual player selection, versions, and club identities in one setup", async () => {

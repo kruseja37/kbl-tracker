@@ -386,8 +386,17 @@ browser walk remains the sole product-acceptance gate.
 **Final independent evidence:** The non-builder auditor returned **APPROVE** with zero actionable findings. Its 48/48 narrow tests and diff-integrity check independently verified completion aggregation, Assistant fail-closed behavior, and absence of diagnostic/test-only production seams. JK's browser re-walk remains the sole product-acceptance gate.
 
 ### FINDING-218
-**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser re-walk | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser re-walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
 **Files:** `LeagueBuilderDraftSetup.tsx`, `LeagueBuilderDraftSetup.setup.test.tsx`
 **Evidence:** An identity-card pick persists the changed team and applies it through `replaceTeamsLocal`, then falls through the generic action wrapper's default full league-data and registered-pool refreshes. Neither refresh can change the just-saved identity or the unchanged pool.
 **Impact:** Selecting an MLB or farm archetype looks and feels like a page reload, restarting setup-derived work and leaving the screen unresponsive on a real Legends-sized setup.
 **Action:** Keep the durable save and immediate local state replacement, but opt identity picks out of both redundant refreshes. A regression asserts the persisted local update occurs while neither full setup-data nor pool loading runs.
+**Independent evidence:** A separate non-builder auditor returned APPROVE with zero findings after verifying the identity save/local replacement remain durable and neither full data nor pool refresh is needed for team metadata.
+
+### FINDING-219
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser re-walk | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
+**Files:** `LeagueBuilderDraftSetup.tsx`, `LeagueBuilderDraftSetup.setup.test.tsx`
+**Evidence:** The browser gate reproduced a newly created league briefly rendering `Select a league first`, followed by a long unresponsive tab. The preview commit resolved `activeLeagueId` only in a post-render effect and also introduced an automatic first-pool effect that invoked the full BUILD path on mount. That path can synchronously shape and certify Competitive, wider presets, and Full Sources across a Legends-sized universe before any user action.
+**Impact:** The durable league appears missing during the handoff, then the browser main thread stalls while hidden pool optimization runs. The league eventually reappears, making the failure look intermittent even though the mount path is deterministic.
+**Action:** Resolve the requested league synchronously from the loaded route/data, and never run the expensive multi-candidate BUILD transaction implicitly on mount. BUILD remains an explicit user action with its existing identity/legal/money guarantees. Regressions pin both the no-false-empty handoff and the no-auto-build mount contract.
+**Independent evidence:** A separate non-builder auditor returned APPROVE with zero findings. It verified the removed effect was the only implicit BUILD caller, the visible BUILD transaction remains wired and covered, and the route/no-auto regressions plus TypeScript and diff checks pass.

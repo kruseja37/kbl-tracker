@@ -1583,22 +1583,18 @@ export function LeagueBuilderDraftSetup() {
     () => leagues.filter((candidate) => !candidate.sourceLibrary),
     [leagues],
   );
-  const [activeLeagueId, setActiveLeagueId] = useState<string>("");
+  const [selectedLeagueId, setActiveLeagueId] = useState<string>("");
+  const activeLeagueId = useMemo(() => {
+    if (selectedLeagueId && draftTargetLeagues.some((candidate) => candidate.id === selectedLeagueId)) {
+      return selectedLeagueId;
+    }
+    return resolveInitialLeagueId(draftTargetLeagues, requestedLeagueId);
+  }, [draftTargetLeagues, requestedLeagueId, selectedLeagueId]);
   const [showHelp, setShowHelp] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [clubEditorMode, setClubEditorMode] = useState<ClubEditorMode>("identity");
   const [shills, setShills] = useState(() => scaledShillDefault(0));
   const [salaryCapInput, setSalaryCapInput] = useState("");
-
-  // Resolve the active league once leagues load (honoring ?leagueId=).
-  useEffect(() => {
-    if (draftTargetLeagues.length === 0) return;
-    setActiveLeagueId((current) =>
-      current && draftTargetLeagues.some((l) => l.id === current)
-        ? current
-        : resolveInitialLeagueId(draftTargetLeagues, requestedLeagueId),
-    );
-  }, [draftTargetLeagues, requestedLeagueId]);
 
   const league = useMemo(
     () => leagues.find((l) => l.id === activeLeagueId) ?? null,
@@ -1673,7 +1669,6 @@ export function LeagueBuilderDraftSetup() {
   const [recheckReport, setRecheckReport] = useState<RecheckReport | null>(null);
   const [lastRecheckKey, setLastRecheckKey] = useState<string | null>(null);
   const autoRecheckTriggerRef = useRef<string | null>(null);
-  const autoSnakePoolBuildRef = useRef<string | null>(null);
   const legacySnakeMigrationRef = useRef<string | null>(null);
   const reExtractConfirmRef = useRef<HTMLDivElement>(null);
   const lockConfirmRef = useRef<HTMLDivElement>(null);
@@ -3984,47 +3979,6 @@ export function LeagueBuilderDraftSetup() {
     snakeRosterLocalProofBlocked: snakeAdapter.lockProofBlocked,
   });
 
-  // A new snake league should open with a draftable pool, not make the GM
-  // discover and repair the app's own undersized default. Manual edits remain
-  // fully respected: this bootstrap only runs once on an untouched first pool.
-  useEffect(() => {
-    if (!isSnakeFormat
-      || !activeLeagueId
-      || !savedDraftChecked
-      || savedDraftLookupError
-      || hasSavedDraft
-      || hasCompletedDraft
-      || hydratedPoolPreferencesKey !== poolPreferencesKey
-      || locked
-      || busy
-      || universeEmpty
-      || !poolFirstSalaryCompletionBlocked
-      || poolFirstShapeReport
-      || poolProvenance.userAddedIds.size > 0
-      || poolProvenance.manualExcludedIds.size > 0) return;
-    const trigger = `${activeLeagueId}:${sortedIds(inPoolPlayers.map((player) => player.id)).join('|')}`;
-    if (autoSnakePoolBuildRef.current === trigger) return;
-    autoSnakePoolBuildRef.current = trigger;
-    void handleBuildSelectedSnakePool();
-  }, [
-    activeLeagueId,
-    busy,
-    hasCompletedDraft,
-    hasSavedDraft,
-    handleBuildSelectedSnakePool,
-    hydratedPoolPreferencesKey,
-    inPoolPlayers,
-    isSnakeFormat,
-    locked,
-    poolFirstSalaryCompletionBlocked,
-    poolPreferencesKey,
-    poolFirstShapeReport,
-    poolProvenance.manualExcludedIds,
-    poolProvenance.userAddedIds,
-    savedDraftChecked,
-    savedDraftLookupError,
-    universeEmpty,
-  ]);
   // BLOCKFIX (JK repro 2026-07-12): legality-shape view of the source universe, used to tell
   // "regenerate/add can fix this" apart from "the checked source leagues themselves lack the role".
   const universeRosterShapes = useMemo(
