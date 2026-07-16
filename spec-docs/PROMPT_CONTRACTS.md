@@ -31686,3 +31686,82 @@ Stop if restoring meaningful value requires a non-pitcher-hitting identity chang
 an unrelated archetype retune, or a weakened gate. Report the exact measured conflict instead of tuning
 around it silently.
 <!-- ===== END CONTRACT: SNAKE-PITCHER-HITTING-RECALIBRATION-30 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-MULTI-TEAM-COMPANION-31 ===== -->
+# SNAKE-MULTI-TEAM-COMPANION-31 — MULTIPLE PRIVATE TEAM DESKS ON ONE DEVICE
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-16 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+The builder must let one approved companion device control more than one companion team in the same
+Snake room while preserving exact team-by-team privacy, board ownership, trade authority, and pick
+intent. The intended table can run eight clubs with one Hotseat device and three companion devices,
+with each human controlling two clubs. The Hotseat remains the authoritative pick-confirmation gate.
+
+## SOURCE OF TRUTH
+JK approved the device-first model: one physical device may hold multiple separately approved team
+seats, but it may expose and act for only one active team desk at a time. The current v1 same-account
+Supabase model remains in force. Supabase Auth permits the same user to hold multiple device sessions
+by default; this contract does not introduce guest accounts, server seat ACLs, RLS changes, or a new
+database schema. The existing limit remains three unique companion devices, not three claims.
+
+## ALLOWED FILES
+- `src/utils/leagueBuilderStorage.ts`
+- focused companion persistence tests under `src/utils/tests/`
+- `src/src_figma/app/pages/SnakeCompanion.tsx`
+- `src/src_figma/app/components/snake/companion/companionModel.ts`
+- `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`
+- `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
+- `src/src_figma/app/components/snake/companion/SnakeCompanionFrame.tsx`
+- focused tests under `src/src_figma/app/components/snake/companion/__tests__/`
+- focused Snake page or browser-journey tests when needed to prove the complete switch flow
+- companion styling only when required for the compact switcher
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- `spec-docs/NOW/SNAKE_DRAFT.md`
+- required session-close status/log documents
+
+## REQUIRED BEHAVIOR
+- A companion claim is authorized by the exact `(deviceId, teamId)` tuple. One device may have
+  multiple pending or approved team claims; one team may have only one active device.
+- A GM name intentionally assigned to multiple companion clubs requests that complete team package
+  from the device. It is no longer rejected as ambiguous. The Hotseat must see the package clearly
+  and approve or refuse each team without losing another approved team on the same device.
+- The three-companion limit counts distinct active device IDs. Adding a second team to an existing
+  device does not consume another device slot. A fourth distinct device remains blocked.
+- The companion UI provides a compact, obvious authorized-team switcher. Exactly one approved team is
+  active. A switch immediately invalidates the prior private epoch, clears selected player, board
+  undo, Assistant GM optimization, trade prefill, transient messages, and every prior team-derived
+  render, then covers the device. The newly selected desk is revealed only by an explicit open action.
+- Recovery, refresh, revocation, fallback-to-Hotseat, and claim replacement preserve every unrelated
+  team claim on that device. If the active team is revoked, the device covers before choosing another
+  approved team. If none remain, it returns to the pending/claim state.
+- Every private board read/write, Assistant GM calculation, team-fit label, trade offer/nod/withdrawal,
+  and pick request must use the currently active approved `(deviceId, teamId)` claim. A device's
+  approval for one team never authorizes another team. Stale work from a prior team switch must fail.
+- Companion pick submission remains intent only, is available only for the active club when it is on
+  the clock, and still requires Hotseat confirmation through the normal authoritative pick path.
+- Preserve the existing same-account login, cloud-sync transport, room code, three-device ceiling,
+  farm no-trade ruling, draft legality, salary/tax/archetype engines, and board calculations.
+- Keep ordinary screens terse. Any operating explanation belongs behind the ratified `?` help control.
+
+## REQUIRED PROOF
+- Model tests cover one device claiming and receiving approval for two teams, package resubmission,
+  per-team revocation, team takeover by another device, and a fourth unique device rejection.
+- Persistence tests prove atomic writes retain sibling claims and all team-specific writers reject an
+  unapproved tuple even when that device is approved for a different team.
+- UI tests prove the switcher lists only approved teams, active branding/board data follows the chosen
+  team, switching covers before reveal, and old private state cannot reappear after delayed work.
+- Pick-intent and trade tests prove the active team ID is used and cross-team actions are rejected.
+- A real browser journey uses at least two teams on one companion browser context, switches in both
+  directions, rearranges both independent boards, and submits a pick for the on-clock team for
+  Hotseat confirmation without leaking the other desk.
+- Run focused tests, TypeScript, changed-file lint, full tests in proportion to the change, production
+  build, `git diff --check`, and a separate skeptical audit of the committed implementation.
+
+## STOP CONDITIONS
+Stop and report rather than weakening the exact team guard, exposing two desks at once, allowing a
+companion to commit a pick directly, increasing the three-device cap, adding guest auth/RLS/schema,
+changing draft or economy engines, enabling farm trades, or hiding a privacy failure behind UI copy.
+<!-- ===== END CONTRACT: SNAKE-MULTI-TEAM-COMPANION-31 ===== -->
