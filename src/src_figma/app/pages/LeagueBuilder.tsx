@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
-import { Database, Users, User, Folder, Shuffle, Loader2, Download, CheckCircle, AlertCircle } from "lucide-react";
+import { Database, Users, User, Folder, Shuffle, Loader2, Download, CheckCircle, AlertCircle, Wrench } from "lucide-react";
 import { useLeagueBuilderData } from "../../hooks/useLeagueBuilderData";
+import { isRecoverableHistoricalLegendsOwnershipCollision } from "../../../utils/historicalLegendsImport";
 import { BallparkShell } from "../components/ballpark";
 
 export function LeagueBuilder() {
@@ -17,10 +18,11 @@ export function LeagueBuilder() {
     seedMLBData,
     isMLBSeeded,
     seedHistoricalLegendsData,
+    repairHistoricalLegendsData,
     isHistoricalLegendsSeeded,
   } = useLeagueBuilderData();
 
-  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | 'legends' | null>(null);
+  const [isSeeding, setIsSeeding] = useState<'sml' | 'mlb' | 'legends' | 'legends-repair' | null>(null);
   const [seedResult, setSeedResult] = useState<{
     source: string;
     players: number;
@@ -28,6 +30,7 @@ export function LeagueBuilder() {
     playerGroups?: number;
   } | null>(null);
   const [seedError, setSeedError] = useState<string | null>(null);
+  const [canRepairLegendsImport, setCanRepairLegendsImport] = useState(false);
   const [isSMLSeeded, setIsSMLSeeded] = useState(false);
   const [isMLBSeededState, setIsMLBSeededState] = useState(false);
   const [areLegendsSeeded, setAreLegendsSeeded] = useState(false);
@@ -62,6 +65,7 @@ export function LeagueBuilder() {
     setIsSeeding(source);
     setSeedResult(null);
     setSeedError(null);
+    setCanRepairLegendsImport(false);
 
     try {
       const result = source === 'sml'
@@ -81,6 +85,37 @@ export function LeagueBuilder() {
       console.error(`Failed to seed ${source} database:`, err);
       const message = err instanceof Error ? err.message : 'Unknown error';
       setSeedError(message);
+      setCanRepairLegendsImport(
+        source === 'legends' && isRecoverableHistoricalLegendsOwnershipCollision(err),
+      );
+    } finally {
+      setIsSeeding(null);
+    }
+  };
+
+  const handleRepairLegendsImport = async () => {
+    if (isSeeding || !canRepairLegendsImport) return;
+    const confirmed = window.confirm(
+      'This will reclaim only unassigned, verified Historical Legends cards left behind as League Builder players, then complete the Draft / Career / Peak import. Other players and leagues are preserved.\n\nContinue?'
+    );
+    if (!confirmed) return;
+
+    setIsSeeding('legends-repair');
+    setSeedResult(null);
+    try {
+      const result = await repairHistoricalLegendsData();
+      setSeedError(null);
+      setCanRepairLegendsImport(false);
+      setSeedResult({
+        source: 'Historical Legends (345 players / 835 cards / 3 source libraries)',
+        ...result,
+      });
+      setAreLegendsSeeded(true);
+      isHistoricalLegendsSeeded().then(setAreLegendsSeeded);
+    } catch (err) {
+      console.error('Failed to repair Historical Legends import:', err);
+      setSeedError(err instanceof Error ? err.message : 'Unknown error');
+      setCanRepairLegendsImport(false);
     } finally {
       setIsSeeding(null);
     }
@@ -215,9 +250,23 @@ export function LeagueBuilder() {
               </div>
             )}
             {seedError && (
-              <div className="bg-[#556B55] border-[2px] border-[#F44336] p-3 text-xs text-[#F44336] flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Import failed: {seedError}</span>
+              <div className="bg-[#556B55] border-[2px] border-[#F44336] p-3 text-xs text-[#F44336]">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>Import failed: {seedError}</span>
+                </div>
+                {canRepairLegendsImport && (
+                  <button
+                    type="button"
+                    onClick={handleRepairLegendsImport}
+                    disabled={!!isSeeding}
+                    className="mt-3 min-h-11 px-4 border-[3px] border-[#E8E8D8] bg-[#D4A020] text-[#1A1A1A] font-bold flex items-center gap-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,0.8)] active:scale-95 disabled:opacity-50"
+                  >
+                    {isSeeding === 'legends-repair'
+                      ? <><Loader2 className="w-4 h-4 animate-spin" /> REPAIRING...</>
+                      : <><Wrench className="w-4 h-4" /> REPAIR LEGENDS IMPORT</>}
+                  </button>
+                )}
               </div>
             )}
           </div>

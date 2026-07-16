@@ -4,6 +4,23 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## BUILDER COMPLETE / AUDIT PENDING (2026-07-16; LEGENDS-IMPORT-RECOVERY-32)
+- League Builder now has a narrow repair path for the reproduced partial Legends import collision.
+  Normal import still refuses every non-Legends owner. Repair is offered only when a complete
+  read-only preflight proves every non-Legends `hl:` row is an exact pinned-payload card, owned by
+  exactly `League Builder`, and unassigned.
+- Repair validates the pinned asset before storage inspection, preflights the entire candidate set
+  before any write, adopts only proven legacy rows, and reconciles through the normal importer.
+  Assigned, SMB4, MLB, custom, mixed, and non-payload cases all produce zero mutation.
+- Focused proof covers partial Draft/Peak recovery into complete Draft/Career/Peak, the real pinned
+  835-card payload and all three libraries, idempotence, unrelated-player preservation, adversarial
+  zero-write cases, structured UI eligibility, confirmation cancellation, success, and hidden repair
+  actions for blocked/unrelated failures. TypeScript and changed-file lint are green. Production
+  packaging reaches all 2,726 modules and then hits the unchanged recorded Vite/PWA
+  `worker.format = iife` conflict outside this contract.
+- **Next move:** separate non-builder audit, then JK retries the exact League Builder import recovery
+  in the browser. JK's browser result remains the acceptance gate.
+
 ## VERIFIED (2026-07-16; SNAKE-MULTI-TEAM-COMPANION-31)
 - One companion device may now hold multiple separately approved team desks. Duplicate normalized
   companion GM names in Draft Setup intentionally define a team package, and capacity remains three

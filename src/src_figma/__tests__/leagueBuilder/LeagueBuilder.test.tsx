@@ -6,8 +6,9 @@
  */
 
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { LeagueBuilder } from '../../app/pages/LeagueBuilder';
+import { HistoricalLegendsOwnershipCollisionError } from '../../../utils/historicalLegendsImport';
 
 // ============================================
 // MOCKS
@@ -67,6 +68,7 @@ function createMockHookReturn(overrides: Record<string, unknown> = {}) {
     seedMLBData: vi.fn(() => Promise.resolve({ teams: 0, players: 0 })),
     isMLBSeeded: vi.fn(() => Promise.resolve(false)),
     seedHistoricalLegendsData: vi.fn(() => Promise.resolve({ players: 835, playerGroups: 345, removedStaleCards: 0, sourceSha256: 'a'.repeat(64) })),
+    repairHistoricalLegendsData: vi.fn(() => Promise.resolve({ players: 835, playerGroups: 345, removedStaleCards: 0, sourceSha256: 'a'.repeat(64) })),
     isHistoricalLegendsSeeded: vi.fn(() => Promise.resolve(false)),
     refresh: vi.fn(),
     ...overrides,
@@ -186,6 +188,97 @@ describe('LeagueBuilder Component', () => {
       expect(screen.getByText('Historical Legends')).toBeInTheDocument();
       expect(screen.getByText('Import Draft / Career / Peak Legends libraries')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /IMPORT LEGENDS/i })).toBeInTheDocument();
+    });
+
+    test('offers repair only after a fully preflighted recoverable ownership collision', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      const collision = new HistoricalLegendsOwnershipCollisionError(
+        'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+        true,
+      );
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        seedHistoricalLegendsData: vi.fn(() => Promise.reject(collision)),
+      }) as ReturnType<typeof useLeagueBuilderData>);
+      window.confirm = vi.fn(() => true);
+
+      render(<LeagueBuilder />);
+      fireEvent.click(screen.getByRole('button', { name: /IMPORT LEGENDS/i }));
+
+      expect(await screen.findByRole('button', { name: /REPAIR LEGENDS IMPORT/i })).toBeInTheDocument();
+    });
+
+    test.each([
+      ['assigned or mixed collision', new HistoricalLegendsOwnershipCollisionError(
+        'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+        false,
+      )],
+      ['unrelated import failure', new Error('Historical Legends data is not available (500).')],
+    ])('does not expose repair for %s', async (_label, failure) => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        seedHistoricalLegendsData: vi.fn(() => Promise.reject(failure)),
+      }) as ReturnType<typeof useLeagueBuilderData>);
+      window.confirm = vi.fn(() => true);
+
+      render(<LeagueBuilder />);
+      fireEvent.click(screen.getByRole('button', { name: /IMPORT LEGENDS/i }));
+      await screen.findByText(/Import failed:/i);
+
+      expect(screen.queryByRole('button', { name: /REPAIR LEGENDS IMPORT/i })).not.toBeInTheDocument();
+    });
+
+    test('repair confirmation cancellation writes nothing', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      const repairHistoricalLegendsData = vi.fn(() => Promise.resolve({
+        players: 835,
+        playerGroups: 345,
+        removedStaleCards: 0,
+        sourceSha256: 'a'.repeat(64),
+      }));
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        seedHistoricalLegendsData: vi.fn(() => Promise.reject(new HistoricalLegendsOwnershipCollisionError(
+          'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+          true,
+        ))),
+        repairHistoricalLegendsData,
+      }) as ReturnType<typeof useLeagueBuilderData>);
+      window.confirm = vi.fn()
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
+
+      render(<LeagueBuilder />);
+      fireEvent.click(screen.getByRole('button', { name: /IMPORT LEGENDS/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /REPAIR LEGENDS IMPORT/i }));
+
+      expect(repairHistoricalLegendsData).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /REPAIR LEGENDS IMPORT/i })).toBeInTheDocument();
+    });
+
+    test('successful repair clears the error and reports the completed import', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      const repairHistoricalLegendsData = vi.fn(() => Promise.resolve({
+        players: 835,
+        playerGroups: 345,
+        removedStaleCards: 0,
+        sourceSha256: 'a'.repeat(64),
+      }));
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        seedHistoricalLegendsData: vi.fn(() => Promise.reject(new HistoricalLegendsOwnershipCollisionError(
+          'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+          true,
+        ))),
+        repairHistoricalLegendsData,
+      }) as ReturnType<typeof useLeagueBuilderData>);
+      window.confirm = vi.fn(() => true);
+
+      render(<LeagueBuilder />);
+      fireEvent.click(screen.getByRole('button', { name: /IMPORT LEGENDS/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /REPAIR LEGENDS IMPORT/i }));
+
+      await waitFor(() => expect(repairHistoricalLegendsData).toHaveBeenCalledTimes(1));
+      expect(await screen.findByText(/Successfully imported Historical Legends/i)).toBeInTheDocument();
+      expect(screen.queryByText(/Import failed:/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /REPAIR LEGENDS IMPORT/i })).not.toBeInTheDocument();
     });
   });
 

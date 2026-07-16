@@ -29,6 +29,38 @@ export interface HistoricalLegendsImportResult {
   sourceSha256: string;
 }
 
+export class HistoricalLegendsOwnershipCollisionError extends Error {
+  readonly repairEligible: boolean;
+
+  constructor(message: string, repairEligible: boolean) {
+    super(message);
+    this.name = 'HistoricalLegendsOwnershipCollisionError';
+    this.repairEligible = repairEligible;
+  }
+}
+
+export function isRecoverableHistoricalLegendsOwnershipCollision(error: unknown): boolean {
+  return error instanceof HistoricalLegendsOwnershipCollisionError && error.repairEligible;
+}
+
+function legacyOwnershipRepairBlocker(
+  existing: readonly Player[],
+  incomingById: ReadonlyMap<string, HistoricalLegendAppPlayer>,
+): string | null {
+  const legacyOwnershipRows = existing.filter((player) => (
+    player.id.startsWith('hl:')
+    && player.sourceDatabase !== HISTORICAL_LEGENDS_SOURCE_DATABASE
+  ));
+  for (const current of legacyOwnershipRows) {
+    if (!incomingById.has(current.id)) return `non-payload card ${current.id}`;
+    if (current.sourceDatabase !== 'League Builder') {
+      return `${current.id} is owned by ${current.sourceDatabase ?? 'UNKNOWN'}`;
+    }
+    if ((current.leagueAssignments ?? []).length > 0) return `${current.id} is assigned to a league`;
+  }
+  return null;
+}
+
 function assertFiniteRating(value: unknown, field: string, playerId: string): void {
   if (!Number.isFinite(value) || Number(value) < 0 || Number(value) > 99) {
     throw new Error(`Historical Legends payload has invalid ${field} for ${playerId}.`);
@@ -157,12 +189,14 @@ export async function importHistoricalLegendsPayload(
 
   const existing = await getAllPlayers();
   const existingById = new Map(existing.map((player) => [player.id, player]));
-  const nextIds = new Set(payload.players.map((player) => player.id));
+  const incomingById = new Map(payload.players.map((player) => [player.id, player]));
+  const nextIds = new Set(incomingById.keys());
   for (const player of payload.players) {
     const owner = existingById.get(player.id);
     if (owner && owner.sourceDatabase !== HISTORICAL_LEGENDS_SOURCE_DATABASE) {
-      throw new Error(
+      throw new HistoricalLegendsOwnershipCollisionError(
         `Historical Legends card id ${player.id} is already owned by non-Legends source ${owner.sourceDatabase ?? 'UNKNOWN'}.`,
+        legacyOwnershipRepairBlocker(existing, incomingById) === null,
       );
     }
   }
@@ -249,9 +283,50 @@ export async function importHistoricalLegendsPayload(
   };
 }
 
+/**
+ * Repairs only the narrow legacy state where verified Historical Legends card IDs were stored as
+ * unassigned League Builder players. Ordinary import deliberately remains fail-closed.
+ */
+export async function repairHistoricalLegendsPayload(
+  payload: HistoricalLegendsAppPayload,
+  expectedSourceSha256: string | null = EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256,
+): Promise<HistoricalLegendsImportResult> {
+  // Validation must finish before storage is even inspected so an unpinned or modified payload can
+  // never authorize ownership changes.
+  validateHistoricalLegendsPayload(payload, expectedSourceSha256);
+
+  const incomingById = new Map(payload.players.map((player) => [player.id, player]));
+  const existing = await getAllPlayers();
+  const legacyOwnershipRows = existing.filter((player) => (
+    player.id.startsWith('hl:')
+    && player.sourceDatabase !== HISTORICAL_LEGENDS_SOURCE_DATABASE
+  ));
+
+  // Complete preflight precedes the first write. One unsafe or unknown card blocks the whole repair.
+  const blocker = legacyOwnershipRepairBlocker(existing, incomingById);
+  if (blocker) throw new Error(`Historical Legends repair blocked by ${blocker}.`);
+
+  // Adopt ownership only after every candidate is proven safe. If a write is interrupted, the rows
+  // already written are merely safe Legends-owned rows; the next repair/import completes normally.
+  for (const current of legacyOwnershipRows) {
+    await savePlayer({
+      ...current,
+      sourceDatabase: HISTORICAL_LEGENDS_SOURCE_DATABASE,
+    });
+  }
+
+  return importHistoricalLegendsPayload(payload, expectedSourceSha256);
+}
+
 export async function seedHistoricalLegendsDatabase(): Promise<HistoricalLegendsImportResult> {
   const payload = await loadHistoricalLegendsPayload();
   return importHistoricalLegendsPayload(payload);
+}
+
+export async function repairHistoricalLegendsDatabase(): Promise<HistoricalLegendsImportResult> {
+  // The production repair always starts from the hash-pinned app asset.
+  const payload = await loadHistoricalLegendsPayload();
+  return repairHistoricalLegendsPayload(payload);
 }
 
 export async function isHistoricalLegendsDatabaseSeeded(): Promise<boolean> {

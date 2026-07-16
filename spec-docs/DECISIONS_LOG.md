@@ -4071,3 +4071,18 @@ The accepted product boundary is exact: multiple approved desks may live on one 
 only one active `(deviceId, teamId)` may render or act; every switch is cover-gated; and a companion
 can request but never authoritatively commit a draft pick. JK's real same-Wi-Fi device walk remains
 the only acceptance gate because automated proof cannot certify room-specific latency.
+
+## 2026-07-16 — Legends import recovery is explicit, hash-pinned, and ownership-exact
+
+The ordinary Historical Legends importer remains fail-closed whenever an incoming `hl:` card ID is
+owned by a non-Legends source. A separate repair action is available only after the importer has
+loaded and validated the pinned payload and completed a read-only preflight proving that every
+non-Legends `hl:` row is an exact incoming card, is owned by exactly `League Builder`, and has no
+league assignment. One assigned, unknown, SMB4, MLB, custom-source, or non-payload row blocks the
+entire repair before its first write.
+
+Approved repair adopts only those proven legacy rows into Historical Legends ownership, then runs
+the normal complete importer to restore Draft, Career, and Peak source libraries. It never clears
+the League Builder, infers identity from names or ratings, or deletes unrelated data. The page shows
+the 44px repair action only from a structured, fully preflighted eligible collision; cancellation
+does nothing, and any changed or newly blocked state fails closed on the repair's own fresh preflight.

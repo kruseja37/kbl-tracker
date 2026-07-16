@@ -56,6 +56,7 @@ import type { PlayerForSalary } from '../../engines/salaryCalculator';
 import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
 import {
   isHistoricalLegendsDatabaseSeeded,
+  repairHistoricalLegendsDatabase,
   seedHistoricalLegendsDatabase,
   type HistoricalLegendsImportResult,
 } from '../../utils/historicalLegendsImport';
@@ -150,6 +151,7 @@ export interface UseLeagueBuilderDataReturn {
 
   // Historical Legends Database Import
   seedHistoricalLegendsData: () => Promise<HistoricalLegendsImportResult>;
+  repairHistoricalLegendsData: () => Promise<HistoricalLegendsImportResult>;
   isHistoricalLegendsSeeded: () => Promise<boolean>;
 
   // Utility
@@ -822,6 +824,21 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
     }
   }, [refresh]);
 
+  const repairHistoricalLegendsData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const result = await repairHistoricalLegendsDatabase();
+      await refresh();
+      return result;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to repair Historical Legends data';
+      setError(message);
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refresh]);
+
   const isHistoricalLegendsSeeded = useCallback(async () => {
     return isHistoricalLegendsDatabaseSeeded();
   }, []);
@@ -881,6 +898,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
     // Historical Legends Database Import
     seedHistoricalLegendsData,
+    repairHistoricalLegendsData,
     isHistoricalLegendsSeeded,
 
     // Utility

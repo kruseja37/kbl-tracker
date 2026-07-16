@@ -1,4 +1,6 @@
 import 'fake-indexeddb/auto';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 
 import type {
@@ -6,14 +8,21 @@ import type {
   HistoricalLegendsAppPayload,
 } from '../../data/historicalLegendsAppData';
 import {
+  HistoricalLegendsOwnershipCollisionError,
   importHistoricalLegendsPayload,
+  isRecoverableHistoricalLegendsOwnershipCollision,
   parseHistoricalLegendsPayloadBytes,
+  repairHistoricalLegendsPayload,
   validateHistoricalLegendsPayload,
 } from '../historicalLegendsImport';
+import {
+  EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256,
+} from '../../data/historicalLegendsAppData';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
   createEmptyTeamRoster,
+  getAllLeagueTemplates,
   getAllPlayers,
   getTeamRoster,
   savePlayer,
@@ -251,4 +260,149 @@ describe('Historical Legends app import', () => {
     expect(players).toHaveLength(1);
     expect(players[0]).toMatchObject({ id: incoming.id, sourceDatabase: 'SMB4' });
   });
+
+  test('recognizes only the exact League Builder ownership collision as repairable UI state', () => {
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(
+      new HistoricalLegendsOwnershipCollisionError(
+        'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+        true,
+      ),
+    )).toBe(true);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(
+      new HistoricalLegendsOwnershipCollisionError(
+        'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+        false,
+      ),
+    )).toBe(false);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(
+      new Error('Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.'),
+    )).toBe(false);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision('network failed')).toBe(false);
+  });
+
+  test('ordinary import exposes repair eligibility only after full read-only collision preflight', async () => {
+    const peak = card('Peak', 'peak');
+    const draft = card('Draft Pool', 'draft');
+    await savePlayer({ ...peak, sourceDatabase: 'League Builder' });
+    await savePlayer({ ...draft, sourceDatabase: 'League Builder' });
+
+    const eligibleFailure = await importHistoricalLegendsPayload(payload([peak, draft]), SOURCE_SHA)
+      .then(() => null, (error: unknown) => error);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(eligibleFailure)).toBe(true);
+
+    await savePlayer({
+      ...draft,
+      sourceDatabase: 'League Builder',
+      leagueAssignments: [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' }],
+    });
+    const blockedFailure = await importHistoricalLegendsPayload(payload([peak, draft]), SOURCE_SHA)
+      .then(() => null, (error: unknown) => error);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(blockedFailure)).toBe(false);
+    expect((await getAllPlayers()).find((player) => player.id === peak.id)).toMatchObject({
+      sourceDatabase: 'League Builder',
+      leagueAssignments: [],
+    });
+  });
+
+  test('repairs partial Draft/Peak legacy ownership into complete Career/Draft/Peak data', async () => {
+    const career = card('Career', 'career');
+    const peak = card('Peak', 'peak');
+    const draft = card('Draft Pool', 'draft');
+    await savePlayer(stockPlayer());
+    await savePlayer({ ...peak, sourceDatabase: 'League Builder' });
+    await savePlayer({ ...draft, sourceDatabase: 'League Builder' });
+
+    const result = await repairHistoricalLegendsPayload(payload([career, peak, draft]), SOURCE_SHA);
+    const players = await getAllPlayers();
+    const legends = players.filter((player) => player.sourceDatabase === 'HISTORICAL_LEGENDS');
+
+    expect(result).toMatchObject({ players: 3, playerGroups: 1 });
+    expect(legends.map((player) => player.id).sort()).toEqual([
+      'hl:aaroh101:career',
+      'hl:aaroh101:draft',
+      'hl:aaroh101:peak',
+    ]);
+    expect(players.find((player) => player.id === 'stock-player')).toMatchObject({ sourceDatabase: 'SMB4' });
+  });
+
+  test.each([
+    ['assigned League Builder', { sourceDatabase: 'League Builder', assigned: true }],
+    ['SMB4', { sourceDatabase: 'SMB4', assigned: false }],
+    ['MLB', { sourceDatabase: 'MLB', assigned: false }],
+    ['custom source', { sourceDatabase: 'CUSTOM_DB', assigned: false }],
+  ])('blocks %s ownership with zero mutation', async (_label, scenario) => {
+    const incoming = card('Draft Pool', 'draft');
+    await savePlayer({
+      ...incoming,
+      sourceDatabase: scenario.sourceDatabase,
+      leagueAssignments: scenario.assigned
+        ? [{ leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'MLB' as const }]
+        : [],
+    });
+    const before = await getAllPlayers();
+
+    await expect(repairHistoricalLegendsPayload(payload([incoming]), SOURCE_SHA)).rejects.toThrow(/repair blocked/i);
+    expect(await getAllPlayers()).toEqual(before);
+  });
+
+  test('a mixed safe and blocked set performs zero mutation', async () => {
+    const peak = card('Peak', 'peak');
+    const draft = card('Draft Pool', 'draft');
+    await savePlayer({ ...peak, sourceDatabase: 'League Builder' });
+    await savePlayer({ ...draft, sourceDatabase: 'League Builder', leagueAssignments: [
+      { leagueId: 'league-1', teamId: 'team-1', rosterStatus: 'FREE_AGENT' as const },
+    ] });
+    const before = await getAllPlayers();
+
+    await expect(repairHistoricalLegendsPayload(payload([peak, draft]), SOURCE_SHA)).rejects.toThrow(/assigned/i);
+    expect(await getAllPlayers()).toEqual(before);
+  });
+
+  test('an hl card absent from the verified payload blocks all repair writes', async () => {
+    const incoming = card('Draft Pool', 'draft');
+    await savePlayer({ ...incoming, sourceDatabase: 'League Builder' });
+    await savePlayer({ ...incoming, id: 'hl:not-in-payload:draft', sourceDatabase: 'League Builder' });
+    const before = await getAllPlayers();
+
+    await expect(repairHistoricalLegendsPayload(payload([incoming]), SOURCE_SHA)).rejects.toThrow(/non-payload card/i);
+    expect(await getAllPlayers()).toEqual(before);
+  });
+
+  test('repair is idempotent', async () => {
+    const cards = [card('Career', 'career'), card('Peak', 'peak'), card('Draft Pool', 'draft')];
+    await savePlayer({ ...cards[2], sourceDatabase: 'League Builder' });
+
+    const first = await repairHistoricalLegendsPayload(payload(cards), SOURCE_SHA);
+    const afterFirst = await getAllPlayers();
+    const second = await repairHistoricalLegendsPayload(payload(cards), SOURCE_SHA);
+    const afterSecond = await getAllPlayers();
+
+    expect(first).toMatchObject({ players: 3, playerGroups: 1 });
+    expect(second).toMatchObject({ players: 3, playerGroups: 1 });
+    expect(afterSecond).toEqual(afterFirst);
+  });
+
+  test('full pinned payload repair provisions all three Legends source libraries', async () => {
+    const bytes = await readFile(resolve(process.cwd(), 'public/data/historical-legends-app-data.json'));
+    const fullPayload = JSON.parse(bytes.toString()) as HistoricalLegendsAppPayload;
+    const legacyDraft = fullPayload.players.find((player) => player.historicalProfileType === 'Draft Pool');
+    if (!legacyDraft) throw new Error('Pinned fixture has no Draft Pool card.');
+    await savePlayer({ ...legacyDraft, sourceDatabase: 'League Builder' });
+
+    const result = await repairHistoricalLegendsPayload(
+      fullPayload,
+      EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256,
+    );
+    const libraryIds = (await getAllLeagueTemplates())
+      .filter((league) => league.sourceLibrary?.kind === 'historical-legends')
+      .map((league) => league.id)
+      .sort();
+
+    expect(result).toMatchObject({ players: 835, playerGroups: 345 });
+    expect(libraryIds).toEqual([
+      'legends-library-career',
+      'legends-library-draft',
+      'legends-library-peak',
+    ]);
+  }, 30_000);
 });

@@ -7511,3 +7511,23 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   failures were ENOSPC startup casualties or unchanged unrelated archetype/auction/franchise fixtures.
 - **Final verdict:** VERIFIED, Major 0 / Minor 0. Only JK's actual same-Wi-Fi Mac/iPad/phone latency and
   privacy walkthrough can accept the product.
+
+## 2026-07-16 (Codex, safe Legends import recovery) — builder complete; audit pending
+
+- Implemented contract `LEGENDS-IMPORT-RECOVERY-32` without weakening ordinary import collision
+  refusal. The importer now carries a structured repair-eligibility result derived from a complete
+  read-only preflight, while preserving the existing user-facing collision message.
+- The explicit repair validates the hash-pinned payload before reading stored players, then requires
+  every non-Legends `hl:` row to be an exact incoming card owned by exactly `League Builder` with no
+  assignments. Any assigned, SMB4, MLB, custom, mixed, or non-payload row blocks before the first
+  write. Eligible rows are adopted and reconciled through the normal complete importer.
+- League Builder shows `REPAIR LEGENDS IMPORT` only for the structured eligible state. It uses a
+  44px target, requires confirmation, preserves the error on cancellation, refreshes after success,
+  and hides itself for blocked or unrelated failures.
+- Focused tests prove partial Draft/Peak to complete Draft/Career/Peak recovery, the real pinned
+  835-card payload and all three source libraries, idempotence, preservation, zero-write adversarial
+  cases, UI visibility/cancel/success. TypeScript, changed-file lint, and diff integrity are green.
+  Production packaging transformed all 2,726 modules and then reproduced the unchanged known
+  Vite/PWA `worker.format = iife` conflict in the rational-room worker.
+- **Pending:** a separate non-builder audits the implementation; JK then retries the import and repair
+  action in the actual League Builder browser.
