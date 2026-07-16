@@ -31778,3 +31778,70 @@ Stop and report rather than weakening the exact team guard, exposing two desks a
 companion to commit a pick directly, increasing the three-device cap, adding guest auth/RLS/schema,
 changing draft or economy engines, enabling farm trades, or hiding a privacy failure behind UI copy.
 <!-- ===== END CONTRACT: SNAKE-MULTI-TEAM-COMPANION-31 ===== -->
+
+<!-- ===== CONTRACT: LEGENDS-IMPORT-RECOVERY-32 ===== -->
+# LEGENDS-IMPORT-RECOVERY-32 — SAFE REPAIR FOR PARTIAL LEGACY CARD OWNERSHIP
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-16 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+The builder must add a one-action recovery path for a failed Historical Legends import when an older
+partial import left verified `hl:` card IDs stored as unassigned `League Builder` players. Recovery
+must complete the pinned Draft/Career/Peak import without deleting leagues or weakening the existing
+ownership collision guard.
+
+## SOURCE OF TRUTH
+JK reproduced `Historical Legends card id hl:ryann001:draft is already owned by non-Legends source
+League Builder` after a partial Peak/Draft import. The normal importer is correct to fail closed and
+must continue doing so. A separate explicit repair action may reclaim only proven legacy collisions
+that are safe by all rules below.
+
+## ALLOWED FILES
+- `src/utils/historicalLegendsImport.ts`
+- `src/utils/tests/historicalLegendsImport.test.ts`
+- `src/src_figma/hooks/useLeagueBuilderData.ts`
+- `src/src_figma/app/pages/LeagueBuilder.tsx`
+- focused League Builder import tests
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- `spec-docs/NOW/SNAKE_DRAFT.md`
+- required session-close status/log documents
+
+## REQUIRED BEHAVIOR
+- `importHistoricalLegendsPayload` retains its exact fail-closed behavior for every non-Legends owner.
+- Repair loads and validates the pinned app asset before inspecting or mutating stored players.
+- A collision is recoverable only when all are true: its exact ID exists in the verified payload; the
+  ID starts `hl:`; current `sourceDatabase` is exactly `League Builder`; and `leagueAssignments` is
+  empty. Do not infer ownership from player name, version label, or ratings.
+- Preflight every collision before the first write. If any collision is assigned, owned by SMB4, MLB,
+  another custom source, missing from the verified payload, or otherwise ineligible, repair performs
+  zero writes and reports the blocking card.
+- Eligible rows are adopted into Historical Legends ownership and immediately reconciled through the
+  normal importer. Preserve every non-colliding player and all ordinary leagues/teams/rosters.
+- Re-running repair/import is idempotent. A storage interruption may leave only safe adopted Legends
+  rows that the next run can finish; it must never leave a row mis-owned as ordinary data.
+- League Builder exposes `REPAIR LEGENDS IMPORT` only after the exact recoverable ownership-collision
+  failure. The action requires confirmation, states that only unassigned verified legacy cards are
+  reclaimed, reruns the complete import, refreshes local state, and reports normal success.
+- Do not add tutorial copy to the ordinary page. Preserve the existing visual theme and 44px action
+  target law.
+
+## REQUIRED PROOF
+- Existing non-Legends collision test remains green and proves ordinary import never overwrites.
+- Focused tests prove a partial Draft/Peak `League Builder` collision set repairs into complete
+  Draft/Career/Peak Legends data while preserving unrelated players.
+- Adversarial tests prove assigned `League Builder`, SMB4, MLB, custom-source, mixed recoverable plus
+  blocked, and non-payload rows produce zero mutation.
+- Repeated repair is idempotent and full-payload repair provisions all three source libraries.
+- UI tests prove the recovery button appears only for the exact collision, confirmation cancellation
+  writes nothing, success clears the error and updates the import state, and unrelated failures do not
+  expose the recovery action.
+- Run focused tests, TypeScript, changed-file lint, production build, diff integrity, and a separate
+  skeptical audit of the committed implementation.
+
+## STOP CONDITIONS
+Stop rather than clearing all League Builder data, deleting arbitrary unassigned players, reclaiming
+assigned cards, broadening the source allowlist beyond exact `League Builder`, bypassing payload hash
+verification, changing Legends card content, or weakening the normal import collision guard.
+<!-- ===== END CONTRACT: LEGENDS-IMPORT-RECOVERY-32 ===== -->
