@@ -1,10 +1,38 @@
-# NOW — Snake Draft: exact and shaped pool assembly ready; JK walk is the gate
+# NOW — Snake Draft: starter-hitting identities ratified; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-15; latest code commit `c5ca1e9c`)
+## VERIFIED (git, 2026-07-15; latest code commit `9e5901d7`)
+- **Current thread move:** hand the revised 24-archetype engine to JK for the League Builder and
+  Snake-room walk, then refresh the Standard/Nerfed archetype presentation from this commit.
+  Browser acceptance remains JK's gate; no agent visual pass can close it.
+- Starter POW/CON is now a first-class rotation-only identity axis everywhere the Snake product
+  needs it: canonical archetypes, tax caps, fit, pool shaping/sufficiency, setup board-worth,
+  My Board, Companion, Assistant GM, Rational Room, and team-facing labels. It never leaks into
+  hitter or bullpen identity rows.
+- Four archetypes receive distinct starter-batting identities: Bash Brothers adds +15% rotation
+  POW headroom; Launch & Leather adds +10% rotation POW and CON; Flamethrowers adds +10% rotation
+  POW and CON behind its velocity identity; HDH Royals adds +10% rotation CON. No 25th archetype
+  and no additional existing archetype receives starter hitting.
+- Standard and Nerfed are the tuned product tiers; Juiced is compatibility-only. All 24 identities
+  stay inside ±10%: Standard max deviation 3.6%, Nerfed max deviation 3.3%. The four revised
+  identities land at Standard/Nerfed: Bash +1.1/+1.2, Launch +1.1/−2.8, Flamethrowers +0.7/−0.2,
+  HDH −2.4/+1.2.
+- Eight-club contested proof is honest: Standard completes at Tight, Competitive, Loose, and Full
+  Sources; Nerfed completes at Competitive, Loose, and Full Sources. Nerfed Tight returns the same
+  locked HDH verdict in both its identity gate and tax-aware finish proof rather than showing a
+  false green. Competitive remains the recommended preset.
+- Builder proof: 11 focused files / 147 tests plus the 6-test production-shape gate; TypeScript,
+  changed-file ESLint, and diff integrity green. The independent audit found and repaired one
+  role-neutral fallback: a Flamethrowers RP can no longer inherit generic Rotation fit. Final
+  verdict: **APPROVE**, no remaining finding.
+- Current production packaging is separately blocked by the pre-existing Vite/PWA worker-format
+  conflict in `useSnakeRationalRisks.ts`; the failing file and config are unchanged by `9e5901d7`.
+  Dev/test/type gates for this engine change are green.
+
+## PRIOR VERIFIED (git, 2026-07-15; code commit `c5ca1e9c`)
 - **Current thread move:** keep the build running for JK's League Builder and Snake-room browser
   walk. Snake setup now offers `TIGHT`, `COMPETITIVE`, `LOOSE`, and `FULL SOURCES` from the same
   chosen source leagues, player-version groups, and hand-add/remove shuttle used by the shared

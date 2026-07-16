@@ -1232,3 +1232,11 @@ for distinct Legend/non-Legend personality initialization plus Snake MLB/FARM pl
 and roster-archetype fan morale for Living Season launch. This close supersedes that header
 with independently approved code commit `2efcef63`; JK's League Builder and Mac/iPad Snake
 walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 starter-hitting identity close
+
+The prior live header recorded code commit `c5ca1e9c` after the pitcher secondary-tax ramp was
+softened and held pitcher-hitting identity for simulation. JK then ruled Standard and Nerfed as
+the product tiers and approved testing four distinct existing-archetype extensions instead of a
+25th archetype. This close supersedes that header with independently approved code commit
+`9e5901d7`; JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.

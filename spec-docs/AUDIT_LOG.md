@@ -1256,3 +1256,12 @@ the sole product-acceptance gate.
 Contract: `PROMPT_CONTRACTS.md` section `SNAKE-PITCHER-HITTING-IDENTITY-28`. Standard and
 Nerfed are the tuned product tiers; Juiced remains compatibility-only. Independent final verdict:
 **APPROVE**. JK's browser walk remains the sole product-acceptance gate.
+
+### 2026-07-15 Snake identity close — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-212 | 2026-07-15 | CONFIRMED-OPEN (PRE-EXISTING) | Production build | Resolve the Vite/PWA code-split worker format in a separate bounded build-plumbing repair. |
+
+The identity diff is independently approved and does not touch the failing worker or Vite config.
+Dev/test/type gates are green; JK's browser walk remains the product-acceptance gate.

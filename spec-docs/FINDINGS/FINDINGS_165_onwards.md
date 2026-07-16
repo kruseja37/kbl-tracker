@@ -337,3 +337,10 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** The first role-specific identity adapter returned `null` both when an identity was absent and when a real identity had no axis applicable to the player's role. The downstream value engine interprets `null` as permission to use its legacy generic-band fit, so a Flamethrowers RP/CP could inherit a Rotation reward or penalty even though that identity changes rotation axes only.
 **Impact:** My Board, Companion, Assistant GM, and Rational Room could contradict the exact tax/archetype contract for role-neutral relievers.
 **Action:** Preserve `null` only for a missing exact identity; return exact neutral `1` when an identity exists but has no role-applicable axis. Unit coverage carries the neutral value through the downstream factor engine, and a production Assistant regression proves contradictory generic Rotation/Bullpen weights cannot change Flamethrowers reliever ordering or roster membership. Independent delta re-audit: **APPROVE**, no residual finding.
+
+### FINDING-212
+**Date:** 2026-07-15 | **Phase:** Snake pitcher-hitting identity close | **Status:** CONFIRMED-OPEN (PRE-EXISTING)
+**Files:** `vite.config.ts`, `src/src_figma/app/components/snake/desk/useSnakeRationalRisks.ts`
+**Evidence:** A clean `env -u NODE_ENV npm run build` typechecks and transforms 2,726 modules, then Vite/PWA rejects the default `worker.format = iife` because the rational-room worker graph uses code splitting. The failing file and Vite config have no diff between the pre-batch parent `7bf1b6fc` and the independently approved identity commit `9e5901d7`.
+**Impact:** Production packaging is red on this branch even though the revised identity engine's focused tests, TypeScript, and changed-file lint are green. The dev server and browser walk are not blocked by this packaging failure.
+**Action:** Give worker packaging its own bounded build-plumbing repair and independent audit; do not entangle it with the approved archetype/tax behavior change.

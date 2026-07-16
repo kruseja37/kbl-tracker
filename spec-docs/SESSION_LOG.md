@@ -7369,3 +7369,31 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   headroom, and retain the lineup POW/CON sacrifice. Current production axes, fit, embodiment, and
   pool-supply logic cannot express that safely; a three-tier and contested-pool simulation is the
   ratification gate.
+
+## 2026-07-15 (Codex, starter-hitting archetype ratification) — independently approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before implementation close; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`; implementation commit is `9e5901d7`.
+- Added rotation-only POW/CON identity axes and carried them through the canonical cap bridge,
+  balance simulator, pool shaping/sufficiency, setup, My Board, Companion, Assistant GM, Rational
+  Room, and team-facing catalog. Hitter and bullpen identity rows remain separate.
+- Ratified four distinct extensions: Bash Brothers +15% rotation POW; Launch & Leather +10%
+  rotation POW/CON; Flamethrowers +10% rotation POW/CON behind its velocity identity; HDH Royals
+  +10% rotation CON. No 25th archetype and no other existing archetype changed.
+- Product tuning now centers Standard and Nerfed. All 24 identities remain inside ±10% with maximum
+  deviations 3.6% and 3.3%, respectively. Juiced stays compatibility-only.
+- Contested eight-club production proof is green for every Standard preset and Nerfed Competitive,
+  Loose, and Full Sources. Nerfed Tight honestly returns HDH as locked in both the identity and
+  tax-aware finish gates; it does not manufacture a readiness claim.
+- The independent auditor rejected one role-neutral fallback that allowed a Flamethrowers reliever
+  to inherit generic Rotation fit. Exact neutral-role handling and downstream/production regressions
+  repaired it; final delta verdict: **APPROVE**, no remaining finding.
+- Closing proof: 11 files / 147 focused tests plus 6 production-shape tests; TypeScript,
+  changed-file ESLint, and diff integrity green. A clean production build transforms 2,726 modules
+  but then hits the pre-existing Vite/PWA `worker.format = iife` code-splitting conflict in the
+  unchanged rational-room worker path (FINDING-212); repair belongs to a separate build-plumbing
+  ticket.
+- **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
+  archetype presentation should be regenerated from `9e5901d7`, covering every boost/sacrifice for
+  all 24 identities and rebuilding every Standard/Nerfed roster and tax panel from current truth.
