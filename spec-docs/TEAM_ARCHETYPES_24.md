@@ -27,12 +27,12 @@ so a GM has real variety in every direction, not just the pitching-heavy skew th
 ### How these are balanced (and why it's trustworthy)
 1. **Equal total value.** Each archetype builds its best-possible 22-man roster from the same player pool; every
    archetype's total team value lands within **±10%** of the group average, across all three difficulty tiers
-   (max deviation observed, per tier, live gate as of 2026-07-15: **8.3%** juiced / **3.6%** standard /
-   **3.3%** nerfed). Standard and Nerfed are the product calibration priorities; Juiced remains a compatibility
+   (max deviation observed, per tier, live gate as of 2026-07-15: **4.9%** juiced / **2.8%** standard /
+   **3.5%** nerfed). Standard and Nerfed are the product calibration priorities; Juiced remains a compatibility
    guard inside the same band. No identity can build a richer roster than any other.
-2. **Legal rosters only.** That comparison is run on **real, fieldable SMB4 rosters** — 8 field starters (one of
+2. **Legal, solvent rosters only.** That comparison is run on **real, fieldable SMB4 rosters** — 8 field starters (one of
    each position), a required backup catcher, 4 starters, 4–5 relievers, a 4–5-man bench (14 position + 8 pitchers,
-   or 13 + 9). So the result translates to an actual auction draft, not to impossible teams. (Canonical definition:
+   or 13 + 9) — and every salary-plus-tax bill is inside the tier budget. So the result translates to an actual auction draft, not to impossible teams. (Canonical definition:
    `src/data/rosterConstruction.ts`.)
 3. **Deferred:** a full head-to-head *win-rate* simulation (do equal-value teams win at equal rates when they
    actually play?) is a later project — see the decision record. v1 ships on equal-value + legal rosters.

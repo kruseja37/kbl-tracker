@@ -1240,3 +1240,13 @@ softened and held pitcher-hitting identity for simulation. JK then ruled Standar
 the product tiers and approved testing four distinct existing-archetype extensions instead of a
 25th archetype. This close supersedes that header with independently approved code commit
 `9e5901d7`; JK's League Builder and Mac/iPad Snake walk remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-15 usage-aware pitcher-tax close
+
+The prior live header recorded code commit `9e5901d7` after starter-hitting identities were ratified.
+JK then approved playing-time-weighted pitcher secondary tax and separate Two Way hitter/pitcher
+treatment. This close supersedes that header with runtime commits through `e26f9970`: exact role
+exposure, roster-level single assignment for SP/RP arms, shared Assistant/Auction/Snake fit, frozen
+legacy-row compatibility, and an absolute solvency gate. The independent oracle run proves all 72
+tier/archetype rosters legal and solvent. JK's League Builder and Mac/iPad Snake walk remains the sole
+acceptance gate.

@@ -1,36 +1,38 @@
-# NOW — Snake Draft: starter-hitting identities ratified; JK walk is the gate
+# NOW — Snake Draft: usage-aware pitcher tax and exact Two Way fit are ready; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-15; latest code commit `9e5901d7`)
-- **Current thread move:** hand the revised 24-archetype engine to JK for the League Builder and
-  Snake-room walk, then refresh the Standard/Nerfed archetype presentation from this commit.
-  Browser acceptance remains JK's gate; no agent visual pass can close it.
-- Starter POW/CON is now a first-class rotation-only identity axis everywhere the Snake product
-  needs it: canonical archetypes, tax caps, fit, pool shaping/sufficiency, setup board-worth,
-  My Board, Companion, Assistant GM, Rational Room, and team-facing labels. It never leaks into
-  hitter or bullpen identity rows.
-- Four archetypes receive distinct starter-batting identities: Bash Brothers adds +15% rotation
-  POW headroom; Launch & Leather adds +10% rotation POW and CON; Flamethrowers adds +10% rotation
-  POW and CON behind its velocity identity; HDH Royals adds +10% rotation CON. No 25th archetype
-  and no additional existing archetype receives starter hitting.
-- Standard and Nerfed are the tuned product tiers; Juiced is compatibility-only. All 24 identities
-  stay inside ±10%: Standard max deviation 3.6%, Nerfed max deviation 3.3%. The four revised
-  identities land at Standard/Nerfed: Bash +1.1/+1.2, Launch +1.1/−2.8, Flamethrowers +0.7/−0.2,
-  HDH −2.4/+1.2.
-- Eight-club contested proof is honest: Standard completes at Tight, Competitive, Loose, and Full
-  Sources; Nerfed completes at Competitive, Loose, and Full Sources. Nerfed Tight returns the same
-  locked HDH verdict in both its identity gate and tax-aware finish proof rather than showing a
-  false green. Competitive remains the recommended preset.
-- Builder proof: 11 focused files / 147 tests plus the 6-test production-shape gate; TypeScript,
-  changed-file ESLint, and diff integrity green. The independent audit found and repaired one
-  role-neutral fallback: a Flamethrowers RP can no longer inherit generic Rotation fit. Final
-  verdict: **APPROVE**, no remaining finding.
-- Current production packaging is separately blocked by the pre-existing Vite/PWA worker-format
-  conflict in `useSnakeRationalRisks.ts`; the failing file and config are unchanged by `9e5901d7`.
-  Dev/test/type gates for this engine change are green.
+## VERIFIED (git, 2026-07-15; latest runtime commit `e26f9970`, canonical result docs `9e6fdd9e`)
+- **Current thread move:** JK walks actual Draft Setup and Snake Room on Mac/iPad. Browser acceptance
+  remains JK's gate; no agent visual pass can close it. The Standard/Nerfed archetype presentation
+  built from `9e5901d7` is economically stale and must be regenerated from this final tax model.
+- Ordinary pitcher POW/CON/SPD/FLD now enters tax and identity math at canonical role exposure rather
+  than everyday-player strength. Tax FLD follows defensive start/range exposure; salary/IV keeps its
+  separate full pitcher-FLD value. Pitcher ARM remains excluded.
+- A true Two Way pitcher's POW/CON/SPD/FLD enters hitter rows at full use, while VEL/JNK/ACC enters
+  exactly one pitching group. The same batting ratings never enter pitcher-secondary rows. SP/RP
+  assignment is roster-level and settlement-exact: pure SPs fill the rotation first, only needed
+  swing arms are promoted, and every other swing arm belongs to the bullpen.
+- Settlement, Snake projections, My Board, Assistant GM/Best-22, pool shaping, embodiment, Auction
+  recommendations, and displayed fit share that classification. Stock SP/RP Two Way Norm Fenomeno
+  is explicitly proved as bullpen plus everyday hitter when four pure starters are rostered.
+- Newly generated rows carry `pitcher-role-usage-v1`; markerless saved cap tables retain their exact
+  legacy raw-rating economics. The deterministic generator reproduces `tierParams.ts` at SHA-256
+  `de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`.
+- All 72 tier/archetype rosters are legal and solvent. Juiced compatibility maximum deviation is
+  4.9%; Standard is 2.8%; Nerfed is 3.5%. The four starter-hitting identities land at
+  Juiced/Standard/Nerfed: Bash +0.5/−0.5/+0.4, Launch +0.4/+0.2/+0.4,
+  Flamethrowers +0.4/+0.3/−0.1, HDH −0.1/+0.2/+0.4.
+- Final affected proof: 17 files / 278 tests, TypeScript, changed-file ESLint with zero errors, and
+  diff integrity green. A post-final full-suite attempt was environment-blocked before tests by
+  `ENOSPC`; the complete affected surface is green. Production packaging remains separately blocked
+  by the recorded Vite/PWA `worker.format = iife` conflict after 2,726 transformed modules.
+- The independent audit's runtime verdict is **APPROVE**: it rejected and forced repairs for the old
+  Two Way fit path, stock SP/RP assignment, and non-absolute simulator solvency, then independently
+  reproduced all 72 legal/solvent rosters with no remaining runtime Major or Minor. This close also
+  removes the stale current-state numbers that were its final documentation blocker.
 
 ## PRIOR VERIFIED (git, 2026-07-15; code commit `c5ca1e9c`)
 - **Current thread move:** keep the build running for JK's League Builder and Snake-room browser

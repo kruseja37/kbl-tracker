@@ -7397,3 +7397,30 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
   archetype presentation should be regenerated from `9e5901d7`, covering every boost/sacrifice for
   all 24 identities and rebuilding every Standard/Nerfed roster and tax panel from current truth.
+
+## 2026-07-15 (Codex, usage-aware pitcher tax + exact Two Way optimizer close) — runtime approved; JK walk next
+
+- Fresh-fetched moving `origin/main` before final state booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Work stayed isolated on
+  `codex/snake-legends-integration`. Runtime commits are `d9bc2711`, `1621b9d5`, `2b33b477`, and
+  `e26f9970`; canonical result docs are `9e6fdd9e`.
+- Ordinary pitcher POW/CON/SPD/FLD now uses canonical role exposure in tax, projection, fit, and
+  optimization. Tax FLD uses defensive start/range exposure; salary/IV retains full pitcher FLD;
+  pitcher ARM remains excluded.
+- Two Way POW/CON/SPD/FLD is full-use hitter value and tax; VEL/JNK/ACC remains pitcher value and tax.
+  The same batting ratings never enter pitcher-secondary rows. SP/RP assignment is roster-level and
+  identical to settlement: pure SPs first, only needed swings promoted, all remaining swings bullpen.
+- New cap rows carry `pitcher-role-usage-v1`; markerless saved cap rows retain exact legacy raw-rating
+  behavior. The deterministic luxury-only generator reproduces `tierParams.ts` at SHA-256
+  `de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`.
+- The independent auditor rejected three runtime defects in sequence: the optimizer's old Two Way
+  split, stock Norm Fenomeno's SP/RP assignment, and a non-absolute simulator budget penalty. All were
+  repaired. Its exact oracle rerun proved all 72 tier/archetype rosters legal and solvent with maximum
+  deviations Juiced 4.902856%, Standard 2.777809%, Nerfed 3.528558%, and no runtime Major or Minor.
+- Final affected proof: 17 files / 278 tests, TypeScript, changed-file ESLint with zero errors, and diff
+  integrity green. A post-final full-suite attempt was blocked before tests by machine `ENOSPC`; an
+  earlier pre-audit full suite was green. Production packaging remains separately blocked by the known
+  Vite/PWA `worker.format = iife` conflict after 2,726 transformed modules.
+- **Pending / only product gate:** JK walks actual League Builder and Snake Room on Mac/iPad. The
+  Standard/Nerfed presentation built from `9e5901d7` is economically stale and must be regenerated from
+  the final usage-aware tax and optimizer model.
