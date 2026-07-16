@@ -31714,6 +31714,9 @@ database schema. The existing limit remains three unique companion devices, not 
 - `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`
 - `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
 - `src/src_figma/app/components/snake/companion/SnakeCompanionFrame.tsx`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.tsx`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- focused Snake setup tests under `src/src_figma/__tests__/pages/`
 - focused tests under `src/src_figma/app/components/snake/companion/__tests__/`
 - focused Snake page or browser-journey tests when needed to prove the complete switch flow
 - companion styling only when required for the compact switcher
@@ -31730,6 +31733,11 @@ database schema. The existing limit remains three unique companion devices, not 
   and approve or refuse each team without losing another approved team on the same device.
 - The three-companion limit counts distinct active device IDs. Adding a second team to an existing
   device does not consume another device slot. A fourth distinct device remains blocked.
+- Draft Setup must express that same rule before the room opens: duplicate normalized GM names on
+  companion clubs intentionally define one multi-team device package. Companion capacity is three
+  distinct nonblank normalized companion GM names, not three companion teams. Unnamed companion
+  clubs remain invalid. A Hotseat club plus three two-team companion packages is legal; a fourth
+  distinct companion GM package is blocked.
 - The companion UI provides a compact, obvious authorized-team switcher. Exactly one approved team is
   active. A switch immediately invalidates the prior private epoch, clears selected player, board
   undo, Assistant GM optimization, trade prefill, transient messages, and every prior team-derived
@@ -31749,6 +31757,8 @@ database schema. The existing limit remains three unique companion devices, not 
 ## REQUIRED PROOF
 - Model tests cover one device claiming and receiving approval for two teams, package resubmission,
   per-team revocation, team takeover by another device, and a fourth unique device rejection.
+- Setup tests prove duplicate companion GM names form packages, one Hotseat plus three two-team
+  packages passes validation, and a fourth distinct companion GM package is rejected.
 - Persistence tests prove atomic writes retain sibling claims and all team-specific writers reject an
   unapproved tuple even when that device is approved for a different team.
 - UI tests prove the switcher lists only approved teams, active branding/board data follows the chosen
