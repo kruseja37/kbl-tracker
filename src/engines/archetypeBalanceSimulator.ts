@@ -20,6 +20,8 @@
  */
 import {
   luxuryTax,
+  luxuryRowPlayerRating,
+  playerEligibleForLuxuryRow,
   shiftLuxuryCaps,
   computePoolTierCap,
   type ConstructionPlayer,
@@ -232,25 +234,12 @@ function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => nu
   });
   const f = (group: string, stat: string) => frac.get(`${group}/${stat}`) ?? 0;
   return (p: SimPlayer) => {
-    if (!p.isPitcher) {
-      return (
-        p.bat.POW * f('hitters', 'POW') +
-        p.bat.CON * f('hitters', 'CON') +
-        p.bat.SPD * f('hitters', 'SPD') +
-        p.bat.FLD * f('hitters', 'FLD') +
-        p.bat.ARM * f('hitters', 'ARM')
-      );
-    }
-    const grp = p.role === 'RP' || p.role === 'CP' ? 'bullpen' : 'rotation';
-    return (
-      p.bat.POW * f(grp, 'POW') +
-      p.bat.CON * f(grp, 'CON') +
-      p.bat.SPD * f(grp, 'SPD') +
-      p.bat.FLD * f(grp, 'FLD') +
-      (p.pit?.VEL ?? 0) * f(grp, 'VEL') +
-      (p.pit?.JNK ?? 0) * f(grp, 'JNK') +
-      (p.pit?.ACC ?? 0) * f(grp, 'ACC')
-    );
+    const pitcherGroup = p.role === 'RP' || p.role === 'CP' ? 'bullpen' : 'rotation';
+    return caps.reduce((score, row) => {
+      if (p.isPitcher && row.group !== 'hitters' && row.group !== pitcherGroup) return score;
+      if (!playerEligibleForLuxuryRow(p, row, caps)) return score;
+      return score + luxuryRowPlayerRating(p, row, caps) * f(row.group, row.stat);
+    }, 0);
   };
 }
 
@@ -475,19 +464,16 @@ function weightedCaps(caps: LuxuryCapRow[], tier: TierKey, boostWeight: number):
   });
 }
 
-function cohortOf(key: string, players: SimPlayer[]): number[] {
+function cohortOf(key: string, players: SimPlayer[], tier: TierKey): number[] {
   const [group, stat] = key.split('/');
-  if (group === 'hitters') {
-    return players.filter((p) => !p.isPitcher).map((p) => p.bat[stat as keyof SimPlayer['bat']] ?? 0);
-  }
-  const wantRotation = group === 'rotation';
-  return players
-    .filter((p) => (wantRotation ? canStart(p) : canRelieve(p)))
-    .map((p) => (
-      stat === 'POW' || stat === 'CON' || stat === 'SPD' || stat === 'FLD'
-        ? p.bat[stat]
-        : p.pit?.[stat as 'VEL' | 'JNK' | 'ACC'] ?? 0
-    ));
+  const caps = LUXURY_CAP_TABLES[tier];
+  const row = caps.find((candidate) => candidate.group === group && candidate.stat === stat);
+  if (!row) return [];
+  return players.filter((player) => {
+    if (!playerEligibleForLuxuryRow(player, row, caps)) return false;
+    if (group === 'hitters') return true;
+    return group === 'rotation' ? canStart(player) : canRelieve(player);
+  }).map((player) => luxuryRowPlayerRating(player, row, caps));
 }
 
 function meanStd(xs: number[]): { mean: number; std: number } {
@@ -511,8 +497,8 @@ export function identityEmbodiment(
 ): EmbodimentReport {
   const frac = capShiftFractions(archetypeCaps(archetype, tier), tier);
   const rowFor = (key: string): EmbodimentRow => {
-    const rosterCohort = cohortOf(key, players);
-    const poolCohort = cohortOf(key, pool);
+    const rosterCohort = cohortOf(key, players, tier);
+    const poolCohort = cohortOf(key, pool, tier);
     const rosterMean = meanStd(rosterCohort).mean;
     const { mean: poolMean, std: poolStd } = meanStd(poolCohort);
     return { key, rosterMean, poolMean, poolStd, z: poolStd > 0 ? (rosterMean - poolMean) / poolStd : 0 };

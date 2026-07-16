@@ -31540,6 +31540,7 @@ compatibility check only.
 - `src/engines/snakeLuxuryTax.ts`
 - `src/engines/auctionLuxuryTax.ts`
 - `src/engines/archetypeIdentity.ts`
+- `src/engines/archetypeBalanceSimulator.ts`
 - `src/engines/__tests__/leagueConstruction.test.ts`
 - `src/engines/__tests__/snakeLuxuryTax.test.ts`
 - `src/engines/__tests__/auctionLuxuryTax.test.ts`

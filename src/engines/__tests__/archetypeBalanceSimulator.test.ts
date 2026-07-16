@@ -2,9 +2,16 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { runBalanceSim, type SimPlayer, type SimArchetype } from '../archetypeBalanceSimulator';
+import {
+  archetypeFitScorer,
+  identityEmbodiment,
+  runBalanceSim,
+  type SimPlayer,
+  type SimArchetype,
+} from '../archetypeBalanceSimulator';
 import { CAP_MODIFICATION_FRACTIONS } from '../../data/tierParams';
 import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
+import { deriveLuxuryTaxUsageWeights } from '../../data/rosterEngineConstants';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORACLE_PATH = path.resolve(__dirname, '../../../spec-docs/reference/iv_oracle.json');
@@ -80,4 +87,47 @@ describe('archetype balance simulator — workbook baseline (provenance)', () =>
     expect(report.results.every((r) => r.rosterSize === 22)).toBe(true);
     expect(report.results.length - report.outliers.length).toBeGreaterThanOrEqual(30);
   }, 30_000);
+});
+
+describe('usage-aware identity fit', () => {
+  const player = (overrides: Partial<SimPlayer> = {}): SimPlayer => ({
+    id: 'player',
+    isPitcher: true,
+    role: 'SP',
+    bat: { POW: 99, CON: 0, SPD: 0, FLD: 0, ARM: 99 },
+    pit: { VEL: 0, JNK: 0, ACC: 0 },
+    iv: 1,
+    salary: 1,
+    position: 'SP',
+    ...overrides,
+  });
+  const hitterPower: SimArchetype = { name: 'Hitter POW', rawShift: { 'hitters/POW': 0.2 } };
+  const rotationPower: SimArchetype = { name: 'Rotation POW', rawShift: { 'rotation/POW': 0.2 } };
+
+  it('scores a Two Way starter on hitter POW plus pitcher VEL, never on duplicate POW or hitter ARM', () => {
+    const twoWay = player({ twoWayVariant: 'IF', pit: { VEL: 80, JNK: 0, ACC: 0 } });
+    expect(archetypeFitScorer(hitterPower, 'standard')(twoWay)).toBeCloseTo(19.8, 8);
+    expect(archetypeFitScorer(rotationPower, 'standard')(twoWay)).toBe(0);
+    expect(archetypeFitScorer({ name: 'Rotation VEL', rawShift: { 'rotation/VEL': 0.2 } }, 'standard')(twoWay)).toBeCloseTo(16, 8);
+    expect(archetypeFitScorer({ name: 'Hitter ARM', rawShift: { 'hitters/ARM': 0.2 } }, 'standard')(twoWay)).toBe(0);
+  });
+
+  it('weights an ordinary starter secondary POW by role exposure and keeps it out of hitter POW', () => {
+    const ordinary = player();
+    expect(archetypeFitScorer(hitterPower, 'standard')(ordinary)).toBe(0);
+    expect(archetypeFitScorer(rotationPower, 'standard')(ordinary)).toBeCloseTo(
+      99 * deriveLuxuryTaxUsageWeights('SP').POW * 0.2,
+      8,
+    );
+  });
+
+  it('uses the same split in the optimizer embodiment report', () => {
+    const weakTwoWay = player({ id: 'weak', twoWayVariant: 'IF', bat: { POW: 10, CON: 0, SPD: 0, FLD: 0, ARM: 99 } });
+    const strongTwoWay = player({ id: 'strong', twoWayVariant: 'IF' });
+    const report = identityEmbodiment([strongTwoWay], hitterPower, 'standard', [weakTwoWay, strongTwoWay]);
+    expect(report.boostRows).toHaveLength(1);
+    expect(report.boostRows[0].key).toBe('hitters/POW');
+    expect(report.boostRows[0].rosterMean).toBe(99);
+    expect(report.boostZ).toBeGreaterThan(0);
+  });
 });
