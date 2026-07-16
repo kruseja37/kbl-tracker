@@ -330,3 +330,10 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** The first correct full-pool FARM expectation repair serialized an exact `prospectId → true talent rank` map for every prospect in the immutable manifest.
 **Impact:** A draft artifact exposed the hidden ordering that FARM scouting fog is designed to protect.
 **Action:** Completion still calculates against the frozen full 3× pool, but the FARM manifest stores only drafted-player `slotClass` and final morale outputs. FARM validation rejects any nonempty talent-rank map. Independent delta audit: **APPROVE**, no residual findings.
+
+### FINDING-211
+**Date:** 2026-07-15 | **Phase:** Snake pitcher-hitting identity independent audit | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED
+**Files:** `archetypeIdentity.ts`, `auctionMarketModel.ts`, `archetypeIdentity.test.ts`, `snakeAssistantBoard.test.ts`
+**Evidence:** The first role-specific identity adapter returned `null` both when an identity was absent and when a real identity had no axis applicable to the player's role. The downstream value engine interprets `null` as permission to use its legacy generic-band fit, so a Flamethrowers RP/CP could inherit a Rotation reward or penalty even though that identity changes rotation axes only.
+**Impact:** My Board, Companion, Assistant GM, and Rational Room could contradict the exact tax/archetype contract for role-neutral relievers.
+**Action:** Preserve `null` only for a missing exact identity; return exact neutral `1` when an identity exists but has no role-applicable axis. Unit coverage carries the neutral value through the downstream factor engine, and a production Assistant regression proves contradictory generic Rotation/Bullpen weights cannot change Flamethrowers reliever ordering or roster membership. Independent delta re-audit: **APPROVE**, no residual finding.

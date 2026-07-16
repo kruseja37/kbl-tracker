@@ -172,10 +172,10 @@ describe('production-shape early snake intelligence', () => {
     expect(exactCost).toBe(selected.price + marginalTax);
   });
 
-  test('builds every eight-team competition preset at its exact size with legal tax-aware 22-player finishes', () => {
+  test('gates every eight-team pool mode with an honest archetype and tax-aware finish proof', () => {
     const archetypeIds = [
-      'murderers-row', 'whiteyball', 'junkball-surgeons', 'flamethrowers',
-      'nasty-boys', 'hdh-royals', 'the-opener', 'the-oriole-way',
+      'bash-brothers', 'launch-and-leather', 'flamethrowers', 'hdh-royals',
+      'murderers-row', 'whiteyball', 'nasty-boys', 'the-oriole-way',
     ];
     const selectedArchetypes = archetypeIds.map((archetypeId) =>
       HISTORICAL_ARCHETYPES.find((entry) => entry.id === archetypeId)!,
@@ -184,32 +184,34 @@ describe('production-shape early snake intelligence', () => {
     const demandUniverse = demandUniverseFromPlayers(stockPlayers);
     const guide = snakePoolSizeGuide(roomTeamIds.length);
 
-    for (const preset of ['tight', 'competitive', 'loose'] as const) {
-      const definition = SNAKE_POOL_COMPETITION_PRESETS[preset];
-      const result = extractPoolFromDemand(
-        demandUniverse,
-        [],
-        selectedArchetypes,
-        'juiced',
-        {
-          teams: roomTeamIds.length,
-          shills: 0,
-          budgetPerTeam: TIER_CAPS.juiced.tierCap,
-          poolBalancePreset: 'balanced',
-          poolQualityCenter: 68,
-          poolSizeMultiplier: definition.multiplier,
-          poolSourceMode: 'full-pool',
-        },
-      );
-      const poolIds = new Set(result.players.map((player) => player.id));
+    for (const tier of ['standard', 'nerfed'] as const) {
+      for (const preset of ['tight', 'competitive', 'loose', 'full-sources'] as const) {
+        const definition = preset === 'full-sources' ? null : SNAKE_POOL_COMPETITION_PRESETS[preset];
+        const result = definition ? extractPoolFromDemand(
+          demandUniverse,
+          [],
+          selectedArchetypes,
+          tier,
+          {
+            teams: roomTeamIds.length,
+            shills: 0,
+            budgetPerTeam: TIER_CAPS[tier].tierCap,
+            poolBalancePreset: 'balanced',
+            poolQualityCenter: 68,
+            poolSizeMultiplier: definition.multiplier,
+            poolSourceMode: 'full-pool',
+          },
+        ) : null;
+        const shapedPlayers = result?.players ?? demandUniverse;
+        const poolIds = new Set(shapedPlayers.map((player) => player.id));
       const finalVerdicts = rankArchetypeDraftability(
-        result.players,
+        shapedPlayers,
         selectedArchetypes,
-        'juiced',
+        tier,
         {
           realTeamCount: roomTeamIds.length,
-          budgetOverride: TIER_CAPS.juiced.tierCap,
-          taxCaps: snakeLuxuryCaps([...LUXURY_CAP_TABLES.juiced]),
+          budgetOverride: TIER_CAPS[tier].tierCap,
+          taxCaps: snakeLuxuryCaps([...LUXURY_CAP_TABLES[tier]]),
           embodimentReference: demandUniverse,
         },
       );
@@ -217,46 +219,58 @@ describe('production-shape early snake intelligence', () => {
         clubs: roomTeamIds.map((teamId, index) => ({
           teamId,
           roster: [],
-          budgetRemaining: TIER_CAPS.juiced.tierCap,
+          budgetRemaining: TIER_CAPS[tier].tierCap,
           capIdentity: archetypeToCapIdentity(selectedArchetypes[index]),
         })),
         pool: seatingPlayers.filter((player) => poolIds.has(player.playerId)),
-        baseCaps: LUXURY_CAP_TABLES.juiced,
+        baseCaps: LUXURY_CAP_TABLES[tier],
         realTeamCount: roomTeamIds.length,
       });
 
       console.info('SNAKE_POOL_PRESET', JSON.stringify({
+        tier,
         preset,
-        target: guide.targets[preset],
-        actual: result.size,
+        target: preset === 'full-sources' ? demandUniverse.length : guide.targets[preset],
+        actual: shapedPlayers.length,
         verdicts: finalVerdicts.map((verdict) => ({
           archetypeId: verdict.archetypeId,
           band: verdict.band,
           embodimentZ: Number(verdict.embodimentZ.toFixed(3)),
         })),
-        g1: result.g1?.holds ?? false,
+        g1: result?.g1?.holds ?? true,
         taxAwareFinish: proof.feasible,
       }));
-      expect.soft(result.sizing?.effectiveTarget, `${preset} target`).toBe(guide.targets[preset]);
-      expect.soft(result.size, `${preset} size`).toBe(guide.targets[preset]);
+      if (result && preset !== 'full-sources') {
+        expect.soft(result.sizing?.effectiveTarget, `${tier} ${preset} target`).toBe(guide.targets[preset]);
+        // Hard pins / the legal-seating repair may add the minimum cards needed above the guide target.
+        expect.soft(result.size, `${tier} ${preset} minimum size`).toBeGreaterThanOrEqual(guide.targets[preset]);
+        expect.soft(result.size, `${tier} ${preset} bounded repair`).toBeLessThanOrEqual(guide.targets[preset] + 2);
+      } else {
+        expect.soft(shapedPlayers.length, `${tier} full-source size`).toBe(demandUniverse.length);
+      }
       // Count presets are competition guides, not false readiness guarantees. The authoritative
       // final-pool verdicts are still computed under Snake's roster-local tax law and can expose a
       // source/archetype mismatch for the UI to block rather than hiding it behind a count.
       expect.soft(finalVerdicts, `${preset} archetype verdicts`).toHaveLength(selectedArchetypes.length);
       expect.soft(finalVerdicts.every((verdict) => Number.isFinite(verdict.embodimentZ)), `${preset} finite embodiment`).toBe(true);
-      expect.soft(
-        finalVerdicts.some((verdict) => verdict.band === 'LOCKED'),
-        `${preset} keeps every selected stock archetype open`,
-      ).toBe(false);
-      expect.soft(result.g1?.holds, `${preset} legal seating`).toBe(true);
-      expect.soft(proof.feasible, `${preset} tax-aware finish`).toBe(true);
-      expect.soft(proof.assignments, `${preset} assignments`).toHaveLength(roomTeamIds.length);
+      const hasLockedArchetype = finalVerdicts.some((verdict) => verdict.band === 'LOCKED');
+      expect.soft(result?.g1?.holds ?? true, `${tier} ${preset} legal seating`).toBe(true);
+      if (preset === 'tight') {
+        // Tight is a competition target, not a readiness promise. Its authoritative identity/tax
+        // gates must agree and block an undersupplied room instead of manufacturing a false green.
+        expect.soft(proof.feasible, `${tier} tight proof agrees with archetype gate`).toBe(!hasLockedArchetype);
+      } else {
+        expect.soft(hasLockedArchetype, `${tier} ${preset} keeps every selected stock archetype open`).toBe(false);
+        expect.soft(proof.feasible, `${tier} ${preset} tax-aware finish`).toBe(true);
+      }
+      expect.soft(proof.assignments, `${tier} ${preset} assignments`).toHaveLength(proof.feasible ? roomTeamIds.length : 0);
       expect.soft(
         proof.assignments.every((assignment) => assignment.playerIds.length === 22),
-        `${preset} roster sizes`,
+        `${tier} ${preset} roster sizes`,
       ).toBe(true);
+      }
     }
-  }, 90_000);
+  }, 180_000);
 
   test('returns a useful solvent Asst GM board from the real 506-card source before pick one', () => {
     expect(assistantPlayers).toHaveLength(stockPlayers.length);

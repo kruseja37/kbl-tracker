@@ -39,7 +39,7 @@ function isTaxonomyPosition(position: Player['primaryPosition']): position is Ta
 
 function requiredRatings(player: Player, isPitcher: boolean): number[] {
   return isPitcher
-    ? [player.velocity, player.junk, player.accuracy]
+    ? [player.power, player.contact, player.velocity, player.junk, player.accuracy]
     : [player.power, player.contact, player.speed, player.fielding, player.arm];
 }
 

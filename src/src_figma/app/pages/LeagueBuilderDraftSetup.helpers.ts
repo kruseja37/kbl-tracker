@@ -114,6 +114,8 @@ function playerStatForArchetypeStat(
     case 'SPD': return player.speed;
     case 'FLD': return player.fielding;
     case 'ARM': return player.arm;
+    case 'ROT_POW': return player.power;
+    case 'ROT_CON': return player.contact;
     case 'ROT_VEL':
     case 'PEN_VEL': return player.velocity ?? 0;
     case 'ROT_JNK':
@@ -124,24 +126,21 @@ function playerStatForArchetypeStat(
   }
 }
 
-function rosterFitForArchetype(
+export function rosterFitForArchetype(
   teamPlayers: readonly Player[],
   archetype: (typeof HISTORICAL_ARCHETYPES)[number],
 ): number {
   if (teamPlayers.length === 0 || archetype.boosts.length === 0) return 0;
-  const relevantPlayers = teamPlayers.filter((player) => {
-    const boostsPitching = archetype.boosts.some((stat) => stat.startsWith('ROT_') || stat.startsWith('PEN_'));
-    if (!boostsPitching) return true;
-    if (archetype.boosts.some((stat) => stat.startsWith('ROT_'))) {
-      return player.primaryPosition === 'SP' || player.primaryPosition === 'SP/RP';
-    }
-    return player.primaryPosition === 'RP' || player.primaryPosition === 'CP' || player.primaryPosition === 'SP/RP';
+  const statMeans = archetype.boosts.map((stat) => {
+    const sample = stat.startsWith('ROT_')
+      ? teamPlayers.filter((player) => player.primaryPosition === 'SP' || player.primaryPosition === 'SP/RP')
+      : stat.startsWith('PEN_')
+        ? teamPlayers.filter((player) => ['RP', 'CP', 'SP/RP'].includes(player.primaryPosition))
+        : teamPlayers.filter((player) => !['SP', 'SP/RP', 'RP', 'CP'].includes(player.primaryPosition));
+    if (sample.length === 0) return 0;
+    return sample.reduce((sum, player) => sum + playerStatForArchetypeStat(player, stat), 0) / sample.length;
   });
-  const sample = relevantPlayers.length > 0 ? relevantPlayers : teamPlayers;
-  const total = sample.reduce((sum, player) => (
-    sum + archetype.boosts.reduce((inner, stat) => inner + playerStatForArchetypeStat(player, stat), 0)
-  ), 0);
-  return total / (sample.length * archetype.boosts.length);
+  return statMeans.reduce((sum, value) => sum + value, 0) / statMeans.length;
 }
 
 function chooseAutoFillArchetype(input: {

@@ -4,7 +4,7 @@ import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxono
 import { isLegalRoster } from '../../../../../data/rosterConstruction';
 import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool, type TeamCapIdentity } from '../../../../../engines/leagueConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
-import { archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
+import { archetypeToCapIdentity, constructionArchetypeFitMultiplier, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
 import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
 import {
@@ -186,6 +186,10 @@ function boardCandidate(input: {
       iv: input.iv,
       archetypeWeights: input.roomPlayer.archetypeWeights,
       ownBandPriorities: input.priorities,
+      archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+        input.capIdentity,
+        input.roomPlayer.construction,
+      ),
       needBreakdown: need,
       shape: input.roomPlayer.shape,
       openSlots: 22,

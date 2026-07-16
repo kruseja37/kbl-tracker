@@ -12,6 +12,7 @@ import {
 import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import { snakeMoneyAffordable, snakeMoneyNonnegative } from './snakeMoney';
 import { computeOwnValue } from './auctionMarketModel';
+import { constructionArchetypeFitMultiplier } from './archetypeIdentity';
 import {
   luxuryTax,
   shiftLuxuryCaps,
@@ -560,6 +561,10 @@ function rankedCandidates(input: {
       iv: player.worth,
       archetypeWeights: player.archetypeWeights,
       ownBandPriorities: input.seat.lockedArchetype,
+      archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+        input.seat.capIdentity,
+        player.construction,
+      ),
       needBreakdown: need,
       shape: player.shape,
       openSlots: LEGAL_ROSTER.size - input.seat.roster.length,
@@ -751,6 +756,10 @@ function economicAssessmentForAskingClub(input: {
     iv: input.player.worth,
     archetypeWeights: input.player.archetypeWeights,
     ownBandPriorities: input.askingSeat.lockedArchetype,
+    archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+      input.askingSeat.capIdentity,
+      input.player.construction,
+    ),
     needBreakdown: context.needBreakdown,
     shape: input.player.shape,
     openSlots: context.openSlots,

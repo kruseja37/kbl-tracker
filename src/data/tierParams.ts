@@ -161,9 +161,9 @@ export const DISABLED_LUXURY_ROWS: Array<Omit<LuxuryCapRow, 'cap'> & { xblCap: n
 /** §6.2 modification deltas as FRACTIONS of the XBL cap of the luxury row each shifts.
  *  Tier-invariant ('+337 FLD' == +57.6% of the FLD cap at any tier). Apply as:
  *  shiftedCap = cap x (1 + sum(increases) - sum(decreases)). */
-export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';
+export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RPOW' | 'RCON' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';
 
-export const CAP_MODIFICATION_FRACTIONS: Record<string, Record<ModStat, number>> = {
+export const CAP_MODIFICATION_FRACTIONS: Record<string, Partial<Record<ModStat, number>>> = {
   '--': { POW: 0.000000, CON: 0.000000, SPD: 0.000000, FLD: 0.000000, ARM: 0.000000, RVEL: 0.000000, RJNK: 0.000000, RACC: 0.000000, PVEL: 0.000000, PJNK: 0.000000, PACC: 0.000000 },
   'POW': { POW: 0.020000, CON: 0.000000, SPD: 0.000000, FLD: 0.000000, ARM: 0.000000, RVEL: 0.000000, RJNK: 0.000000, RACC: 0.000000, PVEL: 0.000000, PJNK: 0.000000, PACC: 0.000000 },
   'CON': { POW: 0.000000, CON: 0.045872, SPD: 0.000000, FLD: 0.000000, ARM: 0.000000, RVEL: 0.000000, RJNK: 0.000000, RACC: 0.000000, PVEL: 0.000000, PJNK: 0.000000, PACC: 0.000000 },

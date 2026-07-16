@@ -410,6 +410,8 @@ export interface OwnValueInput {
   iv: number;
   archetypeWeights: Partial<Record<Band, number>> | undefined;
   ownBandPriorities: BandPriorities;
+  /** Exact team/player identity fit. Snake supplies this to preserve role-specific axes. */
+  archetypeFitMultiplierOverride?: number | null;
   needBreakdown: RosterNeedBreakdown | null;
   shape: RosterSlotPlayer | null;
   openSlots: number;
@@ -422,9 +424,12 @@ export interface OwnValueFactors {
 
 export function computeOwnValueFactors(input: Omit<OwnValueInput, 'iv'>): OwnValueFactors {
   const bandWeights = normalizeBandWeights(input.archetypeWeights);
-  const fit = bandWeights !== null
-    ? bandFitMultiplier(bandWeights, cachedBandLift(input.ownBandPriorities), MEAN_PERSONALITY_SPREAD)
-    : 1;
+  const exactFit = input.archetypeFitMultiplierOverride;
+  const fit = Number.isFinite(exactFit) && (exactFit ?? 0) > 0
+    ? exactFit!
+    : bandWeights !== null
+      ? bandFitMultiplier(bandWeights, cachedBandLift(input.ownBandPriorities), MEAN_PERSONALITY_SPREAD)
+      : 1;
   const need = ownNeedMultiplier(input.needBreakdown, input.shape, Math.max(1, input.openSlots));
   return {
     archetypeFitMultiplier: fit,

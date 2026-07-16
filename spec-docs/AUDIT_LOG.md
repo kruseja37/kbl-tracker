@@ -15,15 +15,15 @@
 
 ---
 
-## Current Phase: Snake companion/economy/responsive repair COMPLETE — JK re-walk next
+## Current Phase: Snake pitcher-hitting identities COMPLETE — JK walk next
 
-JK's companion-lag, false-calculation, roster-tax, fit, Assistant GM, companion-pick, and
-desktop-scroll findings are repaired on code commit `6ae55543`. Normal Pause is retired because
-the room has no clock; stopped-state recovery remains contextual. Full Snake/companion proof is
-54 files / 499 tests, sync/SyncModal is 112/112, production build is green at 2,720 modules, and
-live 1440x1000 proof has no false calculation, Assistant-unavailable state, Pause, or horizontal
-overflow. Independent delta audit: APPROVE, zero blocker/major/minor findings, 168/168 focused.
-Next action: JK's hands-on Mac/iPad companion re-walk; it remains the sole product gate.
+The 24-archetype engine now treats starter POW/CON as explicit rotation-only identity axes for
+Bash Brothers, Launch & Leather, Flamethrowers, and HDH Royals. Standard and Nerfed are the tuned
+product tiers; all 24 stay inside the ±10% parity band. Snake setup, pool feasibility, My Board,
+Companion, Assistant GM, Rational Room, and tax projection consume the same role-specific truth.
+The final independent audit repaired one generic-fit fallthrough and returned APPROVE with no
+remaining finding. Next action: JK's hands-on League Builder and Snake-room walk; it remains the
+sole product gate.
 
 ---
 
@@ -1246,3 +1246,13 @@ APPROVE, 22 files / 327 tests, zero blocker/major/minor findings. Freshly fetche
 Contract: `PROMPT_CONTRACTS.md` section `SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26`.
 Code commit: `2efcef63`. Independent final verdict: **APPROVE**. JK's browser walk remains
 the sole product-acceptance gate.
+
+### 2026-07-15 Pitcher-hitting archetype identity — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-211 | 2026-07-15 | FIXED-AND-INDEPENDENTLY-VERIFIED | Snake exact role fit | A real identity with no axis for the player's role resolves to neutral instead of falling through to generic band fit. |
+
+Contract: `PROMPT_CONTRACTS.md` section `SNAKE-PITCHER-HITTING-IDENTITY-28`. Standard and
+Nerfed are the tuned product tiers; Juiced remains compatibility-only. Independent final verdict:
+**APPROVE**. JK's browser walk remains the sole product-acceptance gate.

@@ -50,6 +50,8 @@ const STAT_LABEL: Record<ArchetypeStat, string> = {
   SPD: "Speed",
   FLD: "Defense",
   ARM: "Arm",
+  ROT_POW: "Starter batting power",
+  ROT_CON: "Starter batting contact",
   ROT_VEL: "Rotation velocity",
   ROT_JNK: "Rotation junk",
   ROT_ACC: "Rotation command",
@@ -64,12 +66,13 @@ function statLabel(stat: ArchetypeStat): string {
 
 /** Derive a display family (accent only) from the boosted stats. */
 function deriveFamily(boosts: ArchetypeStat[]): ArchetypeFamily {
-  if (boosts.length >= 3) return "Balanced";
-  if (boosts.some((s) => s.startsWith("ROT_") || s.startsWith("PEN_"))) return "Pitching";
-  if (boosts.includes("SPD")) return "Speed";
-  if (boosts.includes("FLD")) return "Defense";
-  if (boosts.includes("POW")) return "Power";
-  if (boosts.includes("CON")) return "Small-ball";
+  const primaryBoosts = boosts.filter((stat) => stat !== "ROT_POW" && stat !== "ROT_CON");
+  if (primaryBoosts.length >= 3) return "Balanced";
+  if (primaryBoosts.some((s) => s.startsWith("ROT_") || s.startsWith("PEN_"))) return "Pitching";
+  if (primaryBoosts.includes("SPD")) return "Speed";
+  if (primaryBoosts.includes("FLD")) return "Defense";
+  if (primaryBoosts.includes("POW")) return "Power";
+  if (primaryBoosts.includes("CON")) return "Small-ball";
   return "Balanced";
 }
 

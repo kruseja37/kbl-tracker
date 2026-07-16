@@ -4,6 +4,7 @@ import type { LuxuryCapRow, TierKey } from '../data/tierParams';
 import type { Player, SnakeVersionState } from '../utils/leagueBuilderStorage';
 import type { SimArchetype, SimPlayer } from './archetypeBalanceSimulator';
 import { computeOwnValue } from './auctionMarketModel';
+import { constructionArchetypeFitMultiplier } from './archetypeIdentity';
 import { buildBest22Target } from './best22Target';
 import { shiftLuxuryCaps, type BandPriorities, type TeamCapIdentity } from './leagueConstruction';
 import type { ShapeClassification } from './playerArchetypeClassifier';
@@ -318,6 +319,10 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
         iv: player.frozenIv,
         archetypeWeights: player.archetypeWeights,
         ownBandPriorities: input.ownBandPriorities,
+        archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+          input.capIdentity,
+          player.seating.construction,
+        ),
         needBreakdown: need,
         shape: player.seating.shape,
         openSlots: Math.max(1, 22 - ownPicks.length),

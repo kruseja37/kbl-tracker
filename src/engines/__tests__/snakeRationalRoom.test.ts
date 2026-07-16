@@ -127,6 +127,38 @@ describe('deterministic rational-room ensemble', () => {
     expect(result.risks.some((row) => row.playerId === 'target')).toBe(true);
   });
 
+  test('uses the asking club exact starter-batting axis instead of generic Rotation fit', () => {
+    const spShape = { isPitcher: true, position: 'SP', role: 'SP' } as const;
+    const highBat = candidate({ id: 'z-high-bat-sp', worth: 100, shape: spShape });
+    highBat.construction = {
+      ...highBat.construction,
+      bat: { ...highBat.construction.bat, POW: 90, CON: 90 },
+    };
+    const lowBat = candidate({ id: 'a-low-bat-sp', worth: 100, shape: spShape });
+    lowBat.construction = {
+      ...lowBat.construction,
+      bat: { ...lowBat.construction.bat, POW: 1, CON: 1 },
+    };
+    const capIdentity = {
+        increase: [], decrease: [],
+        rawShift: { RPOW: 0.1, RCON: 0.1 } as NonNullable<SnakeRationalSeat['capIdentity']>['rawShift'],
+    };
+    const askingSeat = { ...seat('asker'), capIdentity };
+    const result = playSnakeRationalRoom(room({
+      players: [
+        lowBat,
+        highBat,
+        candidate({ id: 'filler-sp-1', worth: 20, shape: spShape }),
+        candidate({ id: 'filler-sp-2', worth: 10, shape: spShape }),
+      ],
+      askedPlayerIds: [lowBat.playerId, highBat.playerId],
+      seats: [askingSeat, { ...seat('rival-z'), capIdentity }, seat('rival-a')],
+    }));
+
+    expect(result.status).toBe('ready');
+    expect(result.scenarios[0].picks[0]).toMatchObject({ teamId: 'rival-z', playerId: 'z-high-bat-sp' });
+  });
+
   test('emits one exact decision and continues scarcity from the same proof and ensemble', () => {
     const cloneSpy = vi.spyOn(globalThis, 'structuredClone');
     const onDecision = vi.fn();

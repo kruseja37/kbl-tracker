@@ -83,7 +83,7 @@ export const BAND_STATS: Record<Band, readonly ModStat[]> = {
   Contact: ['CON'],
   Speed: ['SPD'],
   Defense: ['FLD', 'ARM'],
-  Rotation: ['RVEL', 'RJNK', 'RACC'],
+  Rotation: ['RPOW', 'RCON', 'RVEL', 'RJNK', 'RACC'],
   Bullpen: ['PVEL', 'PJNK', 'PACC'],
 };
 
@@ -93,6 +93,8 @@ export const MOD_STAT_TO_LUX: Record<ModStat, { group: LuxuryGroup; stat: Luxury
   SPD: { group: 'hitters', stat: 'SPD' },
   FLD: { group: 'hitters', stat: 'FLD' },
   ARM: { group: 'hitters', stat: 'ARM' },
+  RPOW: { group: 'rotation', stat: 'POW' },
+  RCON: { group: 'rotation', stat: 'CON' },
   RVEL: { group: 'rotation', stat: 'VEL' },
   RJNK: { group: 'rotation', stat: 'JNK' },
   RACC: { group: 'rotation', stat: 'ACC' },
@@ -109,6 +111,8 @@ const MOD_STAT_XBL_CAP: Record<ModStat, number> = {
   SPD: 550,
   FLD: 585,
   ARM: 565,
+  RPOW: 120,
+  RCON: 160,
   RVEL: 100,
   RJNK: 260,
   RACC: 260,
@@ -134,8 +138,8 @@ function bandScores(): Record<string, BandScore> {
     const pos = {} as Record<Band, number>;
     const net = {} as Record<Band, number>;
     for (const band of BANDS) {
-      pos[band] = BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat], 0), 0);
-      net[band] = BAND_STATS[band].reduce((sum, stat) => sum + deltas[stat], 0);
+      pos[band] = BAND_STATS[band].reduce((sum, stat) => sum + Math.max(deltas[stat] ?? 0, 0), 0);
+      net[band] = BAND_STATS[band].reduce((sum, stat) => sum + (deltas[stat] ?? 0), 0);
     }
     out[name] = { pos, net };
   }
@@ -145,7 +149,7 @@ function bandScores(): Record<string, BandScore> {
 function rawDeltaMagnitude(name: string): number {
   const deltas = CAP_MODIFICATION_FRACTIONS[name];
   if (!deltas) return Number.NEGATIVE_INFINITY;
-  return MOD_STATS.reduce((sum, stat) => sum + Math.abs(deltas[stat] * MOD_STAT_XBL_CAP[stat]), 0);
+  return MOD_STATS.reduce((sum, stat) => sum + Math.abs((deltas[stat] ?? 0) * MOD_STAT_XBL_CAP[stat]), 0);
 }
 
 function pickIncrease(weight: BandPriorities, taken: Set<string>, scores: Record<string, BandScore>): string | undefined {
@@ -222,14 +226,14 @@ export function identityCapShift(identity: IdentityComposition): Record<ModStat,
   for (const name of normalized.increase) {
     const deltas = CAP_MODIFICATION_FRACTIONS[name];
     for (const stat of MOD_STATS) {
-      net[stat] += deltas[stat];
+      net[stat] += deltas[stat] ?? 0;
     }
   }
 
   for (const name of normalized.decrease) {
     const deltas = CAP_MODIFICATION_FRACTIONS[name];
     for (const stat of MOD_STATS) {
-      net[stat] -= deltas[stat];
+      net[stat] -= deltas[stat] ?? 0;
     }
   }
 

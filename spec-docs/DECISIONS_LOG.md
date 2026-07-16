@@ -3980,3 +3980,19 @@ and rotation/bullpen assignment are unchanged. This applies anywhere the shared 
 used, including example archetype rosters, Draft Setup, Snake boards, and Auction tax settlement.
 Newly registered or rebuilt pools receive this curve. Already locked or saved drafts keep their
 frozen `luxuryCaps`; there is no mid-draft economics migration.
+
+## 2026-07-15 — Starter hitting is a role-specific identity axis for four archetypes
+
+`ROT_POW` and `ROT_CON` are canonical archetype axes stored inside the existing exact `rawShift`
+identity. They widen only rotation POW/CON tax rows and value those ratings only on startable arms;
+they do not change hitter or bullpen caps, add a seventh public band, or change persistence shape.
+Exact role-specific fit is shared by My Board, Assistant GM, rational-room reads, Draft Setup
+auto-assignment, farm tilt, identity construction, and pool feasibility. Mixed identities score each
+boost against its own player cohort. Pools that claim to support multiple starter-hitting axes must
+have the same starters satisfy the combined traits.
+
+The four treatments are deliberately different: Bash Brothers gets +15% starter POW; Launch &
+Leather gets +10% starter POW and +10% starter CON; Flamethrowers gets +10% each as a secondary layer
+behind rotation velocity; HDH Royals gets +10% starter CON. Standard and Nerfed are the calibration
+priorities. Their final 24-team maximum deviations are 3.6% and 3.3%; Juiced remains inside the
+compatibility guard at 8.3%.

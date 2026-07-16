@@ -62,7 +62,7 @@ const composeGoldens: Array<{ name: string; priorities: BandPriorities; increase
   { name: 'pitching_equal', priorities: { ...zeroPriorities, Rotation: 3, Bullpen: 3 }, increase: ['Junk Ballers', 'JNK'] },
 ];
 
-const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }; shift: Record<ModStat, number> }> = [
+const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }; shift: Partial<Record<ModStat, number>> }> = [
   {
     identity: { increase: ['POW', 'CON'], decrease: [] },
     shift: { POW: 0.02, CON: 0.045871559633027525, SPD: 0, FLD: 0, ARM: 0, RVEL: 0, RJNK: 0, RACC: 0, PVEL: 0, PJNK: 0, PACC: 0 },
@@ -94,17 +94,17 @@ const shiftGoldens: Array<{ identity: { increase: string[]; decrease: string[] }
 function directShift(identity: { increase: string[]; decrease: string[] }): Record<ModStat, number> {
   const net = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
   for (const name of identity.increase.filter((item) => item !== '--')) {
-    for (const stat of MOD_STATS) net[stat] += CAP_MODIFICATION_FRACTIONS[name][stat];
+    for (const stat of MOD_STATS) net[stat] += CAP_MODIFICATION_FRACTIONS[name][stat] ?? 0;
   }
   for (const name of identity.decrease.filter((item) => item !== '--')) {
-    for (const stat of MOD_STATS) net[stat] -= CAP_MODIFICATION_FRACTIONS[name][stat];
+    for (const stat of MOD_STATS) net[stat] -= CAP_MODIFICATION_FRACTIONS[name][stat] ?? 0;
   }
   return net;
 }
 
-function expectShiftClose(actual: Record<ModStat, number>, expected: Record<ModStat, number>, precision = 5) {
+function expectShiftClose(actual: Record<ModStat, number>, expected: Partial<Record<ModStat, number>>, precision = 5) {
   for (const stat of MOD_STATS) {
-    expect(actual[stat], stat).toBeCloseTo(expected[stat], precision);
+    expect(actual[stat], stat).toBeCloseTo(expected[stat] ?? 0, precision);
   }
 }
 

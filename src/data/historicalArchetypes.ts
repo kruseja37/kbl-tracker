@@ -6,10 +6,12 @@
  * shift; the balance simulator (archetypeBalanceSimulator) is the gate that keeps the set within the
  * ±10% parity band across all three tiers.
  *
- * Stat vocabulary: POW/CON/SPD/FLD/ARM (hitters) + ROT_x / PEN_x (rotation/bullpen velocity, junk, accuracy).
+ * Stat vocabulary: POW/CON/SPD/FLD/ARM (hitters), ROT_POW/ROT_CON (starter batting),
+ * and ROT_x / PEN_x (rotation/bullpen velocity, junk, accuracy).
  */
 export type ArchetypeStat =
   | 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM'
+  | 'ROT_POW' | 'ROT_CON'
   | 'ROT_VEL' | 'ROT_JNK' | 'ROT_ACC'
   | 'PEN_VEL' | 'PEN_JNK' | 'PEN_ACC';
 
@@ -20,6 +22,7 @@ export type ArchetypeStat =
  */
 export const ARCHETYPE_STAT_UNIT: Record<ArchetypeStat, number> = {
   POW: 0.05, CON: 0.1, SPD: 0.12, FLD: 0.22, ARM: 0.12,
+  ROT_POW: 0.1, ROT_CON: 0.1,
   ROT_VEL: 0.16, ROT_JNK: 0.3, ROT_ACC: 0.25,
   PEN_VEL: 0.2, PEN_JNK: 0.35, PEN_ACC: 0.3,
 };
@@ -27,6 +30,7 @@ export const ARCHETYPE_STAT_UNIT: Record<ArchetypeStat, number> = {
 /** Maps each archetype stat to the luxury-cap row it shifts (`${group}/${stat}`). */
 export const ARCHETYPE_STAT_LUX_KEY: Record<ArchetypeStat, string> = {
   POW: 'hitters/POW', CON: 'hitters/CON', SPD: 'hitters/SPD', FLD: 'hitters/FLD', ARM: 'hitters/ARM',
+  ROT_POW: 'rotation/POW', ROT_CON: 'rotation/CON',
   ROT_VEL: 'rotation/VEL', ROT_JNK: 'rotation/JNK', ROT_ACC: 'rotation/ACC',
   PEN_VEL: 'bullpen/VEL', PEN_JNK: 'bullpen/JNK', PEN_ACC: 'bullpen/ACC',
 };
@@ -60,8 +64,8 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   },
   {
     id: 'bash-brothers', name: 'Bash Brothers', exemplars: ['1989 Athletics', '1996 Mariners'], era: 'late 1980s–90s',
-    lore: 'Forearm-bashing bombs and cannon arms; the pitching leaks.', identity: '+power +arm → −command (rotation & bullpen)',
-    boosts: ['POW', 'ARM'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, ARM: 1, ROT_ACC: -1, PEN_ACC: -0.5 },
+    lore: 'Forearm-bashing bombs — even the starters can take you deep, but nobody locates.', identity: '+power +arm +starter power → −command (rotation & bullpen)',
+    boosts: ['POW', 'ARM', 'ROT_POW'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: { POW: 1.5, ARM: 1, ROT_POW: 1.5, ROT_ACC: -1, PEN_ACC: -0.5 },
   },
   {
     id: 'whiteyball', name: 'Whiteyball', exemplars: ['1985 Cardinals', '1982 Cardinals'], era: 'turf era / 1980s',
@@ -90,8 +94,8 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   },
   {
     id: 'flamethrowers', name: 'Flamethrowers', exemplars: ['1963 Dodgers (Koufax/Drysdale)'], era: '1960s',
-    lore: 'Koufax–Drysdale heat; the lineup is along for the ride.', identity: '+rotation velocity → −power −contact',
-    boosts: ['ROT_VEL'], nerfs: ['POW', 'CON'], spec: { ROT_VEL: 2, POW: -1, CON: -1 },
+    lore: 'Koufax–Drysdale heat, with just enough damage from the pitcher spot.', identity: '+rotation velocity +starter hitting → −lineup power −contact',
+    boosts: ['ROT_VEL', 'ROT_POW', 'ROT_CON'], nerfs: ['POW', 'CON'], spec: { ROT_VEL: 2, ROT_POW: 1, ROT_CON: 1, POW: -1, CON: -1 },
   },
   {
     id: 'nasty-boys', name: 'Nasty Boys', exemplars: ['1990 Reds'], era: '1990',
@@ -100,8 +104,8 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   },
   {
     id: 'hdh-royals', name: 'HDH Royals', exemplars: ['2014 Royals', '2015 Royals'], era: '2010s',
-    lore: 'Shorten the game: a lockdown pen and fast gloves.', identity: '+bullpen command +speed → −power −rotation command',
-    boosts: ['PEN_ACC', 'SPD'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 0.3, SPD: 1, POW: -0.5, ROT_ACC: -0.25 },
+    lore: 'The starters put the ball in play, then a precise bullpen shortens the game.', identity: '+bullpen command +speed +starter contact → −lineup power −rotation command',
+    boosts: ['PEN_ACC', 'SPD', 'ROT_CON'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 0.3, SPD: 1, ROT_CON: 1, POW: -0.5, ROT_ACC: -0.25 },
   },
   {
     id: 'the-opener', name: 'The Opener', exemplars: ['2018 Rays'], era: '2018',
@@ -159,10 +163,12 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   },
   {
     id: 'launch-and-leather', name: 'Launch & Leather', exemplars: ['2016 Cubs', '2021 Astros'], era: 'three-true-outcomes + gloves',
-    lore: 'Mash and pick it clean; if the staff could find the zone they would be unbeatable.', identity: '+power +defense → −command (rotation & bullpen)',
-    boosts: ['POW', 'FLD'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: {
+    lore: 'Mash and pick it clean — even the starters hit, but the staff still cannot find the zone.', identity: '+power +defense +starter hitting → −command (rotation & bullpen)',
+    boosts: ['POW', 'FLD', 'ROT_POW', 'ROT_CON'], nerfs: ['ROT_ACC', 'PEN_ACC'], spec: {
       POW: 1.5,
       FLD: 1,
+      ROT_POW: 1,
+      ROT_CON: 1,
       ROT_ACC: -0.8, // CONTRACT_TAXSWING_2026-07-10 Amendment 1: ruled parity retune from -1.0.
       PEN_ACC: -0.6, // CONTRACT_TAXSWING_2026-07-10 Amendment 1: ruled parity retune from -1.0.
     },

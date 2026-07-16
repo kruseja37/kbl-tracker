@@ -31423,3 +31423,87 @@ data shape.
 
 Use extra-high reasoning effort.
 <!-- ===== END CONTRACT: SNAKE-PITCHER-SECONDARY-TAX-27 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-PITCHER-HITTING-IDENTITY-28 ===== -->
+# SNAKE-PITCHER-HITTING-IDENTITY-28 — ROLE-SPECIFIC ARCHETYPE AXES AND FOUR-WAY RETUNE
+
+**ROUTE:** Codex 5.6 SOL | extra-high reasoning effort
+**Date:** 2026-07-15 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+Codex is the builder and verifier. A separate non-builder is the skeptical auditor. Extend the
+canonical archetype engine so rotation-pitcher POW/CON can be an explicit team-identity advantage,
+then retune HDH Royals, Launch & Leather, Bash Brothers, and Flamethrowers from measured three-tier
+results instead of attaching one generic pitcher-hitting bonus to a single archetype.
+
+## SOURCE OF TRUTH
+JK ruled that the prior Flamethrowers-only recommendation overweighted theme and underweighted the
+three identities closest to the lower parity edge. The current verified Juiced/Standard/Nerfed
+deviations are HDH Royals -7.8/+0.9/+1.7, Launch & Leather -0.4/-7.5/-5.5, Bash Brothers
+-1.1/-6.4/-3.3, and Flamethrowers -1.7/-0.4/-2.9. Preserve the locked set at 24. Give each treated
+identity a distinct baseball reason to value pitcher hitting; do not use one identical subsidy.
+
+## ALLOWED FILES
+- `scripts/analyze-pool.py`
+- `src/data/historicalArchetypes.ts`
+- `src/data/tierParams.ts`
+- `src/engines/leagueConstruction.ts`
+- `src/engines/archetypeIdentity.ts`
+- `src/engines/archetypeBalanceSimulator.ts`
+- `src/engines/poolFeasibility.ts`
+- `src/engines/farmArchetypeTilt.ts`
+- `src/engines/auctionMarketModel.ts`
+- `src/engines/snakeAssistantBoard.ts`
+- `src/engines/snakeRationalRoom.ts`
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.helpers.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/pages/SnakeCompanion.tsx`
+- `src/src_figma/app/data/teamArchetypeCatalog.ts`
+- `src/src_figma/app/pages/LeagueBuilderTeams.tsx`
+- focused tests for the files above
+- `spec-docs/TEAM_ARCHETYPES_24.md`
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- required session-close status/log documents
+
+## REQUIRED BEHAVIOR
+- Add rotation-pitcher POW and CON as role-specific archetype axes. They shift only the rotation
+  POW/CON tax rows, never hitter or bullpen rows.
+- Those axes must flow through saved cap identity, shifted tax, exact player fit, identity-first
+  roster construction, embodiment, Assistant GM optimization/recommendation, rational-room reads,
+  auto-assignment roster fit, and pool feasibility/supply.
+- Retune the four candidate identities distinctly. HDH should combine a real bullpen edge with
+  starters whose bats help before the pen takes over; Bash should prefer pitcher power; Launch &
+  Leather should prefer complete pitcher bats within its power/defense identity; Flamethrowers may
+  receive a smaller secondary edge or remain the control if velocity already pays enough.
+- Keep all 24 archetypes legal and inside +/-10% at Juiced, Standard, and Nerfed. Prefer the smallest
+  shifts that materially change the intended rotation without pushing another tier toward +10%.
+- JK clarified on 2026-07-15 that Standard and Nerfed are the product tiers to optimize; Juiced is a
+  compatibility guard only and may sit nearer either +/-10% edge when that materially improves both
+  priority tiers.
+- Preserve the already-ratified quadratic tax response, all base caps/coefficients/adders, salary/IV,
+  roster legality, draft budgets, tax-group assignment, pool sizes, storage shape, and the 24 names.
+
+## REQUIRED PROOF
+- Three-tier parity output with all 24 identities and exact final deviations.
+- Exact cap-shift tests proving rotation POW/CON never leak into hitter or bullpen rows.
+- Fit and embodiment tests proving the intended high-hitting starters beat otherwise-equal weak bats,
+  while unrelated archetypes do not inherit the preference.
+- Pool-feasibility removal/restoration proof for joint pitcher-hitting supply.
+- Assistant GM and rational-room proof that the final recommendation/valuation consumes the exact
+  role-specific fit rather than a generic Rotation-band shortcut.
+- Contested eight-team Snake readiness across Tight, Competitive, Loose, and Full Sources using the
+  authoritative identity and tax-aware finish gates. Competitive, Loose, and Full Sources must
+  produce legal, solvent 22s; Tight may be honestly blocked for a demanding identity mix but its
+  archetype and tax gates must agree rather than emit a false green. Then run focused tests,
+  TypeScript, changed-file lint, build, diff integrity, and independent audit.
+
+## STOP CONDITIONS
+Stop and report rather than adding a 25th archetype, changing base tax tables, changing salary/IV,
+retuning unrelated archetypes, altering Auction or Snake draft flow, changing persistence shape, or
+shipping tier-specific archetype definitions solely to game the parity test.
+
+Use extra-high reasoning effort.
+<!-- ===== END CONTRACT: SNAKE-PITCHER-HITTING-IDENTITY-28 ===== -->

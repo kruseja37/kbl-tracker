@@ -1654,9 +1654,9 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a("/** §6.2 modification deltas as FRACTIONS of the XBL cap of the luxury row each shifts.")
     a(" *  Tier-invariant ('+337 FLD' == +57.6% of the FLD cap at any tier). Apply as:")
     a(" *  shiftedCap = cap x (1 + sum(increases) - sum(decreases)). */")
-    a("export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';")
+    a("export type ModStat = 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'RPOW' | 'RCON' | 'RVEL' | 'RJNK' | 'RACC' | 'PVEL' | 'PJNK' | 'PACC';")
     a("")
-    a("export const CAP_MODIFICATION_FRACTIONS: Record<string, Record<ModStat, number>> = {")
+    a("export const CAP_MODIFICATION_FRACTIONS: Record<string, Partial<Record<ModStat, number>>> = {")
     for name in mods:
         fr = ", ".join(f"{st}: {mods[name][st] / xbl_caps[st]:.6f}" for st in mod_stats)
         a(f"  {name!r}: {{ {fr} }},")

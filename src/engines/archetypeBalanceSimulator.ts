@@ -243,6 +243,10 @@ function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => nu
     }
     const grp = p.role === 'RP' || p.role === 'CP' ? 'bullpen' : 'rotation';
     return (
+      p.bat.POW * f(grp, 'POW') +
+      p.bat.CON * f(grp, 'CON') +
+      p.bat.SPD * f(grp, 'SPD') +
+      p.bat.FLD * f(grp, 'FLD') +
       (p.pit?.VEL ?? 0) * f(grp, 'VEL') +
       (p.pit?.JNK ?? 0) * f(grp, 'JNK') +
       (p.pit?.ACC ?? 0) * f(grp, 'ACC')
@@ -479,7 +483,11 @@ function cohortOf(key: string, players: SimPlayer[]): number[] {
   const wantRotation = group === 'rotation';
   return players
     .filter((p) => (wantRotation ? canStart(p) : canRelieve(p)))
-    .map((p) => p.pit?.[stat as 'VEL' | 'JNK' | 'ACC'] ?? 0);
+    .map((p) => (
+      stat === 'POW' || stat === 'CON' || stat === 'SPD' || stat === 'FLD'
+        ? p.bat[stat]
+        : p.pit?.[stat as 'VEL' | 'JNK' | 'ACC'] ?? 0
+    ));
 }
 
 function meanStd(xs: number[]): { mean: number; std: number } {

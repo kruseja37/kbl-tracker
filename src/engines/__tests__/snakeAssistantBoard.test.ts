@@ -32,6 +32,8 @@ function candidate(input: {
   position: Player['primaryPosition'];
   secondary?: Player['secondaryPosition'];
   role?: 'SP' | 'SP/RP' | 'RP' | 'CP';
+  power?: number;
+  contact?: number;
   frozenIv?: number;
   storedSalary?: number;
   sourceId?: string;
@@ -42,7 +44,7 @@ function candidate(input: {
     id: input.id,
     isPitcher,
     role: input.role,
-    bat: { POW: 10, CON: 10, SPD: 10, FLD: 10, ARM: 10 },
+    bat: { POW: input.power ?? 10, CON: input.contact ?? 10, SPD: 10, FLD: 10, ARM: 10 },
     ...(isPitcher ? { pit: { VEL: 10, JNK: 10, ACC: 10 } } : {}),
   };
   const shape = {
@@ -55,7 +57,7 @@ function candidate(input: {
     id: input.id, sourceId: input.sourceId, versionGroupId: input.versionGroupId,
     firstName: input.id, lastName: 'Player', gender: 'M', age: 27, bats: 'R', throws: 'R',
     primaryPosition: input.position, secondaryPosition: input.secondary,
-    power: 10, contact: 10, speed: 10, fielding: 10, arm: 10,
+    power: input.power ?? 10, contact: input.contact ?? 10, speed: 10, fielding: 10, arm: 10,
     velocity: 10, junk: 10, accuracy: 10, arsenal: isPitcher ? ['4F'] : [],
     overallGrade: 'C', personality: 'Competitive', chemistry: 'Competitive',
     morale: 50, mojo: 'Normal', fame: 0, salary: input.storedSalary ?? 999_999,
@@ -130,6 +132,66 @@ describe('shared snake assistant board core', () => {
     const byId = new Map(input.activePool.map((player) => [player.playerId, player]));
     expect(isLegalRoster(result.playerIds.map((id) => byId.get(id)!.seating.shape))).toBe(true);
     expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
+  });
+
+  it('uses exact starter-batting fit in its recommendation and final 22', () => {
+    const activePool = legalPool().filter((player) => player.playerId !== 'sp-3');
+    activePool.push(
+      candidate({ id: 'sp-high-bat', position: 'SP', role: 'SP', frozenIv: 100, power: 90, contact: 90 }),
+      candidate({ id: 'sp-low-bat', position: 'SP', role: 'SP', frozenIv: 100, power: 1, contact: 1 }),
+    );
+    const input = engineInput({
+      activePool,
+      archetype: { name: 'Starter Bats', rawShift: { 'rotation/POW': 0.1, 'rotation/CON': 0.1 } },
+      capIdentity: {
+        increase: [], decrease: [],
+        rawShift: { RPOW: 0.1, RCON: 0.1 } as NonNullable<SnakeAssistantBoardInput['capIdentity']>['rawShift'],
+      },
+    });
+    const result = buildSnakeAssistantBoard(input);
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toContain('sp-high-bat');
+    expect(result.playerIds).not.toContain('sp-low-bat');
+    expect(result.recommendationOrder.indexOf('sp-high-bat')).toBeLessThan(
+      result.recommendationOrder.indexOf('sp-low-bat'),
+    );
+  });
+
+  it('keeps relievers neutral when a real identity has only rotation axes', () => {
+    const activePool = legalPool().filter((player) => player.playerId !== 'rp-2');
+    const neutralRp = candidate({ id: 'a-neutral-rp', position: 'RP', role: 'RP', frozenIv: 100 });
+    neutralRp.archetypeWeights = {
+      Power: 0, Contact: 0, Speed: 0, Defense: 0, Rotation: 0, Bullpen: 1,
+    };
+    const genericRotationRp = candidate({ id: 'z-generic-rotation-rp', position: 'RP', role: 'RP', frozenIv: 100 });
+    genericRotationRp.archetypeWeights = {
+      Power: 0, Contact: 0, Speed: 0, Defense: 0, Rotation: 1, Bullpen: 0,
+    };
+    activePool.push(neutralRp, genericRotationRp);
+
+    const result = buildSnakeAssistantBoard(engineInput({
+      activePool,
+      archetype: {
+        name: 'Flamethrowers',
+        rawShift: { 'rotation/POW': 0.1, 'rotation/CON': 0.1, 'rotation/VEL': 0.32 },
+      },
+      capIdentity: {
+        increase: [], decrease: [],
+        rawShift: { RPOW: 0.1, RCON: 0.1, RVEL: 0.32 } as NonNullable<SnakeAssistantBoardInput['capIdentity']>['rawShift'],
+      },
+      ownBandPriorities: {
+        Power: 0, Contact: 0, Speed: 0, Defense: 0, Rotation: 10, Bullpen: 0,
+      },
+    }));
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.recommendationOrder.indexOf('a-neutral-rp')).toBeLessThan(
+      result.recommendationOrder.indexOf('z-generic-rotation-rp'),
+    );
+    expect(result.playerIds).toContain('a-neutral-rp');
+    expect(result.playerIds).not.toContain('z-generic-rotation-rp');
   });
 
   it('keeps a sub-cent-negative plan ready under the canonical Snake money law', () => {

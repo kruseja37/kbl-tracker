@@ -10,6 +10,7 @@ import {
   luxKeyToModStat,
   type Band,
   type BandPriorities,
+  type ConstructionPlayer,
   type TeamCapIdentity,
 } from './leagueConstruction';
 import { archetypeBandPriorities } from './cpuShillBidding';
@@ -118,6 +119,7 @@ export function archetypeStatFitMultiplier(
   const ratings: Partial<Record<ModStat, number>> = player.isPitcher
     ? {
         ...(startable || (!startable && !relievable) ? {
+          RPOW: player.power, RCON: player.contact,
           RVEL: player.velocity, RJNK: player.junk, RACC: player.accuracy,
         } : {}),
         ...(relievable || (!startable && !relievable) ? {
@@ -137,8 +139,30 @@ export function archetypeStatFitMultiplier(
     weightedSignal += shift * centeredRating;
     totalWeight += Math.abs(shift);
   }
-  if (totalWeight === 0) return null;
+  // A real identity with no axis for this player's role is exactly neutral.
+  // Returning null here would invite the legacy generic-band fallback and let,
+  // for example, a Flamethrowers reliever inherit a Rotation preference.
+  if (totalWeight === 0) return 1;
   return 1 + (weightedSignal / totalWeight) * FIT_MULTIPLIER_SPREAD;
+}
+
+/** One exact adapter used by every Snake valuation path so role-specific axes cannot drift. */
+export function constructionArchetypeFitMultiplier(
+  capIdentity: TeamCapIdentity | null | undefined,
+  player: ConstructionPlayer,
+): number | null {
+  return archetypeStatFitMultiplier(capIdentity, {
+    isPitcher: player.isPitcher,
+    role: player.role,
+    power: player.bat.POW,
+    contact: player.bat.CON,
+    speed: player.bat.SPD,
+    fielding: player.bat.FLD,
+    arm: player.bat.ARM,
+    velocity: player.pit?.VEL ?? 0,
+    junk: player.pit?.JNK ?? 0,
+    accuracy: player.pit?.ACC ?? 0,
+  });
 }
 
 export async function selectTeamArchetype(team: Team, mlbKey: string, farmKey?: string): Promise<Team> {

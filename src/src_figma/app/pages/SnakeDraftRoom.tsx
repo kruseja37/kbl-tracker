@@ -7,6 +7,7 @@ import {
 } from '../../../engines/auctionLuxuryTax';
 import { snakeLuxuryCaps } from '../../../engines/snakeLuxuryTax';
 import { computeOwnValue } from '../../../engines/auctionMarketModel';
+import { constructionArchetypeFitMultiplier } from '../../../engines/archetypeIdentity';
 import { computeDraftFreeze } from '../../../engines/draftFreeze';
 import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
@@ -1353,6 +1354,10 @@ function MlbSnakeDraftRoom() {
       iv: player.price,
       archetypeWeights: player.archetypeWeights,
       ownBandPriorities: locked.priorities,
+      archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+        locked.capIdentity,
+        player.construction,
+      ),
       needBreakdown: need,
       shape: player.shape,
       openSlots,
