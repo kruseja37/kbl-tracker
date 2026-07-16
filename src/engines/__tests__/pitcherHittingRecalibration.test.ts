@@ -10,7 +10,7 @@ import {
   type HistoricalArchetype,
 } from '../../data/historicalArchetypes';
 import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
-import { deriveLuxuryTaxUsageWeights } from '../../data/rosterEngineConstants';
+import { USAGE_INPUTS } from '../../data/rosterEngineConstants';
 import { LUXURY_CAP_TABLES, type LuxuryCapRow, type TierKey } from '../../data/tierParams';
 import {
   buildBestRoster,
@@ -26,6 +26,14 @@ const ORACLE_PATH = path.resolve(__dirname, '../../../spec-docs/reference/iv_ora
 const AFFECTED = ['bash-brothers', 'launch-and-leather', 'flamethrowers', 'hdh-royals'] as const;
 const TIERS = ['standard', 'nerfed'] as const satisfies readonly TierKey[];
 const RAW_OVERAGE_LADDER = [10, 25, 50] as const;
+
+function usageWeight(role: NonNullable<SimPlayer['role']>, stat: 'POW' | 'CON' | 'SPD' | 'FLD'): number {
+  const input = USAGE_INPUTS[role];
+  const bat = input.startShare * input.paRatio + input.phFloor;
+  if (stat === 'POW' || stat === 'CON') return bat;
+  if (stat === 'SPD') return Math.min(1, bat + input.prFloor + input.rangeFloor);
+  return Math.max(input.startShare, input.rangeFloor);
+}
 
 interface OracleEntry {
   id: string;
@@ -102,7 +110,7 @@ function rotationBatTotals(players: readonly SimPlayer[]): Record<'POW' | 'CON',
     const raw = rotation.reduce((sum, player) => sum + player.bat[stat], 0);
     const weighted = rotation.reduce((sum, player) => {
       const role = player.role;
-      return sum + (role ? player.bat[stat] * deriveLuxuryTaxUsageWeights(role)[stat] : 0);
+      return sum + (role ? player.bat[stat] * usageWeight(role, stat) : 0);
     }, 0);
     return [stat, { raw, weighted }];
   })) as Record<'POW' | 'CON', { raw: number; weighted: number }>;
@@ -132,7 +140,7 @@ describe('SNAKE-PITCHER-HITTING-RECALIBRATION-30', () => {
         });
         const shifts = complete.rawShift ?? {};
         const usageAware = LUXURY_CAP_TABLES[tier].some((row) => row.ratingBasis === 'pitcher-role-usage-v1');
-        const usageWeight = usageAware ? deriveLuxuryTaxUsageWeights('SP').POW : 1;
+        const starterUsageWeight = usageAware ? usageWeight('SP', 'POW') : 1;
         const headroom = (['POW', 'CON'] as const).flatMap((stat) => {
           const shift = shifts[`rotation/${stat}`] ?? 0;
           if (shift === 0) return [];
@@ -142,8 +150,8 @@ describe('SNAKE-PITCHER-HITTING-RECALIBRATION-30', () => {
             stat,
             shift,
             weighted,
-            rawEquivalent: weighted / usageWeight,
-            reliefByRawOverage: taxReliefLadder(row, shift, usageWeight),
+            rawEquivalent: weighted / starterUsageWeight,
+            reliefByRawOverage: taxReliefLadder(row, shift, starterUsageWeight),
           }];
         });
 
