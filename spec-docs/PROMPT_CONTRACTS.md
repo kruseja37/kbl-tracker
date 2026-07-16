@@ -31624,6 +31624,8 @@ Standard and Nerfed are the product tiers. Juiced is compatibility-only.
 - `src/engines/__tests__/archetypeIdentityEmbodiment.test.ts`
 - `src/engines/__tests__/leagueConstruction.test.ts`
 - `src/data/__tests__/pitcherSecondaryTaxTuning.test.ts`
+- `src/data/__tests__/archetypeSheetConformance.test.ts` only to update the exact expected
+  Flamethrowers rotation POW/CON and HDH Royals rotation CON values ratified by this contract
 - `spec-docs/PROMPT_CONTRACTS.md`
 - `spec-docs/DECISIONS_LOG.md`
 - `spec-docs/TEAM_ARCHETYPES_24.md`
@@ -31668,6 +31670,8 @@ before widening the edit.
 
 ## REQUIRED PROOF
 - Focused red/green regression pins the final four multiplier values and their isolated effects.
+- The canonical archetype sheet-conformance weld is updated only for the retuned Flamethrowers
+  rotation POW/CON and HDH Royals rotation CON expectations and remains fully green.
 - All 48 Standard/Nerfed identity rosters are legal and solvent; all 24 archetypes remain within +/-10%.
 - Juiced remains within +/-10% but does not drive the tuning.
 - The four identities show non-decorative starter-hitting differences from their zero-axis ablations.
