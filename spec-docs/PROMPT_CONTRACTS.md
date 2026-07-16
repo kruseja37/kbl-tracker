@@ -31376,3 +31376,50 @@ simulation, awards, relationships, or offseason logic.
   worker/privacy greps, and a real local setup/room browser precheck. Then independent audit and
   repairs before JK's browser handoff.
 <!-- ===== END CONTRACT: SNAKE-LEGENDS-LIBRARIES-PERSONALITY-MORALE-26 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-PITCHER-SECONDARY-TAX-27 ===== -->
+# SNAKE-PITCHER-SECONDARY-TAX-27 — SOFTEN PITCHER POW/CON TAX CLIFFS
+
+**ROUTE:** Codex 5.6 SOL | extra-high reasoning effort
+**Date:** 2026-07-15 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+Codex is the builder and local verifier. A separate non-builder is the skeptical auditor. Change
+pitcher POW/CON luxury-tax response from a linear cliff to a quadratic ramp across Juiced,
+Standard, and Nerfed tiers while preserving the current caps, top-four grouping, dollar
+coefficients, and flat adders.
+
+## SOURCE OF TRUTH
+JK approved the 2026-07-15 finding that pitcher POW/CON are useful secondary ratings but are
+currently punished too heavily once they exceed the empirically derived stock-team caps. Pitcher
+SPD/FLD, pitcher VEL/JNK/ACC, hitter rows, salary caps, identity shifts, and roster grouping do not
+change.
+
+## ALLOWED FILES
+- `scripts/analyze-pool.py`
+- `src/data/tierParams.ts`
+- `src/data/__tests__/pitcherSecondaryTaxTuning.test.ts`
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- required session-close status/log documents
+
+## REQUIRED PROOF
+- The canonical generator applies the approved override before its R4/R5 calculations and emits
+  the same named curve constant used by `tierParams.ts`. Its existing full regeneration gate is
+  run and any unrelated pre-existing IV/workbook anchor drift is reported rather than changed in
+  this contract.
+- All twelve rotation/bullpen POW/CON rows use curve 2 and keep their existing cap,
+  `penaltyPer100`, `minAdder`, and `topN=4` values.
+- At Standard, a ten-point overage produces rounded taxes of $22,278 / $14,045 for rotation
+  POW/CON and $25,184 / $15,498 for bullpen POW/CON.
+- At Standard, a fifty-point overage remains materially expensive: $487,211 / $293,005 and
+  $513,364 / $317,705 respectively.
+- Focused tests, TypeScript, production build, and diff integrity pass before independent audit.
+
+## STOP CONDITIONS
+Stop and report rather than changing caps, tier budgets, archetype shifts, pitcher SPD/FLD,
+pitcher VEL/JNK/ACC, hitter tax, salary/IV, roster assignment, UI, Auction/Snake routing, or saved
+data shape.
+
+Use extra-high reasoning effort.
+<!-- ===== END CONTRACT: SNAKE-PITCHER-SECONDARY-TAX-27 ===== -->

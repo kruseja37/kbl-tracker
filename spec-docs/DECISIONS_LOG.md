@@ -3967,3 +3967,16 @@ Competitive 1.35x = 238 (recommended starting point), and Loose 1.50x = 264. Ful
 unrestricted. These are target counts, not readiness promises: the shared simultaneous Snake seating
 proof must still show that every club can finish a legal, affordable, archetype-credible 22 under its
 own roster-local tax caps. Draft-room size never rescales those caps.
+
+## 2026-07-15 — Pitcher POW/CON use a soft tax ramp, not a premium-pitching cliff
+
+Pitcher POW/CON remain active top-four rotation and top-four bullpen luxury-tax rows. Their
+stock-team-derived caps, dollar coefficients, and flat adders remain unchanged, but their penalty
+curve changes from linear (`1`) to quadratic (`2`) at every roster tier. A modest overage therefore
+stays modest, while deliberately stacking several elite-hitting pitchers still becomes expensive.
+
+Pitcher SPD/FLD, pitcher VEL/JNK/ACC, hitter rows, archetype cap shifts, tier salary caps, salary/IV,
+and rotation/bullpen assignment are unchanged. This applies anywhere the shared tier tables are
+used, including example archetype rosters, Draft Setup, Snake boards, and Auction tax settlement.
+Newly registered or rebuilt pools receive this curve. Already locked or saved drafts keep their
+frozen `luxuryCaps`; there is no mid-draft economics migration.

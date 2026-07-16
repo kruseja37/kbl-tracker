@@ -80,6 +80,16 @@ LUXURY_CAP_PERCENTILE = 0.65
 EV_FLATNESS_TOLERANCE = 0.10
 N_TEAMS = 20  # contention ladder depth = league size the 440 pool implies (440/22)
 
+# JK ruling 2026-07-15: pitcher POW/CON stay active at their empirical top-four caps,
+# but their response is a quadratic KBL override instead of the workbook's linear cliff.
+PITCHER_SECONDARY_BATTING_ROWS = {
+    ("rotation", "POW"),
+    ("rotation", "CON"),
+    ("bullpen", "POW"),
+    ("bullpen", "CON"),
+}
+PITCHER_SECONDARY_BATTING_PENALTY_CURVE = 2.0
+
 
 # §3.9 registry-style inputs. The script stores the derivation inputs, then emits the
 # calibrated weights; downstream kblIV never consumes opaque hand-picked role weights.
@@ -822,6 +832,12 @@ def load_luxury(wbpath):
         row = next(r for r in rows if r["group"] == g and r["stat"] == s)
         if (row["curve"], row["topN"], row["xblCap"], row["per100"], row["minAdder"]) != (cv, n, cap, p100, ma):
             fail(f"Luxury Cap row {g}/{s} disagrees with spec §5.3: {row}")
+    # Preserve the workbook as the raw source, then apply the approved KBL product override.
+    # This happens before R4/R5 so analysis, generated data, and runtime all use one curve.
+    for row in rows:
+        if (row["group"], row["stat"]) in PITCHER_SECONDARY_BATTING_ROWS:
+            row["curve"] = PITCHER_SECONDARY_BATTING_PENALTY_CURVE
+
     # 44 modifications, AT:BE = cols 46 (name) + 47-57 (11 deltas); header at row 2
     mod_stats = ["POW", "CON", "SPD", "FLD", "ARM", "RVEL", "RJNK", "RACC", "PVEL", "PJNK", "PACC"]
     hdr = [ws.cell(row=2, column=c).value for c in range(46, 58)]
@@ -1066,7 +1082,7 @@ def r4_luxury(pool, lux_rows, mods, mod_stats, scales, anchors_median):
     print(f"\nPenalty-$ scale: sigma(juiced) = pool median IV / XBL anchor median salary "
           f"= {med_iv:,.0f} / {anchors_median:,.0f} = {sigma_j:.4f}")
     print("(keeps tax bite per overage point proportional to this pool's salary scale;")
-    print(" penalty CURVES (exponents) port unchanged - they are the 'shape' D13 protects.)\n")
+    print(" penalty CURVES port unchanged except the approved quadratic pitcher POW/CON KBL override.)\n")
     derived = []
     print("Two candidate 'best-plausible top-N sum' distributions were derived; the STOCK-TEAM")
     print("basis is ADOPTED (rationale + the rejected alternative documented in T3_POOL_ANALYSIS.md §R4):")
@@ -1537,7 +1553,8 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a(" *     ignore-budget contention ladder was derived too and REJECTED: caps so high the")
     a(" *     tax layer never binds - see T3_POOL_ANALYSIS.md §R4).")
     a(" *   - penalty $ scale sigma = pool median IV / XBL workbook anchor median salary;")
-    a(" *     penalty curve exponents port unchanged (D13 'ratios and shapes').")
+    a(" *     workbook curve shapes port unchanged except the approved quadratic pitcher")
+    a(" *     rotation/bullpen POW/CON override (JK ruling 2026-07-15).")
     a(" *   - modification deltas: stored as FRACTIONS of the XBL cap they shift (tier-invariant),")
     a(" *     plus per-tier absolute tables (fraction x tier cap) (§5.3, §6.2).")
     a(" *   - farm nerf: one grade step left of the league tier (§7.4); no new free parameter.")
@@ -1591,10 +1608,17 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
     a("  stat: 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'VEL' | 'JNK' | 'ACC';")
     a("  topN: number;")
     a("  cap: number;              // tier-scaled neutral cap (rating-sum)")
-    a("  penaltyCurve: number;     // XBL shape, ports unchanged")
+    a("  penaltyCurve: number;     // response shape; approved KBL tuning may supersede the XBL source curve")
     a("  penaltyPer100: number;    // $ per (overage/100)^curve - sigma-scaled to this pool")
     a("  minAdder: number;         // flat $ when over - sigma-scaled")
     a("}")
+    a("")
+    a("/**")
+    a(" * Pitcher POW/CON are useful secondary skills, but should not price like dominant pitching.")
+    a(" * Keep their stock-team-derived caps and dollar coefficients while using a soft quadratic")
+    a(" * ramp so modest overages stay modest and only deliberate stacking becomes expensive.")
+    a(" */")
+    a(f"export const PITCHER_SECONDARY_BATTING_PENALTY_CURVE = {fmt(PITCHER_SECONDARY_BATTING_PENALTY_CURVE)};")
     a("")
     a("export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {")
     for tier in ["juiced", "standard", "nerfed"]:
@@ -1605,8 +1629,11 @@ def emit_tier_params(scales, farm, caps, lux_derived, sigma, mods, mod_stats, me
             if not d["enabled"]:
                 continue
             cap = d["capJuiced"] * rs
+            curve = ("PITCHER_SECONDARY_BATTING_PENALTY_CURVE"
+                     if (d["group"], d["stat"]) in PITCHER_SECONDARY_BATTING_ROWS
+                     else fmt(d["curve"]))
             a(f"    {{ group: '{d['group']}', stat: '{d['stat']}', topN: {d['topN']}, "
-              f"cap: {round(cap, 1)}, penaltyCurve: {fmt(d['curve'])}, "
+              f"cap: {round(cap, 1)}, penaltyCurve: {curve}, "
               f"penaltyPer100: {round(d['per100'] * sigma * s)}, minAdder: {round(d['minAdder'] * sigma * s)} }},")
         a("  ],")
     a("};")

@@ -19,7 +19,8 @@
  *     ignore-budget contention ladder was derived too and REJECTED: caps so high the
  *     tax layer never binds - see T3_POOL_ANALYSIS.md §R4).
  *   - penalty $ scale sigma = pool median IV / XBL workbook anchor median salary;
- *     penalty curve exponents port unchanged (D13 'ratios and shapes').
+ *     workbook curve shapes port unchanged except the approved quadratic pitcher
+ *     rotation/bullpen POW/CON override (JK ruling 2026-07-15).
  *   - modification deltas: stored as FRACTIONS of the XBL cap they shift (tier-invariant),
  *     plus per-tier absolute tables (fraction x tier cap) (§5.3, §6.2).
  *   - farm nerf: one grade step left of the league tier (§7.4); no new free parameter.
@@ -73,10 +74,17 @@ export interface LuxuryCapRow {
   stat: 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'VEL' | 'JNK' | 'ACC';
   topN: number;
   cap: number;              // tier-scaled neutral cap (rating-sum)
-  penaltyCurve: number;     // XBL shape, ports unchanged
+  penaltyCurve: number;     // response shape; approved KBL tuning may supersede the XBL source curve
   penaltyPer100: number;    // $ per (overage/100)^curve - sigma-scaled to this pool
   minAdder: number;         // flat $ when over - sigma-scaled
 }
+
+/**
+ * Pitcher POW/CON are useful secondary skills, but should not price like dominant pitching.
+ * Keep their stock-team-derived caps and dollar coefficients while using a soft quadratic
+ * ramp so modest overages stay modest and only deliberate stacking becomes expensive.
+ */
+export const PITCHER_SECONDARY_BATTING_PENALTY_CURVE = 2;
 
 export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
   juiced: [
@@ -85,15 +93,15 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'hitters', stat: 'SPD', topN: 8, cap: 617.1, penaltyCurve: 1.8, penaltyPer100: 1097332, minAdder: 2195 },
     { group: 'hitters', stat: 'FLD', topN: 8, cap: 612.7, penaltyCurve: 2, penaltyPer100: 768132, minAdder: 658 },
     { group: 'hitters', stat: 'ARM', topN: 8, cap: 597.4, penaltyCurve: 1.8, penaltyPer100: 987598, minAdder: 988 },
-    { group: 'rotation', stat: 'POW', topN: 4, cap: 98.0, penaltyCurve: 1, penaltyPer100: 2194663, minAdder: 3292 },
-    { group: 'rotation', stat: 'CON', topN: 4, cap: 98.3, penaltyCurve: 1, penaltyPer100: 1316798, minAdder: 2743 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 98.0, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2194663, minAdder: 3292 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 98.3, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1316798, minAdder: 2743 },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 118.7, penaltyCurve: 2, penaltyPer100: 1097332, minAdder: 2743 },
     { group: 'rotation', stat: 'FLD', topN: 4, cap: 273.1, penaltyCurve: 2, penaltyPer100: 713266, minAdder: 1097 },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 272.9, penaltyCurve: 1.5, penaltyPer100: 1645997, minAdder: 2195 },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 264.4, penaltyCurve: 2, penaltyPer100: 438933, minAdder: 1097 },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 299.0, penaltyCurve: 1.9, penaltyPer100: 877865, minAdder: 1317 },
-    { group: 'bullpen', stat: 'POW', topN: 4, cap: 80.0, penaltyCurve: 1, penaltyPer100: 2304396, minAdder: 5487 },
-    { group: 'bullpen', stat: 'CON', topN: 4, cap: 77.1, penaltyCurve: 1, penaltyPer100: 1426531, minAdder: 3292 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 80.0, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2304396, minAdder: 5487 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 77.1, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1426531, minAdder: 3292 },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 131.4, penaltyCurve: 2, penaltyPer100: 1207065, minAdder: 3292 },
     { group: 'bullpen', stat: 'FLD', topN: 4, cap: 277.4, penaltyCurve: 2, penaltyPer100: 822999, minAdder: 1097 },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 234.1, penaltyCurve: 1.1, penaltyPer100: 3291995, minAdder: 5487 },
@@ -106,15 +114,15 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'hitters', stat: 'SPD', topN: 8, cap: 588.9, penaltyCurve: 1.8, penaltyPer100: 968610, minAdder: 1937 },
     { group: 'hitters', stat: 'FLD', topN: 8, cap: 584.7, penaltyCurve: 2, penaltyPer100: 678027, minAdder: 581 },
     { group: 'hitters', stat: 'ARM', topN: 8, cap: 570.0, penaltyCurve: 1.8, penaltyPer100: 871749, minAdder: 872 },
-    { group: 'rotation', stat: 'POW', topN: 4, cap: 93.5, penaltyCurve: 1, penaltyPer100: 1937221, minAdder: 2906 },
-    { group: 'rotation', stat: 'CON', topN: 4, cap: 93.9, penaltyCurve: 1, penaltyPer100: 1162333, minAdder: 2422 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 93.5, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1937221, minAdder: 2906 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 93.9, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1162333, minAdder: 2422 },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 113.3, penaltyCurve: 2, penaltyPer100: 968610, minAdder: 2422 },
     { group: 'rotation', stat: 'FLD', topN: 4, cap: 260.6, penaltyCurve: 2, penaltyPer100: 629597, minAdder: 969 },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 260.4, penaltyCurve: 1.5, penaltyPer100: 1452916, minAdder: 1937 },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 252.3, penaltyCurve: 2, penaltyPer100: 387444, minAdder: 969 },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 285.3, penaltyCurve: 1.9, penaltyPer100: 774888, minAdder: 1162 },
-    { group: 'bullpen', stat: 'POW', topN: 4, cap: 76.3, penaltyCurve: 1, penaltyPer100: 2034082, minAdder: 4843 },
-    { group: 'bullpen', stat: 'CON', topN: 4, cap: 73.6, penaltyCurve: 1, penaltyPer100: 1259194, minAdder: 2906 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 76.3, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2034082, minAdder: 4843 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 73.6, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1259194, minAdder: 2906 },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 125.4, penaltyCurve: 2, penaltyPer100: 1065472, minAdder: 2906 },
     { group: 'bullpen', stat: 'FLD', topN: 4, cap: 264.7, penaltyCurve: 2, penaltyPer100: 726458, minAdder: 969 },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 223.4, penaltyCurve: 1.1, penaltyPer100: 2905831, minAdder: 4843 },
@@ -127,15 +135,15 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'hitters', stat: 'SPD', topN: 8, cap: 564.2, penaltyCurve: 1.8, penaltyPer100: 868952, minAdder: 1738 },
     { group: 'hitters', stat: 'FLD', topN: 8, cap: 560.1, penaltyCurve: 2, penaltyPer100: 608266, minAdder: 521 },
     { group: 'hitters', stat: 'ARM', topN: 8, cap: 546.1, penaltyCurve: 1.8, penaltyPer100: 782056, minAdder: 782 },
-    { group: 'rotation', stat: 'POW', topN: 4, cap: 89.6, penaltyCurve: 1, penaltyPer100: 1737903, minAdder: 2607 },
-    { group: 'rotation', stat: 'CON', topN: 4, cap: 89.9, penaltyCurve: 1, penaltyPer100: 1042742, minAdder: 2172 },
+    { group: 'rotation', stat: 'POW', topN: 4, cap: 89.6, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1737903, minAdder: 2607 },
+    { group: 'rotation', stat: 'CON', topN: 4, cap: 89.9, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1042742, minAdder: 2172 },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 108.5, penaltyCurve: 2, penaltyPer100: 868952, minAdder: 2172 },
     { group: 'rotation', stat: 'FLD', topN: 4, cap: 249.7, penaltyCurve: 2, penaltyPer100: 564818, minAdder: 869 },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 249.5, penaltyCurve: 1.5, penaltyPer100: 1303427, minAdder: 1738 },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 241.7, penaltyCurve: 2, penaltyPer100: 347581, minAdder: 869 },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 273.3, penaltyCurve: 1.9, penaltyPer100: 695161, minAdder: 1043 },
-    { group: 'bullpen', stat: 'POW', topN: 4, cap: 73.1, penaltyCurve: 1, penaltyPer100: 1824798, minAdder: 4345 },
-    { group: 'bullpen', stat: 'CON', topN: 4, cap: 70.5, penaltyCurve: 1, penaltyPer100: 1129637, minAdder: 2607 },
+    { group: 'bullpen', stat: 'POW', topN: 4, cap: 73.1, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1824798, minAdder: 4345 },
+    { group: 'bullpen', stat: 'CON', topN: 4, cap: 70.5, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1129637, minAdder: 2607 },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 120.1, penaltyCurve: 2, penaltyPer100: 955847, minAdder: 2607 },
     { group: 'bullpen', stat: 'FLD', topN: 4, cap: 253.6, penaltyCurve: 2, penaltyPer100: 651714, minAdder: 869 },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 214.0, penaltyCurve: 1.1, penaltyPer100: 2606855, minAdder: 4345 },
