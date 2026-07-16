@@ -31719,6 +31719,9 @@ database schema. The existing limit remains three unique companion devices, not 
 - focused Snake setup tests under `src/src_figma/__tests__/pages/`
 - focused tests under `src/src_figma/app/components/snake/companion/__tests__/`
 - focused Snake page or browser-journey tests when needed to prove the complete switch flow
+- `src/src_figma/app/pages/SnakeResponsivePreview.tsx` and its focused test, only to seed two
+  independent companion desks through the real `SnakeCompanionFrame` switch/cover contract
+- `test-utils/journeys/12-snake-draft-responsive.spec.ts` for deterministic browser proof
 - companion styling only when required for the compact switcher
 - `spec-docs/PROMPT_CONTRACTS.md`
 - `spec-docs/DECISIONS_LOG.md`
