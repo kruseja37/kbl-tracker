@@ -40,7 +40,10 @@ export class HistoricalLegendsOwnershipCollisionError extends Error {
 }
 
 export function isRecoverableHistoricalLegendsOwnershipCollision(error: unknown): boolean {
-  return error instanceof HistoricalLegendsOwnershipCollisionError && error.repairEligible;
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { name?: unknown; repairEligible?: unknown };
+  return candidate.name === 'HistoricalLegendsOwnershipCollisionError'
+    && candidate.repairEligible === true;
 }
 
 function legacyOwnershipRepairBlocker(

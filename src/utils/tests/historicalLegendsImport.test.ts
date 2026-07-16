@@ -280,6 +280,32 @@ describe('Historical Legends app import', () => {
     expect(isRecoverableHistoricalLegendsOwnershipCollision('network failed')).toBe(false);
   });
 
+  test('recognizes the structured repair brand after HMR replaces the error class identity', () => {
+    const hmrError = new HistoricalLegendsOwnershipCollisionError(
+      'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+      true,
+    );
+    Object.setPrototypeOf(hmrError, Error.prototype);
+
+    expect(hmrError instanceof HistoricalLegendsOwnershipCollisionError).toBe(false);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(hmrError)).toBe(true);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision({
+      name: 'HistoricalLegendsOwnershipCollisionError',
+      repairEligible: true,
+    })).toBe(true);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision({
+      name: 'HistoricalLegendsOwnershipCollisionError',
+      repairEligible: 'true',
+    })).toBe(false);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision({
+      name: 'Error',
+      repairEligible: true,
+    })).toBe(false);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision({
+      message: 'Historical Legends card id hl:aaroh101:draft is already owned by non-Legends source League Builder.',
+    })).toBe(false);
+  });
+
   test('ordinary import exposes repair eligibility only after full read-only collision preflight', async () => {
     const peak = card('Peak', 'peak');
     const draft = card('Draft Pool', 'draft');
