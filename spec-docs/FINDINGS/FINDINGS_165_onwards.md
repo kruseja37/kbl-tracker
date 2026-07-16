@@ -344,3 +344,43 @@ browser walk remains the sole product-acceptance gate.
 **Evidence:** A clean `env -u NODE_ENV npm run build` typechecks and transforms 2,726 modules, then Vite/PWA rejects the default `worker.format = iife` because the rational-room worker graph uses code splitting. The failing file and Vite config have no diff between the pre-batch parent `7bf1b6fc` and the independently approved identity commit `9e5901d7`.
 **Impact:** Production packaging is red on this branch even though the revised identity engine's focused tests, TypeScript, and changed-file lint are green. The dev server and browser walk are not blocked by this packaging failure.
 **Action:** Give worker packaging its own bounded build-plumbing repair and independent audit; do not entangle it with the approved archetype/tax behavior change.
+
+### FINDING-214
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser gate | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
+**Files:** `LeagueBuilderDraftSetup.tsx:4063-4074`, `LeagueBuilderDraftSetup.tsx:4608-4749`, `LeagueBuilderDraftSetup.tsx:5650-5662`
+**Evidence:** Snake's Edit Profile control sets shared edit state, but the Snake render returns before the edit modal, which exists only inside Auction's later return.
+**Impact:** The visible control deterministically does nothing in Snake Draft Setup.
+**Action:** Mount the canonical editor in Snake's return and regression-test open, save, refresh, and lock behavior without changing Auction semantics.
+**Builder evidence:** Shared modal rendered in both format returns; the Snake save/refresh/locked-state component regressions are green. The repaired-tree behavioral matrix passes 187/187. Independent re-audit remains pending.
+
+### FINDING-215
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser gate | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
+**Files:** `poolFromDemand.ts:5-18`, `poolFromDemand.ts:2046-2055`, `LeagueBuilderDraftSetup.tsx`
+**Evidence:** Sizing mode computes the selected-archetype extraction but uses it only as verdict/fit input; its identity claims are not protected in shaped membership.
+**Impact:** A chosen club identity can become gray after the app builds a nominally Competitive pool, contradicting the pool guarantee and hiding the actual missing role/axis from the user.
+**Action:** Treat selected identities as hard pool constraints, preserve their minimum claims, run the exact all-club proof, grow above the nominal target when needed, and expose a specific one-line source blocker plus one recovery action when the source is impossible.
+**Builder evidence:** Snake shaping preserves chosen-identity claims, and one BUILD auto-widens through larger presets and then the full selected source while persisting the actual result. SUCCESS requires a disjoint unique-person chosen-identity certificate plus legal 22, exact Snake money, canonical value floor, and strict positive embodiment; bounded identity-search exhaustion after ordinary legal proof is UNKNOWN, not a fabricated shortfall. Manual changes invalidate the receipt and recompute proof; confirmed source failures name the baseball role/axis. Auction keeps the shared extractor's legacy default. Independent re-audit remains pending.
+**Second-audit repair evidence:** Full Sources now removes every restored hard keep from the actual and persisted removal ledger, so removals `b,c` plus hard keep `c` yield pool `a,c` and only persisted removal `b`. UNKNOWN copy keys off persisted `poolAssemblyMode`, remaining correct after reload and after a receipt-clearing manual edit. Independent re-audit remains pending.
+
+### FINDING-216
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser gate | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
+**Files:** `SnakeDraftSetupAdapter.helpers.ts:172-216`, `SnakeDraftSetupAdapter.helpers.ts:260-305`, `deskModel.ts:103-159`
+**Evidence:** The setup adapter drops secondary positions, roster shape, source ID, and version group when materializing board candidates, then can reject the exact assignment certificate and append its success message to a failure.
+**Impact:** The user sees the contradictory `Could not seed ...: EVERY CLUB CAN FINISH A LEGAL 22` error and cannot distinguish a product invariant defect from an insufficient pool.
+**Action:** Preserve canonical eligibility/shape/version fields, seed consistently from the certificate, and make the defensive invariant failure honest and slot-specific.
+**Builder evidence:** Board candidates retain secondary/two-way coverage, roster shape, source, and version group. Assistant recommendations retain sibling alternatives, while the roster search keeps cross-position sibling edges and reserves one person in the final 22. The repaired-tree Assistant engine/hook tests pass 36/36 and the seating-proof tests pass 14/14. Independent re-audit remains pending.
+**Second-audit repair evidence:** The unweighted sibling representative pass is removed. All cards enter the weighted optimizer under an exact one-capacity version-group assignment; the padded A/B/C alternating cycle produces the 293 optimum rather than the legal 198 collapse. Assistant passes 21/21, while default Best 22 and archetype callers remain green. Independent re-audit remains pending.
+**Third-audit repair evidence:** The additive assignment is now only a deterministic seed. A separately bounded arbitrary-length simple-cycle pass evaluates actual full-roster legality, exact nonlinear tax, value floor, and fit across all relevant unpinned occupied groups, including singleton intermediaries. Exhausted neighborhoods may report complete; a node, candidate, or improvement-pass cap reports incomplete and Assistant fails closed with `INCOMPLETE_BOARD`. Nonlinear two-cycle and four-cycle regressions are green. Callers without exclusive grouping again use the literal frozen `rosterFitScore(players)` comparison, with nonzero preference/rank omitted-option parity pinned. Independent re-audit remains pending.
+**Fourth-audit repair evidence:** Completion now ANDs every executed value/fit baseline start and both identity starts instead of inheriting only the winning board's flag. Real Assistant regressions cover a capped secondary baseline start and a capped unselected identity start; both fail closed with `INCOMPLETE_BOARD`. Independent re-audit remains pending.
+
+### FINDING-217
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser gate | **Status:** FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN
+**Files:** `SnakeDraftSetupAdapter.tsx:69-89`, `deskModel.ts:173-247`, `SNAKE_DRAFT_VISION_2026-07-10.md:141-160`
+**Evidence:** Setup forces one version before lock although the ratified design allows all selected versions and retires siblings on the first pick; board matching reserves card IDs but not human/version groups during search.
+**Impact:** Users must hand-curate hundreds of cards before entry, and enabling the intended all-version room can false-fail or double-count a person.
+**Action:** Lock all manually retained cards, count unique people in every proof/plan, make matching version-group-aware, and retain the existing first-pick retirement plus correction restoration law.
+**Builder evidence:** New sessions carry all remaining cards with an empty setup-selection map; matching and Assistant plans reserve version groups. Setup is compact, unsaved legacy one-card locks restore/reprice/reprove/relock before Ready, saved sessions retain their frozen path, and the neutral pick ticker disappears on undo with the restored sibling snapshot. Independent re-audit remains pending.
+**Third-audit repair evidence:** Version-group optimization no longer treats an additive assignment as proof of the nonlinear 22-player objective. Deterministic arbitrary-length cycle search either exhausts its declared neighborhood or marks the result incomplete; incomplete Assistant boards are never exposed as ready. Independent re-audit remains pending.
+**Fourth-audit repair evidence:** An incomplete executed search start now propagates even when a different completed roster wins selection. Assistant cannot present READY by discarding the cap state of an unselected baseline or identity start. Independent re-audit remains pending.
+
+**Final independent evidence:** The non-builder auditor returned **APPROVE** with zero actionable findings. Its 48/48 narrow tests and diff-integrity check independently verified completion aggregation, Assistant fail-closed behavior, and absence of diagnostic/test-only production seams. JK's browser re-walk remains the sole product-acceptance gate.

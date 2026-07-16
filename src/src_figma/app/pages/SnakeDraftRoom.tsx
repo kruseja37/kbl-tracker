@@ -45,6 +45,7 @@ import { assembleBoard } from '../../../engines/rosterIntelligencePayload';
 import * as phaseFlags from '../../../utils/franchisePhase2Flags';
 import { useLeagueBuilderData, toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { SnakeDraftRoomView, type SnakeReviewCandidate } from '../components/snake/SnakeDraftRoomView';
+import { buildSnakePickTicker } from '../components/snake/snakePickTicker';
 import { SnakeDraftRecap } from '../components/snake/SnakeDraftRecap';
 import { PrivateDesk } from '../components/snake/desk/PrivateDesk';
 import { SelectedPlayerCard } from '../components/snake/desk/SelectedPlayerCard';
@@ -1218,14 +1219,14 @@ function MlbSnakeDraftRoom() {
     team.id,
     (session?.pickOrder ?? []).slice(session?.currentPickIndex ?? 0).filter((slot) => slot.teamId === team.id).map((slot) => slot.pick),
   ])), [leagueTeams, session]);
-  const ticker = useMemo(() => [...(session?.completedPicks ?? [])].reverse().map((pick) => {
-    const player = playerById.get(pick.playerId);
-    return {
-      id: `${pick.round}-${pick.pick}-${pick.playerId}`,
-      teamId: pick.teamId,
-      text: `PICK #${pick.pick} · ${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`,
-    };
-  }), [leagueTeams, playerById, session]);
+  const ticker = useMemo(() => buildSnakePickTicker({
+    picks: session?.completedPicks ?? [],
+    players,
+    teams: leagueTeams,
+    versionState: session?.versionState,
+    unknownPlayer: UNKNOWN_PLAYER,
+    unknownTeam: UNKNOWN_TEAM,
+  }), [leagueTeams, players, session?.completedPicks, session?.versionState]);
   const latestPick = session?.completedPicks.at(-1);
   const currentBoardPlayerIds = new Set([
     ...(currentBoard?.rankings.global ?? []),

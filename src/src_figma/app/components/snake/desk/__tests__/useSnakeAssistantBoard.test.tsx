@@ -231,6 +231,29 @@ describe('snake assistant board worker hook', () => {
     expect(screen.getByText('team-a')).toBeInTheDocument();
   });
 
+  it('accepts sibling versions in rankings when the final 22 uses that person once', () => {
+    const value = request('sibling-rankings');
+    const sibling = livePlayer(['p-c-career', 'C']);
+    const original = value.input.activePool.find((player) => player.playerId === 'p-c')!;
+    sibling.versionGroupId = original.versionGroupId;
+    sibling.stored.versionGroupId = original.versionGroupId;
+    value.input.activePool.push(sibling);
+    const result = runSnakeAssistantBoardRequest(value);
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.board.recommendationOrder).toContain(original.playerId);
+    expect(result.board.recommendationOrder).toContain(sibling.playerId);
+    expect(result.board.playerIds.filter((playerId) => (
+      playerId === original.playerId || playerId === sibling.playerId
+    ))).toHaveLength(1);
+
+    render(<Harness value={value} />);
+    act(() => FakeWorker.instances[0].onmessage?.({
+      data: { key: value.key, result },
+    } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+  });
+
   it('accepts a canonical READY board with sub-cent-negative money left', () => {
     const value = request('money-epsilon-ready');
     value.input.budget = 109.9999995;

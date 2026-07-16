@@ -1,16 +1,13 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type { SnakeSeatingProof } from '../../../../../engines/snakeSeatingProof';
-import type { Player, Team } from '../../../../../utils/leagueBuilderStorage';
-import { snakePlayerVersionLabel } from '../../../../../utils/snakePlayerIdentity';
+import type { Team } from '../../../../../utils/leagueBuilderStorage';
 import { type SnakeVersionGroup } from './SnakeDraftSetupAdapter.helpers';
 
 const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 
 export interface SnakeDraftSetupAdapterState {
   groups: SnakeVersionGroup[];
-  versionSelections: Record<string, string>;
-  setVersionSelections: Dispatch<SetStateAction<Record<string, string>>>;
   selectedPoolIds: string[];
   gmNames: Record<string, string>;
   setGmNames: Dispatch<SetStateAction<Record<string, string>>>;
@@ -30,10 +27,6 @@ export interface SnakeDraftSetupAdapterState {
   tapOrder: (teamId: string) => void;
   enterDraft: () => Promise<void>;
   enterPractice: () => Promise<void>;
-}
-
-function fullName(player: Player): string {
-  return `${player.firstName} ${player.lastName}`.trim();
 }
 
 function HelpNote({ children }: { children: ReactNode }) {
@@ -66,25 +59,13 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
       <section className="ballpark-panel" aria-label="Snake pool">
         <div className="ballpark-panel-strip"><strong>1 · POOL</strong></div>
         <div className="space-y-3 p-4">
-          {showHelp ? <HelpNote>Pick one card for each real person before you lock the pool. Choose each player version, then LOCK POOL. The room check runs on those locked players and prices.</HelpNote> : null}
+          {showHelp ? <HelpNote>Every card left in the pool enters the room. When one version of a player is drafted, every sibling version retires automatically. Remove cards in the pool shuttle only when you do not want them available at all.</HelpNote> : null}
           {poolSources}
-          {adapter.groups.filter(({ cards }) => cards.length > 1).map(({ groupId, cards }) => (
-            <label key={groupId} className="grid gap-2 sm:grid-cols-[1fr_240px] sm:items-center">
-              <span className="font-bold">{fullName(cards[0]).toUpperCase()}</span>
-              <select
-                aria-label={`PICK A ${fullName(cards[0]).toUpperCase()} CARD`}
-                disabled={disabled || locked}
-                value={adapter.versionSelections[groupId] ?? cards[0].id}
-                onChange={(event) => adapter.setVersionSelections((current) => ({ ...current, [groupId]: event.target.value }))}
-                className="border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2 font-bold"
-              >
-                {cards.map((card) => <option key={card.id} value={card.id}>{(snakePlayerVersionLabel(card, cards) ?? card.overallGrade).toUpperCase()}</option>)}
-              </select>
-            </label>
-          ))}
-          {adapter.groups.every(({ cards }) => cards.length === 1) ? <p className="text-sm">No duplicate player versions in this pool.</p> : null}
+          <p className="font-bold text-[var(--ballpark-brass)]" data-testid="snake-version-count">
+            {adapter.selectedPoolIds.length} CARDS · {adapter.groups.length} PEOPLE
+          </p>
           {poolControls}
-          {locked ? <p className="font-bold text-[var(--ballpark-brass)]">UNLOCK THE POOL TO CHANGE VERSIONS.</p> : null}
+          {locked ? <p className="font-bold text-[var(--ballpark-brass)]">POOL LOCKED</p> : null}
           <button type="button" disabled={disabled || (!locked && lockDisabled)} onClick={locked ? onUnlock : onLock} className="ballpark-press-button ballpark-press-md ballpark-press-gold">
             {locked ? 'UNLOCK POOL' : 'LOCK POOL'}
           </button>

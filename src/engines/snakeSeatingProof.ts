@@ -9,6 +9,7 @@ import {
   type RosterSlotPlayer,
 } from '../data/rosterConstruction';
 import type { LuxuryCapRow } from '../data/tierParams';
+import type { TierKey } from '../data/tierParams';
 import type { SnakeVersionState } from '../utils/leagueBuilderStorage';
 import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import {
@@ -46,6 +47,13 @@ import {
   unavailableVersionPlayerIds,
   type VersionedPlayerIdentity,
 } from './snakeVersioning';
+import {
+  archetypeFitScorer,
+  buildIdentityRoster,
+  identityEmbodiment,
+  type SimArchetype,
+  type SimPlayer,
+} from './archetypeBalanceSimulator';
 
 export interface SnakeSeatingPlayer extends VersionedPlayerIdentity {
   price: number;
@@ -60,6 +68,8 @@ export interface SnakeSeatingClub {
   budgetRemaining: number;
   committedConstruction?: readonly ConstructionPlayer[];
   capIdentity?: TeamCapIdentity;
+  /** Chosen club identity; setup certificates prove all chosen identities simultaneously. */
+  identityArchetype?: SimArchetype;
 }
 
 export interface SnakeSeatingAssignment {
@@ -72,7 +82,7 @@ export interface SnakeSeatingAssignment {
 
 export interface SnakeSeatingShortfall {
   /** Same base fields as POOLFLOOR's positionFloorReasons, extended for joint/money failures. */
-  kind: PositionSupplyFloorKind | 'body-count' | 'joint-assignment' | 'affordability';
+  kind: PositionSupplyFloorKind | 'body-count' | 'joint-assignment' | 'affordability' | 'identity-proof-unknown';
   position: string;
   label: string;
   minimumPerTeam: number;
@@ -81,7 +91,7 @@ export interface SnakeSeatingShortfall {
   needed: number;
   available: number;
   missing: number;
-  reason: 'position-floor' | 'body-count' | 'joint-assignment' | 'affordability';
+  reason: 'position-floor' | 'body-count' | 'joint-assignment' | 'affordability' | 'identity-proof-unknown';
   shortBy: number;
   affectedClubs: number;
 }
@@ -98,6 +108,7 @@ export interface SimultaneousSnakeSeatingInput {
   pool: readonly SnakeSeatingPlayer[];
   baseCaps: readonly LuxuryCapRow[];
   realTeamCount: number;
+  tier?: TierKey;
   versionState?: SnakeVersionState;
 }
 
@@ -267,9 +278,17 @@ export function validateSnakeSeatingProof(
   input: SimultaneousSnakeSeatingInput,
   proof: SnakeSeatingProof,
 ): boolean {
+  if (!validateConstructiveSnakeSeatingProof(input, proof)) return false;
   const rosters = proofRosters(input, proof);
   if (!rosters) return false;
-  const representatives = representativeCards(availableCards(input));
+  const available = availableCards(input);
+  const assignedIds = new Set(proof.assignments.flatMap((assignment) => assignment.playerIds));
+  const assigned = available.filter((player) => assignedIds.has(player.playerId));
+  const assignedGroups = new Set(assigned.map(deriveVersionGroupId));
+  const representatives = [
+    ...assigned,
+    ...representativeCards(available.filter((player) => !assignedGroups.has(deriveVersionGroupId(player)))),
+  ];
   const verified = repairMatchedRosters(input, representatives, rosters);
   if (!verified) return false;
   const expectedByTeamId = new Map(proof.assignments.map((assignment) => [assignment.teamId, assignment]));
@@ -311,6 +330,7 @@ export function validateConstructiveSnakeSeatingProof(
     const usedIds = new Set<string>();
     const usedGroups = new Set<string>();
     const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
+    const finalRosters: SnakeSeatingPlayer[][] = [];
 
     for (const club of input.clubs) {
       const assignment = assignmentByTeamId.get(club.teamId);
@@ -332,7 +352,9 @@ export function validateConstructiveSnakeSeatingProof(
         usedGroups.add(groupId);
       }
       const players = future as SnakeSeatingPlayer[];
-      if (!isLegalRoster([...club.roster, ...players].map((player) => player.shape))) return false;
+      const finalRoster = [...club.roster, ...players];
+      if (!isLegalRoster(finalRoster.map((player) => player.shape))) return false;
+      finalRosters.push(finalRoster);
 
       const shiftedCaps = club.capIdentity
         ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
@@ -355,7 +377,13 @@ export function validateConstructiveSnakeSeatingProof(
         || Math.abs(assignment.allInCost - allInCost) > 1e-6
         || !snakeMoneyAffordable(allInCost, club.budgetRemaining)) return false;
     }
-    return true;
+    const identityAvailable = availableCards(input);
+    return input.clubs.every((club, clubIndex) => identityRosterMeetsCanonicalFloor({
+      seatingInput: input,
+      club,
+      roster: finalRosters[clubIndex],
+      available: identityAvailable,
+    }));
   } catch {
     return false;
   }
@@ -954,6 +982,9 @@ function advanceSnakeSeatingCertificate(input: {
 }
 
 function copyLawMessage(shortfall: SnakeSeatingShortfall): string {
+  if (shortfall.reason === 'identity-proof-unknown') {
+    return 'THIS POOL COULD NOT CERTIFY EVERY CHOSEN IDENTITY TOGETHER. WIDEN THIS BUILD OR CHANGE A SOURCE OR CLUB IDENTITY.';
+  }
   if (shortfall.reason === 'affordability') {
     return `NOT ENOUGH BUDGET ROOM FOR ${shortfall.affectedClubs} CLUB — SHORT ${shortfall.shortBy}.`;
   }
@@ -1120,6 +1151,72 @@ function toGlobalDesignPlayer(player: SnakeSeatingPlayer): DesignPoolPlayer {
       accuracy: pit?.ACC,
     },
   };
+}
+
+function toIdentitySimPlayer(player: SnakeSeatingPlayer): SimPlayer {
+  return {
+    ...player.construction,
+    id: player.playerId,
+    iv: player.price,
+    salary: player.price,
+    position: player.shape.position ?? player.shape.role ?? '',
+    secondaryPosition: player.shape.secondaryPosition ?? null,
+    twoWayVariant: player.shape.twoWayVariant ?? player.construction.twoWayVariant ?? null,
+  };
+}
+
+function uniqueIdentityReference(
+  players: readonly SnakeSeatingPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+): SimPlayer[] {
+  const score = archetypeFitScorer(archetype, tier, 'optimal');
+  const byGroup = new Map<string, SimPlayer>();
+  for (const player of players) {
+    const sim = toIdentitySimPlayer(player);
+    const groupId = deriveVersionGroupId(player);
+    const current = byGroup.get(groupId);
+    if (!current || score(sim) > score(current) + 1e-9
+      || (Math.abs(score(sim) - score(current)) <= 1e-9
+        && (sim.iv > current.iv + 1e-9
+          || (Math.abs(sim.iv - current.iv) <= 1e-9 && sim.id.localeCompare(current.id) < 0)))) {
+      byGroup.set(groupId, sim);
+    }
+  }
+  return [...byGroup.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function identityRosterMeetsCanonicalFloor(input: {
+  seatingInput: SimultaneousSnakeSeatingInput;
+  club: SnakeSeatingClub;
+  roster: readonly SnakeSeatingPlayer[];
+  available: readonly SnakeSeatingPlayer[];
+}): boolean {
+  const archetype = input.club.identityArchetype;
+  if (!archetype) return true;
+  // This certificate is a setup gate. Partial-room proofs deliberately do not infer a surviving
+  // identity from an already drafted roster; room legality remains owned by its normal proof.
+  if (input.club.roster.length > 0 || input.roster.length !== LEGAL_ROSTER.size) return false;
+  const tier = input.seatingInput.tier ?? 'standard';
+  const reference = uniqueIdentityReference(input.available, archetype, tier);
+  const normalizedCaps = snakeLuxuryCaps([...input.seatingInput.baseCaps]);
+  const taxCaps = input.club.capIdentity
+    ? shiftLuxuryCaps([...normalizedCaps], input.club.capIdentity)
+    : [...normalizedCaps];
+  const baseline = buildIdentityRoster(reference, archetype, tier, input.club.budgetRemaining, {
+    realTeamCount: input.seatingInput.realTeamCount,
+    taxCaps,
+    affordabilityLaw: 'snake-money',
+    posture: 'optimal',
+    embodimentReference: reference,
+  });
+  const roster = input.roster.map(toIdentitySimPlayer);
+  const totalIv = roster.reduce((sum, player) => sum + player.iv, 0);
+  return baseline.legalRoster
+    && baseline.solvent
+    && baseline.floorMet
+    && totalIv >= baseline.baselineIv * baseline.valueFloor - 1e-9
+    && identityEmbodiment(roster, archetype, tier, reference).boostZ > 0;
 }
 
 /**
@@ -1648,6 +1745,170 @@ function proveEmptySetupGlobally(
     : null;
 }
 
+type IdentityMatchStrategy = 'seed-fit' | 'fit-value' | 'value-fit' | 'cheap-fit';
+
+function proveIdentitySetupConstructively(
+  input: SimultaneousSnakeSeatingInput,
+  players: readonly SnakeSeatingPlayer[],
+): SnakeSeatingProof | null {
+  if (!input.clubs.every((club) => club.roster.length === 0)
+    || !input.clubs.some((club) => club.identityArchetype)) return null;
+  const tier = input.tier ?? 'standard';
+  const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
+  const contexts = input.clubs.map((club) => {
+    if (!club.identityArchetype) return null;
+    const reference = uniqueIdentityReference(players, club.identityArchetype, tier);
+    const taxCaps = club.capIdentity
+      ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
+      : [...normalizedCaps];
+    const seed = buildIdentityRoster(reference, club.identityArchetype, tier, club.budgetRemaining, {
+      realTeamCount: input.realTeamCount,
+      taxCaps,
+      affordabilityLaw: 'snake-money',
+      posture: 'optimal',
+      embodimentReference: reference,
+    });
+    return {
+      scorer: archetypeFitScorer(club.identityArchetype, tier, 'optimal', reference),
+      seedIds: new Set(seed.players.map((player) => player.id)),
+      zeroVarianceIdentity: seed.embodiment.boostRows.length > 0
+        && seed.embodiment.boostRows.every((row) => row.poolStd <= 0),
+    };
+  });
+  // Exact early impossibility under the canonical strict-z gate: when every boosted cohort has
+  // zero variance, every possible roster has z=0 and no roster can clear the required >0.
+  if (contexts.some((context) => context?.zeroVarianceIdentity)) return null;
+  const slots = buildDefaultDesignSlots();
+  const globalSlots = input.clubs.flatMap((_, clubIndex) => slots.map((slot, localSlotIndex) => ({
+    clubIndex,
+    localSlotIndex,
+    slot,
+  })));
+  const designById = new Map(players.map((player) => [player.playerId, toGlobalDesignPlayer(player)]));
+  const exposure = (player: SnakeSeatingPlayer) => {
+    const bat = player.construction.bat;
+    const pit = player.construction.pit;
+    return bat.POW + bat.CON + bat.SPD + bat.FLD + bat.ARM
+      + (pit?.VEL ?? 0) + (pit?.JNK ?? 0) + (pit?.ACC ?? 0);
+  };
+  const strategies: readonly IdentityMatchStrategy[] = ['seed-fit', 'fit-value', 'value-fit', 'cheap-fit'];
+  const restrictions = [
+    { backupCHittersOnly: false, swingHittersOnly: false },
+    { backupCHittersOnly: true, swingHittersOnly: false },
+    { backupCHittersOnly: false, swingHittersOnly: true },
+    { backupCHittersOnly: true, swingHittersOnly: true },
+  ] as const;
+
+  for (const restriction of restrictions) {
+    for (const strategy of strategies) {
+      const edgesBySlot = globalSlots.map(({ clubIndex, slot }) => {
+        const context = contexts[clubIndex];
+        const bestByGroup = new Map<string, SnakeSeatingPlayer>();
+        const compare = (left: SnakeSeatingPlayer, right: SnakeSeatingPlayer) => {
+          const leftSim = toIdentitySimPlayer(left);
+          const rightSim = toIdentitySimPlayer(right);
+          const leftSeed = Number(context?.seedIds.has(left.playerId) ?? false);
+          const rightSeed = Number(context?.seedIds.has(right.playerId) ?? false);
+          const leftFit = context?.scorer(leftSim) ?? 0;
+          const rightFit = context?.scorer(rightSim) ?? 0;
+          if (strategy === 'seed-fit') return rightSeed - leftSeed || rightFit - leftFit
+            || right.price - left.price || left.playerId.localeCompare(right.playerId);
+          if (strategy === 'fit-value') return rightFit - leftFit || right.price - left.price
+            || left.playerId.localeCompare(right.playerId);
+          if (strategy === 'value-fit') return right.price - left.price || rightFit - leftFit
+            || left.playerId.localeCompare(right.playerId);
+          return left.price - right.price || exposure(left) - exposure(right)
+            || rightFit - leftFit || left.playerId.localeCompare(right.playerId);
+        };
+        for (const player of players) {
+          if (restriction.backupCHittersOnly && slot.kind === 'backupC' && player.shape.isPitcher) continue;
+          if (restriction.swingHittersOnly && slot.kind === 'swing' && player.shape.isPitcher) continue;
+          if (!isDesignPlayerEligibleForSlot(slot, designById.get(player.playerId)!)) continue;
+          const groupId = deriveVersionGroupId(player);
+          const current = bestByGroup.get(groupId);
+          if (!current || compare(player, current) < 0) bestByGroup.set(groupId, player);
+        }
+        return [...bestByGroup.entries()]
+          .map(([groupId, player]) => ({ groupId, player }))
+          .sort((left, right) => compare(left.player, right.player));
+      });
+
+      for (const reverseOrder of [false, true]) {
+        const slotOrder = globalSlots.map((_, slotIndex) => slotIndex).sort((left, right) => (
+          edgesBySlot[left].length - edgesBySlot[right].length
+          || (reverseOrder ? right - left : left - right)
+        ));
+        const ownerSlotByGroup = new Map<string, number>();
+        const cardByGroup = new Map<string, SnakeSeatingPlayer>();
+        const assign = (slotIndex: number, seenGroups: Set<string>): boolean => {
+          for (const edge of edgesBySlot[slotIndex]) {
+            if (seenGroups.has(edge.groupId)) continue;
+            seenGroups.add(edge.groupId);
+            const ownerSlot = ownerSlotByGroup.get(edge.groupId);
+            if (ownerSlot !== undefined && !assign(ownerSlot, seenGroups)) continue;
+            ownerSlotByGroup.set(edge.groupId, slotIndex);
+            cardByGroup.set(edge.groupId, edge.player);
+            return true;
+          }
+          return false;
+        };
+        if (slotOrder.some((slotIndex) => !assign(slotIndex, new Set()))) continue;
+        const groupBySlot = new Map([...ownerSlotByGroup.entries()].map(([groupId, slotIndex]) => [slotIndex, groupId]));
+        const rosters = input.clubs.map((_, clubIndex) => globalSlots
+          .map((globalSlot, slotIndex) => ({ globalSlot, groupId: groupBySlot.get(slotIndex) }))
+          .filter(({ globalSlot }) => globalSlot.clubIndex === clubIndex)
+          .map(({ groupId }) => groupId ? cardByGroup.get(groupId) : undefined)
+          .filter((player): player is SnakeSeatingPlayer => Boolean(player)));
+        if (rosters.some((roster) => roster.length !== LEGAL_ROSTER.size
+          || !isLegalRoster(roster.map((player) => player.shape)))) continue;
+
+        const assignedCardByGroup = new Map(rosters.flatMap((roster) => roster.map((player) => [
+          deriveVersionGroupId(player),
+          player,
+        ] as const)));
+        const repairRepresentativeByGroup = new Map<string, SnakeSeatingPlayer>(assignedCardByGroup);
+        for (const player of [...players].sort((left, right) => (
+          left.price - right.price || exposure(left) - exposure(right) || left.playerId.localeCompare(right.playerId)
+        ))) {
+          const groupId = deriveVersionGroupId(player);
+          if (!repairRepresentativeByGroup.has(groupId)) repairRepresentativeByGroup.set(groupId, player);
+        }
+        const assignments = repairMatchedRosters(input, [...repairRepresentativeByGroup.values()], rosters);
+        if (!assignments) continue;
+        const proof: SnakeSeatingProof = {
+          feasible: true,
+          assignments,
+          shortfall: null,
+          message: 'EVERY CLUB CAN FINISH A LEGAL, AFFORDABLE 22 THAT FITS ITS CHOSEN IDENTITY.',
+        };
+        // Bounded search may miss a certificate; it may never mint one. This independent seam
+        // rechecks unique people, roster law, exact money, optimal-posture value floor, and strict
+        // positive embodiment before SUCCESS can reach Lock or GO.
+        if (validateConstructiveSnakeSeatingProof(input, proof)) return proof;
+      }
+    }
+  }
+  return null;
+}
+
+function identityProofUnknown(clubCount: number): SnakeSeatingProof {
+  const shortfall: SnakeSeatingShortfall = {
+    kind: 'identity-proof-unknown',
+    position: 'IDENTITY',
+    label: 'CHOSEN IDENTITIES',
+    minimumPerTeam: 0,
+    teams: clubCount,
+    slack: 0,
+    needed: clubCount,
+    available: 0,
+    missing: 0,
+    reason: 'identity-proof-unknown',
+    shortBy: 0,
+    affectedClubs: clubCount,
+  };
+  return { feasible: false, assignments: [], shortfall, message: copyLawMessage(shortfall) };
+}
+
 /**
  * Constructive simultaneous proof. Success is a certificate: every returned roster is verified by
  * the canonical law, every reserved human is disjoint, and each completion fits salary plus the
@@ -1660,6 +1921,18 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
   const necessary = setupFloorShortfall(input.clubs, remaining)
     ?? namedNecessaryShortfall(input.clubs, remaining);
   if (necessary) return { feasible: false, assignments: [], shortfall: necessary, message: copyLawMessage(necessary) };
+
+  if (input.clubs.every((club) => club.roster.length === 0)
+    && input.clubs.some((club) => club.identityArchetype)) {
+    const identityProof = proveIdentitySetupConstructively(input, remaining);
+    if (identityProof) return identityProof;
+    const ordinaryInput: SimultaneousSnakeSeatingInput = {
+      ...input,
+      clubs: input.clubs.map((club) => ({ ...club, identityArchetype: undefined })),
+    };
+    const ordinaryProof = proveSimultaneousSnakeSeating(ordinaryInput);
+    return ordinaryProof.feasible ? identityProofUnknown(input.clubs.length) : ordinaryProof;
+  }
 
   const globalSetupProof = proveEmptySetupGlobally(input, remaining);
   if (globalSetupProof) return globalSetupProof;

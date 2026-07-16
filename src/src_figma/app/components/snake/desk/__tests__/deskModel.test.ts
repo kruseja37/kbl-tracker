@@ -281,7 +281,7 @@ describe('private desk model', () => {
     expect(fit(fourteenEightPool)).toEqual(fourteenEight);
   });
 
-  it('rejects an otherwise complete refit that seats two cards from one version group', () => {
+  it('treats sibling cards as alternatives and finds a complete unique-person refit', () => {
     const pool = fullPool();
     const board = buildSeededSeatBoard(pool).board!;
     const duplicateVersionIds = Object.values(board.slots).slice(0, 2);
@@ -291,13 +291,17 @@ describe('private desk model', () => {
     const refit = refitBoardSlots({ candidates: versionedPool, rankings: board.rankings });
 
     expect(refit.brokenSlots).toEqual([]);
-    expect(refit.invalidRoster).toBe(true);
+    expect(refit.invalidRoster).toBe(false);
+    const selectedGroups = Object.values(refit.slots).map((id) => (
+      versionedPool.find((row) => row.id === id)?.versionGroupId ?? `player:${id}`
+    ));
+    expect(new Set(selectedGroups).size).toBe(22);
     expect(reorderSeatBoardRankings({
       board,
       view: 'OVERALL',
       orderedIds: board.rankings.global,
       candidates: versionedPool,
-    })).toMatchObject({ board: null, invalidRoster: true });
+    })).toMatchObject({ invalidRoster: false, brokenSlots: [] });
   });
 
   it('never moves a hand-touched survivor and only backfills the unavailable slot from the GM ranking', () => {

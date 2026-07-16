@@ -415,6 +415,33 @@ describe('buildBest22Target', () => {
     expect(noRankOverrides.picks.map((pick) => pick.playerId)).toEqual(emptyRankOverrides.picks.map((pick) => pick.playerId));
   });
 
+  it('R4: omitting the version-group option preserves the frozen nonzero ask/rank default path', () => {
+    const gmPreferred = simPlayer('gm-preferred-ss', { position: 'SS', isPitcher: false });
+    const pool = legalPool([gmPreferred]);
+    const slots = buildDefaultDesignSlots().map((slot) =>
+      slot.slotId === 'SS'
+        ? { ...slot, preference: { shape: 'Defensive-Wizard', allowRunnerUp: false } }
+        : slot,
+    );
+    const classes = classifiedById(pool, { 'gm-preferred-ss': classification('Defensive-Wizard') });
+    const ranks = new Map([['SS', ['gm-preferred-ss', 'ss']]]);
+    const omitted = buildBest22Target(
+      slots, pool, classes, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20, undefined, ranks,
+    );
+    const explicitUndefined = buildBest22Target(
+      slots, pool, classes, NEUTRAL_ARCHETYPE, TIER, SOLVENT_BUDGET, 20, undefined, ranks,
+      undefined, undefined, 'strict', undefined,
+    );
+
+    expect(omitted).toEqual(explicitUndefined);
+    expect(omitted.picks.map((pick) => pick.playerId)).toEqual([
+      'c', '1b', '2b', '3b', 'gm-preferred-ss', 'lf', 'cf', 'rf', 'backup-c',
+      'sp-0', 'sp-1', 'sp-2', 'sp-3', 'rp-0', 'rp-1', 'rp-2', 'cp-0',
+      'ss', 'bench-0', 'bench-1', 'bench-2', 'bench-3',
+    ]);
+    expect(omitted.asksHonored).toEqual({ honored: 1, asked: 1 });
+  });
+
   it('A3: an ask that would break solvency stays advisory and the floor verdict is unchanged', () => {
     const expensiveFlex = { ...simPlayer('expensive-flex', { position: 'LF', isPitcher: false }), salary: 100_000_000 };
     const pool = legalPool([expensiveFlex]);

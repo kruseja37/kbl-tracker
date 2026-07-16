@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import { LUXURY_CAP_TABLES } from '../../../data/tierParams';
-import { proveSimultaneousSnakeSeating } from '../../../engines/snakeSeatingProof';
+import { proveSimultaneousSnakeSeating, type SnakeSeatingProof } from '../../../engines/snakeSeatingProof';
 import type { RegisteredPool } from '../../../engines/leagueConstruction';
 import {
   buildInitialSnakeSeatBoards,
@@ -50,8 +50,7 @@ describe('SnakeDraftSetupAdapter', () => {
     const missingTeamId = 'setup-internal-team-key-51';
     const adapter = {
       groups: [],
-      versionSelections: {},
-      setVersionSelections: vi.fn(),
+      selectedPoolIds: [],
       gmNames: {},
       setGmNames: vi.fn(),
       seatModes: {},
@@ -70,16 +69,43 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(document.body.innerHTML).not.toContain(missingTeamId);
   });
 
-  test('chooses exactly one historical version before lock', () => {
+  test('locks every historical version and stores no setup-time selection', () => {
     const ruthA = makePlayer(1, { id: 'ruth-a', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);
     const ruthB = makePlayer(2, { id: 'ruth-b', firstName: 'Babe', lastName: 'Ruth', sourceId: 'lahman:ruthba01' } as never);
     const mays = makePlayer(3, { id: 'mays', firstName: 'Willie', lastName: 'Mays', sourceId: 'lahman:mayswi01' } as never);
     const groups = deriveSnakeVersionGroups([ruthA, ruthB, mays]);
-    const ruthGroup = groups.find(({ cards }) => cards.length === 2)!;
-    expect(selectedSnakePoolIds(groups, { [ruthGroup.groupId]: 'ruth-b' })).toEqual(['ruth-b', 'mays']);
-    expect(lockedSnakeVersionSelections(groups, ['ruth-b', 'mays'])).toEqual({
-      [ruthGroup.groupId]: 'ruth-b',
-    });
+    expect(selectedSnakePoolIds(groups, {})).toEqual(['ruth-a', 'ruth-b', 'mays']);
+    expect(lockedSnakeVersionSelections(groups, ['ruth-a', 'ruth-b', 'mays'])).toEqual({});
+  });
+
+  test('shows only the compact cards-and-people count, keeping version inventory and retirement explanation behind Help', () => {
+    const cards = (['Career', 'Peak', 'Draft Pool'] as const).map((historicalProfileType, index) => (
+      makePlayer(index + 1, {
+        id: `aaron-${index}`,
+        firstName: 'Hank',
+        lastName: 'Aaron',
+        versionGroupId: 'historical:aaron',
+        historicalProfileType,
+      })
+    ));
+    const adapter = {
+      groups: deriveSnakeVersionGroups(cards),
+      selectedPoolIds: cards.map((card) => card.id),
+      gmNames: {}, setGmNames: vi.fn(), seatModes: {}, setSeatModes: vi.fn(),
+      seed: 'test', setSeed: vi.fn(), order: [], swapFirst: null,
+      shuffleOrder: vi.fn(), tapOrder: vi.fn(),
+    } as unknown as Parameters<typeof SnakeDraftSetupPanels>[0]['adapter'];
+    const view = render(<SnakeDraftSetupPanels adapter={adapter} teams={[]} locked={false} disabled={false} />);
+
+    expect(screen.getByTestId('snake-version-count')).toHaveTextContent('3 CARDS · 1 PEOPLE');
+    expect(screen.queryByText('HANK AARON')).not.toBeInTheDocument();
+    expect(screen.queryByText('CAREER')).not.toBeInTheDocument();
+    expect(screen.queryByText('PEAK')).not.toBeInTheDocument();
+    expect(screen.queryByText('DRAFT POOL')).not.toBeInTheDocument();
+    expect(screen.queryByText(/retires automatically/i)).not.toBeInTheDocument();
+    view.rerender(<SnakeDraftSetupPanels adapter={adapter} teams={[]} locked={false} disabled={false} showHelp />);
+    expect(screen.getByText(/retires automatically/i)).toBeInTheDocument();
+    expect(screen.queryByText('HANK AARON')).not.toBeInTheDocument();
   });
 
   test('groups imported Career, Peak, and Draft cards by stable historical identity', () => {
@@ -125,6 +151,44 @@ describe('SnakeDraftSetupAdapter', () => {
 
     expect(buildLockedSnakeSeatingPlayers({ players: withTwoWay, pool: locked })
       .find((player) => player.playerId === target.id)?.construction.twoWayVariant).toBe('C');
+  });
+
+  test('materializes a certified board through Two Way catcher coverage and version identity', () => {
+    const base = makeLegalRosterPlayers(10_000);
+    const backup = base.find((player) => player.id === 'legal-backup-c')!;
+    const starter = base.find((player) => player.primaryPosition === 'SP')!;
+    const players = rosterLocalTaxFixture(base.map((player) => {
+      if (player.id === backup.id) return { ...player, secondaryPosition: undefined };
+      if (player.id === starter.id) {
+        return {
+          ...player,
+          trait1: 'Two Way (C)',
+          sourceId: 'historical:two-way-catcher',
+          versionGroupId: 'historical:two-way-catcher',
+        };
+      }
+      return { ...player, versionGroupId: `person:${player.id}` };
+    }));
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: players.map((player) => player.id),
+        salaryCost: players.length * 1_000,
+        addedTax: 0,
+        allInCost: players.length * 1_000,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+
+    const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: locked, certificate });
+    const plannedIds = Object.values(boards[team.id].slots);
+    expect(plannedIds).toHaveLength(22);
+    expect(new Set(plannedIds.map((id) => players.find((player) => player.id === id)?.versionGroupId ?? id)).size).toBe(22);
+    expect(plannedIds).toContain(starter.id);
   });
 
   test('passes each chosen archetype cap identity into the simultaneous proof', () => {
@@ -241,14 +305,15 @@ describe('SnakeDraftSetupAdapter', () => {
       makePlayer(405, { id: 'epsilon-floor-cp', primaryPosition: 'CP' }),
     ]);
     const widePool = pool(players, 1_000);
+    const moneyOnlyTeam = makeTeam('team-a', { mlbArchetypeKey: undefined });
     const certificate = proveSimultaneousSnakeSeating(
-      buildSnakeSetupProofInput({ teams: [makeTeam('team-a')], players, pool: widePool }),
+      buildSnakeSetupProofInput({ teams: [moneyOnlyTeam], players, pool: widePool }),
     );
     expect(certificate.feasible, certificate.message).toBe(true);
     const allInCost = certificate.assignments[0].allInCost;
     const locked = { ...widePool, tierCap: allInCost - 0.0000005 };
     const boards = buildInitialSnakeSeatBoards({
-      teams: [makeTeam('team-a')],
+      teams: [moneyOnlyTeam],
       players,
       pool: locked,
       certificate,

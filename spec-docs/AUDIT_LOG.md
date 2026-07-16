@@ -1280,3 +1280,92 @@ relief cases are pinned. The separate non-builder audit returned **VERIFIED**, w
 findings: 6/6 recalibration, exact `9e5901d7` ablation 1/1, 186/186 surrounding tests, 72/72 parity
 rosters and 48/48 identity rosters legal/solvent, independently reproduced lower bounds, and clean
 TypeScript/lint/diff gates. JK's browser walk remains open.
+
+### 2026-07-16 Draft Setup browser-gate feedback — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-214 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Snake player editor | Shared editor mounted in Snake; builder component gates and independent audit are green. |
+| FINDING-215 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Shaped pool / chosen identities | Live unique-person identity certificate, honest UNKNOWN, BUILD-scoped widening, actual-mode persistence, and source-role diagnostics are independently approved. |
+| FINDING-216 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Setup certificate / board parity | Cross-position sibling alternatives survive the bounded nonlinear search while final legal plans reserve one person; incomplete search fails closed. |
+| FINDING-217 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Legends version handling | Compact all-card setup, safe unsaved-legacy migration, sibling-retirement ticker, undo removal, and fail-closed version optimization are independently approved. |
+
+Contract: `contracts/CONTRACT_DRAFT_SETUP_BROWSER_FIXES_2026-07-16.md`. Builder and auditor are
+different agents. No commit, merge, or deploy is authorized; JK's browser re-walk remains the sole
+product-acceptance gate.
+
+Builder repair handoff after the first rejected audit: all seven deltas are implemented. The exact
+repaired-tree focused matrix passes 8 files / 187 tests, TypeScript and changed-file ESLint are
+green, the post-lint seating-proof delta passes 14/14, and diff integrity is clean. Production build
+was not rerun by coordinator instruction. This
+is builder evidence only: the original non-builder auditor must recheck the frozen tree, and JK's
+browser re-walk remains the sole product-acceptance gate. No commit, merge, push, or deploy is
+authorized.
+
+### 2026-07-16 Draft Setup second independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with three Majors and no Blockers: Assistant could
+pre-collapse sibling cards to a legal non-optimal 198 assignment instead of the 293 weighted
+optimum; Full Sources could persist a removal that its hard keep restored; and Full Sources UNKNOWN
+copy fell back to shaped-pool guidance after reload or a receipt-clearing manual edit.
+
+The original builder removed the pre-collapse and placed exact one-capacity version-group matching
+inside the weighted identity optimizer, cleaned the Full Sources removal ledger from final
+membership before state/persistence, and keyed UNKNOWN copy to persisted `poolAssemblyMode`.
+Builder gates are Assistant 21/21, residual Full Sources 2/2, combined optimizer/default-caller/UI
+78/78, TypeScript, changed-file ESLint, and diff integrity. Production build was not run by
+coordinator instruction. This is builder evidence only; status remains **BUILT — INDEPENDENT
+RE-AUDIT PENDING**. No commit, merge, push, or deploy is authorized, and JK's browser re-walk
+remains the product-acceptance gate. The original target worktree and its pre-existing
+`archetypeBalanceSimulator.ts` collision remain untouched.
+
+### 2026-07-16 Draft Setup third independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with two Majors: the additive exact assignment did
+not exhaust arbitrary-length nonlinear roster exchanges, and optional slot-preference scoring
+changed the default no-group Best 22 path.
+
+The original builder retained the assignment. Exclusive-version optimization now uses the additive
+assignment only as a seed, then runs a separately capped deterministic simple-cycle search over all
+relevant unpinned occupied groups and evaluates the actual legality, nonlinear tax, value-floor,
+and fit objectives. Cap or pass exhaustion marks the result incomplete and Assistant fails closed;
+two-cycle, four-cycle, and deterministic cap-hit regressions are pinned. The no-group path again
+uses literal `rosterFitScore(players)`, with omitted-option parity under nonzero preference/rank
+inputs.
+
+Builder gates are 12 changed test files / 246 tests, optimizer/default/Assistant 51/51, exact-tree
+TypeScript, all-changed-file ESLint, diff integrity, and a successful 2,729-module production build.
+Full-repository lint still reports 939 pre-existing problems outside the changed-file gate. This is
+builder evidence only; status remains **BUILT — INDEPENDENT RE-AUDIT PENDING**. No commit, merge,
+push, or deploy is authorized. The target worktree remains untouched, and JK's browser re-walk is
+the sole product-acceptance gate.
+
+### 2026-07-16 Draft Setup fourth independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with one Major: completion followed only the
+winning baseline/identity board, so a cap hit in an executed but unselected start could be discarded
+and Assistant could report READY.
+
+The original builder retained the narrow repair. Baseline completion now ANDs every executed value
+and fit start; identity completion ANDs both identity starts. The winning board is still selected by
+the existing objective and feasibility rules, but any incomplete executed start propagates
+`optimizationComplete=false` and Assistant fails closed. Two real Assistant regressions isolate the
+secondary baseline start and the unselected identity start respectively. The identity regression's
+test-only 10-second timeout accommodates deliberate exhaustion of the unchanged 250,000-candidate
+production cap; no product timeout or cap changed.
+
+Builder gates are focused simulator/Assistant 31/31, exact-tree TypeScript, narrow changed-file
+ESLint, and diff integrity. The prior production build remains green; it was not rerun because only
+about 1.58 GiB remained. This is builder evidence only; status remains **BUILT — INDEPENDENT
+RE-AUDIT PENDING**. No commit, merge, push, or deploy occurred. The external target worktree now
+points to clean `codex/home-bar-proportions` at `7ba9922f`; the builder did not modify tracked files
+there. JK's browser re-walk remains the sole product-acceptance gate.
+
+### 2026-07-16 Draft Setup final independent re-audit — APPROVE
+
+The same non-builder auditor returned **APPROVE** with zero actionable findings. Baseline completion
+ANDs every executed value/fit start, identity completion ANDs both identity starts, and either capped
+unselected start forces Assistant `INCOMPLETE_BOARD` independently of the winning board. The
+auditor's narrow run passed 48/48 tests and `git diff --check`; no diagnostic or test-only production
+seam was found. This is code-audit approval only. JK's browser re-walk remains the sole
+product-acceptance gate. No commit, merge, push, or deploy occurred.

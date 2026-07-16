@@ -1165,6 +1165,44 @@ describe('extractPoolFromDemand', () => {
     expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'pinned', 'reserved']);
   });
 
+  it('preserves every chosen-identity claim across Tight, Competitive, and Loose shaping', () => {
+    const source = universe();
+    for (const poolSizeMultiplier of [1.2, 1.35, 1.5]) {
+      const result = extractPoolFromDemand(source, [], archetypes, 'standard', {
+        teams: 2,
+        budgetPerTeam: 5_000_000,
+        poolSizeMultiplier,
+        preserveSelectedIdentityClaims: true,
+      });
+      const selected = new Set(result.players.map((player) => player.id));
+      expect(result.floors.claimedIds.length).toBeGreaterThan(0);
+      expect(result.floors.claimedIds.every((id) => selected.has(id))).toBe(true);
+      expect(result.floors.verdicts.every((verdict) => verdict.band !== 'LOCKED')).toBe(true);
+    }
+  });
+
+  it('does not let a manual removal silently defeat a chosen identity claim', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.2,
+      preserveSelectedIdentityClaims: true,
+    });
+    const claimedId = baseline.floors.claimedIds[0];
+    expect(claimedId).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.2,
+      excludedIds: [claimedId],
+      preserveSelectedIdentityClaims: true,
+    });
+    expect(result.players.map((player) => player.id)).toContain(claimedId);
+    expect(result.sizing?.messages.some((message) => message.includes('chosen club identities require'))).toBe(true);
+  });
+
   it('uses salary-desc then id-asc only inside equal-fit trim ties', () => {
     const players = [
       { id: 'b-cheap', salary: 100 },
@@ -1520,7 +1558,7 @@ describe('extractPoolFromDemand', () => {
   });
 
   it('force-includes pins, protects them from trim, and withholds excludes', () => {
-    const source = universe();
+    const source = [...universe(), ...shapedHitters('manual-headroom', 100, MIDDLE_CORE)];
     // Keep source headroom in this pin/exclude fixture; the production 1.50 default deliberately
     // consumes its entire tiny universe and would leave no outside player to pin.
     const fixtureMultiplier = 1.25;

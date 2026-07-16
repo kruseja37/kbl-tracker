@@ -1,12 +1,13 @@
 /* Pure snake setup calculations shared by setup UI, room recovery, and focused tests. */
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
-import { isLegalRoster, twoWayVariantFromTraits } from '../../../../../data/rosterConstruction';
+import { canCover, isLegalRoster, twoWayVariantFromTraits } from '../../../../../data/rosterConstruction';
 import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool, type TeamCapIdentity } from '../../../../../engines/leagueConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import { archetypeToCapIdentity, constructionArchetypeFitMultiplier, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
 import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
+import { historicalToSimArchetype } from '../../../../../engines/draftabilityRanker';
 import {
   auctionSinglePlayerTaxWithShiftedCaps,
 } from '../../../../../engines/auctionLuxuryTax';
@@ -48,6 +49,8 @@ export interface SnakeSetupAdapterInput {
   poolPlayers: Player[];
   pool: RegisteredPool | null;
   hasSavedDraft: boolean;
+  /** Unsaved one-card legacy pool is being restored and re-proved before it may enter a room. */
+  legacyMigrationPending?: boolean;
   savedDraftChecked: boolean;
   savedDraftLookupError: string | null;
   flushBoardRankings: () => Promise<Team[]>;
@@ -90,24 +93,19 @@ export function deriveSnakeVersionGroups(poolPlayers: readonly Player[]): SnakeV
 
 export function selectedSnakePoolIds(
   groups: readonly SnakeVersionGroup[],
-  selections: Readonly<Record<string, string>>,
+  _selections: Readonly<Record<string, string>> = {},
 ): string[] {
-  return groups.map(({ groupId, cards }) => (
-    cards.find((card) => card.id === selections[groupId])?.id ?? cards[0].id
-  ));
+  void _selections;
+  return groups.flatMap(({ cards }) => cards.map((card) => card.id));
 }
 
 export function lockedSnakeVersionSelections(
-  groups: readonly SnakeVersionGroup[],
-  lockedPlayerIds: readonly string[],
+  _groups: readonly SnakeVersionGroup[],
+  _lockedPlayerIds: readonly string[],
 ): Record<string, string> {
-  const locked = new Set(lockedPlayerIds);
-  return Object.fromEntries(groups
-    .filter(({ cards }) => cards.length > 1)
-    .map(({ groupId, cards }) => [
-      groupId,
-      cards.find((card) => locked.has(card.id))?.id ?? cards[0].id,
-    ]));
+  void _groups;
+  void _lockedPlayerIds;
+  return {};
 }
 
 function capIdentityForTeam(team: Team) {
@@ -115,6 +113,13 @@ function capIdentityForTeam(team: Team) {
     ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === team.mlbArchetypeKey)
     : undefined;
   return archetype ? archetypeToCapIdentity(archetype) : team.capIdentity;
+}
+
+function identityArchetypeForTeam(team: Team) {
+  const archetype = team.mlbArchetypeKey
+    ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === team.mlbArchetypeKey)
+    : undefined;
+  return archetype ? historicalToSimArchetype(archetype) : undefined;
 }
 
 export function buildLockedSnakeSeatingPlayers(input: {
@@ -152,10 +157,12 @@ export function buildSnakeSetupProofInput(input: {
       roster: [],
       budgetRemaining: input.pool.tierCap,
       capIdentity: capIdentityForTeam(team),
+      identityArchetype: identityArchetypeForTeam(team),
     })),
     pool: buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }),
     baseCaps: input.pool.luxuryCaps,
     realTeamCount: input.teams.length,
+    tier: input.pool.tier,
   };
 }
 
@@ -186,6 +193,14 @@ function boardCandidate(input: {
     id: input.player.id,
     name: fullName(input.player).toUpperCase(),
     position: input.player.primaryPosition,
+    eligiblePositions: [...new Set([
+      ...input.roomPlayer.eligiblePositions,
+      ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+        .filter((position) => canCover(input.roomPlayer.shape, position)),
+    ])],
+    rosterShape: input.roomPlayer.shape,
+    sourceId: input.roomPlayer.sourceId,
+    versionGroupId: input.roomPlayer.versionGroupId,
     advisorWorth: computeOwnValue({
       iv: input.iv,
       archetypeWeights: input.roomPlayer.archetypeWeights,
@@ -300,8 +315,18 @@ export function buildInitialSnakeSeatBoards(input: {
       }
     }
     const fullRankings = buildSeededSeatBoard(candidates).board?.rankings;
-    if (!completion.feasible || !seeded.board || !affordable(seeded.board) || !fullRankings) {
-      throw new Error(`Could not seed ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
+    if (!completion.feasible) {
+      throw new Error(`Could not prove ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
+    }
+    if (!seeded.board || !affordable(seeded.board) || !fullRankings) {
+      const state = seeded.brokenSlots.length > 0
+        ? `broken slots ${seeded.brokenSlots.join(', ')}`
+        : !seeded.board
+          ? 'no canonical 22-slot assignment'
+          : !affordable(seeded.board)
+            ? 'the materialized board is not affordable under the certified cap identity'
+            : 'the complete pool could not produce canonical rankings';
+      throw new Error(`Snake board seeding disagreed with the legal-finish certificate for ${team.name}: ${state}.`);
     }
     const overrides = team.boardRankOverrides;
     const plannedIds = SNAKE_BOARD_SLOT_IDS.flatMap((slotId) => seeded.board?.slots[slotId] ?? []);

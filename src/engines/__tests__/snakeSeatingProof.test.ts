@@ -7,6 +7,7 @@ import {
   createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
   proveSnakePickKeepsAllClubsSeated,
+  validateConstructiveSnakeSeatingProof,
   validateSnakeSeatingProof,
   type SnakeSeatingPlayer,
 } from '../snakeSeatingProof';
@@ -77,6 +78,69 @@ const clubs = ['a', 'b'].map((teamId) => ({
 }));
 
 describe('simultaneous snake seating proof', () => {
+  test('mints setup SUCCESS only for disjoint legal money-safe rosters that meet each chosen identity', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const identityPool = [
+      ...oneClubPool('identity-a'),
+      ...oneClubPool('identity-b'),
+      ...floorSlackExtras('identity-slack'),
+    ].map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.playerId.startsWith('identity-slack') || player.shape.isPitcher ? 5 : 95,
+        },
+      },
+    }));
+    const sibling = {
+      ...identityPool[0],
+      playerId: `${identityPool[0].playerId}-peak`,
+      sourceId: identityPool[0].sourceId,
+      construction: { ...identityPool[0].construction, id: `${identityPool[0].playerId}-peak` },
+    };
+    const poolWithSibling = [...identityPool, sibling];
+    const input = {
+      clubs: clubs.map((club) => ({ ...club, identityArchetype: powerIdentity })),
+      pool: poolWithSibling,
+      baseCaps: [],
+      realTeamCount: 2,
+      tier: 'standard' as const,
+    };
+
+    const result = proveSimultaneousSnakeSeating(input);
+
+    expect(result.feasible).toBe(true);
+    expect(result.message).toContain('FITS ITS CHOSEN IDENTITY');
+    expect(validateConstructiveSnakeSeatingProof(input, result)).toBe(true);
+    expect(validateSnakeSeatingProof(input, result)).toBe(true);
+    const assignedGroups = result.assignments.flatMap((assignment) => assignment.playerIds)
+      .map((playerId) => poolWithSibling.find((player) => player.playerId === playerId)!)
+      .map((player) => player.sourceId);
+    expect(new Set(assignedGroups)).toHaveLength(44);
+  });
+
+  test('reports bounded identity uncertainty separately from a proven legal impossibility', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const result = proveSimultaneousSnakeSeating({
+      clubs: clubs.map((club) => ({ ...club, identityArchetype: powerIdentity })),
+      pool: [...oneClubPool('same-a'), ...oneClubPool('same-b'), ...floorSlackExtras('same-slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+      tier: 'standard',
+    });
+
+    expect(result.feasible).toBe(false);
+    expect(result.shortfall).toMatchObject({
+      kind: 'identity-proof-unknown',
+      reason: 'identity-proof-unknown',
+      missing: 0,
+    });
+    expect(result.message).toContain('COULD NOT CERTIFY EVERY CHOSEN IDENTITY TOGETHER');
+    expect(result.message).not.toMatch(/SHORT|MISSING|LACKS/);
+  });
+
   test('shared-scarcity joint-fail: counting passes but both clubs need the same C-covering SS human', () => {
     const sharedFlex = card('shared-flex-SS', {
       isPitcher: false,

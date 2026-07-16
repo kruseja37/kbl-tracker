@@ -117,8 +117,6 @@ function readyBoardMatchesRequest(
     const selectedId = selectedByGroup[deriveVersionGroupId(playerVersionIdentity(player))];
     return !selectedId || selectedId === player.playerId;
   });
-  const versionValidGroups = versionValidPool.map((player) => deriveVersionGroupId(playerVersionIdentity(player)));
-  if (new Set(versionValidGroups).size !== versionValidGroups.length) return false;
   const pickedIds = new Set(input.completedPicks.map((pick) => pick.playerId));
   const draftedGroups = new Set(input.completedPicks.map((pick) => (
     deriveVersionGroupId(playerVersionIdentity(poolById.get(pick.playerId)!))
@@ -166,10 +164,6 @@ function readyBoardMatchesRequest(
     || new Set(board.recommendationOrder).size !== board.recommendationOrder.length
     || board.recommendationOrder.some((playerId) => !allowedIds.has(playerId))
     || board.playerIds.some((playerId) => !board.recommendationOrder.includes(playerId))) return false;
-  const recommendationGroups = board.recommendationOrder.map((playerId) => (
-    deriveVersionGroupId(playerVersionIdentity(poolById.get(playerId)!))
-  ));
-  if (new Set(recommendationGroups).size !== recommendationGroups.length) return false;
   let plan;
   try {
     plan = evaluateSnakePlan({

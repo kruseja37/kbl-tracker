@@ -207,6 +207,12 @@ describe("LeagueBuilderDraftSetup", () => {
     await clickDraftSetupButton("BUILD COMPETITIVE POOL");
     const options = await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.35);
     expect(options.poolSizeMultiplier).toBe(1.35);
+    expect(await screen.findByText(/BUILT FULL SELECTED SOURCES · AUTO-WIDENED FROM COMPETITIVE/i, {}, { timeout: 12_000 }))
+      .toHaveTextContent(/300 PLAYERS · CHOSEN IDENTITIES NOT YET CERTIFIED TOGETHER/i);
+    expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+      id: "league-page",
+      poolAssemblyMode: "full-sources",
+    }));
   }, 20_000);
 
   test("FULL SOURCES loads the exact selected source union instead of running the curve", async () => {
@@ -289,6 +295,124 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(within(assembly).getByRole("button", { name: /FULL SOURCES.*49/i })).toBeInTheDocument();
     });
   }, 20_000);
+
+  test("FULL SOURCES clears a restored hard keep from the visible and persisted removal ledger", async () => {
+    const sourcePlayers = makePositionDiversePlayers(50, 2, "full-ledger").map((player) => ({
+      ...player,
+      leagueAssignments: [{ leagueId: "source-league", teamId: "", rosterStatus: "FREE_AGENT" as const }],
+    }));
+    const removed = sourcePlayers[0];
+    const restoredHardKeep = sourcePlayers[1];
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      poolAssemblyMode: "full-sources",
+      sourceLeagueIds: ["source-league"],
+      snakeIncludeUnassignedSourcePlayers: false,
+      poolFirstHandRemoves: [removed.id, restoredHardKeep.id],
+      salaryCap: 10_000_000,
+    });
+    window.sessionStorage.setItem(
+      "kbl:draft-pool-provenance:league-page:snake:pool-first",
+      JSON.stringify({
+        engineGeneratedIds: [],
+        userAddedIds: [],
+        manualExcludedIds: [removed.id, restoredHardKeep.id],
+        seedProtectedIds: [restoredHardKeep.id],
+        generationNonce: 0,
+      }),
+    );
+    mockLeagueData({
+      league,
+      leagues: [league, makeLeague({ id: "source-league", name: "Source", teamIds: [] })],
+      players: sourcePlayers,
+      pool: makePool({ locked: false, players: [], totalSlots: 44 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+    await clickDraftSetupButton("BUILD FULL SOURCES");
+
+    await waitFor(() => {
+      expect(vi.mocked(saveLeagueTemplate).mock.calls.some(([saved]) =>
+        saved.poolFirstHandRemoves?.length === 1
+        && saved.poolFirstHandRemoves[0] === removed.id)).toBe(true);
+    });
+    const addedIds = vi.mocked(addPlayersToLeaguePool).mock.calls
+      .map(([ids]) => ids)
+      .find((ids) => ids.includes(restoredHardKeep.id));
+    expect(addedIds).toContain(restoredHardKeep.id);
+    expect(addedIds).not.toContain(removed.id);
+    expect(await screen.findByText(/0 ADDED · 1 REMOVED/i)).toBeInTheDocument();
+  }, 20_000);
+
+  test("persisted FULL SOURCES UNKNOWN copy survives reload state and a manual edit with no receipt", async () => {
+    const players = makePositionDiversePlayers(80, 2, "full-copy");
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      poolAssemblyMode: "full-sources",
+      salaryCap: 10_000_000,
+    });
+    mockLeagueData({
+      league,
+      players,
+      pool: makePool({
+        locked: false,
+        players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: 44,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const fullSourceUnknown = /FULL SELECTED SOURCES COULD NOT CERTIFY.*ADD OR CHANGE A DRAFT POOL SOURCE/i;
+    expect(await screen.findByText(fullSourceUnknown)).toBeInTheDocument();
+    expect(screen.queryByText(/THIS SHAPED POOL COULD NOT CERTIFY/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: /^Select /i })[0]);
+    await clickDraftSetupButton("Remove");
+
+    expect(await screen.findByText(fullSourceUnknown)).toBeInTheDocument();
+    expect(screen.queryByText(/THIS SHAPED POOL COULD NOT CERTIFY/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^BUILT /i)).not.toBeInTheDocument();
+  }, 20_000);
+
+  test("a persisted auto-resolved Full Sources build reloads honestly and trips an older shaped basis", async () => {
+    const players = makePositionDiversePlayers(70, 2, "resolved-full");
+    const league = makeLeague({
+      draftFormat: "snake",
+      draftPoolMode: "pool-first",
+      poolAssemblyMode: "full-sources",
+      snakePoolSizeMultiplier: 1.5,
+      poolExtractedAt: "2026-07-16T00:00:00.000Z",
+      poolExtractedBasis: {
+        cap: 10_000_000,
+        poolSizeMultiplier: 1.35,
+        shills: 0,
+        identityByTeamId: { "team-a": "murderers-row", "team-b": "murderers-row" },
+        poolQualityCenter: 68,
+        poolBalancePreset: "balanced",
+        poolAssemblyMode: "shape-to-teams",
+        includeUnassignedSourcePlayers: true,
+      },
+      salaryCap: 10_000_000,
+    });
+    mockLeagueData({
+      league,
+      players,
+      pool: makePool({
+        locked: true,
+        players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+        totalSlots: 44,
+      }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const assembly = await screen.findByTestId("snake-pool-assembly");
+    expect(within(assembly).getByRole("button", { name: /FULL SOURCES/i })).toHaveAttribute("aria-pressed", "true");
+    expect(await screen.findByText(/THE POOL BUILD CHANGED/i)).toBeInTheDocument();
+  });
 
   test("VERSION-LABELS: identical Legend names stay distinguishable by Draft, Career, and Peak profile", async () => {
     const versions = ([

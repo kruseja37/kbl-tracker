@@ -200,15 +200,23 @@ export function refitBoardSlots(input: {
       || (canonicalIndex.get(left) ?? 0) - (canonicalIndex.get(right) ?? 0)
   ));
 
-  const canMatchEverySlot = (slotIds: readonly SnakeBoardSlotId[], reserved: ReadonlySet<string>): boolean => {
-    const playerOwner = new Map<string, SnakeBoardSlotId>();
-    const tryAssign = (slotId: SnakeBoardSlotId, visitedPlayers: Set<string>): boolean => {
+  // FINDING-217: a version group, not a card id, is the scarce matching resource.
+  // Different sibling cards may expose different positions, so the augmenting path still
+  // walks cards while ownership is reserved at the one-person group level.
+  const versionGroupByPlayerId = new Map([...byId.entries()].map(([playerId, candidate]) => [
+    playerId,
+    candidateVersionGroupId(candidate),
+  ]));
+  const canMatchEverySlot = (slotIds: readonly SnakeBoardSlotId[], reservedGroups: ReadonlySet<string>): boolean => {
+    const groupOwner = new Map<string, SnakeBoardSlotId>();
+    const tryAssign = (slotId: SnakeBoardSlotId, visitedGroups: Set<string>): boolean => {
       for (const playerId of rankedBySlot.get(slotId) ?? []) {
-        if (reserved.has(playerId) || visitedPlayers.has(playerId)) continue;
-        visitedPlayers.add(playerId);
-        const owner = playerOwner.get(playerId);
-        if (owner && !tryAssign(owner, visitedPlayers)) continue;
-        playerOwner.set(playerId, slotId);
+        const groupId = versionGroupByPlayerId.get(playerId);
+        if (!groupId || reservedGroups.has(groupId) || visitedGroups.has(groupId)) continue;
+        visitedGroups.add(groupId);
+        const owner = groupOwner.get(groupId);
+        if (owner && !tryAssign(owner, visitedGroups)) continue;
+        groupOwner.set(groupId, slotId);
         return true;
       }
       return false;
@@ -217,20 +225,21 @@ export function refitBoardSlots(input: {
   };
 
   const assigned = new Map<SnakeBoardSlotId, string>();
-  const used = new Set<string>();
-  const fullyFeasible = canMatchEverySlot(assignmentOrder, used);
+  const usedGroups = new Set<string>();
+  const fullyFeasible = canMatchEverySlot(assignmentOrder, usedGroups);
   for (const [index, slotId] of assignmentOrder.entries()) {
     const remainingSlots = assignmentOrder.slice(index + 1);
     for (const playerId of rankedBySlot.get(slotId) ?? []) {
-      if (used.has(playerId)) continue;
+      const groupId = versionGroupByPlayerId.get(playerId);
+      if (!groupId || usedGroups.has(groupId)) continue;
       if (fullyFeasible) {
-        used.add(playerId);
-        if (!canMatchEverySlot(remainingSlots, used)) {
-          used.delete(playerId);
+        usedGroups.add(groupId);
+        if (!canMatchEverySlot(remainingSlots, usedGroups)) {
+          usedGroups.delete(groupId);
           continue;
         }
       } else {
-        used.add(playerId);
+        usedGroups.add(groupId);
       }
       assigned.set(slotId, playerId);
       break;

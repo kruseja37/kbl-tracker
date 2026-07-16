@@ -161,7 +161,10 @@ function positionScopesForSlot(slot: DesignSlot): readonly TaxonomyPosition[] {
     case 'cp':
       return ['CP'];
     case 'swing':
-      return POSITION_GROUPS;
+      // SWING's positional job is staff flexibility. Hitter bench preferences arrive through the
+      // global board; importing C here ties a secondary catcher's backup-C bonus at an unrelated
+      // slot and defeats the GM's named job.
+      return ['SP', 'SP/RP', 'RP', 'CP'];
   }
 }
 
@@ -184,9 +187,13 @@ function buildOptimizerRankings(
   slots.forEach((slot, slotIndex) => {
     const optimizerPosition = optimizerSlotPosition(slot);
     if (ranks.has(optimizerPosition)) return;
+    const positionRanked = positionScopesForSlot(slot).flatMap((position) => gmRanks?.byPosition?.[position] ?? []);
     const ordered = [
-      ...positionScopesForSlot(slot).flatMap((position) => gmRanks?.byPosition?.[position] ?? []),
-      ...(gmRanks?.global ?? []),
+      // Generic FLEX membership follows the global board first. Otherwise a player ranked for a
+      // specific job (notably a secondary catcher on the C board) receives the same rank bonus in
+      // FLEX and can tie away the exact slot the GM named.
+      ...(slot.kind === 'flex' ? gmRanks?.global ?? [] : positionRanked),
+      ...(slot.kind === 'flex' ? positionRanked : gmRanks?.global ?? []),
       ...assembledPlayerIds,
     ];
     const seen = new Set<string>();
@@ -275,12 +282,6 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     const selectedId = selectedByGroup[deriveVersionGroupId(identityOf(player))];
     return !selectedId || selectedId === player.playerId;
   });
-  const groupCounts = new Map<string, number>();
-  for (const player of versionValidPool) {
-    const groupId = deriveVersionGroupId(identityOf(player));
-    groupCounts.set(groupId, (groupCounts.get(groupId) ?? 0) + 1);
-  }
-  if ([...groupCounts.values()].some((count) => count > 1)) return unavailable('VERSION_CONFLICT');
 
   const picksById = new Map(input.completedPicks.map((pick) => [pick.playerId, pick]));
   const ownPicks = input.completedPicks.filter((pick) => pick.teamId === input.teamId);
@@ -296,8 +297,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     && !draftedGroups.has(deriveVersionGroupId(identityOf(player))));
   const universe = [...ownPicks.map((pick) => byId.get(pick.playerId)!), ...available];
 
-  if (universe.some((player) => rivalIds.has(player.playerId))
-    || new Set(universe.map((player) => deriveVersionGroupId(identityOf(player)))).size !== universe.length) {
+  if (universe.some((player) => rivalIds.has(player.playerId))) {
     return unavailable('VERSION_CONFLICT');
   }
   const selectedPin = input.selectedPinPlayerId ?? null;
@@ -307,26 +307,38 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   const requiredIds = [...new Set([...ownIds, ...(selectedPin ? [selectedPin] : [])])].sort();
   const requiredPlayers = requiredIds.map((playerId) => byId.get(playerId)).filter((player): player is SnakeAssistantBoardPlayer => Boolean(player));
   if (requiredPlayers.length !== requiredIds.length) return unavailable('PIN_UNAVAILABLE');
+  if (new Set(requiredPlayers.map((player) => deriveVersionGroupId(identityOf(player)))).size !== requiredPlayers.length) {
+    return unavailable('PIN_UNMATCHED');
+  }
   const pins = deterministicPinMatching(input.slots, requiredPlayers);
   if (!pins || pins.size !== requiredIds.length) return unavailable('PIN_UNMATCHED');
 
   const ownStoredPlayers = ownPicks.map((pick) => byId.get(pick.playerId)!.stored);
   const need = rosterNeedBreakdown(ownPicks.map((pick) => byId.get(pick.playerId)!.seating.shape));
+  const worthById = new Map(universe.map((player) => [player.playerId, computeOwnValue({
+    iv: player.frozenIv,
+    archetypeWeights: player.archetypeWeights,
+    ownBandPriorities: input.ownBandPriorities,
+    archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
+      input.capIdentity,
+      player.seating.construction,
+    ),
+    needBreakdown: need,
+    shape: player.seating.shape,
+    openSlots: Math.max(1, 22 - ownPicks.length),
+  })]));
+  // The weighted 22-player optimizer receives every sibling card plus an exact one-capacity group
+  // constraint. No feasibility-only representative pass may discard the globally better card
+  // combination before the Assistant objective sees it.
+  const optimizerUniverse = universe;
+  const exclusiveGroupByPlayerId = new Map(optimizerUniverse.map((player) => [
+    player.playerId,
+    deriveVersionGroupId(identityOf(player)),
+  ]));
   const assembled = assembleBoard({
     candidates: universe.map((player) => ({
       playerId: player.playerId,
-      iv: computeOwnValue({
-        iv: player.frozenIv,
-        archetypeWeights: player.archetypeWeights,
-        ownBandPriorities: input.ownBandPriorities,
-        archetypeFitMultiplierOverride: constructionArchetypeFitMultiplier(
-          input.capIdentity,
-          player.seating.construction,
-        ),
-        needBreakdown: need,
-        shape: player.seating.shape,
-        openSlots: Math.max(1, 22 - ownPicks.length),
-      }),
+      iv: worthById.get(player.playerId) ?? player.frozenIv,
       candidate: player.stored,
       shape: player.seating.shape,
     })),
@@ -336,11 +348,11 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   });
   const optimizer = buildOptimizerRankings(
     input.slots,
-    universe,
+    optimizerUniverse,
     assembled.map((entry) => entry.playerId),
     input.gmRankOverrides,
   );
-  const simPool: SimPlayer[] = universe.map((player) => ({
+  const simPool: SimPlayer[] = optimizerUniverse.map((player) => ({
     ...player.simPlayer,
     id: player.playerId,
     // The identity optimizer's 90% value floor is literal frozen IV. Contextual
@@ -351,7 +363,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
       ? ownPicks.find((pick) => pick.playerId === player.playerId)!.settledSalary!
       : player.frozenIv,
   }));
-  const classifiedById = new Map(universe.map((player) => [player.playerId, player.classification]));
+  const classifiedById = new Map(optimizerUniverse.map((player) => [player.playerId, player.classification]));
 
   let target;
   try {
@@ -360,11 +372,13 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
       : snakeLuxuryCaps([...input.baseCaps]);
     target = buildBest22Target(optimizer.slots, simPool, classifiedById, input.archetype, input.tier,
       input.budget, input.realTeamCount, pins, optimizer.ranks, taxCaps,
-      new Map(universe.map((player) => [player.playerId, player.frozenIv])), 'snake-money');
+      new Map(optimizerUniverse.map((player) => [player.playerId, player.frozenIv])), 'snake-money',
+      exclusiveGroupByPlayerId);
   } catch {
     return unavailable('INCOMPLETE_BOARD');
   }
   if (!allNumbersFinite(target)) return unavailable('INVALID_NUMERIC_INPUT');
+  if (target.optimizationComplete === false) return unavailable('INCOMPLETE_BOARD');
   if (target.pins.dropped.length || target.pins.honored.length !== requiredIds.length) return unavailable('DROPPED_PIN');
   const playerIds = target.picks.map((pick) => pick.playerId);
   if (playerIds.length !== 22 || playerIds.some((playerId) => !playerId)
@@ -402,12 +416,19 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   if (!allNumbersFinite(plan)) return unavailable('INVALID_NUMERIC_INPUT');
   if (!target.feasible || !snakeMoneyNonnegative(plan.planCushion)) return unavailable('INSOLVENT_BOARD');
 
+  const assembledIds = new Set(assembled.map((entry) => entry.playerId));
+
   return {
     status: 'ready',
     teamId: input.teamId,
     slots: target.picks.map((pick) => ({ slotId: pick.slotId, playerId: pick.playerId, pinned: pick.pinned })),
     playerIds,
-    recommendationOrder: assembled.map((entry) => entry.playerId),
+    recommendationOrder: [
+      ...assembled.map((entry) => entry.playerId),
+      ...universe
+        .map((player) => player.playerId)
+        .filter((playerId) => !assembledIds.has(playerId)),
+    ],
     plan,
   };
 }

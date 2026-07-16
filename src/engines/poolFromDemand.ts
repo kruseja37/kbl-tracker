@@ -1960,6 +1960,7 @@ export function extractPoolFromDemand(
     poolSourceMode?: PoolSourceMode;
     priorityIds?: string[];
     designPriorityIds?: string[];
+    preserveSelectedIdentityClaims?: boolean;
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
@@ -2057,14 +2058,22 @@ export function extractPoolFromDemand(
   for (const { player } of classified) {
     if (reservedIds.has(player.id)) byId.set(player.id, player);
   }
+  const preserveSelectedIdentityClaims = options.preserveSelectedIdentityClaims ?? false;
+  const identityClaimedIds = new Set(preserveSelectedIdentityClaims ? floors.claimedIds : []);
+  const structuralFloorIds = new Set(preserveSelectedIdentityClaims ? floors.floorIds : []);
   const explicitProtectedIdsForExclusions = new Set<string>([
     ...reservedIds,
+    ...identityClaimedIds,
+    ...structuralFloorIds,
     ...(handReconcileEnabled ? requestedPinnedIds : []),
   ]);
   const effectiveExcludedIds = new Set(
     [...requestedExcludedIds].filter((id) => !explicitProtectedIdsForExclusions.has(id)),
   );
-  if (!sizingEnabled) {
+  // FINDING-215: selected identities and structural roster floors are hard membership,
+  // including in numeric-shaping mode. The shaper may grow past its nominal target, but it
+  // may never make a chosen club identity disappear by treating its exact build as a soft score.
+  if (!sizingEnabled || preserveSelectedIdentityClaims) {
     for (const player of floors.players as DemandUniversePlayer[]) {
       if (!byId.has(player.id)) byId.set(player.id, player);
     }
@@ -2094,6 +2103,8 @@ export function extractPoolFromDemand(
     });
     const protectedIds = new Set<string>([
       ...reservedIds,
+      ...identityClaimedIds,
+      ...structuralFloorIds,
       ...(handReconcileEnabled ? requestedPinnedIds : []),
       ...requestedDesignPriorityIds,
     ]);
@@ -2147,6 +2158,14 @@ export function extractPoolFromDemand(
       messages.push(trimClampMessage(target, target.effectiveTarget, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
     }
     messages.push(...numericShape.messages);
+    const identityOverrideCount = [...requestedExcludedIds]
+      .filter((id) => identityClaimedIds.has(id))
+      .length;
+    if (identityOverrideCount > 0) {
+      messages.push(
+        `${identityOverrideCount} manual removal${identityOverrideCount === 1 ? '' : 's'} stayed in because chosen club identities require ${identityOverrideCount === 1 ? 'that player' : 'those players'}.`,
+      );
+    }
     if (numericShape.quotaShortfalls.length > 0) {
       messages.push(
         `numeric grade quota shortfalls reported in ${numericShape.quotaShortfalls.length} role/window bucket${numericShape.quotaShortfalls.length === 1 ? '' : 's'}; fallback stayed deterministic and did not silently overfill stars or scrubs.`,

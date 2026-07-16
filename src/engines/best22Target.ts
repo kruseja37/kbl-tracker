@@ -46,6 +46,8 @@ export interface Best22Target {
   allIn: number;
   budget: number;
   feasible: boolean;
+  /** False when the bounded exclusive-group optimizer could not exhaust its cycle neighborhood. */
+  optimizationComplete?: boolean;
   embodimentZ: number;
   asksHonored: { honored: number; asked: number };
 }
@@ -211,6 +213,7 @@ export function buildBest22Target(
   taxCaps?: readonly LuxuryCapRow[],
   displayIvByPlayerId?: ReadonlyMap<string, number>,
   affordabilityLaw: 'strict' | 'snake-money' = 'strict',
+  exclusiveGroupByPlayerId?: ReadonlyMap<string, string>,
 ): Best22Target {
   const fitScore = archetypeFitScorer(archetype, tier, 'optimal', simPool);
   const u = meanStd(simPool.map(fitScore)).std || 1;
@@ -264,6 +267,7 @@ export function buildBest22Target(
     pinned: buildPins,
     taxCaps,
     affordabilityLaw,
+    exclusiveGroupByPlayerId,
   });
 
   let asked = 0;
@@ -328,6 +332,7 @@ export function buildBest22Target(
     allIn: build.totalSalary + build.totalTax,
     budget,
     feasible: build.legalRoster && build.solvent && build.floorMet,
+    optimizationComplete: build.optimizationComplete,
     embodimentZ: build.embodiment.boostZ,
     asksHonored: { honored, asked },
   };
