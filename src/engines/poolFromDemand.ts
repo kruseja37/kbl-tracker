@@ -1420,10 +1420,11 @@ function makeMaxFitOf(
   selectedArchetypes: readonly HistoricalArchetype[],
   tier: TierKey,
   posture: RosterPosture,
+  universe: readonly DemandUniversePlayer[],
 ): (player: DemandUniversePlayer) => number {
   if (selectedArchetypes.length === 0) return () => 0;
   const scorers = selectedArchetypes.map((archetype) =>
-    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture),
+    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture, universe),
   );
   return (player) => Math.max(...scorers.map((score) => score(player)));
 }
@@ -2082,7 +2083,7 @@ export function extractPoolFromDemand(
   let g1: PoolG1Result | undefined;
   let numericShape: NumericPoolShapeDiagnostics | undefined;
   let positionSupplyFloors: PositionSupplyFloorResult[] = [];
-  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture);
+  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture, universe);
 
   if (sizingEnabled) {
     const target = resolvePoolSizingTarget({

@@ -31541,6 +31541,9 @@ compatibility check only.
 - `src/engines/auctionLuxuryTax.ts`
 - `src/engines/archetypeIdentity.ts`
 - `src/engines/archetypeBalanceSimulator.ts`
+- `src/engines/best22Target.ts`
+- `src/engines/draftPoolExtractor.ts`
+- `src/engines/poolFromDemand.ts`
 - `src/engines/__tests__/leagueConstruction.test.ts`
 - `src/engines/__tests__/snakeLuxuryTax.test.ts`
 - `src/engines/__tests__/auctionLuxuryTax.test.ts`
@@ -31554,6 +31557,7 @@ compatibility check only.
 - focused setup-adapter tests
 - `src/src_figma/app/components/snake/desk/deskModel.ts`
 - `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/pages/LeagueBuilderAuctionDraft.tsx`
 - focused Snake desk-model tests
 - `spec-docs/PROMPT_CONTRACTS.md`
 - `spec-docs/DECISIONS_LOG.md`

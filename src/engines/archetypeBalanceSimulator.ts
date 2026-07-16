@@ -19,6 +19,7 @@
  * higher-value roster under the same algorithm reveals a real imbalance.
  */
 import {
+  assignLuxuryTaxPitchingGroups,
   luxuryTax,
   luxuryRowPlayerRating,
   playerEligibleForLuxuryRow,
@@ -225,7 +226,26 @@ function shortlist(
  * when a player loads the bands the archetype RAISED and stays light where it LOWERED them. The shift
  * fraction is read straight off the shifted-vs-base caps so it tracks whatever the archetype does.
  */
-function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => number {
+type AssignedPitchingGroup = 'rotation' | 'bullpen';
+
+function assignedPitchingGroupById(players: readonly SimPlayer[]): ReadonlyMap<string, AssignedPitchingGroup> {
+  const assigned = assignLuxuryTaxPitchingGroups([...players]);
+  return new Map<string, AssignedPitchingGroup>([
+    ...assigned.rotation.map((player) => [player.id, 'rotation'] as const),
+    ...assigned.bullpen.map((player) => [player.id, 'bullpen'] as const),
+  ]);
+}
+
+function defaultPitchingGroup(player: SimPlayer): AssignedPitchingGroup {
+  if (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP') return 'bullpen';
+  return 'rotation';
+}
+
+function makeFitScore(
+  caps: LuxuryCapRow[],
+  tier: TierKey,
+  pitchingGroupById?: ReadonlyMap<string, AssignedPitchingGroup>,
+): (p: SimPlayer) => number {
   const base = LUXURY_CAP_TABLES[tier];
   const frac = new Map<string, number>();
   caps.forEach((row, i) => {
@@ -234,12 +254,19 @@ function makeFitScore(caps: LuxuryCapRow[], tier: TierKey): (p: SimPlayer) => nu
   });
   const f = (group: string, stat: string) => frac.get(`${group}/${stat}`) ?? 0;
   return (p: SimPlayer) => {
-    const pitcherGroup = p.role === 'RP' || p.role === 'CP' ? 'bullpen' : 'rotation';
+    const pitcherGroup = pitchingGroupById?.get(p.id) ?? defaultPitchingGroup(p);
     return caps.reduce((score, row) => {
       if (p.isPitcher && row.group !== 'hitters' && row.group !== pitcherGroup) return score;
       if (!playerEligibleForLuxuryRow(p, row, caps)) return score;
       return score + luxuryRowPlayerRating(p, row, caps) * f(row.group, row.stat);
     }, 0);
+  };
+}
+
+function makeRosterFitScore(caps: LuxuryCapRow[], tier: TierKey): (players: SimPlayer[]) => number {
+  return (players) => {
+    const fitScore = makeFitScore(caps, tier, assignedPitchingGroupById(players));
+    return players.reduce((sum, player) => sum + fitScore(player), 0);
   };
 }
 
@@ -464,7 +491,12 @@ function weightedCaps(caps: LuxuryCapRow[], tier: TierKey, boostWeight: number):
   });
 }
 
-function cohortOf(key: string, players: SimPlayer[], tier: TierKey): number[] {
+function cohortOf(
+  key: string,
+  players: SimPlayer[],
+  tier: TierKey,
+  pitchingGroupById: ReadonlyMap<string, AssignedPitchingGroup>,
+): number[] {
   const [group, stat] = key.split('/');
   const caps = LUXURY_CAP_TABLES[tier];
   const row = caps.find((candidate) => candidate.group === group && candidate.stat === stat);
@@ -472,7 +504,7 @@ function cohortOf(key: string, players: SimPlayer[], tier: TierKey): number[] {
   return players.filter((player) => {
     if (!playerEligibleForLuxuryRow(player, row, caps)) return false;
     if (group === 'hitters') return true;
-    return group === 'rotation' ? canStart(player) : canRelieve(player);
+    return pitchingGroupById.get(player.id) === group;
   }).map((player) => luxuryRowPlayerRating(player, row, caps));
 }
 
@@ -496,9 +528,11 @@ export function identityEmbodiment(
   pool: SimPlayer[],
 ): EmbodimentReport {
   const frac = capShiftFractions(archetypeCaps(archetype, tier), tier);
+  const rosterPitchingGroupById = assignedPitchingGroupById(players);
+  const poolPitchingGroupById = assignedPitchingGroupById(pool);
   const rowFor = (key: string): EmbodimentRow => {
-    const rosterCohort = cohortOf(key, players, tier);
-    const poolCohort = cohortOf(key, pool, tier);
+    const rosterCohort = cohortOf(key, players, tier, rosterPitchingGroupById);
+    const poolCohort = cohortOf(key, pool, tier, poolPitchingGroupById);
     const rosterMean = meanStd(rosterCohort).mean;
     const { mean: poolMean, std: poolStd } = meanStd(poolCohort);
     return { key, rosterMean, poolMean, poolStd, z: poolStd > 0 ? (rosterMean - poolMean) / poolStd : 0 };
@@ -684,6 +718,7 @@ function constrainedIdentityClimb(
   budget: number,
   floorIv: number,
   fitScore: (p: SimPlayer) => number,
+  rosterFitScore: (players: SimPlayer[]) => number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
   pinnedSlots?: ReadonlySet<number>,
 ): SlotPick[] {
@@ -696,8 +731,8 @@ function constrainedIdentityClimb(
     const over = Math.max(0, rosterCost(players, caps) - budget);
     const short = Math.max(0, floorIv - iv);
     const illegal = players.length === LEGAL_ROSTER.size && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
-    const fit = players.reduce(
-      (s, p, idx) => s + fitScore(p) + (slotBonus?.(p.id, picks[idx].slotIndex) ?? 0),
+    const fit = rosterFitScore(players) + players.reduce(
+      (sum, player, idx) => sum + (slotBonus?.(player.id, picks[idx].slotIndex) ?? 0),
       0,
     );
     return { violation: illegal + over + short, fit };
@@ -818,6 +853,10 @@ export function buildIdentityRoster(
     weightedCaps(archetypeCaps(archetype, tier), tier, params.boostFitWeight),
     tier,
   );
+  const rosterFitScore = makeRosterFitScore(
+    weightedCaps(archetypeCaps(archetype, tier), tier, params.boostFitWeight),
+    tier,
+  );
 
   const slotBonus = options.slotPreferenceBonus;
   const pinnedBySlot = normalizeIdentityPins(pool, options.pinned);
@@ -829,6 +868,7 @@ export function buildIdentityRoster(
     budget,
     floorIv,
     fitScore,
+    rosterFitScore,
     slotBonus,
     pinnedSlots,
   );
@@ -843,6 +883,7 @@ export function buildIdentityRoster(
     budget,
     floorIv,
     fitScore,
+    rosterFitScore,
     slotBonus,
     pinnedSlots,
   );
@@ -862,7 +903,7 @@ export function buildIdentityRoster(
         ? snakeMoneyNonnegative(budget - totalSalary - totalTax)
         : totalSalary + totalTax <= budget,
       floorMet: totalIv >= floorIv - 1e-9,
-      fit: players.reduce((s, p) => s + fitScore(p), 0),
+      fit: rosterFitScore(players),
     };
   };
   const a = evaluate(idFromFit);
@@ -903,7 +944,12 @@ export function archetypeFitScorer(
   archetype: SimArchetype,
   tier: TierKey,
   posture: RosterPosture = 'optimal',
+  assignmentContext?: readonly SimPlayer[],
 ): (p: SimPlayer) => number {
   const caps = archetypeCaps(archetype, tier);
-  return makeFitScore(weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight), tier);
+  return makeFitScore(
+    weightedCaps(caps, tier, POSTURE_PARAMS[posture].boostFitWeight),
+    tier,
+    assignmentContext ? assignedPitchingGroupById(assignmentContext) : undefined,
+  );
 }

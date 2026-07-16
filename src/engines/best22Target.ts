@@ -212,7 +212,7 @@ export function buildBest22Target(
   displayIvByPlayerId?: ReadonlyMap<string, number>,
   affordabilityLaw: 'strict' | 'snake-money' = 'strict',
 ): Best22Target {
-  const fitScore = archetypeFitScorer(archetype, tier, 'optimal');
+  const fitScore = archetypeFitScorer(archetype, tier, 'optimal', simPool);
   const u = meanStd(simPool.map(fitScore)).std || 1;
   const { report: pinValidationReport, buildPins } = validatePins(slots, simPool, pins);
 

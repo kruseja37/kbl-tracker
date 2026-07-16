@@ -130,4 +130,28 @@ describe('usage-aware identity fit', () => {
     expect(report.boostRows[0].rosterMean).toBe(99);
     expect(report.boostZ).toBeGreaterThan(0);
   });
+
+  it('assigns stock SP/RP Two Way identity to the same single group as settlement', () => {
+    const starters = Array.from({ length: 4 }, (_, index) => player({
+      id: `starter-${index}`,
+      pit: { VEL: 10, JNK: 0, ACC: 0 },
+    }));
+    const fenomeno = loadPool().find((candidate) => candidate.id === 'crc-fenomeno')!;
+    const context = [...starters, fenomeno];
+    const rotationVelocity: SimArchetype = { name: 'Rotation VEL', rawShift: { 'rotation/VEL': 0.2 } };
+    const bullpenVelocity: SimArchetype = { name: 'Bullpen VEL', rawShift: { 'bullpen/VEL': 0.2 } };
+
+    expect(fenomeno.twoWayVariant).toBe('IF');
+    expect(fenomeno.role).toBe('SP/RP');
+    expect(archetypeFitScorer(rotationVelocity, 'standard', 'optimal', context)(fenomeno)).toBe(0);
+    expect(archetypeFitScorer(bullpenVelocity, 'standard', 'optimal', context)(fenomeno)).toBeCloseTo(
+      (fenomeno.pit?.VEL ?? 0) * 0.2,
+      8,
+    );
+
+    const rotationReport = identityEmbodiment(context, rotationVelocity, 'standard', context);
+    const bullpenReport = identityEmbodiment(context, bullpenVelocity, 'standard', context);
+    expect(rotationReport.boostRows[0].rosterMean).toBe(10);
+    expect(bullpenReport.boostRows[0].rosterMean).toBe(fenomeno.pit?.VEL);
+  });
 });

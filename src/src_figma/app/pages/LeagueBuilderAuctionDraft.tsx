@@ -1547,14 +1547,22 @@ export function LeagueBuilderAuctionDraft() {
         return player && auctionPlayer ? playerToSimPlayer(player, auctionPlayer.iv) : null;
       })
       .filter((player): player is SimPlayer => Boolean(player));
+    const identityRosterBeforeLot = [...identityRoster];
     if (lotPlayer && lotAuction) {
       identityRoster.push(playerToSimPlayer(lotPlayer, lotAuction.iv));
     }
     const identityArchetype = resolveAuctionWhisperIdentityArchetype(team);
     const identityZByPlayerId = identityArchetype && comparisonPool.length > 0
       ? (() => {
-          const scorer = archetypeFitScorer(identityArchetype, identityTier);
-          const scoredPool = comparisonPool.map((player) => ({ player, score: scorer(player) }));
+          const scoredPool = comparisonPool.map((player) => ({
+            player,
+            score: archetypeFitScorer(
+              identityArchetype,
+              identityTier,
+              'optimal',
+              [...identityRosterBeforeLot, player],
+            )(player),
+          }));
           const mean = scoredPool.reduce((sum, item) => sum + item.score, 0) / scoredPool.length;
           const variance = scoredPool.reduce((sum, item) => sum + (item.score - mean) ** 2, 0) / scoredPool.length;
           const sigma = Math.sqrt(variance);
