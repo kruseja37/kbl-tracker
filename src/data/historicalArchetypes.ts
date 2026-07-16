@@ -95,7 +95,7 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'flamethrowers', name: 'Flamethrowers', exemplars: ['1963 Dodgers (Koufax/Drysdale)'], era: '1960s',
     lore: 'Koufax–Drysdale heat, with just enough damage from the pitcher spot.', identity: '+rotation velocity +starter hitting → −lineup power −contact',
-    boosts: ['ROT_VEL', 'ROT_POW', 'ROT_CON'], nerfs: ['POW', 'CON'], spec: { ROT_VEL: 2, ROT_POW: 1, ROT_CON: 1, POW: -1, CON: -1 },
+    boosts: ['ROT_VEL', 'ROT_POW', 'ROT_CON'], nerfs: ['POW', 'CON'], spec: { ROT_VEL: 2, ROT_POW: 3, ROT_CON: 3, POW: -1, CON: -1 },
   },
   {
     id: 'nasty-boys', name: 'Nasty Boys', exemplars: ['1990 Reds'], era: '1990',
@@ -105,7 +105,7 @@ export const HISTORICAL_ARCHETYPES: HistoricalArchetype[] = [
   {
     id: 'hdh-royals', name: 'HDH Royals', exemplars: ['2014 Royals', '2015 Royals'], era: '2010s',
     lore: 'The starters put the ball in play, then a precise bullpen shortens the game.', identity: '+bullpen command +speed +starter contact → −lineup power −rotation command',
-    boosts: ['PEN_ACC', 'SPD', 'ROT_CON'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 0.3, SPD: 1, ROT_CON: 1, POW: -0.5, ROT_ACC: -0.25 },
+    boosts: ['PEN_ACC', 'SPD', 'ROT_CON'], nerfs: ['POW', 'ROT_ACC'], spec: { PEN_ACC: 0.3, SPD: 1, ROT_CON: 4, POW: -0.5, ROT_ACC: -0.25 },
   },
   {
     id: 'the-opener', name: 'The Opener', exemplars: ['2018 Rays'], era: '2018',

@@ -33,10 +33,12 @@ const RATIFIED_SHIFTS: Record<string, Record<string, number>> = {
   'dead-ball-suppressors': { 'rotation/JNK': 0.45, 'hitters/CON': 0.10, 'hitters/POW': -0.10, 'bullpen/VEL': -0.20 },
   'billy-ball-burners': { 'hitters/SPD': 0.24, 'hitters/POW': -0.075, 'rotation/ACC': -0.25 },
   'junkball-surgeons': { 'rotation/ACC': 0.375, 'rotation/JNK': 0.30, 'hitters/POW': -0.05, 'rotation/VEL': -0.16 },
-  'flamethrowers': { 'rotation/VEL': 0.32, 'rotation/POW': 0.10, 'rotation/CON': 0.10, 'hitters/POW': -0.05, 'hitters/CON': -0.10 },
+  // SNAKE-PITCHER-HITTING-RECALIBRATION-30: usage-aware zero-axis ablation retune from 0.10/0.10.
+  'flamethrowers': { 'rotation/VEL': 0.32, 'rotation/POW': 0.30, 'rotation/CON': 0.30, 'hitters/POW': -0.05, 'hitters/CON': -0.10 },
   'nasty-boys': { 'bullpen/VEL': 0.40, 'bullpen/ACC': -0.45 },
   // Retuned in 057f4525 (value-parity re-pin during the reliever repricing); re-verified 2026-07-09.
-  'hdh-royals': { 'bullpen/ACC': 0.09, 'hitters/SPD': 0.12, 'rotation/CON': 0.10, 'hitters/POW': -0.025, 'rotation/ACC': -0.0625 },
+  // SNAKE-PITCHER-HITTING-RECALIBRATION-30: usage-aware zero-axis ablation retune from 0.10.
+  'hdh-royals': { 'bullpen/ACC': 0.09, 'hitters/SPD': 0.12, 'rotation/CON': 0.40, 'hitters/POW': -0.025, 'rotation/ACC': -0.0625 },
   'the-opener': { 'bullpen/VEL': 0.30, 'bullpen/JNK': 0.35, 'rotation/VEL': -0.24, 'rotation/ACC': -0.25 },
   'the-oriole-way': { 'hitters/FLD': 0.33, 'rotation/ACC': 0.375, 'hitters/SPD': -0.12, 'bullpen/VEL': -0.20 },
   // CONTRACT_TAXSWING_2026-07-10 Amendment 1: bullpen-command cap shift retuned from -0.30.

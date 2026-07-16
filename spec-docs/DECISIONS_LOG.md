@@ -4018,3 +4018,23 @@ New generated cap rows carry `pitcher-role-usage-v1`. Locked or saved tables wit
 legacy raw-rating behavior, so no draft changes economics midstream. The rerun keeps all 24 identities
 legal, solvent, and inside ±10%: Standard maximum deviation 2.8%; Nerfed 3.5% (Juiced compatibility
 maximum 4.9%). Solvency is lexicographic: no IV gain may trade through any positive budget overage.
+
+## 2026-07-16 — Starter-hitting value recalibrated; ordinary relievers stay usage-discounted
+
+JK ruled that preserving similar raw-rating headroom was insufficient if the playing-time correction
+made a unique archetype axis economically decorative. The exact `9e5901d7` reference and the corrected
+usage-aware base were therefore ablated against otherwise-identical identities with rotation POW/CON
+set to zero at Standard and Nerfed.
+
+Bash Brothers' existing +15% rotation POW and Launch & Leather's existing +10% rotation POW/CON still
+changed the selected starter bats in both priority tiers, so they remain unchanged. Flamethrowers'
++10% rotation POW/CON and HDH Royals' +10% rotation CON were flat in at least one priority tier. The
+smallest simple increments with a visible combined starter-hitting selection effect in both tiers are
+Flamethrowers +30% rotation POW/CON and HDH Royals +40% rotation CON. No balancing sacrifice or other
+archetype axis changed; all 24 remain legal, solvent, and within ±10% at all three tiers.
+
+This retune does not revive everyday-player taxation. Ordinary RP and CP POW/CON/SPD/FLD already enter
+bullpen secondary rows only at canonical relief exposure: RP `.08/.08/.16/.06`, CP
+`.05/.05/.11/.05`. Two Way relievers are full-use hitters in hitter POW/CON/SPD/FLD and are excluded
+from bullpen secondary rows, so the same batting rating is never charged twice. There is no bullpen
+POW/CON archetype axis in the locked 24 and therefore no reliever-hitting identity retune.

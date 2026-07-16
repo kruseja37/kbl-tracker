@@ -1,10 +1,25 @@
-# NOW — Snake Draft: usage-aware pitcher tax and exact Two Way fit are ready; JK walk is the gate
+# NOW — Snake Draft: pitcher-hitting identities recalibrated; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-15; latest runtime commit `e26f9970`, canonical result docs `9e6fdd9e`)
+## VERIFIED (builder, 2026-07-16; SNAKE-PITCHER-HITTING-RECALIBRATION-30 awaiting independent audit)
+- Exact zero-axis ablation against `9e5901d7` proved the playing-time correction made
+  Flamethrowers' prior +10% rotation POW/CON and HDH Royals' prior +10% rotation CON decorative in at
+  least one priority tier. The smallest simple values with visible Standard and Nerfed starter-bat
+  selection are Flamethrowers +30% rotation POW/CON and HDH +40% rotation CON. Bash Brothers +15%
+  rotation POW and Launch & Leather +10% rotation POW/CON already remained visible and are unchanged.
+- Ordinary RP/CP hitting was explicitly checked and is not taxed as everyday offense. RP
+  POW/CON/SPD/FLD exposure is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Two Way relievers are
+  full-use hitters but are excluded from bullpen secondary rows, so the same rating is never charged
+  twice. No bullpen-hitting archetype axis exists and none was added.
+- The retune changes no base cap, tax coefficient, salary/IV, roster law, optimizer objective,
+  reliever law, or other archetype lever. All three tiers remain 24/24 inside ±10%; maximum deviations
+  remain Juiced 4.9%, Standard 2.8%, and Nerfed 3.5%. Independent non-builder audit is still required
+  before this builder result becomes the final engine verdict.
+
+## PRIOR VERIFIED (git, 2026-07-15; latest runtime commit `e26f9970`, canonical result docs `9e6fdd9e`)
 - **Current thread move:** JK walks actual Draft Setup and Snake Room on Mac/iPad. Browser acceptance
   remains JK's gate; no agent visual pass can close it. The Standard/Nerfed archetype presentation
   built from `9e5901d7` is economically stale and must be regenerated from this final tax model.
