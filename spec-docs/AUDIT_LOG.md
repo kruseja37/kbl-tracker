@@ -1289,6 +1289,7 @@ TypeScript/lint/diff gates. JK's browser walk remains open.
 | FINDING-215 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Shaped pool / chosen identities | Live unique-person identity certificate, honest UNKNOWN, BUILD-scoped widening, actual-mode persistence, and source-role diagnostics are independently approved. |
 | FINDING-216 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Setup certificate / board parity | Cross-position sibling alternatives survive the bounded nonlinear search while final legal plans reserve one person; incomplete search fails closed. |
 | FINDING-217 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Legends version handling | Compact all-card setup, safe unsaved-legacy migration, sibling-retirement ticker, undo removal, and fail-closed version optimization are independently approved. |
+| FINDING-218 | 2026-07-16 | BUILT — INDEPENDENT AUDIT PENDING | Snake identity picks | Archetype picks needlessly refreshed all setup data and the unchanged pool after the local save, causing browser-visible setup stalls. |
 
 Contract: `contracts/CONTRACT_DRAFT_SETUP_BROWSER_FIXES_2026-07-16.md`. Builder and auditor are
 different agents. No commit, merge, or deploy is authorized; JK's browser re-walk remains the sole

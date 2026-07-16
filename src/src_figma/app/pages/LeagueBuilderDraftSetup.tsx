@@ -3096,7 +3096,10 @@ export function LeagueBuilderDraftSetup() {
         next.delete(identityAutoFilledSlotKey(selectedTeam.id, slot));
         return next;
       });
-    });
+    // The saved team is already applied to the page through replaceTeamsLocal above. Reloading all
+    // league data and the unchanged registered pool here makes every identity-card click feel like
+    // a page reload, while also needlessly restarting all setup-derived work.
+    }, { refreshData: false, refreshPool: false });
 
   const persistIdentityAutoAssignments = useCallback(
     async (assignments: readonly IdentityAutoAssignment[]) => {

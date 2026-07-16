@@ -384,3 +384,10 @@ browser walk remains the sole product-acceptance gate.
 **Fourth-audit repair evidence:** An incomplete executed search start now propagates even when a different completed roster wins selection. Assistant cannot present READY by discarding the cap state of an unselected baseline or identity start. Independent re-audit remains pending.
 
 **Final independent evidence:** The non-builder auditor returned **APPROVE** with zero actionable findings. Its 48/48 narrow tests and diff-integrity check independently verified completion aggregation, Assistant fail-closed behavior, and absence of diagnostic/test-only production seams. JK's browser re-walk remains the sole product-acceptance gate.
+
+### FINDING-218
+**Date:** 2026-07-16 | **Phase:** JK Draft Setup browser re-walk | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Files:** `LeagueBuilderDraftSetup.tsx`, `LeagueBuilderDraftSetup.setup.test.tsx`
+**Evidence:** An identity-card pick persists the changed team and applies it through `replaceTeamsLocal`, then falls through the generic action wrapper's default full league-data and registered-pool refreshes. Neither refresh can change the just-saved identity or the unchanged pool.
+**Impact:** Selecting an MLB or farm archetype looks and feels like a page reload, restarting setup-derived work and leaving the screen unresponsive on a real Legends-sized setup.
+**Action:** Keep the durable save and immediate local state replacement, but opt identity picks out of both redundant refreshes. A regression asserts the persisted local update occurs while neither full setup-data nor pool loading runs.

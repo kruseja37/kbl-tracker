@@ -261,6 +261,24 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: "SNAKE DRAFT", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("snake identity picks persist and update the local team without reloading setup data or the pool", async () => {
+    const leagueData = mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    render(<LeagueBuilderDraftSetup />);
+
+    const card = await screen.findByRole("button", { name: /Bomba Squad/i });
+    vi.clearAllMocks();
+    fireEvent.click(card);
+
+    await waitFor(() => {
+      expect(selectTeamArchetype).toHaveBeenCalledTimes(1);
+      expect(leagueData.replaceTeamsLocal).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "team-a", mlbArchetypeKey: "bomba-squad" }),
+      ]);
+    });
+    expect(leagueData.refresh).not.toHaveBeenCalled();
+    expect(leagueData.getRegisteredPool).not.toHaveBeenCalled();
+  });
+
   test("snake Edit Player opens the shared editor, saves, and refreshes the focused player", async () => {
     const leagueData = mockLeagueData({
       league: makeLeague({ draftFormat: "snake" }),
