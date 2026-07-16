@@ -4058,3 +4058,16 @@ currently active exact tuple. A team switch during pull or atomic persistence ma
 stale rather than letting it land or restore old UI. Companion picks remain requests only and require
 normal Hotseat confirmation. Same-account Supabase, room codes, the three-device ceiling, farm
 no-trade, draft legality, and salary/tax/archetype calculations are unchanged.
+
+## 2026-07-16 — Multi-team companion requires covered switching and Hotseat-confirmed browser proof
+
+The separate audit ratified the implementation with zero Major and zero Minor findings. A unit-only
+pick-intent proof was not sufficient: the deterministic browser journey must carry the active team's
+choice through the real companion action, real Hotseat approval card, production request assertion,
+public pick record, and next-pick advance. Test-only commit `888c144d` supplies that proof without
+changing production storage, Supabase, schema/RLS, farm-trade, economy, or draft-engine code.
+
+The accepted product boundary is exact: multiple approved desks may live on one physical device, but
+only one active `(deviceId, teamId)` may render or act; every switch is cover-gated; and a companion
+can request but never authoritatively commit a draft pick. JK's real same-Wi-Fi device walk remains
+the only acceptance gate because automated proof cannot certify room-specific latency.

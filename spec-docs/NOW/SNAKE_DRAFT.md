@@ -1,10 +1,10 @@
-# NOW — Snake Draft: multi-team companion build complete; audit and JK walk remain
+# NOW — Snake Draft: multi-team companion verified; JK walk is the gate
 
 **This thread belongs to the snake-draft captain line — its bookings live in the standard docs
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## BUILDER COMPLETE (2026-07-16; SNAKE-MULTI-TEAM-COMPANION-31; independent audit pending)
+## VERIFIED (2026-07-16; SNAKE-MULTI-TEAM-COMPANION-31)
 - One companion device may now hold multiple separately approved team desks. Duplicate normalized
   companion GM names in Draft Setup intentionally define a team package, and capacity remains three
   distinct companion packages/devices rather than three teams. Unnamed companion teams and a fourth
@@ -26,8 +26,14 @@
   independent two-team board mutations and cover-gated switching; TypeScript, changed-file ESLint,
   production build, and diff integrity green. The browser crawl exposed and repaired the new team
   selector's 36px touch target; it now meets the 44px law.
-- **Next move:** a separate non-builder skeptically audits `0d28e63f`. If it passes, JK's actual
-  same-Wi-Fi companion-device walk remains the only product acceptance gate.
+- Separate non-builder audit of production `0d28e63f` plus proof repair `888c144d` returned
+  **VERIFIED with 0 Major / 0 Minor findings**. Independent proof: companion/setup/persistence 97/97;
+  standalone snake-room persistence 60/60; pick-handoff UI/persistence 22/22; responsive browser
+  17/17; TypeScript, focused lint, production build, and diff integrity green. The repaired real
+  browser proof sends the active Buzzards desk's #19 Max Backstop request into the Hotseat approval
+  card, runs the production approval assertion, records public truth, and advances to #20.
+- **Next move / sole product gate:** JK runs the actual same-Wi-Fi Mac/iPad/phone latency and privacy
+  walkthrough with multiple teams on one companion device.
 
 ## VERIFIED (builder + separate auditor, 2026-07-16; SNAKE-PITCHER-HITTING-RECALIBRATION-30)
 - Exact zero-axis ablation against `9e5901d7` proved the playing-time correction made

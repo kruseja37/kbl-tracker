@@ -7493,3 +7493,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   TypeScript, changed-file ESLint, production build, and diff integrity green.
 - **Pending gates:** a separate non-builder audits `0d28e63f`; JK's real same-Wi-Fi device walkthrough
   remains the sole product acceptance gate.
+
+## 2026-07-16 (Codex, multi-team companion desks) — independent audit VERIFIED
+
+- Refreshed moving `origin/main` before final booking; it remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`. Branch was 83 ahead / 0 behind before this docs commit.
+- Separate non-builder audit found zero production correctness, privacy, persistence, authorization,
+  touch-target, Supabase, or farm-trade findings in `0d28e63f`.
+- The auditor did identify one Minor proof gap: the browser journey switched and edited both desks but
+  did not submit an on-clock companion pick through Hotseat confirmation. Builder repair `888c144d`
+  changed only the allowed preview and responsive journey files. It sends Buzzards #19 Max Backstop,
+  renders the exact seat-bound request in the real approval card, runs
+  `assertCompanionPickRequestApprovable`, clears the request, records public truth, and advances to #20.
+- Final independent gates: companion/setup/persistence 97/97; standalone snake-room persistence 60/60;
+  repaired pick-handoff UI/persistence 22/22; responsive browser 17/17; TypeScript, focused lint,
+  production build, and diff integrity green. The 704-file audit run passed 10,217 tests; remaining
+  failures were ENOSPC startup casualties or unchanged unrelated archetype/auction/franchise fixtures.
+- **Final verdict:** VERIFIED, Major 0 / Minor 0. Only JK's actual same-Wi-Fi Mac/iPad/phone latency and
+  privacy walkthrough can accept the product.
