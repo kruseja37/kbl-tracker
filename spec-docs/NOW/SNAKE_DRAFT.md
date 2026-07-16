@@ -15,9 +15,9 @@
 - Focused proof covers partial Draft/Peak recovery into complete Draft/Career/Peak, the real pinned
   835-card payload and all three libraries, idempotence, unrelated-player preservation, adversarial
   zero-write cases, structured UI eligibility, confirmation cancellation, success, and hidden repair
-  actions for blocked/unrelated failures. TypeScript and changed-file lint are green. Production
-  packaging reaches all 2,726 modules and then hits the unchanged recorded Vite/PWA
-  `worker.format = iife` conflict outside this contract.
+  actions for blocked/unrelated failures. TypeScript and changed-file lint are green. The subsequent
+  release-build repair aligns module workers with Vite's ES output; production packaging now passes
+  after 2,728 transformed modules and emits the PWA service worker normally.
 - **Next move:** separate non-builder audit, then JK retries the exact League Builder import recovery
   in the browser. JK's browser result remains the acceptance gate.
 

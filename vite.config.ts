@@ -133,6 +133,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src/src_figma'),
     },
   },
+  // Module workers can code-split; Vite's default IIFE worker output cannot.
+  worker: {
+    format: 'es',
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,

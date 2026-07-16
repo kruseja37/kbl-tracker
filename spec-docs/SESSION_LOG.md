@@ -7531,3 +7531,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   Vite/PWA `worker.format = iife` conflict in the rational-room worker.
 - **Pending:** a separate non-builder audits the implementation; JK then retries the import and repair
   action in the actual League Builder browser.
+
+## 2026-07-16 (Codex, production module-worker packaging repair) — builder complete; audit pending
+
+- Reproduced the production failure after 2,726 transformed modules: Vite's default IIFE worker
+  output cannot package the code-split rational-room module worker.
+- Set the single canonical Vite worker output to `es`, matching every affected worker's existing
+  `{ type: 'module' }` runtime declaration. Worker product logic, PWA behavior, Supabase, and draft
+  engines are unchanged.
+- Production build now succeeds after 2,728 transformed modules, renders the rational-room,
+  scarcity-verifier, Assistant GM, recommendation, and draftability worker chunks, then generates
+  the PWA manifest, service worker, and Workbox runtime. Focused worker/desk tests pass 56/56;
+  TypeScript, changed-file lint, and diff integrity are green.
+- Browser compatibility is unchanged for the supported modern Mac/iPad path: the app already
+  requested module workers. Browsers without module-worker support remain outside this runtime path.
+- **Pending:** a separate non-builder audits the one-setting release repair; JK's browser walk remains
+  the product-acceptance gate.
