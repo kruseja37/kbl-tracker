@@ -4,7 +4,7 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## VERIFIED (git, 2026-07-15; latest code commit `498be692`)
+## VERIFIED (git, 2026-07-15; latest code commit `c5ca1e9c`)
 - **Current thread move:** keep the build running for JK's League Builder and Snake-room browser
   walk. Snake setup now offers `TIGHT`, `COMPETITIVE`, `LOOSE`, and `FULL SOURCES` from the same
   chosen source leagues, player-version groups, and hand-add/remove shuttle used by the shared
@@ -20,7 +20,12 @@
   remains the GM's own order. Source-player roster/IV edits immediately retire stale advisor reads.
 - Pitcher POW/CON/SPD/FLD are not free bonuses under current canon: the base top-four rotation and
   bullpen rows tax them. Pitcher ARM is excluded; archetypes shift hitter rows and pitcher
-  VEL/JNK/ACC only. This pass verified that law and did not change it.
+  VEL/JNK/ACC only. The POW/CON rows now use a quadratic ramp instead of a linear cliff at all three
+  tiers; caps, top-four grouping, coefficients, adders, and every other tax row are unchanged. New
+  or rebuilt pools receive the curve; locked/saved drafts keep their frozen `luxuryCaps`.
+- Pitcher-hitting archetype analysis recommends testing this as a Flamethrowers extension, not
+  adding a 25th archetype. Production archetype axes do not yet model rotation POW/CON, so no
+  identity change is ratified until a joint velocity+hitting supply/parity simulation passes.
 - Final builder evidence: 15 focused files / 252 tests, TypeScript, changed-file ESLint,
   2,728-module production build, and diff integrity green. Playwright passed the pool-assembly
   journey on Mac and iPad (2/2) and the full main/companion responsive room journey (16/16).

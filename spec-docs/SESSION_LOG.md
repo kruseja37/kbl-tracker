@@ -7343,3 +7343,29 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   fixture failure predates this lane and remains outside its scope.
 - **Pending / only acceptance gate:** JK walks the actual League Builder Snake setup and room on Mac
   and iPad. The port-5173 dev server runs from `/private/tmp/kbl-snake-legends-integration`.
+
+## 2026-07-15 (Codex, pitcher secondary-tax correction + identity analysis) — approved
+
+- Fresh fetch before final state booking confirmed `origin/main` remained
+  `ea66830e0305d999f4140a101d452417f7d9152e`; the branch was 60 ahead / 0 behind before this docs
+  commit.
+- Changed the active top-four rotation and bullpen POW/CON tax rows from a linear response to a
+  quadratic response at Juiced, Standard, and Nerfed. Caps, coefficients, flat adders, salary/IV,
+  pitcher SPD/FLD, primary pitching rows, hitter rows, and roster assignment did not change.
+- At Standard, a ten-point overage now taxes rotation POW/CON at $22,278 / $14,045 and bullpen
+  POW/CON at $25,184 / $15,498. A fifty-point overage remains material at $487,211 / $293,005 and
+  $513,364 / $317,705. New/rebuilt pools receive the new curve; locked/saved rooms keep their
+  frozen `luxuryCaps`.
+- The first independent audit rejected the hand-edited generated output. The repair put the ruling
+  into `scripts/analyze-pool.py`, added complete non-target-row mutation protection, and documented
+  frozen saved-pool behavior. Re-audit verdict: **APPROVE**, no residual finding. The full legacy
+  generator still aborts earlier on unrelated pre-existing IV/workbook anchor drift; this narrow
+  economy change did not rewrite those anchors.
+- Builder proof: 7 focused files / 96 tests, Python syntax, TypeScript, changed-file ESLint,
+  2,728-module production build, and diff integrity green. The earlier full-repository run had one
+  unrelated solo-reproducing FARM fixture failure caused by missing frozen farm IV.
+- A separate read-only tracer recommended no 25th archetype yet. If pitcher hitting becomes a team
+  identity, test it as a Flamethrowers extension: keep rotation velocity, add rotation POW/CON
+  headroom, and retain the lineup POW/CON sacrifice. Current production axes, fit, embodiment, and
+  pool-supply logic cannot express that safely; a three-tier and contested-pool simulation is the
+  ratification gate.
