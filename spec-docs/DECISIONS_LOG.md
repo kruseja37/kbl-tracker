@@ -4008,10 +4008,13 @@ valuation. Pitcher ARM remains excluded.
 A true `Two Way (C/IF/OF)` pitcher is an everyday hitter for hitter POW/CON/SPD/FLD tax and remains
 a pitcher for rotation/bullpen VEL/JNK/ACC tax. The same batting ratings are excluded from pitcher
 secondary rows, so they are never charged twice; hitter ARM still does not inherit a stored pitcher
-ARM rating. Archetype fit follows the same split.
+ARM rating. Archetype fit follows the same split and the same roster-level single assignment for
+SP/RP arms: pure starters fill the rotation first, then only the swing arms needed to reach four;
+every other swing arm belongs to the bullpen.
 
 The stock-team 65th-percentile method was rerun in this usage-adjusted rating space. Salary caps,
 tax dollar coefficients, flat adders, penalty curves, roster law, and archetype shifts are unchanged.
 New generated cap rows carry `pitcher-role-usage-v1`. Locked or saved tables without that marker keep
 legacy raw-rating behavior, so no draft changes economics midstream. The rerun keeps all 24 identities
-inside ±10%: Standard maximum deviation 1.4%; Nerfed 1.8% (Juiced compatibility maximum 0.5%).
+legal, solvent, and inside ±10%: Standard maximum deviation 2.8%; Nerfed 3.5% (Juiced compatibility
+maximum 4.9%). Solvency is lexicographic: no IV gain may trade through any positive budget overage.

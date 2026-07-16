@@ -547,7 +547,8 @@ Ordinary pitcher POW/CON/SPD/FLD is measured at role exposure. SP exposure is `.
 SP/RP is `.15/.15/.25/.18`; RP is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Tax FLD deliberately uses
 defensive start/range exposure; salary/IV retains its separate full pitcher-FLD value. Two Way pitchers
 enter hitter POW/CON/SPD/FLD at full use, remain in pitcher VEL/JNK/ACC, and are excluded from pitcher
-secondary rows. Pitcher ARM remains excluded.
+secondary rows. SP/RP arms are assigned exactly once from the complete roster by the settlement
+engine's pure-starters-first rule. Pitcher ARM remains excluded.
 
 ### Re-derived pitcher-secondary caps
 
@@ -563,5 +564,6 @@ row carries `pitcher-role-usage-v1`; markerless saved rows retain legacy raw-rat
 
 Verification: the luxury-only generator is byte-deterministic (`tierParams.ts` SHA-256
 `de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`). The 24-archetype rerun,
-including the stock Two Way trait, leaves all identities within ±10%: Juiced max `0.5%`, Standard
-max `1.4%`, Nerfed max `1.8%`.
+including stock SP/RP Two Way Norm Fenomeno and an absolute solvency gate, builds legal and solvent
+rosters for all 24 identities and leaves them within ±10%: Juiced max `4.9%`, Standard max `2.8%`,
+Nerfed max `3.5%`.

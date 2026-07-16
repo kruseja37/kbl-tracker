@@ -190,11 +190,12 @@ The starters put the ball in play, then a precise bullpen shortens the game. **+
 - **Pitcher secondary tax is usage-adjusted.** Ordinary pitcher POW/CON/SPD/FLD is multiplied by
   canonical role exposure before entering rotation/bullpen top-four rows. Two Way pitcher batting
   instead enters hitter POW/CON/SPD/FLD at full use and is omitted from those pitcher-secondary rows;
-  VEL/JNK/ACC stays in the proper pitcher group. Pitcher ARM remains excluded.
+  VEL/JNK/ACC stays in the proper pitcher group. SP/RP arms are assigned once from the complete roster
+  by the same pure-starters-first rule used at tax settlement. Pitcher ARM remains excluded.
 - **2026-07-15 measured results after the usage-aware rerun (Juiced / Standard / Nerfed):** Bash Brothers
-  **+0.5 / −0.7 / +0.2%**; Launch & Leather **−0.3 / −0.4 / +0.1%**; Flamethrowers
-  **+0.5 / 0.0 / −0.7%**; HDH Royals **0.0 / +0.2 / +0.2%**. All 24 remain in band;
-  maximum deviations are **0.5 / 1.4 / 1.8%**.
+  **+0.5 / −0.5 / +0.4%**; Launch & Leather **+0.4 / +0.2 / +0.4%**; Flamethrowers
+  **+0.4 / +0.3 / −0.1%**; HDH Royals **−0.1 / +0.2 / +0.4%**. Every simulated roster is legal
+  and solvent; all 24 remain in band with maximum deviations of **4.9 / 2.8 / 3.5%**.
 
 - **Estimated rating points** = the archetype's cap-shift fraction for that area × ~60 (a typical rostered rating),
   rounded. It's a rough translation of *tax-free headroom* onto the 0–99 rating scale — a design feel, not a
