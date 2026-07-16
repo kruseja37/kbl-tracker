@@ -1,4 +1,5 @@
 import { HISTORICAL_ARCHETYPES } from '../data/historicalArchetypes';
+import { twoWayVariantFromTraits } from '../data/rosterConstruction';
 import type { LeagueBuilderMlbDraftSession, Player } from '../utils/leagueBuilderStorage';
 import { archetypeStatFitMultiplier, archetypeToCapIdentity } from './archetypeIdentity';
 
@@ -107,7 +108,7 @@ export function snakeDraftAlignmentRoomRank(
 }
 
 export function snakePlayerArchetypeFitMultiplier(
-  player: Pick<Player, 'primaryPosition' | 'power' | 'contact' | 'speed' | 'fielding' | 'arm' | 'velocity' | 'junk' | 'accuracy'>,
+  player: Pick<Player, 'primaryPosition' | 'power' | 'contact' | 'speed' | 'fielding' | 'arm' | 'velocity' | 'junk' | 'accuracy' | 'trait1' | 'trait2'>,
   archetypeId: string | null | undefined,
 ): number {
   const archetype = archetypeId
@@ -119,6 +120,7 @@ export function snakePlayerArchetypeFitMultiplier(
   return archetypeStatFitMultiplier(archetypeToCapIdentity(archetype), {
     isPitcher,
     role: position,
+    twoWayVariant: isPitcher ? twoWayVariantFromTraits([player.trait1, player.trait2]) : null,
     power: player.power,
     contact: player.contact,
     speed: player.speed,

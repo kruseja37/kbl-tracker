@@ -115,6 +115,18 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(buildLockedSnakeSeatingPlayers({ players, pool: locked }).every((player) => player.price === 12_345)).toBe(true);
   });
 
+  test('carries Two Way identity from the locked pool into Snake seating economics', () => {
+    const players = makeLegalRosterPlayers(10_000);
+    const target = players.find((player) => player.primaryPosition === 'SP')!;
+    const withTwoWay = players.map((player) => player.id === target.id
+      ? { ...player, trait1: 'Two Way (C)' }
+      : player);
+    const locked = pool(withTwoWay, 12_345);
+
+    expect(buildLockedSnakeSeatingPlayers({ players: withTwoWay, pool: locked })
+      .find((player) => player.playerId === target.id)?.construction.twoWayVariant).toBe('C');
+  });
+
   test('passes each chosen archetype cap identity into the simultaneous proof', () => {
     const players = [
       ...makeLegalRosterPlayerSet('first', 10_000),

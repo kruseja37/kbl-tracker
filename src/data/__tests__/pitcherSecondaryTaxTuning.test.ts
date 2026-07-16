@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { describe, expect, test } from 'vitest';
 
 import {
@@ -13,22 +11,22 @@ const TIERS: TierKey[] = ['juiced', 'standard', 'nerfed'];
 
 const EXPECTED_ROWS: Record<TierKey, Array<Pick<LuxuryCapRow, 'group' | 'stat' | 'cap' | 'penaltyPer100' | 'minAdder'>>> = {
   juiced: [
-    { group: 'rotation', stat: 'POW', cap: 98.0, penaltyPer100: 2_194_663, minAdder: 3_292 },
-    { group: 'rotation', stat: 'CON', cap: 98.3, penaltyPer100: 1_316_798, minAdder: 2_743 },
-    { group: 'bullpen', stat: 'POW', cap: 80.0, penaltyPer100: 2_304_396, minAdder: 5_487 },
-    { group: 'bullpen', stat: 'CON', cap: 77.1, penaltyPer100: 1_426_531, minAdder: 3_292 },
+    { group: 'rotation', stat: 'POW', cap: 17.5, penaltyPer100: 2_194_663, minAdder: 3_292 },
+    { group: 'rotation', stat: 'CON', cap: 17.3, penaltyPer100: 1_316_798, minAdder: 2_743 },
+    { group: 'bullpen', stat: 'POW', cap: 6.9, penaltyPer100: 2_304_396, minAdder: 5_487 },
+    { group: 'bullpen', stat: 'CON', cap: 7.0, penaltyPer100: 1_426_531, minAdder: 3_292 },
   ],
   standard: [
-    { group: 'rotation', stat: 'POW', cap: 93.5, penaltyPer100: 1_937_221, minAdder: 2_906 },
-    { group: 'rotation', stat: 'CON', cap: 93.9, penaltyPer100: 1_162_333, minAdder: 2_422 },
-    { group: 'bullpen', stat: 'POW', cap: 76.3, penaltyPer100: 2_034_082, minAdder: 4_843 },
-    { group: 'bullpen', stat: 'CON', cap: 73.6, penaltyPer100: 1_259_194, minAdder: 2_906 },
+    { group: 'rotation', stat: 'POW', cap: 16.7, penaltyPer100: 1_937_221, minAdder: 2_906 },
+    { group: 'rotation', stat: 'CON', cap: 16.6, penaltyPer100: 1_162_333, minAdder: 2_422 },
+    { group: 'bullpen', stat: 'POW', cap: 6.6, penaltyPer100: 2_034_082, minAdder: 4_843 },
+    { group: 'bullpen', stat: 'CON', cap: 6.7, penaltyPer100: 1_259_194, minAdder: 2_906 },
   ],
   nerfed: [
-    { group: 'rotation', stat: 'POW', cap: 89.6, penaltyPer100: 1_737_903, minAdder: 2_607 },
-    { group: 'rotation', stat: 'CON', cap: 89.9, penaltyPer100: 1_042_742, minAdder: 2_172 },
-    { group: 'bullpen', stat: 'POW', cap: 73.1, penaltyPer100: 1_824_798, minAdder: 4_345 },
-    { group: 'bullpen', stat: 'CON', cap: 70.5, penaltyPer100: 1_129_637, minAdder: 2_607 },
+    { group: 'rotation', stat: 'POW', cap: 16.0, penaltyPer100: 1_737_903, minAdder: 2_607 },
+    { group: 'rotation', stat: 'CON', cap: 15.9, penaltyPer100: 1_042_742, minAdder: 2_172 },
+    { group: 'bullpen', stat: 'POW', cap: 6.3, penaltyPer100: 1_824_798, minAdder: 4_345 },
+    { group: 'bullpen', stat: 'CON', cap: 6.4, penaltyPer100: 1_129_637, minAdder: 2_607 },
   ],
 };
 
@@ -40,11 +38,6 @@ function pitcherSecondaryRows(tier: TierKey): LuxuryCapRow[] {
 
 function rowTax(row: LuxuryCapRow, overage: number): number {
   return Math.round(row.penaltyPer100 * (overage / 100) ** row.penaltyCurve + row.minAdder);
-}
-
-function isPitcherSecondaryRow(row: LuxuryCapRow): boolean {
-  return (row.group === 'rotation' || row.group === 'bullpen')
-    && (row.stat === 'POW' || row.stat === 'CON');
 }
 
 describe('pitcher secondary-rating luxury tax tuning', () => {
@@ -59,7 +52,7 @@ describe('pitcher secondary-rating luxury tax tuning', () => {
     }
   });
 
-  test('changes only the response curve, preserving the empirical caps and dollar coefficients', () => {
+  test('uses playing-time-derived caps while preserving the approved dollar coefficients', () => {
     for (const tier of TIERS) {
       expect(pitcherSecondaryRows(tier).map(({ group, stat, cap, penaltyPer100, minAdder }) => ({
         group,
@@ -71,16 +64,19 @@ describe('pitcher secondary-rating luxury tax tuning', () => {
     }
   });
 
-  test('leaves every non-target luxury-tax row unchanged', () => {
-    const nonTargetRows = TIERS.flatMap((tier) =>
-      LUXURY_CAP_TABLES[tier]
-        .filter((row) => !isPitcherSecondaryRow(row))
-        .map((row) => [tier, row]));
-    const fingerprint = createHash('sha256')
-      .update(JSON.stringify(nonTargetRows))
-      .digest('hex');
-
-    expect(fingerprint).toBe('fd42eded9c654ea27a59b41176369f698b4fdc49dfaee843ab6205282123da03');
+  test('marks every generated row with the new basis and re-derives all eight pitcher secondary caps', () => {
+    const expectedCaps = {
+      juiced: [17.5, 17.3, 35.3, 64.8, 6.9, 7.0, 22.1, 23.6],
+      standard: [16.7, 16.6, 33.7, 61.9, 6.6, 6.7, 21.1, 22.5],
+      nerfed: [16.0, 15.9, 32.3, 59.3, 6.3, 6.4, 20.2, 21.6],
+    } satisfies Record<TierKey, number[]>;
+    for (const tier of TIERS) {
+      expect(LUXURY_CAP_TABLES[tier].every((row) => row.ratingBasis === 'pitcher-role-usage-v1')).toBe(true);
+      expect(LUXURY_CAP_TABLES[tier]
+        .filter((row) => (row.group === 'rotation' || row.group === 'bullpen')
+          && ['POW', 'CON', 'SPD', 'FLD'].includes(row.stat))
+        .map((row) => row.cap)).toEqual(expectedCaps[tier]);
+    }
   });
 
   test('keeps a standard ten-point overage modest while preserving a meaningful stacking penalty', () => {

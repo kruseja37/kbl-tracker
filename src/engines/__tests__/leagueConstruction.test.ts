@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  deriveLuxuryTaxUsageWeights,
   POOL_SURPLUS_MAX,
   SOLVENCY_RED_MARGIN,
   SOLVENCY_SEVERE_TAX_FRAC,
@@ -185,15 +186,24 @@ function groupTax(result: ReturnType<typeof luxuryTax>, group: 'rotation' | 'bul
 }
 
 function expectedTax(roster: ConstructionPlayer[], caps: LuxuryCapRow[]) {
-  const hitters = roster.filter((player) => !player.isPitcher);
-  const rotation = roster.filter((player) => player.isPitcher && (player.role === 'SP' || player.role === 'SP/RP'));
-  const bullpen = roster.filter((player) => player.isPitcher && (player.role === 'RP' || player.role === 'CP' || player.role === 'SP/RP'));
+  const usageAware = caps.some((row) => row.ratingBasis === 'pitcher-role-usage-v1');
+  const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
   const binding: Array<{ group: string; stat: string; over: number; tax: number }> = [];
   let wouldBeTax = 0;
   for (const row of caps) {
-    const group = row.group === 'hitters' ? hitters : row.group === 'rotation' ? rotation : bullpen;
+    const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const vals = group
-      .map((player) => (row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC') ? player.pit?.[row.stat] ?? 0 : player.bat[row.stat])
+      .filter((player) => {
+        if (!usageAware) return row.group === 'hitters' ? !player.isPitcher : player.isPitcher;
+        const secondary = row.stat === 'POW' || row.stat === 'CON' || row.stat === 'SPD' || row.stat === 'FLD';
+        if (row.group === 'hitters') return !player.isPitcher || Boolean(player.twoWayVariant && secondary);
+        return player.isPitcher && !(player.twoWayVariant && secondary);
+      })
+      .map((player) => {
+        if (row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC') return player.pit?.[row.stat] ?? 0;
+        if (!usageAware || row.group === 'hitters' || !player.isPitcher || player.twoWayVariant) return player.bat[row.stat];
+        return player.bat[row.stat] * deriveLuxuryTaxUsageWeights(player.role!)[row.stat];
+      })
       .sort((left, right) => right - left)
       .slice(0, row.topN);
     const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);
@@ -285,6 +295,44 @@ describe('leagueConstruction T8a pure engine', () => {
     expect(actual.binding).toEqual(expected.binding);
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'VEL' && row.over > 0)).toBe(true);
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD' && row.over > 0)).toBe(true);
+  });
+
+  test('usage-aware tax weights ordinary pitcher secondary ratings by role and preserves legacy rows', () => {
+    const starter = pitcher('starter', 'SP', { VEL: 50, JNK: 50, ACC: 50 }, { POW: 80, CON: 80, SPD: 80, FLD: 80 });
+    const usageRows: LuxuryCapRow[] = (['POW', 'CON', 'SPD', 'FLD'] as const).map((stat) => ({
+      group: 'rotation', stat, topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0,
+      ratingBasis: 'pitcher-role-usage-v1',
+    }));
+    const usage = luxuryTax([starter], usageRows, 'taxed');
+    const byStat = new Map(usage.binding.map((entry) => [entry.stat, entry.over]));
+
+    expect(byStat.get('POW')).toBeCloseTo(15.7, 8);
+    expect(byStat.get('CON')).toBeCloseTo(15.7, 8);
+    expect(byStat.get('SPD')).toBeCloseTo(25.3, 8);
+    expect(byStat.get('FLD')).toBeCloseTo(20, 8);
+
+    const legacy = luxuryTax([starter], usageRows.map((row) => ({ ...row, ratingBasis: undefined })), 'taxed');
+    expect(legacy.binding.map((entry) => entry.over)).toEqual([80, 80, 80, 80]);
+  });
+
+  test('Two Way splits everyday batting and pitching without a duplicate secondary-rating charge', () => {
+    const twoWay = {
+      ...pitcher('two-way', 'SP', { VEL: 70, JNK: 0, ACC: 0 }, { POW: 80, CON: 0, SPD: 0, FLD: 0, ARM: 99 }),
+      twoWayVariant: 'IF' as const,
+    };
+    const rows: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'hitters', stat: 'ARM', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ];
+    const result = luxuryTax([twoWay], rows, 'taxed');
+
+    expect(result.wouldBeTax).toBe(150);
+    expect(result.binding).toEqual([
+      { group: 'hitters', stat: 'POW', over: 80, tax: 80 },
+      { group: 'rotation', stat: 'VEL', over: 70, tax: 70 },
+    ]);
   });
 
   describe('TAXSWING named single-assignment scenarios', () => {

@@ -1,5 +1,7 @@
 import {
+  luxuryRowPlayerRating,
   luxuryTax,
+  playerEligibleForLuxuryRow,
   shiftLuxuryCaps,
   type ConstructionPlayer,
   type ConstructionRoster,
@@ -72,21 +74,16 @@ export function auctionSinglePlayerTaxWithShiftedCaps(
   candidate: ConstructionPlayer,
   shiftedCaps: readonly LuxuryCapRow[],
 ): number {
-  const group: LuxuryCapRow['group'] | null = !candidate.isPitcher
-    ? 'hitters'
-    : candidate.role === 'SP' || candidate.role === 'SP/RP'
-      ? 'rotation'
-      : candidate.role === 'RP' || candidate.role === 'CP'
-        ? 'bullpen'
-        : null;
-  if (!group) return 0;
+  const groups = new Set<LuxuryCapRow['group']>();
+  if (!candidate.isPitcher || candidate.twoWayVariant) groups.add('hitters');
+  if (candidate.isPitcher && (candidate.role === 'SP' || candidate.role === 'SP/RP')) groups.add('rotation');
+  if (candidate.isPitcher && (candidate.role === 'RP' || candidate.role === 'CP')) groups.add('bullpen');
+  if (groups.size === 0) return 0;
 
   let charged = 0;
   for (const row of shiftedCaps) {
-    if (row.group !== group || row.topN <= 0) continue;
-    const rating = row.stat === 'VEL' || row.stat === 'JNK' || row.stat === 'ACC'
-      ? candidate.pit?.[row.stat] ?? 0
-      : candidate.bat[row.stat];
+    if (!groups.has(row.group) || row.topN <= 0 || !playerEligibleForLuxuryRow(candidate, row, shiftedCaps)) continue;
+    const rating = luxuryRowPlayerRating(candidate, row, shiftedCaps);
     const over = rating - Math.max(row.cap, 0);
     if (over <= 0) continue;
     charged += row.penaltyPer100 * (over / 100) ** row.penaltyCurve + row.minAdder;

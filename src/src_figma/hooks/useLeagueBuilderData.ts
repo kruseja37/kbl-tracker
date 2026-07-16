@@ -53,6 +53,7 @@ import { registerLeaguePoolForLeague } from '../../utils/leagueBuilderPoolRegist
 import { copyLeaguePoolMembership } from '../../utils/leagueBuilderPoolBuilder';
 import { isMlbDraftComplete } from '../../utils/mlbDraftCompletion';
 import type { PlayerForSalary } from '../../engines/salaryCalculator';
+import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
 import {
   isHistoricalLegendsDatabaseSeeded,
   seedHistoricalLegendsDatabase,
@@ -174,11 +175,15 @@ export function toConstructionPlayer(player: Player): ConstructionPlayer {
     || player.primaryPosition === 'CP'
     || player.primaryPosition === 'SP/RP'
     || player.primaryPosition === 'P';
+  const twoWayVariant = isPitcher
+    ? twoWayVariantFromTraits([player.trait1, player.trait2])
+    : null;
 
   return {
     id: player.id,
     isPitcher,
     role: isPitcher ? toPitcherRole(player.primaryPosition) : undefined,
+    ...(twoWayVariant ? { twoWayVariant } : {}),
     bat: {
       POW: player.power,
       CON: player.contact,

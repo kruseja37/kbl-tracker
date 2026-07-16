@@ -1,7 +1,7 @@
 /* Pure snake setup calculations shared by setup UI, room recovery, and focused tests. */
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
-import { isLegalRoster } from '../../../../../data/rosterConstruction';
+import { isLegalRoster, twoWayVariantFromTraits } from '../../../../../data/rosterConstruction';
 import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool, type TeamCapIdentity } from '../../../../../engines/leagueConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import { archetypeToCapIdentity, constructionArchetypeFitMultiplier, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
@@ -66,10 +66,14 @@ function isTaxonomyPosition(position: Player['primaryPosition']): position is Ta
 
 function toConstructionPlayer(player: Player): SnakeSeatingPlayer['construction'] {
   const isPitcher = ['SP', 'SP/RP', 'RP', 'CP'].includes(player.primaryPosition);
+  const twoWayVariant = isPitcher
+    ? twoWayVariantFromTraits([player.trait1, player.trait2])
+    : null;
   return {
     id: player.id,
     isPitcher,
     role: isPitcher ? player.primaryPosition as 'SP' | 'SP/RP' | 'RP' | 'CP' : undefined,
+    ...(twoWayVariant ? { twoWayVariant } : {}),
     bat: { POW: player.power, CON: player.contact, SPD: player.speed, FLD: player.fielding, ARM: player.arm },
     pit: isPitcher ? { VEL: player.velocity, JNK: player.junk, ACC: player.accuracy } : undefined,
   };

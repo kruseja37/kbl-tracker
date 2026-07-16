@@ -535,3 +535,33 @@ Pitcher-batting luxury rows remain enabled with unchanged juiced caps:
 | 2.0x tierCap ($2,411,672) | $1,907,231 | all identities PASS within ±10% |
 
 Status: **V117-FIX complete**.
+
+## 2026-07-15 ADDENDUM — usage-aware pitcher secondary tax and Two Way split
+
+This addendum supersedes the raw pitcher-batting cap values above for newly generated luxury tables.
+The full IV/workbook anchor path predates later KBL positional re-blessings, so the canonical analyzer
+now has a deterministic `--luxury-only` path. It re-derives rating caps from current stock players while
+preserving the already-ratified tier salary caps, tax dollar coefficients, flat adders, and curves.
+
+Ordinary pitcher POW/CON/SPD/FLD is measured at role exposure. SP exposure is `.19625/.19625/.31625/.25`;
+SP/RP is `.15/.15/.25/.18`; RP is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Tax FLD deliberately uses
+defensive start/range exposure; salary/IV retains its separate full pitcher-FLD value. Two Way pitchers
+enter hitter POW/CON/SPD/FLD at full use, remain in pitcher VEL/JNK/ACC, and are excluded from pitcher
+secondary rows. Pitcher ARM remains excluded.
+
+### Re-derived pitcher-secondary caps
+
+| Tier | rot POW | rot CON | rot SPD | rot FLD | pen POW | pen CON | pen SPD | pen FLD |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Juiced | 17.5 | 17.3 | 35.3 | 64.8 | 6.9 | 7.0 | 22.1 | 23.6 |
+| Standard | 16.7 | 16.6 | 33.7 | 61.9 | 6.6 | 6.7 | 21.1 | 22.5 |
+| Nerfed | 16.0 | 15.9 | 32.3 | 59.3 | 6.3 | 6.4 | 20.2 | 21.6 |
+
+The Two Way cohort also moves the Juiced hitter-CON cap from `607.2` to `616.0` (Standard `587.8`,
+Nerfed `563.2`). Other hitter and pitcher VEL/JNK/ACC cap inputs remain on their prior basis. Every new
+row carries `pitcher-role-usage-v1`; markerless saved rows retain legacy raw-rating behavior.
+
+Verification: the luxury-only generator is byte-deterministic (`tierParams.ts` SHA-256
+`de656fa5dab376547abe647cb3e30e1ab86fb0e3b0939f3e647686546c6e21f9`). The 24-archetype rerun,
+including the stock Two Way trait, leaves all identities within ±10%: Juiced max `0.5%`, Standard
+max `1.4%`, Nerfed max `1.8%`.

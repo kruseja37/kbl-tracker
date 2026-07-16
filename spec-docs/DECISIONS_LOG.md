@@ -3996,3 +3996,22 @@ Leather gets +10% starter POW and +10% starter CON; Flamethrowers gets +10% each
 behind rotation velocity; HDH Royals gets +10% starter CON. Standard and Nerfed are the calibration
 priorities. Their final 24-team maximum deviations are 3.6% and 3.3%; Juiced remains inside the
 compatibility guard at 8.3%.
+
+## 2026-07-15 — Pitcher secondary-rating tax follows playing time; Two Way is split once
+
+The prior raw-rating pitcher-batting cap law is superseded. Ordinary pitchers' POW, CON, SPD,
+and FLD now enter their rotation or bullpen top-four tax rows at canonical role exposure rather
+than as everyday ratings. POW/CON use batting-appearance exposure, SPD adds running/range exposure,
+and tax FLD uses defensive start/range exposure. Salary/IV keeps its separate full pitcher-FLD
+valuation. Pitcher ARM remains excluded.
+
+A true `Two Way (C/IF/OF)` pitcher is an everyday hitter for hitter POW/CON/SPD/FLD tax and remains
+a pitcher for rotation/bullpen VEL/JNK/ACC tax. The same batting ratings are excluded from pitcher
+secondary rows, so they are never charged twice; hitter ARM still does not inherit a stored pitcher
+ARM rating. Archetype fit follows the same split.
+
+The stock-team 65th-percentile method was rerun in this usage-adjusted rating space. Salary caps,
+tax dollar coefficients, flat adders, penalty curves, roster law, and archetype shifts are unchanged.
+New generated cap rows carry `pitcher-role-usage-v1`. Locked or saved tables without that marker keep
+legacy raw-rating behavior, so no draft changes economics midstream. The rerun keeps all 24 identities
+inside ±10%: Standard maximum deviation 1.4%; Nerfed 1.8% (Juiced compatibility maximum 0.5%).

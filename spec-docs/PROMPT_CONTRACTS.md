@@ -31449,6 +31449,7 @@ identity a distinct baseball reason to value pitcher hitting; do not use one ide
 - `src/data/tierParams.ts`
 - `src/engines/leagueConstruction.ts`
 - `src/engines/archetypeIdentity.ts`
+- `src/engines/snakeDraftAlignment.ts`
 - `src/engines/archetypeBalanceSimulator.ts`
 - `src/engines/poolFeasibility.ts`
 - `src/engines/farmArchetypeTilt.ts`
@@ -31507,3 +31508,86 @@ shipping tier-specific archetype definitions solely to game the parity test.
 
 Use extra-high reasoning effort.
 <!-- ===== END CONTRACT: SNAKE-PITCHER-HITTING-IDENTITY-28 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-PITCHER-USAGE-TAX-29 ===== -->
+# SNAKE-PITCHER-USAGE-TAX-29 — PLAYING-TIME TAX AND TWO-WAY SPLIT
+
+**ROUTE:** Codex 5.6 SOL | extra-high reasoning effort
+**REASONING:** Codex 5.6 SOL | extra-high reasoning effort
+**Date:** 2026-07-15 | **Branch:** `codex/snake-legends-integration`
+
+## ROLE AND GOAL
+Codex is the builder and verifier. A separate non-builder is the skeptical auditor. Replace raw
+everyday-player taxation of pitcher POW/CON/SPD/FLD with role-usage-aware taxation, count a true
+Two Way pitcher's hitter and pitcher contributions in their proper separate tax groups without
+double-charging the same batting ratings, regenerate Standard/Nerfed economics, and preserve saved
+drafts created with the legacy raw-rating table.
+
+## SOURCE OF TRUTH
+JK approved the 2026-07-15 ruling that ordinary starters use their secondary offense only in their
+starts and therefore must not be taxed as everyday hitters. Existing canonical role usage is the
+starting point. Pitcher ARM remains excluded. A Two Way pitcher is taxed as an everyday hitter for
+POW/CON/SPD/FLD and as a pitcher for VEL/JNK/ACC; the same POW/CON/SPD/FLD must not also be charged in
+the rotation or bullpen secondary rows. Standard and Nerfed are the product tiers; Juiced remains a
+compatibility check only.
+
+## ALLOWED FILES
+- `scripts/analyze-pool.py`
+- `src/data/rosterEngineConstants.ts`
+- `src/data/tierParams.ts`
+- `src/data/__tests__/pitcherSecondaryTaxTuning.test.ts`
+- `src/engines/leagueConstruction.ts`
+- `src/engines/snakeLuxuryTax.ts`
+- `src/engines/auctionLuxuryTax.ts`
+- `src/engines/archetypeIdentity.ts`
+- `src/engines/__tests__/leagueConstruction.test.ts`
+- `src/engines/__tests__/snakeLuxuryTax.test.ts`
+- `src/engines/__tests__/auctionLuxuryTax.test.ts`
+- `src/engines/__tests__/archetypeIdentity.test.ts`
+- `src/engines/__tests__/snakeDraftAlignment.test.ts`
+- `src/engines/__tests__/historicalArchetypes.test.ts`
+- `src/engines/__tests__/archetypeBalanceSimulator.test.ts`
+- `src/src_figma/hooks/useLeagueBuilderData.ts`
+- `src/src_figma/__tests__/leagueBuilder/useLeagueBuilderDataConstructionPlayer.test.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- focused setup-adapter tests
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- focused Snake desk-model tests
+- `spec-docs/PROMPT_CONTRACTS.md`
+- `spec-docs/DECISIONS_LOG.md`
+- `spec-docs/TEAM_ARCHETYPES_24.md`
+- `spec-docs/T3_POOL_ANALYSIS.md`
+- `spec-docs/NOW/SNAKE_DRAFT.md`
+- required session-close status/log documents
+
+## REQUIRED BEHAVIOR
+- New generated tables explicitly identify the role-usage rating basis. Legacy saved cap rows without
+  that identity retain their exact prior raw-rating behavior.
+- Ordinary rotation and bullpen POW/CON/SPD/FLD use canonical role exposure. Tax FLD exposure is
+  based on defensive-start share rather than the salary engine's full pitcher defense value.
+- Two Way pitchers enter hitter POW/CON/SPD/FLD cohorts at full usage, remain in their pitching
+  VEL/JNK/ACC cohorts, and are excluded from pitcher secondary-batting cohorts. Pitcher ARM stays out.
+- Shared settlement tax, Snake projected tax/pressure, desk tax-core explanations, construction-player
+  conversion, archetype fit, generated caps, and simulator inputs agree on the same classification.
+- Re-derived Standard and Nerfed cap tables remain grounded in the same stock-team percentile method;
+  no hand-tuned cap, coefficient, salary, IV, roster, draft, or archetype shift is allowed.
+
+## REQUIRED PROOF
+- Unit cases compare legacy and usage-aware rows and prove SP, relief, and Two Way treatment rating by
+  rating, including no double charge and pitcher ARM exclusion.
+- Projection and desk explanations reconcile to authoritative settlement tax.
+- The canonical generator reproduces `tierParams.ts`; focused tests and TypeScript pass.
+- Standard and Nerfed 24-archetype simulations are rerun from the regenerated economics, all identities
+  remain inside the ratified +/-10% band, and the exact new deviations are recorded. Juiced is checked
+  only for compatibility and does not drive tuning.
+- Production build is attempted; any pre-existing packaging or disk blocker is proved separately.
+- A separate auditor inspects the committed diff and reruns adversarial checks before closure.
+
+## STOP CONDITIONS
+Stop and report rather than changing salary/IV, roster size or legality, salary caps, tax coefficients,
+archetype boosts/sacrifices, draft budgets, pool shaping, UI layout, Auction/Snake routing, or silently
+migrating legacy saved cap rows.
+
+Use extra-high reasoning effort.
+<!-- ===== END CONTRACT: SNAKE-PITCHER-USAGE-TAX-29 ===== -->

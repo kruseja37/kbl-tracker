@@ -36,4 +36,22 @@ describe('snake roster-local luxury tax', () => {
 
     expect(pressure).toBe(450);
   });
+
+  it('screens a Two Way player as a hitter plus pitcher without secondary-rating duplication', () => {
+    const pressure = snakePlayerTaxPressure({
+      id: 'two-way',
+      isPitcher: true,
+      role: 'SP',
+      twoWayVariant: 'OF',
+      bat: { POW: 80, CON: 0, SPD: 0, FLD: 0, ARM: 99 },
+      pit: { VEL: 70, JNK: 0, ACC: 0 },
+    }, [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'hitters', stat: 'ARM', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ]);
+
+    expect(pressure).toBe(150);
+  });
 });

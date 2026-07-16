@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { runBalanceSim, type SimPlayer, type SimArchetype } from '../archetypeBalanceSimulator';
 import { CAP_MODIFICATION_FRACTIONS } from '../../data/tierParams';
+import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ORACLE_PATH = path.resolve(__dirname, '../../../spec-docs/reference/iv_oracle.json');
@@ -20,6 +21,7 @@ interface OracleEntry {
     position: string;
     batterRatings?: { POW?: number; CON?: number; SPD?: number; FLD?: number; ARM?: number };
     pitcherRatings?: { VEL?: number; JNK?: number; ACC?: number };
+    traits?: string[];
   };
 }
 
@@ -32,6 +34,7 @@ function loadPool(): SimPlayer[] {
       id: e.id,
       isPitcher: !!e.input.isPitcher,
       role: e.input.isPitcher ? (e.input.role as SimPlayer['role']) : undefined,
+      twoWayVariant: e.input.isPitcher ? twoWayVariantFromTraits(e.input.traits ?? []) : null,
       bat: { POW: br.POW ?? 0, CON: br.CON ?? 0, SPD: br.SPD ?? 0, FLD: br.FLD ?? 0, ARM: br.ARM ?? 0 },
       pit: pr ? { VEL: pr.VEL ?? 0, JNK: pr.JNK ?? 0, ACC: pr.ACC ?? 0 } : undefined,
       iv: e.kblIV,

@@ -495,6 +495,28 @@ describe('private desk model', () => {
 });
 
 describe('tax-core explainer matches the settled single-assignment grouping (TAXSWING seam)', () => {
+  it('shows Two Way batting in hitter rows and pitching in pitcher rows without a duplicate batting row', () => {
+    const twoWay = candidate('TWO-WAY', 'SP', 80);
+    twoWay.construction.twoWayVariant = 'IF';
+    const regular = candidate('REGULAR-SP', 'SP', 90);
+    const hitter = candidate('HITTER', 'C', 70);
+    const board = [twoWay, regular, hitter];
+    const basis = 'pitcher-role-usage-v1' as const;
+    const rows = buildTaxCoreRows({
+      candidates: board,
+      boardPlayerIds: board.map((player) => player.id),
+      caps: [
+        { group: 'hitters', stat: 'POW', topN: 2, cap: 0, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0, ratingBasis: basis },
+        { group: 'rotation', stat: 'POW', topN: 2, cap: 0, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0, ratingBasis: basis },
+        { group: 'rotation', stat: 'VEL', topN: 2, cap: 0, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0, ratingBasis: basis },
+      ],
+    });
+
+    expect(rows.find((row) => row.key === 'hitters:POW')?.playerNames).toEqual(['TWO-WAY', 'HITTER']);
+    expect(rows.find((row) => row.key === 'rotation:POW')?.playerNames).toEqual(['REGULAR-SP']);
+    expect(rows.find((row) => row.key === 'rotation:VEL')?.playerNames).toEqual(['REGULAR-SP', 'TWO-WAY']);
+  });
+
   it('never names a swing arm in the rotation rows when four pure starters are on the board', () => {
     const board = [
       ...['SP-A', 'SP-B', 'SP-C', 'SP-D'].map((id) => candidate(id, 'SP', 500)),

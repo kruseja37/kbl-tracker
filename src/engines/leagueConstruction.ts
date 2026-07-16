@@ -1,12 +1,15 @@
 import {
+  deriveLuxuryTaxUsageWeights,
   POOL_SURPLUS_MAX,
+  type PitcherRoleKey,
   SOLVENCY_RED_MARGIN,
   SOLVENCY_SEVERE_TAX_FRAC,
   TRADE_TOLERANCE_BAND,
 } from '../data/rosterEngineConstants';
-import { LEGAL_ROSTER } from '../data/rosterConstruction';
+import { LEGAL_ROSTER, type TwoWayVariant } from '../data/rosterConstruction';
 import {
   CAP_MODIFICATION_FRACTIONS,
+  LUXURY_TAX_RATING_BASIS,
   LUXURY_CAP_TABLES,
   T3_DERIVATION_INPUTS,
   TIER_CAPS,
@@ -67,6 +70,7 @@ export type ConstructionPlayer = {
   id: string;
   isPitcher: boolean;
   role?: 'SP' | 'SP/RP' | 'RP' | 'CP';
+  twoWayVariant?: TwoWayVariant | null;
   bat: { POW: number; CON: number; SPD: number; FLD: number; ARM: number };
   pit?: { VEL: number; JNK: number; ACC: number };
 };
@@ -249,11 +253,60 @@ export function shiftLuxuryCaps(caps: LuxuryCapRow[], identity: IdentityComposit
   });
 }
 
-function playerRating(player: ConstructionPlayer, stat: LuxuryStat): number {
+export const PITCHER_ROLE_USAGE_RATING_BASIS = LUXURY_TAX_RATING_BASIS;
+
+export function luxuryCapsUsePitcherRoleUsage(caps: readonly LuxuryCapRow[]): boolean {
+  return caps.some((row) => row.ratingBasis === PITCHER_ROLE_USAGE_RATING_BASIS);
+}
+
+export function isPitcherSecondaryBattingStat(
+  stat: LuxuryStat,
+): stat is 'POW' | 'CON' | 'SPD' | 'FLD' {
+  return stat === 'POW' || stat === 'CON' || stat === 'SPD' || stat === 'FLD';
+}
+
+function isTwoWayPitcher(player: ConstructionPlayer): boolean {
+  return player.isPitcher && player.twoWayVariant != null;
+}
+
+export function playerEligibleForLuxuryRow(
+  player: ConstructionPlayer,
+  row: LuxuryCapRow,
+  caps: readonly LuxuryCapRow[],
+): boolean {
+  if (!luxuryCapsUsePitcherRoleUsage(caps)) {
+    return row.group === 'hitters' ? !player.isPitcher : player.isPitcher;
+  }
+  if (row.group === 'hitters') {
+    if (!player.isPitcher) return true;
+    return isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat);
+  }
+  if (!player.isPitcher) return false;
+  return !(isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat));
+}
+
+export function luxuryRowPlayerRating(
+  player: ConstructionPlayer,
+  row: LuxuryCapRow,
+  caps: readonly LuxuryCapRow[],
+): number {
+  const stat = row.stat;
   if (stat === 'VEL' || stat === 'JNK' || stat === 'ACC') {
     return player.pit?.[stat] ?? 0;
   }
-  return player.bat[stat];
+  const raw = player.bat[stat];
+  if (
+    !luxuryCapsUsePitcherRoleUsage(caps)
+    || row.group === 'hitters'
+    || !player.isPitcher
+    || isTwoWayPitcher(player)
+    || !isPitcherSecondaryBattingStat(stat)
+  ) {
+    return raw;
+  }
+  const role = player.role;
+  if (!role) return 0;
+  return raw * deriveLuxuryTaxUsageWeights(role as PitcherRoleKey)[stat];
 }
 
 export type LuxuryTaxPitchingGroups = {
@@ -297,16 +350,16 @@ export function assignLuxuryTaxPitchingGroups(roster: ConstructionRoster): Luxur
 }
 
 export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode: BalanceMode): TaxResult {
-  const hitters = roster.filter((player) => !player.isPitcher);
   const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
 
   let wouldBeTax = 0;
   const binding: TaxBinding[] = [];
 
   for (const row of caps) {
-    const group = row.group === 'hitters' ? hitters : row.group === 'rotation' ? rotation : bullpen;
+    const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const vals = group
-      .map((player) => playerRating(player, row.stat))
+      .filter((player) => playerEligibleForLuxuryRow(player, row, caps))
+      .map((player) => luxuryRowPlayerRating(player, row, caps))
       .sort((left, right) => right - left)
       .slice(0, row.topN);
     const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);

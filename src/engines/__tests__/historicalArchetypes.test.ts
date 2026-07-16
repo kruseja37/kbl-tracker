@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { runBalanceSim, type SimPlayer, type SimArchetype } from '../archetypeBalanceSimulator';
 import { HISTORICAL_ARCHETYPES, archetypeCapShift } from '../../data/historicalArchetypes';
+import { twoWayVariantFromTraits } from '../../data/rosterConstruction';
 import type { TierKey } from '../../data/tierParams';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,6 +16,7 @@ interface OracleEntry {
     isPitcher: boolean; role: string; position: string;
     batterRatings?: { POW?: number; CON?: number; SPD?: number; FLD?: number; ARM?: number };
     pitcherRatings?: { VEL?: number; JNK?: number; ACC?: number };
+    traits?: string[];
   };
 }
 function loadPool(): SimPlayer[] {
@@ -25,6 +27,7 @@ function loadPool(): SimPlayer[] {
     return {
       id: e.id, isPitcher: !!e.input.isPitcher,
       role: e.input.isPitcher ? (e.input.role as SimPlayer['role']) : undefined,
+      twoWayVariant: e.input.isPitcher ? twoWayVariantFromTraits(e.input.traits ?? []) : null,
       bat: { POW: br.POW ?? 0, CON: br.CON ?? 0, SPD: br.SPD ?? 0, FLD: br.FLD ?? 0, ARM: br.ARM ?? 0 },
       pit: pr ? { VEL: pr.VEL ?? 0, JNK: pr.JNK ?? 0, ACC: pr.ACC ?? 0 } : undefined,
       iv: e.kblIV, salary: e.kblIV, position: e.input.position,

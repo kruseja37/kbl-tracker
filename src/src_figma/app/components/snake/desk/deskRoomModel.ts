@@ -113,6 +113,7 @@ export function fitWord(input: {
   const exactMultiplier = archetypeStatFitMultiplier(input.capIdentity, {
     isPitcher: input.player.construction.isPitcher,
     role: input.player.construction.role,
+    twoWayVariant: input.player.construction.twoWayVariant,
     power: input.player.stored.power,
     contact: input.player.stored.contact,
     speed: input.player.stored.speed,

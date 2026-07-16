@@ -111,6 +111,23 @@ describe('auctionLuxuryTax', () => {
     expect(actual).toBeCloseTo(expected, 8);
   });
 
+  test('single-player fast path matches usage-aware Two Way settlement exactly', () => {
+    const candidate: ConstructionPlayer = {
+      id: 'two-way', isPitcher: true, role: 'SP', twoWayVariant: 'C',
+      bat: { POW: 80, CON: 0, SPD: 0, FLD: 0, ARM: 99 },
+      pit: { VEL: 70, JNK: 0, ACC: 0 },
+    };
+    const caps: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'hitters', stat: 'ARM', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ];
+
+    expect(auctionSinglePlayerTaxWithShiftedCaps(candidate, caps)).toBe(150);
+    expect(auctionSinglePlayerTaxWithShiftedCaps(candidate, caps)).toBe(luxuryTax([candidate], caps, 'taxed').charged);
+  });
+
   test('selected cap identity shifts the prioritized band cap through shiftLuxuryCaps', () => {
     const capIdentity: TeamCapIdentity = {
       bandPriorities: { ...zeroPriorities, Defense: 5 },

@@ -145,6 +145,27 @@ describe('archetype identity bridge', () => {
     expect(downstream.archetypeFitMultiplier).toBe(1);
   });
 
+  test('Two Way fit uses everyday hitter axes plus pitching axes, not starter-batting axes', () => {
+    const rawShift = Object.fromEntries(MOD_STATS.map((stat) => [stat, 0])) as Record<ModStat, number>;
+    rawShift.RPOW = 0.1;
+    const rotationBatIdentity = { increase: [], decrease: [], rawShift };
+    const base = {
+      isPitcher: true, role: 'SP', power: 90, contact: 50, speed: 50, fielding: 50, arm: 50,
+      velocity: 50, junk: 50, accuracy: 50,
+    } as const;
+
+    expect(archetypeStatFitMultiplier(rotationBatIdentity, base)).toBeGreaterThan(1);
+    expect(archetypeStatFitMultiplier(rotationBatIdentity, { ...base, twoWayVariant: 'IF' })).toBe(1);
+
+    const hitterAndPitcherShift = { ...rawShift, RPOW: 0, POW: 0.1, RVEL: 0.1 };
+    const twoWayIdentity = { increase: [], decrease: [], rawShift: hitterAndPitcherShift };
+    expect(archetypeStatFitMultiplier(twoWayIdentity, {
+      ...base, twoWayVariant: 'IF', velocity: 90,
+    })).toBeGreaterThan(archetypeStatFitMultiplier(twoWayIdentity, {
+      ...base, twoWayVariant: 'IF', power: 10, velocity: 10,
+    })!);
+  });
+
   test('matches the spec sign for every spec stat and leaves every off-spec ModStat at zero', () => {
     // The authoritative touched-set is arch.spec (NOT boosts/nerfs): some archetypes carry a minor
     // spec entry not surfaced in the headline boosts (e.g. big-red-machine POW: 0.5). The faithful

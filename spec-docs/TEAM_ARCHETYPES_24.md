@@ -187,9 +187,14 @@ The starters put the ball in play, then a precise bullpen shortens the game. **+
 
 - **Starter batting axes are role-specific.** They shift only the top-four rotation POW/CON tax rows and
   affect only startable pitchers in exact team-fit scoring. They never widen hitter or bullpen caps.
-- **2026-07-15 measured results for the revised four (Juiced / Standard / Nerfed):** Bash Brothers
-  **−8.3 / +1.1 / +1.2%**; Launch & Leather **−2.7 / +1.1 / −2.8%**; Flamethrowers
-  **+0.2 / +0.7 / −0.2%**; HDH Royals **−0.3 / −2.4 / +1.2%**.
+- **Pitcher secondary tax is usage-adjusted.** Ordinary pitcher POW/CON/SPD/FLD is multiplied by
+  canonical role exposure before entering rotation/bullpen top-four rows. Two Way pitcher batting
+  instead enters hitter POW/CON/SPD/FLD at full use and is omitted from those pitcher-secondary rows;
+  VEL/JNK/ACC stays in the proper pitcher group. Pitcher ARM remains excluded.
+- **2026-07-15 measured results after the usage-aware rerun (Juiced / Standard / Nerfed):** Bash Brothers
+  **+0.5 / −0.7 / +0.2%**; Launch & Leather **−0.3 / −0.4 / +0.1%**; Flamethrowers
+  **+0.5 / 0.0 / −0.7%**; HDH Royals **0.0 / +0.2 / +0.2%**. All 24 remain in band;
+  maximum deviations are **0.5 / 1.4 / 1.8%**.
 
 - **Estimated rating points** = the archetype's cap-shift fraction for that area × ~60 (a typical rostered rating),
   rounded. It's a rough translation of *tax-free headroom* onto the 0–99 rating scale — a design feel, not a

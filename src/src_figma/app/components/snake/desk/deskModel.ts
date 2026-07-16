@@ -3,6 +3,8 @@ import { isLegalRoster, type RosterSlotPlayer } from '../../../../../data/roster
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import {
   assignLuxuryTaxPitchingGroups,
+  luxuryRowPlayerRating,
+  playerEligibleForLuxuryRow,
   type ConstructionPlayer,
 } from '../../../../../engines/leagueConstruction';
 import type { SnakeRiskRead } from '../../../../../engines/snakeRationalRoom';
@@ -429,11 +431,6 @@ export function buildAdvisorLog(
   ];
 }
 
-function rating(player: ConstructionPlayer, stat: LuxuryCapRow['stat']): number {
-  if (stat === 'VEL' || stat === 'JNK' || stat === 'ACC') return player.pit?.[stat] ?? 0;
-  return player.bat[stat];
-}
-
 // The explainer names arms exactly the way the settled tax groups them
 // (assignLuxuryTaxPitchingGroups — TAXSWING single assignment; a swing arm is never
 // listed in both groups).
@@ -453,15 +450,18 @@ export function buildTaxCoreRows(input: {
   const rotationIds = new Set(pitchingGroups.rotation.map((player) => player.id));
   const bullpenIds = new Set(pitchingGroups.bullpen.map((player) => player.id));
   const inGroup = (player: ConstructionPlayer, group: LuxuryCapRow['group']): boolean => {
-    if (group === 'hitters') return !player.isPitcher;
+    if (group === 'hitters') return true;
     if (group === 'rotation') return rotationIds.has(player.id);
     return bullpenIds.has(player.id);
   };
   return input.caps.map((cap) => {
     const groupWord = cap.group === 'hitters' ? 'HITTERS' : cap.group === 'rotation' ? 'STARTERS' : 'BULLPEN ARMS';
     const core = players
-      .filter((candidate) => inGroup(candidate.construction, cap.group))
-      .sort((left, right) => rating(right.construction, cap.stat) - rating(left.construction, cap.stat) || left.id.localeCompare(right.id))
+      .filter((candidate) => inGroup(candidate.construction, cap.group)
+        && playerEligibleForLuxuryRow(candidate.construction, cap, input.caps))
+      .sort((left, right) => luxuryRowPlayerRating(right.construction, cap, input.caps)
+        - luxuryRowPlayerRating(left.construction, cap, input.caps)
+        || left.id.localeCompare(right.id))
       .slice(0, cap.topN);
     return {
       key: `${cap.group}:${cap.stat}`,

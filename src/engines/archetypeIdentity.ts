@@ -94,6 +94,7 @@ export function resolveClubBandPriorities(input: {
 export interface ArchetypeFitRatings {
   isPitcher: boolean;
   role?: string | null;
+  twoWayVariant?: ConstructionPlayer['twoWayVariant'];
   power: number;
   contact: number;
   speed: number;
@@ -116,10 +117,14 @@ export function archetypeStatFitMultiplier(
   const role = (player.role ?? '').toUpperCase();
   const startable = player.isPitcher && (role === 'SP' || role === 'SP/RP');
   const relievable = player.isPitcher && (role === 'RP' || role === 'CP' || role === 'SP/RP');
+  const twoWay = player.isPitcher && player.twoWayVariant != null;
   const ratings: Partial<Record<ModStat, number>> = player.isPitcher
     ? {
+        ...(twoWay ? {
+          POW: player.power, CON: player.contact, SPD: player.speed, FLD: player.fielding,
+        } : {}),
         ...(startable || (!startable && !relievable) ? {
-          RPOW: player.power, RCON: player.contact,
+          ...(!twoWay ? { RPOW: player.power, RCON: player.contact } : {}),
           RVEL: player.velocity, RJNK: player.junk, RACC: player.accuracy,
         } : {}),
         ...(relievable || (!startable && !relievable) ? {
@@ -154,6 +159,7 @@ export function constructionArchetypeFitMultiplier(
   return archetypeStatFitMultiplier(capIdentity, {
     isPitcher: player.isPitcher,
     role: player.role,
+    twoWayVariant: player.twoWayVariant,
     power: player.bat.POW,
     contact: player.bat.CON,
     speed: player.bat.SPD,
