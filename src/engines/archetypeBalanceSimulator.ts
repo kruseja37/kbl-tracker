@@ -188,18 +188,23 @@ interface SlotPick {
   player: SimPlayer;
 }
 
-/** Over-budget penalty (IV per $ over). Large enough to force feasibility, then maximise value. */
-const OVER_BUDGET_PENALTY = 4;
-
 function rosterCost(players: SimPlayer[], caps: LuxuryCapRow[]): number {
   return players.reduce((s, p) => s + p.salary, 0) + taxOf(players, caps);
 }
 
-/** Objective the hill-climb maximises: total value minus a stiff penalty for exceeding the budget. */
-function objective(players: SimPlayer[], caps: LuxuryCapRow[], budget: number): number {
+type ValueObjective = { over: number; iv: number };
+
+/** Solvency is lexicographically absolute; value breaks ties only after overage is minimized to zero. */
+function objective(players: SimPlayer[], caps: LuxuryCapRow[], budget: number): ValueObjective {
   const iv = players.reduce((s, p) => s + p.iv, 0);
   const over = Math.max(0, rosterCost(players, caps) - budget);
-  return iv - OVER_BUDGET_PENALTY * over;
+  return { over, iv };
+}
+
+function betterObjective(candidate: ValueObjective, current: ValueObjective): boolean {
+  if (candidate.over < current.over - 1e-9) return true;
+  if (candidate.over > current.over + 1e-9) return false;
+  return candidate.iv > current.iv + 1;
 }
 
 /**
@@ -285,9 +290,8 @@ function greedyStart(pool: SimPlayer[], score: (p: SimPlayer) => number): SlotPi
 }
 
 /**
- * Hill-climb from a starting roster: repeatedly accept the single best slot-swap that improves
- * `objective` (value minus a stiff over-budget penalty). The penalty first drives the roster under
- * budget, then maximises value within it. Because a swap can replace a cap-BUSTING star with a
+ * Hill-climb from a starting roster: repeatedly accept the single best slot-swap that first reduces
+ * over-budget dollars to zero, then maximises value without leaving solvency. Because a swap can replace a cap-BUSTING star with a
  * same-position player who FITS the archetype's caps (sheds tax for little value), the climb finds each
  * archetype's natural roster shape rather than punishing the counterintuitive ones.
  */
@@ -314,7 +318,7 @@ function climb(
         if (repl.id === current.id) continue;
         players[idx] = repl;
         const obj = objective(players, caps, budget);
-        if (obj > bestObj + 1) {
+        if (betterObjective(obj, bestObj)) {
           bestObj = obj;
           bestRepl = repl;
         }
@@ -352,7 +356,7 @@ export function buildBestRoster(
 
   const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, fitScore);
   const fromFit = climb(greedyStart(pool, fitScore), pool, caps, budget, fitScore);
-  const best = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+  const best = betterObjective(objOf(fromFit), objOf(fromValue)) ? fromFit : fromValue;
 
   const players = best.map((p) => p.player);
   const totalIv = players.reduce((s, p) => s + p.iv, 0);
@@ -844,7 +848,7 @@ export function buildIdentityRoster(
   const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
   const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, valueFit);
   const fromFit = climb(greedyStart(pool, valueFit), pool, caps, budget, valueFit);
-  const baselinePicks = objOf(fromFit) > objOf(fromValue) ? fromFit : fromValue;
+  const baselinePicks = betterObjective(objOf(fromFit), objOf(fromValue)) ? fromFit : fromValue;
   const baselineIv = baselinePicks.reduce((s, p) => s + p.player.iv, 0);
 
   const valueFloor = options.valueFloorOverride ?? params.valueFloor;

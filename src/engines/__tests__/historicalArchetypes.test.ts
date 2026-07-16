@@ -70,6 +70,7 @@ describe('historical team archetypes — locked set, all tiers', () => {
     // Every archetype must field a LEGAL SMB4 roster (8 field + backup C + 13-14 position / 8-9 pitchers,
     // ≥4 SP + ≥4 RP) — so the parity result translates to a real auction draft, not impossible teams (JK 2026-06-30).
     expect(reports.every(({ report }) => report.results.every((r) => r.legalRoster))).toBe(true);
+    expect(reports.every(({ report }) => report.results.every((r) => r.solvent))).toBe(true);
     const tierViolations = reports.flatMap(({ tier, report }) =>
       report.outliers.map((outlier) => `${tier}: ${outlier.name} ${(outlier.deviation * 100).toFixed(1)}%`),
     );

@@ -31577,6 +31577,8 @@ compatibility check only.
   conversion, archetype fit, generated caps, and simulator inputs agree on the same classification.
 - Re-derived Standard and Nerfed cap tables remain grounded in the same stock-team percentile method;
   no hand-tuned cap, coefficient, salary, IV, roster, draft, or archetype shift is allowed.
+- Balance certification requires every simulated roster to be legal and solvent; no amount of IV may
+  trade through even a one-dollar budget overage.
 
 ## REQUIRED PROOF
 - Unit cases compare legacy and usage-aware rows and prove SP, relief, and Two Way treatment rating by
