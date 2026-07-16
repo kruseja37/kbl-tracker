@@ -270,7 +270,7 @@ describe('production-shape early snake intelligence', () => {
       ).toBe(true);
       }
     }
-  }, 180_000);
+  }, 300_000);
 
   test('returns a useful solvent Asst GM board from the real 506-card source before pick one', () => {
     expect(assistantPlayers).toHaveLength(stockPlayers.length);

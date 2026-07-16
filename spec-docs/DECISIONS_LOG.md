@@ -4086,3 +4086,14 @@ the normal complete importer to restore Draft, Career, and Peak source libraries
 the League Builder, infers identity from names or ratings, or deletes unrelated data. The page shows
 the 44px repair action only from a structured, fully preflighted eligible collision; cancellation
 does nothing, and any changed or newly blocked state fails closed on the repair's own fresh preflight.
+
+## 2026-07-16 — Identity rosters must visibly express a boost before optimizing full fit
+
+The identity builder's order is legality, solvency, and the posture IV floor first. When both of its
+candidate rosters clear those gates, a roster whose boosted cohort is above the source-pool mean
+takes priority over one whose boosted cohort is still below it; only then does the complete
+boost-and-sacrifice fit score choose between equivalent candidates. This preserves every sacrifice
+and value constraint while preventing a nominally optimized roster from failing to visibly embody
+its headline strength. Bomba Squad is the proved boundary: its positive-power candidate keeps 98%
+of baseline IV and is selected over a marginally higher aggregate-fit candidate with negative power
+embodiment.

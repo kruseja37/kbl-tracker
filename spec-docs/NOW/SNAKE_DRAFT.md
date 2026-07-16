@@ -4,6 +4,25 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## BUILDER COMPLETE / AUDIT PENDING (2026-07-16; RELEASE-SUITE REPAIR)
+- The isolated release-suite failures are repaired without weakening production validation. The
+  identity builder now keeps legality, solvency, and IV floor first, then requires a feasible
+  positive boosted-cohort expression before choosing by full boost-and-sacrifice fit. All 24
+  Standard identities pass; Bomba Squad now lands at positive boost with 98% baseline IV.
+- The completed Snake-to-Franchise fixture now contains the same frozen farm prospect snapshot and
+  slot salary required in production. The production handoff still fails closed when frozen farm IV
+  truth is genuinely absent.
+- D5's gauntlet assertion now reflects current usage-aware tax: two of eight teams pay a combined
+  $7,079.52, and every charged dollar exactly matches independently recomputed final liability. No
+  tax engine was changed. The four stale picker snapshot sections now match the already-ratified
+  starter-hitting copy and axes.
+- The eight-team Standard/Nerfed x four-preset proof is unchanged and passes all 6 tests; its heavy
+  gate measured 206.778s in isolation, so its explicit bound is 300s rather than the false 180s
+  failure. `poolFromDemand` was left unchanged after passing 63/63 in isolation and 63/63 in the
+  surrounding contention run.
+- **Next move:** separate non-builder audit and bounded release-suite rerun; JK's browser walk remains
+  the product acceptance gate.
+
 ## BUILDER COMPLETE / AUDIT PENDING (2026-07-16; LEGENDS-IMPORT-RECOVERY-32)
 - League Builder now has a narrow repair path for the reproduced partial Legends import collision.
   Normal import still refuses every non-Legends owner. Repair is offered only when a complete

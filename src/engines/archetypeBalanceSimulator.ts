@@ -918,7 +918,29 @@ export function buildIdentityRoster(
     x.players.length === ROSTER_SIZE && isLegalRoster(x.players) && x.solvent && x.floorMet;
   const feasibleA = feasible(a);
   const feasibleB = feasible(b);
-  const chosen = feasibleA === feasibleB ? (a.fit >= b.fit ? a : b) : feasibleA ? a : b;
+  let chosen = feasibleA === feasibleB ? (a.fit >= b.fit ? a : b) : feasibleA ? a : b;
+  let chosenEmbodiment = identityEmbodiment(
+    chosen.players,
+    archetype,
+    tier,
+    options.embodimentReference ?? fullPool,
+  );
+  // Identity is not embodied when the roster's boosted cohort still sits below the source mean.
+  // When both starts are otherwise feasible, require that visible boost before optimizing the full
+  // boost-and-sacrifice fit score. This keeps legality, solvency, and the IV floor ahead of identity.
+  if (feasibleA && feasibleB && chosenEmbodiment.boostZ <= 0) {
+    const alternate = chosen === a ? b : a;
+    const alternateEmbodiment = identityEmbodiment(
+      alternate.players,
+      archetype,
+      tier,
+      options.embodimentReference ?? fullPool,
+    );
+    if (alternateEmbodiment.boostZ > 0) {
+      chosen = alternate;
+      chosenEmbodiment = alternateEmbodiment;
+    }
+  }
 
   return {
     name: archetype.name,
@@ -935,7 +957,7 @@ export function buildIdentityRoster(
     baselineIv,
     valueFloor,
     floorMet: chosen.floorMet,
-    embodiment: identityEmbodiment(chosen.players, archetype, tier, options.embodimentReference ?? fullPool),
+    embodiment: chosenEmbodiment,
   };
 }
 

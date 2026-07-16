@@ -7547,3 +7547,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   requested module workers. Browsers without module-worker support remain outside this runtime path.
 - **Pending:** a separate non-builder audits the one-setting release repair; JK's browser walk remains
   the product-acceptance gate.
+
+## 2026-07-16 (Codex, deterministic release-suite repairs) — builder complete; audit pending
+
+- Reproduced the six reported files. Five produced actionable isolated failures; `poolFromDemand`
+  passed 63/63 alone and again inside the surrounding regression run, so its product/test code was
+  deliberately left unchanged rather than guessing at a contention failure.
+- Repaired the real Bomba Squad identity defect. After legality, solvency, and the posture IV floor,
+  the builder now prefers a feasible candidate with positive boosted-cohort embodiment before the
+  complete boost-and-sacrifice score. All 24 Standard identities pass; Bomba's result is positive
+  `boostZ` while retaining 98% of baseline IV.
+- Kept the production Snake-to-Franchise handoff fail-closed and repaired only its stale fixture by
+  adding the required frozen farm prospect snapshot. Updated only the four snapshot sections already
+  changed by ratified starter-hitting copy/axes.
+- Replaced D5's stale zero-tax claim with current usage-aware proof: two teams pay $7,079.52 combined,
+  with every charge matching independently recomputed final liability. No tax product code changed.
+- The unchanged eight-team Standard/Nerfed x Tight/Competitive/Loose/Full proof passed 6/6. Its heavy
+  gate measured 206.778s (219.864s whole file), so the explicit bound is 300s instead of 180s.
+  Auction gauntlet passed in 66.159s. Surrounding identity/pool/farm/UI proof passed 129/129.
+- Final TypeScript, changed-file lint, and fresh production packaging are green; the build transformed
+  2,728 modules and emitted the PWA service worker normally.
+- **Pending:** separate non-builder audit and bounded release-suite rerun.
