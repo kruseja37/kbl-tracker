@@ -288,9 +288,11 @@ function prepare(source = session(), activePlayers = players) {
   }) => {
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
     const claim = current.snakeCompanions?.claims.find((candidate) => (
-      candidate.deviceId === input.deviceId && candidate.status === 'approved'
+      candidate.deviceId === input.deviceId
+      && candidate.teamId === input.teamId
+      && candidate.status === 'approved'
     ));
-    if (!claim || claim.teamId !== input.teamId) throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
+    if (!claim) throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
     if (current.currentPickIndex >= current.pickOrder.length) throw new Error('THIS DRAFT IS COMPLETE.');
     if (current.seatBoards?.[input.teamId]?.revision !== input.expectedBoardRevision) throw new Error('board revision changed');
     const saved = { ...current, seatBoards: { ...current.seatBoards, [input.teamId]: input.board }, revision: (current.revision ?? 0) + 1 };
@@ -778,6 +780,118 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
     expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
   });
+
+  test('one device switches between two approved desks only through cover and keeps both boards isolated', async () => {
+    const source = session();
+    source.snakeSetup = {
+      ...source.snakeSetup!,
+      clubs: source.snakeSetup!.clubs.map((club) => ({ ...club, gmName: 'Alex' })),
+    };
+    source.snakeCompanions = {
+      roomCode: '4821',
+      claims: [
+        { claimId: 'claim-a', claimVersion: 2, deviceId: 'ipad-a', gmName: 'Alex', teamId: 'a', status: 'approved' },
+        { claimId: 'claim-b', claimVersion: 2, deviceId: 'ipad-a', gmName: 'Alex', teamId: 'b', status: 'approved' },
+      ],
+    };
+    source.seatBoards!.b = {
+      ...source.seatBoards!.b,
+      rankings: {
+        ...source.seatBoards!.b.rankings,
+        global: ['one-b', ...source.seatBoards!.b.rankings.global.filter((id) => id !== 'one-b')],
+      },
+    };
+    prepare(source);
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByTestId('companion-team-header')).toHaveTextContent('CLUB A');
+    expect(screen.getByTestId('companion-selected-player-pane')).toHaveTextContent('DUAL PLAYER');
+    const switcher = screen.getByRole('combobox', { name: 'PRIVATE TEAM DESK' });
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['CLUB A', 'CLUB B']);
+
+    fireEvent.change(switcher, { target: { value: 'b' } });
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RETURN TO DESK' })).toHaveTextContent('OPEN CLUB B DESK');
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('companion-team-header')).toHaveTextContent('CLUB B');
+    expect(screen.getByTestId('companion-selected-player-pane')).toHaveTextContent(/one-b Player/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'b' })));
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }), { target: { value: 'a' } });
+    await screen.findByTestId('snake-companion-covered');
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('companion-team-header')).toHaveTextContent('CLUB A');
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'a' })));
+
+    const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = {
+      ...current,
+      snakeCompanions: {
+        ...current.snakeCompanions!,
+        claims: [...current.snakeCompanions!.claims].reverse(),
+      },
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+    expect(screen.getByTestId('companion-team-header')).toHaveTextContent('CLUB A');
+
+    const reordered = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = {
+      ...reordered,
+      snakeCompanions: {
+        ...reordered.snakeCompanions!,
+        claims: reordered.snakeCompanions!.claims.map((claim) => (
+          claim.teamId === 'a' ? { ...claim, status: 'revoked' as const, claimVersion: (claim.claimVersion ?? 0) + 1 } : claim
+        )),
+      },
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RETURN TO DESK' })).toHaveTextContent('OPEN CLUB B DESK');
+  }, 20_000);
+
+  test('a delayed Team A board save cannot restore Team A after the device selects Team B', async () => {
+    const source = session();
+    source.snakeCompanions = {
+      roomCode: '4821',
+      claims: [
+        { claimId: 'claim-a', claimVersion: 2, deviceId: 'ipad-a', gmName: 'Alex', teamId: 'a', status: 'approved' },
+        { claimId: 'claim-b', claimVersion: 2, deviceId: 'ipad-a', gmName: 'Alex', teamId: 'b', status: 'approved' },
+      ],
+    };
+    const pending = deferred<LeagueBuilderMlbDraftSession>();
+    prepare(source);
+    mocks.patchBoard.mockImplementationOnce(() => pending.promise);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('companion-team-header')).toHaveTextContent('CLUB A');
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const boardInput = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };
+    expect(boardInput.teamId).toBe('a');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }), { target: { value: 'b' } });
+    await screen.findByTestId('snake-companion-covered');
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('companion-team-header')).toHaveTextContent('CLUB B');
+
+    const staleA = {
+      ...source,
+      revision: (source.revision ?? 0) + 1,
+      seatBoards: { ...source.seatBoards, a: boardInput.board },
+    };
+    await act(async () => { pending.resolve(staleA); await pending.promise; });
+    expect(screen.getByTestId('companion-team-header')).toHaveTextContent('CLUB B');
+    expect(screen.queryByTestId('companion-board-update-banner')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
+  }, 20_000);
 
   test('a revoked approval fails closed inside the atomic companion board patch', async () => {
     render(<SnakeCompanion />);

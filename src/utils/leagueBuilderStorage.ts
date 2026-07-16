@@ -3273,11 +3273,15 @@ export async function submitApprovedCompanionPickRequest(input: {
   expectedSessionRevision: number;
   submittedAt: string;
   requestId?: string;
+  isPrivateContextCurrent?: () => boolean;
 }): Promise<LeagueBuilderMlbDraftSession> {
   if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
     throw new Error('FARM snake sessions do not allow companion pick requests.');
   }
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (input.isPrivateContextCurrent && !input.isPrivateContextCurrent()) {
+      throw new Error('THE DRAFT MOVED ON — REFRESH.');
+    }
     if (validatedSnakeSessionPhase(current) !== 'MLB') {
       throw new Error('FARM snake sessions do not allow companion pick requests.');
     }
@@ -3403,11 +3407,15 @@ export async function postApprovedCompanionTradeOffer(input: {
     sessionRevision: number;
   };
   postedAt: string;
+  isPrivateContextCurrent?: () => boolean;
 }): Promise<LeagueBuilderMlbDraftSession> {
   if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
     throw new Error('FARM snake sessions do not allow pick trades.');
   }
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (input.isPrivateContextCurrent && !input.isPrivateContextCurrent()) {
+      throw new Error('THE DRAFT MOVED ON — REFRESH.');
+    }
     if (validatedSnakeSessionPhase(current) === 'FARM') {
       throw new Error('FARM snake sessions do not allow pick trades.');
     }
@@ -3450,11 +3458,15 @@ export async function respondApprovedCompanionTradeOffer(input: {
   teamId: string;
   offerId: string;
   action: 'NOD' | 'WITHDRAW' | 'DECLINE';
+  isPrivateContextCurrent?: () => boolean;
 }): Promise<LeagueBuilderMlbDraftSession> {
   if ((input.seasonNumber ?? 1) === FARM_SNAKE_SESSION_NUMBER) {
     throw new Error('FARM snake sessions do not allow pick trades.');
   }
   return updateMlbDraftSessionAtomically(input.leagueId, input.seasonNumber ?? 1, (current) => {
+    if (input.isPrivateContextCurrent && !input.isPrivateContextCurrent()) {
+      throw new Error('THE DRAFT MOVED ON — REFRESH.');
+    }
     if (validatedSnakeSessionPhase(current) === 'FARM') {
       throw new Error('FARM snake sessions do not allow pick trades.');
     }
@@ -3520,16 +3532,22 @@ export async function patchApprovedCompanionSeatBoard(input: {
   teamId: string;
   board: SnakeSeatBoardRecord;
   expectedBoardRevision: number;
+  isPrivateContextCurrent?: () => boolean;
 }): Promise<LeagueBuilderMlbDraftSession> {
   return patchIndependentSeatBoard({
     ...input,
     seasonNumber: input.seasonNumber ?? 1,
     phase: 'MLB',
     authorize: (current) => {
+      if (input.isPrivateContextCurrent && !input.isPrivateContextCurrent()) {
+        throw new Error('THE DRAFT MOVED ON — REFRESH.');
+      }
       const claim = current.snakeCompanions?.claims.find((candidate) => (
-        candidate.deviceId === input.deviceId && candidate.status === 'approved'
+        candidate.deviceId === input.deviceId
+        && candidate.teamId === input.teamId
+        && candidate.status === 'approved'
       ));
-      if (!claim || claim.teamId !== input.teamId) {
+      if (!claim) {
         throw new Error('MAIN-DEVICE APPROVAL IS REQUIRED.');
       }
     },

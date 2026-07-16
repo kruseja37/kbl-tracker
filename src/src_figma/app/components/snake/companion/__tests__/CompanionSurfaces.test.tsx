@@ -62,8 +62,9 @@ describe('S5 companion surfaces', () => {
     expect(screen.getByText('FINDING THE SHAREABLE ADDRESS…')).toBeInTheDocument();
     expect(await screen.findByTestId('companion-join-url')).toHaveTextContent('http://192.168.68.54:5173/snake-companion?room=4821');
     expect(screen.getByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).toBeInTheDocument();
-    expect(screen.getByText('LET ALEX SEE THE KODIAKS DESK?')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
+    expect(screen.getByText('ALEX · 1 TEAM')).toBeInTheDocument();
+    expect(screen.getByText('KODIAKS')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'APPROVE KODIAKS' }));
     await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
       snakeCompanions: expect.objectContaining({ claims: expect.arrayContaining([expect.objectContaining({ deviceId: 'ipad-a', status: 'approved' })]) }),
     })));
@@ -71,6 +72,31 @@ describe('S5 companion surfaces', () => {
     fireEvent.click(screen.getByRole('button', { name: 'REVOKE BLAIR' }));
     await waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
     expect(fetchMock).toHaveBeenCalledWith('/__kbl/companion-address', expect.objectContaining({ cache: 'no-store' }));
+  });
+
+  it('groups one device request as a clear multi-team package while keeping per-team decisions', async () => {
+    const packageSession = {
+      ...session,
+      snakeCompanions: {
+        roomCode: '4821',
+        claims: [
+          { claimId: 'a', deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const },
+          { claimId: 'b', deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-b', status: 'pending' as const },
+        ],
+      },
+    };
+    render(<CompanionApprovalCard
+      session={packageSession}
+      teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
+      onChange={vi.fn()}
+    />);
+
+    expect(screen.getByTestId('companion-pending-package')).toHaveTextContent('ALEX · 2 TEAMS');
+    expect(screen.getByRole('button', { name: 'APPROVE KODIAKS' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'APPROVE COMETS' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'REFUSE' })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('COMPANION SHARING IS OFF');
   });
 
   it('shows the exact companion choice and sends approval through the main pick callback', async () => {
@@ -171,7 +197,7 @@ describe('S5 companion surfaces', () => {
       onChange={onChange}
     />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'APPROVE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'APPROVE KODIAKS' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('THAT COMPANION REQUEST IS STALE. REFRESH.');
     expect(onChange).not.toHaveBeenCalled();
     expect(fresh.snakeCompanions.claims.find((claim) => claim.claimId === 'old-claim')?.status).toBe('revoked');
@@ -197,7 +223,8 @@ describe('S5 companion surfaces', () => {
       onChange={vi.fn()}
     />);
 
-    expect(screen.getByText('LET ALEX SEE THE UNKNOWN TEAM DESK?')).toBeInTheDocument();
+    expect(screen.getByText('ALEX · 1 TEAM')).toBeInTheDocument();
+    expect(screen.getByText('UNKNOWN TEAM')).toBeInTheDocument();
     expect(container).not.toHaveTextContent('CLUB');
     expect(container).not.toHaveTextContent(missingTeamId);
     await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());

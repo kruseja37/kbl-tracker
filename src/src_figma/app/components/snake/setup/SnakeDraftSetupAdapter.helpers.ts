@@ -34,7 +34,7 @@ import {
 
 export type ProofRunner = (input: SimultaneousSnakeSeatingInput) => SnakeSeatingProof | Promise<SnakeSeatingProof>;
 
-export const MAX_SNAKE_COMPANION_SEATS = 3;
+export const MAX_SNAKE_COMPANION_PACKAGES = 3;
 
 export interface SnakeVersionGroup {
   groupId: string;
@@ -340,9 +340,6 @@ export function validateSnakeCompanionSeats(input: {
 }): string[] {
   const companionTeams = input.teams.filter((team) => input.seatModes[team.id] === 'companion');
   const reasons: string[] = [];
-  if (companionTeams.length > MAX_SNAKE_COMPANION_SEATS) {
-    reasons.push(`Choose no more than ${MAX_SNAKE_COMPANION_SEATS} companion seats.`);
-  }
   const unnamed = companionTeams.filter((team) => !input.gmNames[team.id]?.trim());
   if (unnamed.length > 0) {
     reasons.push(`Add a GM name for ${unnamed.map((team) => team.name).join(', ')}.`);
@@ -352,8 +349,8 @@ export function validateSnakeCompanionSeats(input: {
     const name = input.gmNames[team.id]?.trim().toLocaleLowerCase();
     if (name) nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
   }
-  if ([...nameCounts.values()].some((count) => count > 1)) {
-    reasons.push('Give every companion seat a unique GM name.');
+  if (nameCounts.size > MAX_SNAKE_COMPANION_PACKAGES) {
+    reasons.push(`Choose no more than ${MAX_SNAKE_COMPANION_PACKAGES} companion GM packages.`);
   }
   return reasons;
 }

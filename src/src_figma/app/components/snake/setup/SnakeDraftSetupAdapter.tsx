@@ -3,10 +3,7 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { SnakeSeatingProof } from '../../../../../engines/snakeSeatingProof';
 import type { Player, Team } from '../../../../../utils/leagueBuilderStorage';
 import { snakePlayerVersionLabel } from '../../../../../utils/snakePlayerIdentity';
-import {
-  MAX_SNAKE_COMPANION_SEATS,
-  type SnakeVersionGroup,
-} from './SnakeDraftSetupAdapter.helpers';
+import { type SnakeVersionGroup } from './SnakeDraftSetupAdapter.helpers';
 
 const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 
@@ -64,7 +61,6 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
   const turn = adapter.order.length > 1
     ? `${teamById.get(adapter.order.at(-1)!)?.name.toUpperCase() ?? UNKNOWN_TEAM} picks twice at one turn. ${teamById.get(adapter.order[0])?.name.toUpperCase() ?? UNKNOWN_TEAM} picks twice at the next.`
     : '';
-  const companionSeatCount = teams.filter((team) => adapter.seatModes[team.id] === 'companion').length;
   return (
     <div className="space-y-6" data-testid="snake-setup-adapter">
       <section className="ballpark-panel" aria-label="Snake pool">
@@ -108,10 +104,7 @@ export function SnakeDraftSetupPanels({ adapter, teams, locked, disabled, lockDi
               <label className="text-xs font-bold">SEAT
                 <select aria-label={`${team.name} SEAT`} disabled={disabled} value={adapter.seatModes[team.id] ?? 'hotseat'} onChange={(event) => adapter.setSeatModes((current) => ({ ...current, [team.id]: event.target.value as 'hotseat' | 'companion' }))} className="mt-1 w-full border-4 border-[var(--ballpark-chalk)] bg-[var(--ballpark-action-green)] p-2 disabled:opacity-45">
                   <option value="hotseat">HOTSEAT</option>
-                  <option
-                    value="companion"
-                    disabled={adapter.seatModes[team.id] !== 'companion' && companionSeatCount >= MAX_SNAKE_COMPANION_SEATS}
-                  >COMPANION</option>
+                  <option value="companion">COMPANION</option>
                 </select>
               </label>
             </div>

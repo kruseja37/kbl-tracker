@@ -68,6 +68,12 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
 
   const companions = props.session.snakeCompanions;
   if (!companions) return <section className="ballpark-panel"><p>OPENING THE COMPANION ROOM…</p></section>;
+  const pendingPackages = [...companions.claims.filter((claim) => claim.status === 'pending').reduce((packages, claim) => {
+    const rows = packages.get(claim.deviceId) ?? [];
+    rows.push(claim);
+    packages.set(claim.deviceId, rows);
+    return packages;
+  }, new Map<string, CompanionClaim[]>()).values()];
   const teamName = (teamId: string) => props.teams.find((team) => team.id === teamId)?.name ?? 'UNKNOWN TEAM';
   const update = async (claim: CompanionClaim, status: 'approved' | 'revoked') => {
     setError(null);
@@ -151,13 +157,20 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
             </div>
           </div>
         ) : null}
-        {companions.claims.filter((claim) => claim.status === 'pending').map((claim) => (
-          <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="border-4 border-[var(--ballpark-panel-border)] p-3">
-            <p className="font-bold">LET {claim.gmName.toUpperCase()} SEE THE {teamName(claim.teamId).toUpperCase()} DESK?</p>
-            <div className="mt-2 flex gap-2">
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={() => void update(claim, 'approved')}>APPROVE</button>
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REFUSE</button>
-            </div>
+        {pendingPackages.map((claims) => (
+          <div key={claims[0].deviceId} className="border-4 border-[var(--ballpark-panel-border)] p-3" data-testid="companion-pending-package">
+            <p className="text-xs font-black tracking-[0.14em] text-[var(--ballpark-brass)]">
+              {claims[0].gmName.toUpperCase()} · {claims.length} TEAM{claims.length === 1 ? '' : 'S'}
+            </p>
+            {claims.map((claim) => (
+              <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t-2 border-[var(--ballpark-panel-border)] pt-2">
+                <p className="font-bold">{teamName(claim.teamId).toUpperCase()}</p>
+                <div className="flex gap-2">
+                  <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={() => void update(claim, 'approved')}>APPROVE {teamName(claim.teamId).toUpperCase()}</button>
+                  <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REFUSE</button>
+                </div>
+              </div>
+            ))}
           </div>
         ))}
         {companions.claims.filter((claim) => claim.status === 'approved').map((claim) => (

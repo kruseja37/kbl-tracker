@@ -51,10 +51,31 @@ describe('SnakeCompanionFrame Batch 5 surface', () => {
   });
 
   it('keeps Forget Room on the covered recovery surface', () => {
-    const { container } = render(<CompanionCoveredScreen onReturn={vi.fn()} onSignOut={vi.fn()} onForgetRoom={vi.fn()} />);
+    const { container } = render(<CompanionCoveredScreen openTeamName="Buzzards" onReturn={vi.fn()} onSignOut={vi.fn()} onForgetRoom={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'FORGET ROOM' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'RETURN TO DESK' })).toHaveTextContent('OPEN BUZZARDS DESK');
     for (const control of container.querySelectorAll('button')) {
       expect(control).toHaveClass('min-h-11');
     }
+  });
+
+  it('shows only approved teams in the compact switcher and requests the selected desk', () => {
+    const onSwitchTeam = vi.fn();
+    render(<SnakeCompanionFrame
+      team={team}
+      authorizedTeams={[{ id: 'bew', name: 'Beewolves' }, { id: 'buz', name: 'Buzzards' }]}
+      onSwitchTeam={onSwitchTeam}
+      currentPick={1}
+      order={[]}
+      ticker={[]}
+      privateDesk={<div>BEES ONLY</div>}
+      onCover={vi.fn()}
+    />);
+
+    const switcher = screen.getByRole('combobox', { name: 'PRIVATE TEAM DESK' });
+    expect(switcher).toHaveValue('bew');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['BEEWOLVES', 'BUZZARDS']);
+    fireEvent.change(switcher, { target: { value: 'buz' } });
+    expect(onSwitchTeam).toHaveBeenCalledWith('buz');
   });
 });

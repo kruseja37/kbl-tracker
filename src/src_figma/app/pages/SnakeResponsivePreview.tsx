@@ -900,12 +900,14 @@ function MainPreview() {
 
 function CompanionPreview() {
   const [state, dispatch] = useReducer(previewDraftReducer, false, createPreviewDraftState);
+  const [activeTeamId, setActiveTeamId] = useState('bew');
   const [privacy, setPrivacy] = useState<{ covered: boolean; epoch: number; message: string | null }>({
     covered: true,
     epoch: 0,
     message: null,
   });
-  const teamId = 'bew';
+  const teamId = activeTeamId;
+  const activeTeam = PREVIEW_TEAMS.find((team) => team.id === teamId) ?? PREVIEW_TEAMS[0];
   const board = state.boards[teamId];
   const unavailable = useMemo(() => unavailableIds(state.rosters), [state.rosters]);
   const selectedPlayerId = state.selectedByTeam[teamId] ?? nextAvailableSelection(board, unavailable);
@@ -934,6 +936,7 @@ function CompanionPreview() {
   />;
   const resetAndCover = (message: string) => {
     dispatch({ type: 'RESET_PRIVATE' });
+    setActiveTeamId('bew');
     setPrivacy({ covered: true, epoch: 0, message });
   };
   const coverPrivateDesk = () => {
@@ -945,7 +948,17 @@ function CompanionPreview() {
       message: null,
     }));
   };
-
+  const switchPrivateDesk = (nextTeamId: string) => {
+    if (nextTeamId === teamId || !PREVIEW_TEAMS.some((team) => team.id === nextTeamId)) return;
+    dispatch({ type: 'ROTATE_PRIVATE_EPOCH', teamId });
+    setActiveTeamId(nextTeamId);
+    setPrivacy((current) => ({
+      ...current,
+      covered: true,
+      epoch: Math.max(1, current.epoch + 1),
+      message: null,
+    }));
+  };
   return <div data-testid="snake-responsive-preview" data-surface="companion">
     {privacy.covered ? <CompanionCoveredScreen
       onReturn={() => {
@@ -957,10 +970,13 @@ function CompanionPreview() {
       }}
       onForgetRoom={() => resetAndCover('ROOM FORGOTTEN. PRIVATE DESK RESET.')}
       onSignOut={() => resetAndCover('SIGNED OUT. PRIVATE DESK RESET.')}
+      openTeamName={activeTeam.name}
       message={privacy.message}
     /> : <div data-testid="companion-private-epoch" data-private-epoch={privacy.epoch} key={privacy.epoch}>
       <SnakeCompanionFrame
-        team={PREVIEW_TEAMS[0]}
+        team={activeTeam}
+        authorizedTeams={PREVIEW_TEAMS}
+        onSwitchTeam={switchPrivateDesk}
         currentPick={state.order[state.currentPickIndex]?.pick ?? state.order.at(-1)?.pick ?? 0}
         order={state.order.slice(state.currentPickIndex, state.currentPickIndex + 3).map((slot) => ({
           pick: slot.pick,
@@ -990,7 +1006,7 @@ function CompanionPreview() {
           title="DRAFTED ROSTER"
           ledger={draftedTruth.ledger}
           chemistry={draftedTruth.chemistry}
-          testId="companion-drafted-truth-bew"
+          testId={`companion-drafted-truth-${teamId}`}
           compact
         />}
         privateDesk={(showHelp) => <PreviewDesk

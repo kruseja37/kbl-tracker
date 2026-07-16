@@ -50,13 +50,9 @@ function isCompanionClub(club: NonNullable<LeagueBuilderMlbDraftSession['snakeSe
 }
 
 function hasClaimableCompanionSeat(session: LeagueBuilderMlbDraftSession): boolean {
-  const names = (session.snakeSetup?.clubs ?? [])
-    .filter(isCompanionClub)
-    .map((club) => club.gmName?.trim().toLocaleLowerCase() ?? '')
-    .filter(Boolean);
-  const counts = new Map<string, number>();
-  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  return [...counts.values()].some((count) => count === 1);
+  return (session.snakeSetup?.clubs ?? []).some((club) => (
+    isCompanionClub(club) && Boolean(club.gmName?.trim())
+  ));
 }
 
 export function ensureCompanionRoom(
@@ -82,6 +78,25 @@ export function approvedClaimForDevice(
   )) ?? null;
 }
 
+export function approvedClaimsForDevice(
+  session: LeagueBuilderMlbDraftSession,
+  deviceId: string,
+): CompanionClaim[] {
+  return (session.snakeCompanions?.claims ?? []).filter((claim) => (
+    claim.deviceId === deviceId && claim.status === 'approved'
+  ));
+}
+
+export function approvedClaimForDeviceTeam(
+  session: LeagueBuilderMlbDraftSession,
+  deviceId: string,
+  teamId: string,
+): CompanionClaim | null {
+  return session.snakeCompanions?.claims.find((claim) => (
+    claim.deviceId === deviceId && claim.teamId === teamId && claim.status === 'approved'
+  )) ?? null;
+}
+
 export function claimForDevice(
   session: LeagueBuilderMlbDraftSession,
   deviceId: string,
@@ -89,6 +104,15 @@ export function claimForDevice(
   return session.snakeCompanions?.claims.find((claim) => (
     claim.deviceId === deviceId && claim.status !== 'revoked'
   )) ?? null;
+}
+
+export function claimsForDevice(
+  session: LeagueBuilderMlbDraftSession,
+  deviceId: string,
+): CompanionClaim[] {
+  return (session.snakeCompanions?.claims ?? []).filter((claim) => (
+    claim.deviceId === deviceId && claim.status !== 'revoked'
+  ));
 }
 
 export function companionClaimIdentity(claim: CompanionClaim): CompanionClaimIdentity {
@@ -112,9 +136,9 @@ export function selectCompanionRecoverySession(input: {
     !forgotten.has(session.id) && Boolean(claimForDevice(session, input.deviceId))
   ));
   recoverable.sort((left, right) => {
-    const leftClaim = claimForDevice(left, input.deviceId)!;
-    const rightClaim = claimForDevice(right, input.deviceId)!;
-    const approvalOrder = Number(rightClaim.status === 'approved') - Number(leftClaim.status === 'approved');
+    const leftApproved = approvedClaimsForDevice(left, input.deviceId).length > 0;
+    const rightApproved = approvedClaimsForDevice(right, input.deviceId).length > 0;
+    const approvalOrder = Number(rightApproved) - Number(leftApproved);
     if (approvalOrder !== 0) return approvalOrder;
     const liveOrder = Number(isCompanionDraftComplete(left)) - Number(isCompanionDraftComplete(right));
     if (liveOrder !== 0) return liveOrder;
@@ -147,45 +171,53 @@ export function submitCompanionClaim(
   if (matchingClubs.length === 0) {
     return { ok: false, message: 'THAT GM NAME IS NOT A COMPANION SEAT IN THIS ROOM.', session: null };
   }
-  if (matchingClubs.length > 1) {
-    return { ok: false, message: 'THAT GM NAME DOES NOT IDENTIFY ONE COMPANION SEAT.', session: null };
-  }
-  const club = matchingClubs[0];
-
   const claims = session.snakeCompanions?.claims ?? [];
-  const otherActiveDevices = new Set(claims.filter((claim) => (
-    claim.status !== 'revoked' && claim.deviceId !== input.deviceId
-  )).map((claim) => claim.deviceId));
-  const replacingSeatDevice = claims.some((claim) => (
-    claim.status !== 'revoked' && claim.teamId === club.teamId && claim.deviceId !== input.deviceId
+  const packageTeamIds = new Set(matchingClubs.map((club) => club.teamId));
+  const claimsAfterTakeover = claims.map((claim) => (
+    packageTeamIds.has(claim.teamId)
+    && claim.deviceId !== input.deviceId
+    && claim.status !== 'revoked'
+      ? { ...claim, status: 'revoked' as const, claimVersion: (claim.claimVersion ?? 0) + 1 }
+      : claim
   ));
-  if (otherActiveDevices.size >= 3 && !replacingSeatDevice) {
+  const claimsAfterPendingRefresh = claimsAfterTakeover.map((claim) => (
+    packageTeamIds.has(claim.teamId)
+    && claim.deviceId === input.deviceId
+    && claim.status === 'pending'
+      ? { ...claim, status: 'revoked' as const, claimVersion: (claim.claimVersion ?? 0) + 1 }
+      : claim
+  ));
+  const needsClaim = matchingClubs.filter((club) => !claimsAfterPendingRefresh.some((claim) => (
+    claim.deviceId === input.deviceId && claim.teamId === club.teamId && claim.status === 'approved'
+  )));
+  const projectedDeviceIds = new Set(claimsAfterPendingRefresh.filter((claim) => claim.status !== 'revoked').map((claim) => claim.deviceId));
+  if (needsClaim.length > 0) projectedDeviceIds.add(input.deviceId);
+  if (projectedDeviceIds.size > 3) {
     return { ok: false, message: COMPANION_ROOM_FULL_COPY, session: null };
   }
-
-  const nextClaims: CompanionClaim[] = claims
-    .filter((claim) => claim.deviceId !== input.deviceId)
-    .map((claim) => claim.teamId === club.teamId && claim.status !== 'revoked'
-      ? { ...claim, status: 'revoked' as const, claimVersion: (claim.claimVersion ?? 0) + 1 }
-      : claim);
-  nextClaims.push({
-    claimId: input.claimId
-      ?? globalThis.crypto?.randomUUID?.()
-      ?? `${input.deviceId}:${club.teamId}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
-    claimVersion: 1,
-    deviceId: input.deviceId,
-    gmName: club.gmName?.trim() || input.gmName.trim(),
-    teamId: club.teamId,
-    status: 'pending',
-  });
+  const nextClaims: CompanionClaim[] = [...claimsAfterPendingRefresh];
+  for (const [index, club] of needsClaim.entries()) {
+    nextClaims.push({
+      claimId: input.claimId
+        ? (matchingClubs.length === 1 ? input.claimId : `${input.claimId}:${club.teamId}`)
+        : globalThis.crypto?.randomUUID?.()
+          ?? `${input.deviceId}:${club.teamId}:${Date.now()}:${index}:${Math.random().toString(36).slice(2)}`,
+      claimVersion: 1,
+      deviceId: input.deviceId,
+      gmName: club.gmName?.trim() || input.gmName.trim(),
+      teamId: club.teamId,
+      status: 'pending',
+    });
+  }
+  const changed = JSON.stringify(nextClaims) !== JSON.stringify(claims);
   return {
     ok: true,
-    message: 'ASK THE MAIN DEVICE TO APPROVE THIS DESK.',
-    session: {
+    message: needsClaim.length > 0 ? 'ASK THE MAIN DEVICE TO APPROVE YOUR DESKS.' : 'YOUR DESK REQUEST IS ALREADY ACTIVE.',
+    session: changed ? {
       ...session,
-      snakeCompanions: { roomCode: input.roomCode, claims: nextClaims },
+      snakeCompanions: { ...session.snakeCompanions!, roomCode: input.roomCode, claims: nextClaims },
       revision: (session.revision ?? 0) + 1,
-    },
+    } : session,
   };
 }
 
@@ -220,9 +252,9 @@ export function approveCompanionClaim(
   if (status === 'approved') {
     const active = claims.filter((claim) => claim.status !== 'revoked');
     if (new Set(active.map((claim) => claim.deviceId)).size > 3
-      || claims.some((claim, index) => index !== targetIndex && claim.status !== 'revoked' && (
-        claim.teamId === target.teamId || claim.deviceId === target.deviceId
-      ))) {
+      || claims.some((claim, index) => index !== targetIndex
+        && claim.status !== 'revoked'
+        && claim.teamId === target.teamId)) {
       throw new Error('THAT COMPANION REQUEST CONFLICTS WITH AN ACTIVE SEAT. REFRESH.');
     }
   }
@@ -243,11 +275,12 @@ export function approveCompanionClaim(
 export function updateApprovedCompanionBoard(input: {
   session: LeagueBuilderMlbDraftSession;
   deviceId: string;
+  teamId: string;
   expectedSessionRevision: number;
   expectedBoardRevision: number;
   board: SnakeSeatBoardRecord;
 }): CompanionResult {
-  const claim = approvedClaimForDevice(input.session, input.deviceId);
+  const claim = approvedClaimForDeviceTeam(input.session, input.deviceId, input.teamId);
   if (!claim) return { ok: false, message: 'MAIN-DEVICE APPROVAL IS REQUIRED.', session: null };
   const currentBoard = input.session.seatBoards?.[claim.teamId];
   if ((input.session.revision ?? 0) !== input.expectedSessionRevision

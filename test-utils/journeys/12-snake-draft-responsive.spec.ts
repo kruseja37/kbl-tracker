@@ -302,6 +302,49 @@ test('main and companion show the same drafted roster money and chemistry truth'
   expect(await page.getByTestId('companion-drafted-truth-bew').innerText()).toBe(mainTruth);
 });
 
+test('one companion device keeps two covered team desks private and independent', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto('/__preview/snake-responsive?surface=companion');
+
+  await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'RETURN TO DESK' })).toContainText('OPEN BEEWOLVES DESK');
+  await page.getByRole('button', { name: 'RETURN TO DESK' }).click();
+  await expect(page.getByTestId('companion-team-header')).toContainText('BEEWOLVES');
+  await expect(page.getByTestId('selected-player-action-strip')).toContainText(/JOVITA PULO/i);
+
+  await page.getByRole('button', { name: 'PLAYER POOL' }).click();
+  const search = page.getByRole('searchbox', { name: 'FIND PLAYER' });
+  await search.fill('taylor utility');
+  await page.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }).click();
+  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+
+  await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('buz');
+  await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
+  await expect(page.getByTestId('snake-companion-frame')).toHaveCount(0);
+  await expect(page.getByText('JOVITA PULO')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'RETURN TO DESK' })).toContainText('OPEN BUZZARDS DESK');
+  await page.getByRole('button', { name: 'RETURN TO DESK' }).click();
+  await expect(page.getByTestId('companion-team-header')).toContainText('BUZZARDS');
+  await expect(page.getByTestId('selected-player-action-strip')).toContainText(/MAX BACKSTOP/i);
+  await expect(page.getByTestId('selected-player-action-strip')).not.toContainText(/JOVITA PULO/i);
+
+  await page.getByRole('button', { name: 'PLAYER POOL' }).click();
+  await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('nora curveball');
+  await page.getByRole('button', { name: 'Send NORA CURVEBALL to top' }).click();
+  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+  await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('bew');
+  await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
+  await expect(page.getByText('MAX BACKSTOP')).toHaveCount(0);
+  await page.getByRole('button', { name: 'RETURN TO DESK' }).click();
+
+  await expect(page.getByTestId('companion-team-header')).toContainText('BEEWOLVES');
+  await page.getByRole('button', { name: 'PLAYER POOL' }).click();
+  await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('taylor utility');
+  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+  await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('nora curveball');
+  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).not.toContainText('#1');
+});
+
 test('a recorded pick becomes unavailable everywhere and cannot be drafted twice', async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await page.goto('/__preview/snake-responsive?surface=main');

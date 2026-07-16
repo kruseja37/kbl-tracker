@@ -6,6 +6,7 @@ export function CompanionCoveredScreen(props: {
   onReturn: () => void | Promise<void>;
   onSignOut: () => void | Promise<void>;
   onForgetRoom?: () => void | Promise<void>;
+  openTeamName?: string;
   message?: string | null;
 }) {
   return (
@@ -14,7 +15,7 @@ export function CompanionCoveredScreen(props: {
         <h1 className="ballpark-title text-3xl">DEVICE COVERED</h1>
         {props.message ? <p className="mt-3 font-bold" role="alert">{props.message}</p> : null}
         <div className="mt-5 flex flex-wrap justify-center gap-3">
-          <button type="button" className="ballpark-press-button ballpark-press-md ballpark-press-gold min-h-11" onClick={() => void props.onReturn()}>RETURN TO DESK</button>
+          <button type="button" aria-label="RETURN TO DESK" className="ballpark-press-button ballpark-press-md ballpark-press-gold min-h-11" onClick={() => void props.onReturn()}>{props.openTeamName ? `OPEN ${props.openTeamName.toUpperCase()} DESK` : 'OPEN DESK'}</button>
           {props.onForgetRoom ? <button type="button" className="ballpark-press-button ballpark-press-md ballpark-press-default min-h-11" onClick={() => void props.onForgetRoom?.()}>FORGET ROOM</button> : null}
           <button type="button" className="ballpark-press-button ballpark-press-md ballpark-press-default min-h-11" onClick={() => void props.onSignOut()}>SIGN OUT</button>
         </div>
@@ -70,6 +71,8 @@ export function SnakeCompanionFrame(props: {
     logoUrl?: string;
     colors?: { primary?: string; secondary?: string; accent?: string };
   };
+  authorizedTeams?: readonly { id: string; name: string }[];
+  onSwitchTeam?: (teamId: string) => void;
   currentPick: number;
   order: readonly { pick: number; teamName: string }[];
   ticker: readonly string[];
@@ -99,6 +102,19 @@ export function SnakeCompanionFrame(props: {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
+          {(props.authorizedTeams?.length ?? 0) > 1 ? (
+            <label className="flex min-h-11 items-center gap-2 border-2 px-2 text-xs font-black" style={{ borderColor: branding.border }}>
+              TEAM
+              <select
+                aria-label="PRIVATE TEAM DESK"
+                className="min-h-11 border-2 bg-[var(--ballpark-well)] px-2 font-black text-[var(--ballpark-chalk)]"
+                value={props.team.id}
+                onChange={(event) => props.onSwitchTeam?.(event.target.value)}
+              >
+                {props.authorizedTeams?.map((team) => <option key={team.id} value={team.id}>{team.name.toUpperCase()}</option>)}
+              </select>
+            </label>
+          ) : null}
           <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 min-w-11" aria-label="HELP" aria-pressed={showHelp} onClick={() => setShowHelp((value) => !value)}><HelpCircle size={15} /> ?</button>
           <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={props.onCover}>COVER THIS DEVICE</button>
         </div>

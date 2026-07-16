@@ -264,9 +264,7 @@ describe('SnakeDraftSetupAdapter', () => {
       gmNames: { 'team-a': '', 'team-b': 'Alex', 'team-c': ' alex ', 'team-d': 'Dana' },
       seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'companion' },
     })).toEqual([
-      'Choose no more than 3 companion seats.',
       `Add a GM name for ${teams[0].name}.`,
-      'Give every companion seat a unique GM name.',
     ]);
 
     expect(validateSnakeCompanionSeats({
@@ -274,5 +272,22 @@ describe('SnakeDraftSetupAdapter', () => {
       gmNames: { 'team-a': 'Alex', 'team-b': 'Blair', 'team-c': 'Casey' },
       seatModes: { 'team-a': 'companion', 'team-b': 'companion', 'team-c': 'companion', 'team-d': 'hotseat' },
     })).toEqual([]);
+
+    const packageTeams = Array.from({ length: 8 }, (_, index) => makeTeam(`package-team-${index + 1}`));
+    const seatModes = Object.fromEntries(packageTeams.map((team, index) => [
+      team.id,
+      index === 0 || index === 7 ? 'hotseat' : 'companion',
+    ])) as Record<string, 'hotseat' | 'companion'>;
+    const gmNames = Object.fromEntries(packageTeams.map((team, index) => [
+      team.id,
+      index === 0 || index === 7 ? 'Commissioner' : ['Alex', 'Alex', 'Blair', 'Blair', 'Casey', 'Casey'][index - 1],
+    ]));
+    expect(validateSnakeCompanionSeats({ teams: packageTeams, gmNames, seatModes })).toEqual([]);
+
+    expect(validateSnakeCompanionSeats({
+      teams: packageTeams,
+      gmNames: { ...gmNames, [packageTeams[7].id]: 'Dana' },
+      seatModes: { ...seatModes, [packageTeams[7].id]: 'companion' },
+    })).toEqual(['Choose no more than 3 companion GM packages.']);
   });
 });

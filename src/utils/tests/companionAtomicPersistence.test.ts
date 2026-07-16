@@ -20,6 +20,7 @@ import {
   getMlbDraftSession,
   patchApprovedCompanionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
+  postApprovedCompanionTradeOffer,
   saveRegisteredPool,
   saveMlbDraftSession,
   submitApprovedCompanionPickRequest,
@@ -184,6 +185,62 @@ describe('companion atomic persistence', () => {
 
     await expect(submitAtomicClaim('ipad-d', 'Dana')).rejects.toThrow('THIS ROOM ALREADY HAS 3 COMPANIONS.');
     expect((await getMlbDraftSession('companion-atomic', 1))?.snakeCompanions?.claims.filter((claim) => claim.status !== 'revoked')).toHaveLength(3);
+  });
+
+  test('one device keeps two approved board authorities while every writer rejects an unapproved team tuple', async () => {
+    const source = session();
+    source.snakeSetup!.clubs = source.snakeSetup!.clubs.map((club) => (
+      club.teamId === 'team-b' ? { ...club, gmName: 'Alex' } : club
+    ));
+    const opened = ensureCompanionRoom(source, () => '4821');
+    const requested = submitCompanionClaim(opened, { deviceId: 'ipad-a', gmName: 'Alex', roomCode: '4821' });
+    let approved = requested.session!;
+    for (const teamId of ['team-a', 'team-b']) {
+      const claim = approved.snakeCompanions!.claims.find((row) => row.deviceId === 'ipad-a' && row.teamId === teamId)!;
+      approved = approveCompanionClaim(approved, companionClaimIdentity(claim), 'approved');
+    }
+    await saveMlbDraftSession(approved);
+
+    const savedA = await patchApprovedCompanionSeatBoard({
+      leagueId: approved.leagueId, deviceId: 'ipad-a', teamId: 'team-a',
+      expectedBoardRevision: 1, board: board(2, 'team-a-private'),
+    });
+    const savedB = await patchApprovedCompanionSeatBoard({
+      leagueId: approved.leagueId, deviceId: 'ipad-a', teamId: 'team-b',
+      expectedBoardRevision: 1, board: board(2, 'team-b-private'),
+    });
+    expect(savedB.seatBoards?.['team-a']).toEqual(savedA.seatBoards?.['team-a']);
+    expect(savedB.seatBoards?.['team-b']).toEqual(board(2, 'team-b-private'));
+    await expect(patchApprovedCompanionSeatBoard({
+      leagueId: approved.leagueId, deviceId: 'ipad-a', teamId: 'team-c',
+      expectedBoardRevision: 1, board: board(2, 'must-not-save'),
+    })).rejects.toThrow('MAIN-DEVICE APPROVAL IS REQUIRED.');
+
+    const offer = await postApprovedCompanionTradeOffer({
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-a',
+      teamId: 'team-b',
+      proposal: {
+        buyerTeamId: 'team-b', sellerTeamId: 'team-c', targetPick: 2,
+        offerPickNumbers: [4], receivePickNumbers: [2],
+        offerValue: 100, receiveValue: 100, sellerPremium: 0,
+        sessionRevision: savedB.revision ?? 0,
+      },
+      postedAt: '2026-07-16T12:00:00.000Z',
+    });
+    expect(offer.openTradeOffers?.[0]).toMatchObject({ buyerTeamId: 'team-b', sellerTeamId: 'team-c' });
+    await expect(postApprovedCompanionTradeOffer({
+      leagueId: approved.leagueId,
+      deviceId: 'ipad-a',
+      teamId: 'team-c',
+      proposal: {
+        buyerTeamId: 'team-c', sellerTeamId: 'team-b', targetPick: 1,
+        offerPickNumbers: [3], receivePickNumbers: [1],
+        offerValue: 100, receiveValue: 100, sellerPremium: 0,
+        sessionRevision: offer.revision ?? 0,
+      },
+      postedAt: '2026-07-16T12:01:00.000Z',
+    })).rejects.toThrow('MAIN-DEVICE APPROVAL IS REQUIRED.');
   });
 
   test('records one current on-clock companion choice and lets only the main device clear it', async () => {

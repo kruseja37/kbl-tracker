@@ -43,7 +43,8 @@ import { safeCompanionLogoUrl } from '../components/snake/companion/companionFra
 import { sameDraftSessionSnapshot, startCompanionFreshness } from '../components/snake/companion/companionFreshness';
 import { runCompanionTradeWrite } from '../components/snake/companion/companionTradeWrite';
 import {
-  approvedClaimForDevice,
+  approvedClaimForDeviceTeam,
+  approvedClaimsForDevice,
   claimForDevice,
   COMPANION_DRAFT_COMPLETE_COPY,
   COMPANION_STALE_COPY,
@@ -145,9 +146,10 @@ function sameCompanionPrivateIdentity(
 function companionPrivateIdentity(
   source: LeagueBuilderMlbDraftSession | null,
   ownDeviceId: string,
+  teamId: string | null,
 ): CompanionPrivateIdentity | null {
-  if (!source) return null;
-  const claim = approvedClaimForDevice(source, ownDeviceId);
+  if (!source || !teamId) return null;
+  const claim = approvedClaimForDeviceTeam(source, ownDeviceId, teamId);
   if (!claim) return null;
   return {
     sessionId: source.id,
@@ -208,6 +210,7 @@ export default function SnakeCompanion() {
   } = useLeagueBuilderData();
   const [ownDeviceId] = useState(deviceId);
   const [session, setSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [deviceCovered, setDeviceCovered] = useState(() => localStorage.getItem(DEVICE_COVERED_KEY) === 'true');
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
   const [poolResult, setPoolResult] = useState<{
@@ -460,6 +463,7 @@ export default function SnakeCompanion() {
     setPullState(null);
     setRoomAvailabilityResult(null);
     setSession(null);
+    setActiveTeamId(null);
     setPoolResult(null);
   }, [authSignOut, invalidatePrivateContext]);
 
@@ -475,6 +479,11 @@ export default function SnakeCompanion() {
       await syncEngine.pull({ throwOnError: true });
       const recovered = await findDeviceSession();
       if (privacyEpochRef.current !== recoveryEpoch || !deviceCoveredRef.current) return;
+      const approvedTeams = recovered ? approvedClaimsForDevice(recovered, ownDeviceId) : [];
+      const nextTeamId = approvedTeams.some((claim) => claim.teamId === activeTeamId)
+        ? activeTeamId
+        : approvedTeams[0]?.teamId ?? null;
+      setActiveTeamId(nextTeamId);
       broadcastDeviceCover(false);
       setSession(recovered);
     } catch (cause) {
@@ -482,19 +491,28 @@ export default function SnakeCompanion() {
         setMessage(cause instanceof Error ? cause.message : String(cause));
       }
     }
-  }, [findDeviceSession, invalidatePrivateContext]);
+  }, [activeTeamId, findDeviceSession, invalidatePrivateContext, ownDeviceId]);
 
   const forgetCurrentRoom = useCallback(async () => {
     if (!session) return;
     invalidatePrivateContext();
     rememberLeftSession(session.id);
     setSession(null);
+    setActiveTeamId(null);
     setPoolResult(null);
     const open = await hasOpenRoom();
     setRoomAvailabilityResult({ key: roomAvailabilityKey, value: open ? 'open' : 'empty' });
   }, [hasOpenRoom, invalidatePrivateContext, roomAvailabilityKey, session]);
 
-  const approved = session ? approvedClaimForDevice(session, ownDeviceId) : null;
+  const approvedClaims = useMemo(
+    () => session ? approvedClaimsForDevice(session, ownDeviceId) : [],
+    [ownDeviceId, session],
+  );
+  const approved = session
+    ? activeTeamId === null
+      ? approvedClaims[0] ?? null
+      : approvedClaimForDeviceTeam(session, ownDeviceId, activeTeamId)
+    : null;
   const activeClaim = session ? claimForDevice(session, ownDeviceId) : null;
   const league = leagues.find((entry) => entry.id === session?.leagueId) ?? null;
   const leagueTeams = useMemo(() => league?.teamIds.flatMap((id) => {
@@ -502,7 +520,7 @@ export default function SnakeCompanion() {
     return team ? [team] : [];
   }) ?? [], [league, teams]);
   const team = leagueTeams.find((entry) => entry.id === approved?.teamId) ?? null;
-  const currentPrivateIdentity = team ? companionPrivateIdentity(session, ownDeviceId) : null;
+  const currentPrivateIdentity = team ? companionPrivateIdentity(session, ownDeviceId, team.id) : null;
   const currentPrivateIdentityKey = currentPrivateIdentity
     ? `${currentPrivateIdentity.sessionId}|${currentPrivateIdentity.leagueId}|${currentPrivateIdentity.seasonNumber}|${currentPrivateIdentity.teamId}|${currentPrivateIdentity.deviceId}`
     : null;
@@ -514,6 +532,21 @@ export default function SnakeCompanion() {
     ? `${currentPrivateIdentityKey}|${approved?.claimId ?? ''}|${privacyEpochRef.current}`
     : null;
   privateIdentityRef.current = currentPrivateIdentity;
+  const approvedTeamIdsKey = approvedClaims.map((claim) => claim.teamId).sort().join('|');
+  useLayoutEffect(() => {
+    if (!session) return;
+    if (activeTeamId === null) {
+      if (approvedClaims[0]) setActiveTeamId(approvedClaims[0].teamId);
+      return;
+    }
+    if (approvedClaims.some((claim) => claim.teamId === activeTeamId)) return;
+    invalidatePrivateContext();
+    const fallbackTeamId = approvedClaims[0]?.teamId ?? null;
+    setActiveTeamId(fallbackTeamId);
+    if (!fallbackTeamId) return;
+    deviceCoveredRef.current = true;
+    broadcastDeviceCover(true);
+  }, [activeTeamId, approvedClaims, approvedTeamIdsKey, invalidatePrivateContext, session]);
   useLayoutEffect(() => {
     setSelectedPlayerId(null);
     setMessage(null);
@@ -522,6 +555,13 @@ export default function SnakeCompanion() {
     undoOperationRef.current = null;
     setUndoWorking(false);
   }, [currentPrivateIdentityKey]);
+  const switchActiveTeam = useCallback((teamId: string) => {
+    if (!session || teamId === activeTeamId || !approvedClaimForDeviceTeam(session, ownDeviceId, teamId)) return;
+    deviceCoveredRef.current = true;
+    invalidatePrivateContext();
+    setActiveTeamId(teamId);
+    broadcastDeviceCover(true);
+  }, [activeTeamId, invalidatePrivateContext, ownDeviceId, session]);
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const liveAlignment = useMemo(() => session
     && session.completedPicks.every((pick) => playerById.has(pick.playerId))
@@ -954,6 +994,7 @@ export default function SnakeCompanion() {
     }
     try {
       await syncEngine.pull({ throwOnError: true });
+      if (!privateContextIsCurrent(guard)) return null;
       const saved = await patchApprovedCompanionSeatBoard({
         leagueId: session.leagueId,
         seasonNumber: session.seasonNumber,
@@ -961,10 +1002,11 @@ export default function SnakeCompanion() {
         teamId: team.id,
         board: nextBoard,
         expectedBoardRevision: board.revision,
+        isPrivateContextCurrent: () => privateContextIsCurrent(guard),
       });
       const guardStillCurrent = privateContextIsCurrent(guard);
       const privateContextStillCurrent = guardStillCurrent
-        && sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId), guard.identity);
+        && sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId, guard.identity.teamId), guard.identity);
       if (privateContextStillCurrent) {
         setSession(saved);
         if (successMessage) setMessage(successMessage);
@@ -1080,7 +1122,7 @@ export default function SnakeCompanion() {
       if (!fresh
         || (fresh.revision ?? 0) !== previewIdentity.sessionRevision
         || fresh.seatBoards?.[team.id]?.revision !== previewIdentity.boardRevision
-        || !sameCompanionPrivateIdentity(companionPrivateIdentity(fresh, ownDeviceId), guard.identity)) {
+        || !sameCompanionPrivateIdentity(companionPrivateIdentity(fresh, ownDeviceId, guard.identity.teamId), guard.identity)) {
         setMessage(COMPANION_STALE_COPY);
         await refreshSession();
         return;
@@ -1096,9 +1138,10 @@ export default function SnakeCompanion() {
         teamId: team.id,
         board: selectedConsequence.board,
         expectedBoardRevision: previewIdentity.boardRevision,
+        isPrivateContextCurrent: () => privateContextIsCurrent(guard),
       });
       if (!privateContextIsCurrent(guard)
-        || !sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId), guard.identity)) {
+        || !sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId, guard.identity.teamId), guard.identity)) {
         await refreshSession();
         return;
       }
@@ -1191,68 +1234,92 @@ export default function SnakeCompanion() {
   }, [pickValueChart, seatingProofInput, session]);
   const postTradeOffer = useCallback(async (proposal: Parameters<typeof postApprovedCompanionTradeOffer>[0]['proposal']) => {
     if (!session || !team) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team.id) return;
     try {
       const saved = await runCompanionTradeWrite({
         pull: () => syncEngine.pull({ throwOnError: true }),
-        write: () => postApprovedCompanionTradeOffer({
-          leagueId: session.leagueId,
-          seasonNumber: session.seasonNumber,
-          deviceId: ownDeviceId,
-          teamId: team.id,
-          proposal,
-          postedAt: new Date().toISOString(),
-        }),
+        write: () => {
+          if (!privateContextIsCurrent(guard)) throw new Error(COMPANION_STALE_COPY);
+          return postApprovedCompanionTradeOffer({
+            leagueId: session.leagueId,
+            seasonNumber: session.seasonNumber,
+            deviceId: ownDeviceId,
+            teamId: guard.identity.teamId,
+            proposal,
+            postedAt: new Date().toISOString(),
+            isPrivateContextCurrent: () => privateContextIsCurrent(guard),
+          });
+        },
         refreshAfterFailure: refreshSession,
       });
+      if (!privateContextIsCurrent(guard)
+        || !sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId, guard.identity.teamId), guard.identity)) return;
       setSession(saved);
       setMessage('THE OFFER IS POSTED.');
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
+      if (privateContextIsCurrent(guard)) setMessage(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     }
-  }, [ownDeviceId, refreshSession, session, team]);
+  }, [capturePrivateContext, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
   const respondToTradeOffer = useCallback(async (offerId: string, action: 'NOD' | 'WITHDRAW' | 'DECLINE') => {
     if (!session || !team) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team.id) return;
     try {
       const saved = await runCompanionTradeWrite({
         pull: () => syncEngine.pull({ throwOnError: true }),
-        write: () => respondApprovedCompanionTradeOffer({
-          leagueId: session.leagueId,
-          seasonNumber: session.seasonNumber,
-          deviceId: ownDeviceId,
-          teamId: team.id,
-          offerId,
-          action,
-        }),
+        write: () => {
+          if (!privateContextIsCurrent(guard)) throw new Error(COMPANION_STALE_COPY);
+          return respondApprovedCompanionTradeOffer({
+            leagueId: session.leagueId,
+            seasonNumber: session.seasonNumber,
+            deviceId: ownDeviceId,
+            teamId: guard.identity.teamId,
+            offerId,
+            action,
+            isPrivateContextCurrent: () => privateContextIsCurrent(guard),
+          });
+        },
         refreshAfterFailure: refreshSession,
       });
+      if (!privateContextIsCurrent(guard)
+        || !sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId, guard.identity.teamId), guard.identity)) return;
       setSession(saved);
       setMessage(action === 'NOD' ? 'YOUR NOD IS RECORDED.' : 'THE OFFER IS CLOSED.');
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
+      if (privateContextIsCurrent(guard)) setMessage(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     }
-  }, [ownDeviceId, refreshSession, session, team]);
+  }, [capturePrivateContext, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
   const submitPickRequest = useCallback(async (playerId: string) => {
     if (!session || !team) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team.id) return;
     try {
       await syncEngine.pull({ throwOnError: true });
+      if (!privateContextIsCurrent(guard)) throw new Error(COMPANION_STALE_COPY);
       const saved = await submitApprovedCompanionPickRequest({
         leagueId: session.leagueId,
         seasonNumber: session.seasonNumber,
         deviceId: ownDeviceId,
-        teamId: team.id,
+        teamId: guard.identity.teamId,
         playerId,
         expectedSessionRevision: session.revision ?? 0,
         submittedAt: new Date().toISOString(),
+        isPrivateContextCurrent: () => privateContextIsCurrent(guard),
       });
+      if (!privateContextIsCurrent(guard)
+        || !sameCompanionPrivateIdentity(companionPrivateIdentity(saved, ownDeviceId, guard.identity.teamId), guard.identity)) return;
       setSession(saved);
       setMessage('PICK SENT TO HOTSEAT.');
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : String(cause));
-      await refreshSession();
+      if (privateContextIsCurrent(guard)) {
+        setMessage(cause instanceof Error ? cause.message : String(cause));
+        await refreshSession();
+      }
     }
-  }, [ownDeviceId, refreshSession, session, team]);
+  }, [capturePrivateContext, ownDeviceId, privateContextIsCurrent, refreshSession, session, team]);
 
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
@@ -1262,7 +1329,8 @@ export default function SnakeCompanion() {
   if (isLoading) return <main className="ballpark-page"><p>OPENING THE COMPANION…</p></main>;
   if (error) return <main className="ballpark-page"><p className="uppercase">{error}</p></main>;
   if (deviceCovered) {
-    return <CompanionCoveredScreen onReturn={returnToDesk} onSignOut={signOut} onForgetRoom={session ? forgetCurrentRoom : undefined} message={message} />;
+    const coveredTeam = leagueTeams.find((entry) => entry.id === activeTeamId);
+    return <CompanionCoveredScreen openTeamName={coveredTeam?.name} onReturn={returnToDesk} onSignOut={signOut} onForgetRoom={session ? forgetCurrentRoom : undefined} message={message} />;
   }
   if (!approved || !team || !session) {
     return <>
@@ -1293,6 +1361,11 @@ export default function SnakeCompanion() {
   const pickRequest = session.snakeCompanions?.pickRequest;
   return <SnakeCompanionFrame
     team={{ id: team.id, name: team.name, abbreviation: team.abbreviation, logoUrl: team.logoUrl, colors: team.colors }}
+    authorizedTeams={approvedClaims.flatMap((claim) => {
+      const entry = leagueTeams.find((candidate) => candidate.id === claim.teamId);
+      return entry ? [{ id: entry.id, name: entry.name }] : [];
+    })}
+    onSwitchTeam={switchActiveTeam}
     currentPick={session.pickOrder[session.currentPickIndex]?.pick ?? session.currentPickIndex + 1}
     order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({ pick: slot.pick, teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? UNKNOWN_TEAM }))}
     ticker={ticker}
