@@ -2,7 +2,7 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
-## 2026-07-17 (Codex, Snake proof performance follow-up) — Practice restart freeze path repaired; re-audit pending
+## 2026-07-17 (Codex, combined Snake correctness/performance close) — independently approved; JK walk pending
 
 The independent performance auditor confirmed the Draft Setup worker/cache/local-patch repair and
 then found one adjacent newly reachable main-thread proof: `RESTART PRACTICE` discarded the saved
@@ -12,9 +12,12 @@ and injects the certificate into board construction. The focused adapter/room pe
 15/15; TypeScript, changed-file lint, and diff integrity are green. The auditor separately identified
 an inherited compatibility fallback for legacy/malformed rooms with no valid saved certificate; new
 rooms seed and refresh their certificate normally, so that path is logged as FINDING-229 rather than
-folded into the present release repair. No correctness math, proof law, FIT, pool membership, tax,
-readiness, merge, push, deploy, or product acceptance changed. Re-audit and the separately owned
-FINDING-228 correctness repair remain pending before combined preview.
+folded into the present release repair. FINDING-228's production-input correctness repair and the
+performance lane are integrated at `68c0f0c0`. Builder gates passed 109 UI/runtime, 95 surrounding
+engine, exact-stock 4/4, TypeScript, lint, a 2,730-module build, and diff integrity. The separate
+combined auditor returned **APPROVE — Major 0 / Minor 0** with 134 focused tests and confirmed the
+approved correctness/performance runtime blobs remained byte-identical through integration. No merge,
+push, deploy, or product acceptance is authorized; JK's real browser walk is the final gate.
 
 ## 2026-07-12 — BLOCKFIX: Draft Setup blocked-pool message now names the REAL constraint (built + browser-verified, UNCOMMITTED — awaiting JK's word to PR)
 

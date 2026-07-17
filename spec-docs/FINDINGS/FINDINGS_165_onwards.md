@@ -480,7 +480,7 @@ changed; those remain the separate performance lane. JK's real browser walk rema
 gate.
 
 ### FINDING-227
-**Date:** 2026-07-17 | **Phase:** Snake Draft Setup performance follow-up | **Status:** BUILT — COMBINED RE-AUDIT PENDING
+**Date:** 2026-07-17 | **Phase:** Snake Draft Setup performance follow-up | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING
 **Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, Snake setup proof transport
 **Evidence:** Adapter, BUILD, Reset, and legacy restore evaluated the expensive seating proof on the
 browser thread; successful pool writes then broadly refreshed League Builder data. Full Sources could
@@ -493,6 +493,10 @@ production-stock calibration 4/4, TypeScript, changed-file ESLint, a 2,730-modul
 with the proof worker emitted, and diff integrity. Earlier production Mac/iPad probes stayed
 responsive through the roughly 19-second Full Sources proof. Practice restart now obtains its fresh
 empty-room certificate through the same worker before rebuilding boards.
+**Independent evidence:** A separate non-builder auditor returned **APPROVE — Major 0 / Minor 0** on
+the exact combined integration. It passed 134 focused tests, TypeScript, combined changed-file ESLint,
+the 2,730-module production build with proof worker, and both diff checks; it also proved the approved
+correctness and performance runtime blobs remained byte-identical through integration.
 
 ### FINDING-228
 **Date:** 2026-07-17 | **Phase:** Combined Snake correctness/performance browser gate | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING

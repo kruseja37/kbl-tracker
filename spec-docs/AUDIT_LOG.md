@@ -1481,3 +1481,13 @@ engine/desk tests, 28/28 universe tests, 21/21 pool-lock tests, 2/2 exact-440 ca
 TypeScript, changed-file ESLint, production build, and diff integrity. No merge, push, deploy, or
 preview occurred. Performance integration, combined independent audit, one preview, and JK's real
 browser walk remain downstream gates.
+### 2026-07-17 — Combined Snake identity-correctness and proof-performance audit
+
+Separate non-builder verdict on integration `68c0f0c0`: **APPROVE — Major 0 / Minor 0**. The auditor
+passed 134 focused combined tests, TypeScript, changed-file ESLint, the 2,730-module production build
+with the Snake setup-proof worker emitted, and both diff checks. It confirmed correctness-owned files
+are byte-identical to approved `ca4cc14b`, performance runtime is byte-identical to approved
+`503362af` except those correctness files, and the restored permanent contract/FINDING-227/229 records
+close the documentation gate. Exact-stock calibration 4/4 remained green in the builder integration
+run. FINDING-229 stays deferred for legacy/malformed saved-room recovery. JK's real browser walk is
+the final acceptance gate; no merge or deploy is authorized.
