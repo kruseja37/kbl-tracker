@@ -484,7 +484,7 @@ describe('private desk room assembly', () => {
       .toBe('WEAK FIT');
   });
 
-  it('refuses STRONG FIT when unshifted rating rows create material tax pressure', () => {
+  it('keeps archetype FIT independent when other rating rows create material tax pressure', () => {
     const locked = resolveLockedSeat({ team: { id: 'a' } as Team, session: session('junkball-surgeons') });
     const hitterShape = { isPitcher: false, position: 'CF' } as const;
     const hitter = storedPlayer('one-lever-fit', {
@@ -525,7 +525,7 @@ describe('private desk room assembly', () => {
       baseCaps: caps,
       need: null,
       openSlots: 22,
-    })).toBe('WEAK FIT');
+    })).toBe('STRONG FIT');
   });
 
   it('keys exact settled public prices and uses them instead of frozen card prices', () => {

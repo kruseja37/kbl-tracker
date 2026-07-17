@@ -7605,3 +7605,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `8a2602eb` changed only reconciliation and regressions; the same auditor re-ran the exact case and
   returned **APPROVE — zero findings**. Builder and auditor remained separate. PR #115 is the delivery
   path; no merge or deployment is authorized. JK's browser walkthrough wave 2 is the sole product gate.
+
+## 2026-07-17 (Codex, Snake FIT and shaped-pool correctness) — independently approved; performance integration pending
+
+- Traced the canonical SMB4 seed to 506 records: exactly 440 assigned stock players plus 66
+  unassigned free agents. Reproduced JK's FIT report across all 24 archetypes and proved tax pressure,
+  not the identity curve, caused the 69%-83% displayed-WEAK range at Standard.
+- Reproduced named-pool drift on the exact 440: the old eight-club Competitive/Loose paths expanded
+  238/264 to 336/344 by protecting every independent identity claim. Exact Full Sources supplied a
+  176-player disjoint simultaneous certificate.
+- Implemented contract `SNAKE-FIT-POOL-CORRECTNESS-34`: identity-only FIT; certificate plus position
+  floor membership; deterministic trimming of evictable quota overfill; exact named bounds; explicit
+  named auto-widen; and honest Full Sources fallback/blocker state. Reset Edits now reuses the same
+  certificate path, clears only hand overrides, and retains the persisted actual preset.
+- The first independent audit rejected the Reset bypass and injection receipt; both were repaired.
+  A later mutation-honesty challenge clarified the persisted-preset contract and strengthened the
+  reset regression. Final non-builder verdict is **APPROVE — Major 0 / Minor 0**.
+- Green evidence: engine/desk 83/83; universe 28/28; pool-lock 21/21; exact 440 calibration 2/2;
+  TypeScript; changed-file ESLint; production build; and `git diff --check`. Proof scheduling,
+  workers, caching, refresh, cancellation, and latency were not changed.
+- **Pending:** commit and hand this correctness result to the performance lane. That lane rebases,
+  then the combined diff receives an independent audit and one preview. JK's real browser walk is
+  the final acceptance gate. No merge or deploy is authorized.

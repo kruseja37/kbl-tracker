@@ -1268,3 +1268,11 @@ the separate audit still open. The non-builder audit then independently reproduc
 ablation, current lower-bound sweep, 72 legal/solvent parity rosters, 48 legal/solvent identity rosters,
 RP/CP usage settlement, and Two Way no-double-tax treatment. Its verdict is VERIFIED with no Major or
 Minor findings. This close leaves only JK's League Builder and Mac/iPad Snake walk as the product gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 Snake FIT/pool correctness close
+
+The prior live header recorded Snake walkthrough wave 2 implementation `c4f1c58f` and audit repair
+`8a2602eb` on `codex/draft-setup-browser-fixes`, with its automated, Mac/iPad, console, overflow, and
+interaction gates green and JK's real browser re-walk still pending. This correctness lane supersedes
+that top header with independently approved identity-only FIT and exact certificate-backed named
+pool bounds. Performance integration, one combined preview, and JK's browser walk remain open.

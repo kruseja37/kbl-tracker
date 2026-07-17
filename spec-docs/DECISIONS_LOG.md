@@ -4116,3 +4116,22 @@ Risk-worker lifecycle belongs at board level, not repeated on player rows. Rows 
 `AT RISK` or `LIKELY GONE`; methodology and diagnostics follow the Help-button law. These are product
 laws for every team desk, not special cases for room size or one team. Independent audit is APPROVE
 after repair `8a2602eb`; JK's browser re-walk remains the acceptance gate.
+
+## 2026-07-17 — Snake FIT is identity-only; shaped pools are certificate-bounded
+
+`STRONG FIT`, `SOLID FIT`, and `WEAK FIT` answer only whether the card matches the selected team
+archetype, using the existing exact multiplier and `>=1.04` / `<=0.96` thresholds. Tax If Picked and
+True Cost remain separate consequences; tax pressure may not relabel identity fit.
+
+For shaped Snake pools, exact selected Full Sources is proved first. The proof's disjoint assignment
+IDs plus the already-ratified anti-hoarding position floor define required engine membership; grade
+and role curves fill the remaining slots as preferences. A named candidate is accepted only when the
+final simultaneous proof passes and actual membership is inside that preset's bound. BUILD may widen
+only through larger named presets, then honest Full Sources. The accepted actual preset is persisted.
+RESET EDITS clears hand adds/removes and rebuilds that current preset through the same certificate
+path; it does not silently revert a prior narrower selection.
+
+This is a correctness law, not a performance ruling. Proof search, execution placement, stable
+fingerprints, cancellation, caching, refresh strategy, duplicate diagnostics, and latency gates
+remain owned by the separate performance lane. Help-button law remains canon, and JK's real browser
+walk remains the final product gate.

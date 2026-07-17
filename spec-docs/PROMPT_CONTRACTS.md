@@ -31941,3 +31941,95 @@ Stop rather than changing economy/archetype math, adding a schema or Supabase mi
 private-desk cover, exposing insider data, enabling Farm trades, changing auction behavior, hiding a
 correctness failure behind copy, or accepting a measurable interaction regression.
 <!-- ===== END CONTRACT: SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FIT-POOL-CORRECTNESS-34 ===== -->
+# SNAKE-FIT-POOL-CORRECTNESS-34 — IDENTITY-TRUE FIT AND BOUNDED CERTIFICATE POOLS
+
+**ROUTE:** Codex builder | high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-fit-pool-calibration`
+
+## ROLE AND GOAL
+Implement only the correctness repair proven by FINDING-225 and FINDING-226: make displayed FIT
+mean team-archetype alignment, and build Tight/Competitive/Loose pools from an exact simultaneous
+identity certificate without silently exceeding the selected named preset. Do not perform the
+separate Draft Setup performance work.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 browser feedback: the 440-player SMB source showed almost no STRONG FIT, roughly
+  85% WEAK FIT, and a nominally generous shaped pool could not honestly support chosen identities.
+- FINDING-225: canonical 440-player proof reproduced 69.1%-83.2% displayed WEAK at Standard because
+  tax pressure overwrites identity fit; the identity-only curve is materially healthier.
+- FINDING-226: all-claim protection expands eight-team Competitive/Loose from 238/264 to 336/344;
+  the full-source simultaneous proof needs exactly 176 disjoint support players. Numeric shaping
+  also overfills targets when protected distribution exceeds its grade/role quotas.
+- Help-Button UI Law remains canon. Existing source-role and blocker detail stays behind Help.
+- JK's browser walk remains the sole product-acceptance gate.
+
+## ALLOWED FILES
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/components/snake/desk/__tests__/deskRoomModel.test.ts`
+- `src/engines/poolFromDemand.ts`
+- `src/engines/__tests__/poolFromDemand.test.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.universe.test.tsx`
+- `src/engines/__tests__/snakeFitPoolCalibration.test.ts` (new focused real-440 regression)
+- Required finding, contract, decision, audit, status, and session documents
+
+The temporary `draftFitDistribution.diagnostic.test.ts` may be deleted; it must not ship.
+
+## DO NOT TOUCH
+- `snakeSeatingProof.ts`, its search law, proof caps, workers, or transport
+- Proof scheduling, off-main-thread execution, fingerprints, cancellation, caching, refresh behavior,
+  persistence batching, or latency/UI-busy behavior
+- Archetype definitions, cap shifts, identity thresholds, IV/salary/tax formulas, roster legality,
+  version-group/person exclusivity, Auction, FARM, Supabase, schema, deploy, or production config
+- Inline explanatory copy; blocker detail remains behind Help
+
+## REQUIRED BEHAVIOR
+- `STRONG FIT` / `SOLID FIT` / `WEAK FIT` use only the shared exact archetype multiplier and its
+  existing `>=1.04` / `<=0.96` thresholds. Tax never downgrades FIT. `TAX IF PICKED` and `TRUE COST`
+  remain unchanged and separate.
+- For a shaped Snake BUILD, prove the exact eligible Full Sources membership first. If feasible,
+  use only the proof's disjoint assignment ids as identity support; do not protect every independent
+  archetype seed or every extractor floor.
+- Seed the already-ruled competitive position-depth floor alongside certificate support before
+  numeric fill. These support ids are engine-generated membership, not user hand-picks.
+- Numeric shaping trims unprotected quota overfill to the effective target whenever protected ids
+  do not themselves exceed it. Protected ids still win; diagnostics must not falsely claim an
+  overage is entirely protected when evictable cards exist.
+- Candidate acceptance requires both an exact feasible final proof and `finalSize <= effectiveTarget`.
+  BUILD may try only the selected preset and wider named presets in order. If Loose cannot satisfy
+  both conditions, persist Full Sources and label that exact fallback. Never persist an unnamed size
+  above Loose while calling it Tight, Competitive, or Loose.
+- If Full Sources itself is infeasible or proof-unknown, keep its honest proof state and existing
+  actionable blocker reasons. Do not manufacture a shaped green state.
+- Manual adds, removals, roster pins, source selection, chosen archetypes, and current actual-mode
+  receipt persistence retain their established semantics.
+- An auto-widened named preset remains the current persisted preset. `RESET EDITS` clears only the
+  hand-add/remove ledger, then rebuilds that current preset through the same Full Sources certificate
+  and final proof path; it does not silently restore the narrower pre-widen selection.
+
+## VERIFICATION
+- Desk regression proves a tax-heavy but identity-strong player remains STRONG while tax fields are
+  untouched elsewhere.
+- Numeric-shaper regression proves skewed protected distribution below target returns exactly the
+  target, preserves every protected id, and deterministically trims only unprotected candidates.
+- Draft Setup regressions prove certificate assignment ids are passed into shaping, all-claim
+  preservation is disabled for that build, oversize candidate presets are rejected/widened, and a
+  Full Sources infeasible/unknown result is reported honestly. The reset regression must model the
+  real `replaceLeagueLocal` state transition and prove Reset clears edits while retaining the
+  persisted auto-widened named preset.
+- Real-data regression seeds exactly the 440 assigned SMB4 players, checks all 24 identity-only FIT
+  distributions, and proves the checked-in eight-identity Competitive/Loose pools stay within their
+  named bounds with no LOCKED identity and an exact simultaneous finish.
+- Run `NODE_ENV= ` focused Vitest, TypeScript, changed-file ESLint, production build, and
+  `git diff --check`. A separate non-builder auditor must try to disprove the frozen diff.
+
+## STOP CONDITIONS
+Stop if correctness requires changing proof scheduling/runtime placement, weakening any proof or
+economy law, changing the 1.04/0.96 thresholds, adding inline explainer text, touching a forbidden
+file, or overlapping runtime edits with the performance lane.
+
+Use high reasoning effort.
+<!-- ===== END CONTRACT: SNAKE-FIT-POOL-CORRECTNESS-34 ===== -->

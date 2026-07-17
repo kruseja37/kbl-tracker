@@ -1268,6 +1268,23 @@ export function shapePoolByNumericGrade(options: {
     );
   }
 
+  if (selected.size > effectiveTarget) {
+    const beforeTrim = selected.size;
+    const trimmed = trimPoolToTarget(
+      [...selected.values()],
+      options.protectedIds,
+      options.fitOf,
+      effectiveTarget,
+    );
+    selected.clear();
+    for (const player of trimmed.kept) selected.set(player.id, player);
+    if (trimmed.evicted.length > 0) {
+      messages.push(
+        `numeric grade quotas selected ${beforeTrim - effectiveTarget} player${beforeTrim - effectiveTarget === 1 ? '' : 's'} above the target because protected distribution exceeded one or more role/window shares; trimmed ${trimmed.evicted.length} unprotected candidate${trimmed.evicted.length === 1 ? '' : 's'} by fit before price.`,
+      );
+    }
+  }
+
   const highTailCapCount = Math.floor(effectiveTarget * tuning.highTailCap);
   let highTailCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
   if (highTailCount > highTailCapCount) {
@@ -1352,6 +1369,39 @@ export function shapePoolByNumericGrade(options: {
       messages.push(
         `numeric grade superstar cap still exceeds target by ${superstarCount - superstarCapCount}; protected players or missing same-role supply prevented further swaps.`,
       );
+    }
+  }
+
+  // Protected distributions can make the ideal role/window curve impossible at the fixed size.
+  // Recompute from the final post-cap membership so diagnostics name every relaxed preference
+  // without retaining a stale pre-trim or pre-swap quota result.
+  quotaShortfalls.length = 0;
+  for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
+    const bucketSource = options.universe.filter((player) => roleBucketOf(player) === bucket && !excludedIds.has(player.id));
+    const windowTargets = targetCountsByWindow(bucketTarget, windows);
+    for (const window of windows) {
+      const targetCount = windowTargets[window.id] ?? 0;
+      if (targetCount <= 0) continue;
+      const selectedCount = [...selected.values()].filter((player) =>
+        roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      if (selectedCount >= targetCount) continue;
+      const protectedCount = protectedPlayers.filter((player) =>
+        roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      const availableCount = bucketSource.filter((player) =>
+        numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      quotaShortfalls.push({
+        roleBucket: bucket,
+        windowId: window.id,
+        minInclusive: window.minInclusive,
+        maxExclusive: window.maxExclusive,
+        targetCount,
+        protectedCount,
+        selectedCount,
+        availableCount,
+      });
     }
   }
 
@@ -1961,6 +2011,8 @@ export function extractPoolFromDemand(
     priorityIds?: string[];
     designPriorityIds?: string[];
     preserveSelectedIdentityClaims?: boolean;
+    /** Exact disjoint ids from the authoritative all-club Snake seating certificate. */
+    identitySupportIds?: string[];
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
@@ -1981,6 +2033,7 @@ export function extractPoolFromDemand(
   const requestedExcludedIds = new Set(options.excludedIds ?? []);
   const requestedPriorityIds = new Set(options.priorityIds ?? []);
   const requestedDesignPriorityIds = new Set(options.designPriorityIds ?? []);
+  const requestedIdentitySupportIds = new Set(options.identitySupportIds ?? []);
   const designReconcileEnabled = requestedDesignPriorityIds.size > 0;
   const reconcileEnabled = handReconcileEnabled || designReconcileEnabled;
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
@@ -2065,6 +2118,7 @@ export function extractPoolFromDemand(
     ...reservedIds,
     ...identityClaimedIds,
     ...structuralFloorIds,
+    ...requestedIdentitySupportIds,
     ...(handReconcileEnabled ? requestedPinnedIds : []),
   ]);
   const effectiveExcludedIds = new Set(
@@ -2076,6 +2130,11 @@ export function extractPoolFromDemand(
   if (!sizingEnabled || preserveSelectedIdentityClaims) {
     for (const player of floors.players as DemandUniversePlayer[]) {
       if (!byId.has(player.id)) byId.set(player.id, player);
+    }
+  }
+  if (requestedIdentitySupportIds.size > 0) {
+    for (const { player } of classified) {
+      if (requestedIdentitySupportIds.has(player.id)) byId.set(player.id, player);
     }
   }
   if (reconcileEnabled) {
@@ -2105,6 +2164,7 @@ export function extractPoolFromDemand(
       ...reservedIds,
       ...identityClaimedIds,
       ...structuralFloorIds,
+      ...requestedIdentitySupportIds,
       ...(handReconcileEnabled ? requestedPinnedIds : []),
       ...requestedDesignPriorityIds,
     ]);
@@ -2128,8 +2188,27 @@ export function extractPoolFromDemand(
           ]),
       );
     };
-    const beforeShape = players;
     const excludedForShape = handReconcileEnabled ? effectiveExcludedIds : new Set<string>();
+    const preShapeFloorInjectedIds: string[] = [];
+    const preShapeFloorMessages: string[] = [];
+    if (requestedIdentitySupportIds.size > 0) {
+      const floorSeed = enforcePositionSupplyFloors({
+        universe,
+        players,
+        teams: teamsForSizing,
+        fitOf,
+        excludedIds: excludedForShape,
+        priorityIds: requestedPriorityIds,
+        poolSourceMode: options.poolSourceMode ?? 'full-pool',
+      });
+      players = floorSeed.players;
+      for (const id of floorSeed.injectedIds) {
+        protectedIds.add(id);
+        preShapeFloorInjectedIds.push(id);
+      }
+      preShapeFloorMessages.push(...floorSeed.messages);
+    }
+    const beforeShape = players;
     const shaped = shapePoolByNumericGrade({
       universe,
       currentPlayers: players,
@@ -2153,7 +2232,7 @@ export function extractPoolFromDemand(
       .filter((player) => !protectedIds.has(player.id) && !keptAfterShape.has(player.id))
       .map((player) => player.id)
       .sort((a, b) => a.localeCompare(b));
-    const messages: string[] = [];
+    const messages: string[] = [...preShapeFloorMessages];
     if (target.clamped) {
       messages.push(trimClampMessage(target, target.effectiveTarget, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
     }
@@ -2172,12 +2251,15 @@ export function extractPoolFromDemand(
       );
     }
     if (players.length > target.effectiveTarget) {
+      const protectedCount = players.filter((player) => protectedIds.has(player.id)).length;
       messages.push(
-        `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: every remaining player is claimed by an ask, an identity build, a structural floor${handReconcileEnabled && players.some((player) => requestedPinnedIds.has(player.id)) ? ', or your own hand-picks' : ''}`,
+        protectedCount > target.effectiveTarget
+          ? `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: protected asks, certificate support, position floors${handReconcileEnabled && players.some((player) => requestedPinnedIds.has(player.id)) ? ', or your own hand-picks' : ''} already exceed the target`
+          : `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget} after numeric shaping even though ${players.length - protectedCount} players remain unprotected`,
       );
     }
 
-    let injectedIds: string[] = [];
+    let injectedIds: string[] = [...preShapeFloorInjectedIds];
     let repairEvictedIds: string[] = [];
     const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
     if (Number.isFinite(budget) && teamsForSizing > 0) {
@@ -2203,7 +2285,8 @@ export function extractPoolFromDemand(
       });
       players = repair.players;
       g1 = repair.g1;
-      injectedIds = repair.injectedIds;
+      injectedIds = [...new Set([...preShapeFloorInjectedIds, ...repair.injectedIds])]
+        .sort((a, b) => a.localeCompare(b));
       repairEvictedIds = repair.evictedIds;
       messages.push(...repair.messages);
       if (repair.curveViolations.length > 0) {
@@ -2236,7 +2319,7 @@ export function extractPoolFromDemand(
         g1LowTailAdditionsByRole: repair.lowTailAdditionsByRole,
         g1Swaps: repair.swaps,
         curveViolations: repair.curveViolations,
-        g1AdditionCount: injectedIds.length,
+        g1AdditionCount: repair.injectedIds.length,
         g1SwapCount: repair.swaps.length,
       });
     } else {
@@ -2281,7 +2364,8 @@ export function extractPoolFromDemand(
     });
     players = floorTopUp.players;
     positionSupplyFloors = floorTopUp.floors;
-    injectedIds = [...injectedIds, ...floorTopUp.injectedIds];
+    injectedIds = [...new Set([...injectedIds, ...floorTopUp.injectedIds])]
+      .sort((a, b) => a.localeCompare(b));
     shortfalls.push(...floorTopUp.shortfalls);
     messages.push(...floorTopUp.messages);
     if (numericShape) {

@@ -1401,3 +1401,34 @@ and 45/45 main/companion. The broader production/page/model gate is 139/139 and 
 checks found no horizontal overflow or console errors; local sorts measured 38-61 ms, fit filters
 22-83 ms, and position-context `TOP` 279 ms. This is engineering approval only. JK's browser re-walk
 remains the sole product-acceptance gate.
+
+### 2026-07-17 Snake fit and shaped-pool correctness follow-up — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-225 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING | Snake room FIT | FIT is identity-only across the exact 440; tax remains separate. |
+| FINDING-226 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING | Snake shaped pool | Exact certificate-backed Competitive/Loose pools hold 238/264 and widen only through named modes. |
+
+### 2026-07-17 Snake FIT and shaped-pool correctness — independent close
+
+The exact 440-player trace confirmed two separate correctness defects: tax pressure overwrote the
+identity FIT label, and all independent identity claims plus structural floors could silently expand
+named 238/264 pools to 336/344. Contract `SNAKE-FIT-POOL-CORRECTNESS-34` kept the repair separate
+from proof scheduling and latency work.
+
+The implementation makes FIT identity-only, derives shaped membership from the exact Full Sources
+simultaneous certificate plus the established position floor, trims evictable quota overfill, and
+requires a feasible final proof inside the actual named bound. The real 440 regression returns exact
+238 Competitive and 264 Loose pools with all 176 certificate players and no LOCKED club. Auto-widen
+uses only wider named presets or honest Full Sources. Reset clears hand edits while retaining the
+persisted actual preset and re-enters the same certificate path.
+
+The first separate read-only audit rejected a Reset Edits bypass and a missing pre-shape injection
+receipt. Both received narrow repairs. Its next pass exposed a mutation-dishonest reset test; the
+contract was clarified to retain the persisted widened preset, and the test now models production
+`replaceLeagueLocal`, rerenders at Loose, and proves the 300-player source plus 264-player final
+candidate. Final auditor verdict: **APPROVE — Major 0 / Minor 0**. Builder gates include 83/83
+engine/desk tests, 28/28 universe tests, 21/21 pool-lock tests, 2/2 exact-440 calibration tests,
+TypeScript, changed-file ESLint, production build, and diff integrity. No merge, push, deploy, or
+preview occurred. Performance integration, combined independent audit, one preview, and JK's real
+browser walk remain downstream gates.

@@ -1165,6 +1165,36 @@ describe('extractPoolFromDemand', () => {
     expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'pinned', 'reserved']);
   });
 
+  it('trims unprotected quota overfill when protected distribution stays below the numeric target', () => {
+    n = 0;
+    const protectedPlayers = Array.from({ length: 10 }, (_, index) => hitter('SS', MIDDLE_CORE, 10_000 + index, {
+      id: `certificate-ss-${index}`,
+    } as Partial<DemandUniversePlayer>));
+    const source = [
+      ...protectedPlayers,
+      ...Array.from({ length: 8 }, (_, index) => hitter('SS', index % 2 === 0 ? LOW_TAIL : HIGH_TAIL, 20_000 + index)),
+      ...Array.from({ length: 16 }, (_, index) => hitter('CF', index % 2 === 0 ? MIDDLE_LOW : MIDDLE_HIGH, 30_000 + index)),
+    ];
+    const protectedIds = new Set(protectedPlayers.map((player) => player.id));
+    const shape = () => shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: protectedPlayers,
+      protectedIds,
+      targetSize: 12,
+      requiredRosterDemand: 10,
+      fitOf: (player) => numericGradeForPoolShape(player),
+    });
+
+    const first = shape();
+    const second = shape();
+
+    expect(first.players).toHaveLength(12);
+    expect(protectedPlayers.every((player) => first.players.some((candidate) => candidate.id === player.id))).toBe(true);
+    expect(first.players.map((player) => player.id)).toEqual(second.players.map((player) => player.id));
+    expect(first.diagnostics.messages.some((message) => message.includes('trimmed') && message.includes('unprotected'))).toBe(true);
+    expect(first.diagnostics.quotaShortfalls.length).toBeGreaterThan(0);
+  });
+
   it('preserves every chosen-identity claim across Tight, Competitive, and Loose shaping', () => {
     const source = universe();
     for (const poolSizeMultiplier of [1.2, 1.35, 1.5]) {

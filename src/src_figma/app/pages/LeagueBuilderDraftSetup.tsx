@@ -2838,6 +2838,7 @@ export function LeagueBuilderDraftSetup() {
   const buildPoolFirstShapeResult = useCallback((
     provenance: PoolProvenanceState,
     sizeMultiplier: number = poolGenerationMultiplier,
+    identitySupportIds: readonly string[] = [],
   ): PoolFromDemandResult => {
     if (!league) throw new Error("League not found.");
     const selectedArchetypes = leagueTeams
@@ -2866,7 +2867,8 @@ export function LeagueBuilderDraftSetup() {
         generationNonce: provenance.generationNonce,
         poolSourceMode,
         priorityIds: sortedIds([...selectedTeamRosterIds]),
-        preserveSelectedIdentityClaims: isSnakeFormat,
+        preserveSelectedIdentityClaims: isSnakeFormat && identitySupportIds.length === 0,
+        identitySupportIds: sortedIds(identitySupportIds),
       },
     );
   }, [isSnakeFormat, league, leagueTeams, poolGenerationMultiplier, universePlayers, poolBalancePreset, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
@@ -3535,8 +3537,7 @@ export function LeagueBuilderDraftSetup() {
       await regenerateProductionPool(poolProvenance);
     }), [poolProvenance, regenerateProductionPool, runAction]);
 
-  const handleBuildSelectedSnakePool = useCallback(() =>
-    runAction(async () => {
+  const buildSelectedSnakePool = useCallback(async (buildProvenance: PoolProvenanceState) => {
       if (!league) return;
       const proveCandidate = (candidateIds: readonly string[], candidateIvById: ReadonlyMap<string, number>) => {
         const candidatePool = registerPool({
@@ -3564,12 +3565,12 @@ export function LeagueBuilderDraftSetup() {
           : proof.shortfall?.reason === 'identity-proof-unknown' ? 'unknown' : 'infeasible'
       );
       if (poolAssemblyMode === "full-sources") {
-        const loaded = await loadFullSourcePool(poolProvenance);
+        const loaded = await loadFullSourcePool(buildProvenance);
         const fullIds = assembleFullSourcePoolIds({
           sourceIds: universePlayerIdList,
-          handAdds: [...poolProvenance.userAddedIds],
-          handRemoves: [...poolProvenance.manualExcludedIds],
-          hardKeepIds: sortedIds([...poolProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
+          handAdds: [...buildProvenance.userAddedIds],
+          handRemoves: [...buildProvenance.manualExcludedIds],
+          hardKeepIds: sortedIds([...buildProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
           validPlayerIds: players.map((player) => player.id),
         });
         const proof = proveCandidate(fullIds, ivById);
@@ -3582,15 +3583,38 @@ export function LeagueBuilderDraftSetup() {
         return;
       }
 
+      const fullIds = assembleFullSourcePoolIds({
+        sourceIds: universePlayerIdList,
+        handAdds: [...buildProvenance.userAddedIds],
+        handRemoves: [...buildProvenance.manualExcludedIds],
+        hardKeepIds: sortedIds([...buildProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
+        validPlayerIds: players.map((player) => player.id),
+      });
+      const fullProof = proveCandidate(fullIds, ivById);
+      if (!fullProof.feasible) {
+        const loaded = await loadFullSourcePool(buildProvenance);
+        setSnakeBuildReceipt({
+          mode: 'full-sources',
+          label: `FULL SELECTED SOURCES · AUTO-WIDENED FROM ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label.toUpperCase()}`,
+          count: loaded?.count ?? fullIds.length,
+          identityProof: proofState(fullProof),
+        });
+        return;
+      }
+      const identitySupportIds = sortedIds([
+        ...new Set(fullProof.assignments.flatMap((assignment) => assignment.playerIds)),
+      ]);
+
       const selectedIndex = SNAKE_POOL_COMPETITION_ORDER.indexOf(snakeCompetitionPreset);
       for (const preset of SNAKE_POOL_COMPETITION_ORDER.slice(Math.max(0, selectedIndex))) {
         const result = buildPoolFirstShapeResult(
-          poolProvenance,
+          buildProvenance,
           SNAKE_POOL_COMPETITION_PRESETS[preset].multiplier,
+          identitySupportIds,
         );
         const hardKeepIds = new Set([
-          ...poolProvenance.seedProtectedIds,
-          ...poolProvenance.userAddedIds,
+          ...buildProvenance.seedProtectedIds,
+          ...buildProvenance.userAddedIds,
           ...rosterDesignPinPlayerIds,
         ]);
         const candidateIds = sortedIds([...new Set([
@@ -3599,9 +3623,11 @@ export function LeagueBuilderDraftSetup() {
         ])]);
         const candidateIvById = new Map(result.players.map((player) => [player.id, player.iv]));
         const proof = proveCandidate(candidateIds, candidateIvById);
-        if (proof.feasible) {
+        const withinPresetBound = result.sizing == null
+          || candidateIds.length <= result.sizing.effectiveTarget;
+        if (proof.feasible && withinPresetBound) {
           const built = await regenerateProductionPool(
-            poolProvenance,
+            buildProvenance,
             result,
             SNAKE_POOL_COMPETITION_PRESETS[preset].multiplier,
           );
@@ -3619,22 +3645,19 @@ export function LeagueBuilderDraftSetup() {
 
       // The current BUILD action authorizes this last bounded recovery attempt. It changes the
       // resulting membership, not the user's selected preset/mode control, and reports that fact.
-      const fullIds = assembleFullSourcePoolIds({
-        sourceIds: universePlayerIdList,
-        handAdds: [...poolProvenance.userAddedIds],
-        handRemoves: [...poolProvenance.manualExcludedIds],
-        hardKeepIds: sortedIds([...poolProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
-        validPlayerIds: players.map((player) => player.id),
-      });
-      const fullProof = proveCandidate(fullIds, ivById);
-      const loaded = await loadFullSourcePool(poolProvenance);
+      const loaded = await loadFullSourcePool(buildProvenance);
       setSnakeBuildReceipt({
         mode: 'full-sources',
         label: `FULL SELECTED SOURCES · AUTO-WIDENED FROM ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label.toUpperCase()}`,
         count: loaded?.count ?? fullIds.length,
         identityProof: proofState(fullProof),
       });
-    }), [buildPoolFirstShapeResult, ivById, league, leagueTeams, loadFullSourcePool, players, poolAssemblyMode, poolProvenance, regenerateProductionPool, rosterDesignPinPlayerIds, runAction, snakeCompetitionPreset, tierBudget, universePlayerIdList]);
+    }, [buildPoolFirstShapeResult, ivById, league, leagueTeams, loadFullSourcePool, players, poolAssemblyMode, regenerateProductionPool, rosterDesignPinPlayerIds, snakeCompetitionPreset, tierBudget, universePlayerIdList]);
+
+  const handleBuildSelectedSnakePool = useCallback(() =>
+    runAction(async () => {
+      await buildSelectedSnakePool(poolProvenance);
+    }), [buildSelectedSnakePool, poolProvenance, runAction]);
 
   const handleSnakePoolChoice = useCallback((
     assemblyMode: SnakePoolAssemblyMode,
@@ -3669,11 +3692,7 @@ export function LeagueBuilderDraftSetup() {
         seedProtectedIds: new Set(poolProvenance.seedProtectedIds),
         generationNonce: poolProvenance.generationNonce,
       };
-      if (poolAssemblyMode === "full-sources") {
-        await loadFullSourcePool(resetProvenance);
-      } else {
-        await regenerateProductionPool(resetProvenance);
-      }
+      await buildSelectedSnakePool(resetProvenance);
     });
 
   const handleExtractPool = () =>
