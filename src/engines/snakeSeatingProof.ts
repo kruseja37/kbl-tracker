@@ -1747,6 +1747,158 @@ function proveEmptySetupGlobally(
 
 type IdentityMatchStrategy = 'seed-fit' | 'fit-value' | 'value-fit' | 'cheap-fit';
 
+/**
+ * The slot matcher below is intentionally generic: it can find any legal global matching, then
+ * asks the canonical validator whether each resulting roster embodies its club identity. On a
+ * deep stock pool that can repeatedly land on legal/value-safe rosters whose boosted cohort sits
+ * at or below the source mean even though disjoint identity-true rosters exist.
+ *
+ * Give the canonical identity builder a bounded chance to construct those rosters directly. Club
+ * order is the only degree of freedom: every selected card is consumed by version group before the
+ * next club builds. A resulting assignment is still only a candidate; the unchanged independent
+ * validator below must recompute Full Sources baselines, exact settlement money, strict positive
+ * embodiment, legality, and person/version disjointness before SUCCESS can escape this function.
+ */
+function proveIdentitySetupFromDisjointBuilds(
+  input: SimultaneousSnakeSeatingInput,
+  players: readonly SnakeSeatingPlayer[],
+  contexts: readonly ({
+    archetype: SimArchetype;
+    reference: readonly SimPlayer[];
+    taxCaps: readonly LuxuryCapRow[];
+    seed: ReturnType<typeof buildIdentityRoster>;
+    seedIds: ReadonlySet<string>;
+  } | null)[],
+): SnakeSeatingProof | null {
+  if (contexts.some((context) => context === null)) return null;
+  const completeContexts = contexts as readonly NonNullable<(typeof contexts)[number]>[];
+  if (completeContexts.some((context) => (
+    !context.seed.legalRoster
+    || !context.seed.solvent
+    || !context.seed.floorMet
+    || context.seed.embodiment.boostZ <= 0
+  ))) return null;
+
+  const playerById = new Map(players.map((player) => [player.playerId, player]));
+  const naturalOrder = input.clubs.map((_, clubIndex) => clubIndex);
+  const seedGroups = completeContexts.map((context) => new Set(
+    [...context.seedIds].flatMap((playerId) => {
+      const player = playerById.get(playerId);
+      return player ? [deriveVersionGroupId(player)] : [];
+    }),
+  ));
+  const overlapCounts = completeContexts.map((_, clubIndex) => {
+    let overlap = 0;
+    for (const groupId of seedGroups[clubIndex]) {
+      if (seedGroups.some((other, otherIndex) => (
+        otherIndex !== clubIndex && other.has(groupId)
+      ))) overlap += 1;
+    }
+    return overlap;
+  });
+  const rawOrders = [
+    naturalOrder,
+    [...naturalOrder].reverse(),
+    [...naturalOrder].sort((left, right) => (
+      overlapCounts[right] - overlapCounts[left]
+      || input.clubs[left].teamId.localeCompare(input.clubs[right].teamId)
+    )),
+    [...naturalOrder].sort((left, right) => (
+      overlapCounts[left] - overlapCounts[right]
+      || input.clubs[left].teamId.localeCompare(input.clubs[right].teamId)
+    )),
+  ];
+  const seenOrders = new Set<string>();
+
+  for (const order of rawOrders) {
+    const orderKey = order.join('|');
+    if (seenOrders.has(orderKey)) continue;
+    seenOrders.add(orderKey);
+    let remaining = [...players];
+    const rosters: SnakeSeatingPlayer[][] = input.clubs.map(() => []);
+    let complete = true;
+
+    for (const clubIndex of order) {
+      const club = input.clubs[clubIndex];
+      const context = completeContexts[clubIndex];
+      const remainingReference = uniqueIdentityReference(remaining, context.archetype, input.tier ?? 'standard');
+      const commonOptions = {
+        realTeamCount: input.realTeamCount,
+        taxCaps: [...context.taxCaps],
+        affordabilityLaw: 'snake-money' as const,
+        posture: 'optimal' as const,
+        embodimentReference: [...context.reference],
+      };
+      const requiredIv = context.seed.baselineIv * context.seed.valueFloor;
+      let built = remaining.length === players.length
+        ? context.seed
+        : buildIdentityRoster(
+            remainingReference,
+            context.archetype,
+            input.tier ?? 'standard',
+            club.budgetRemaining,
+            commonOptions,
+          );
+      if (built.totalIv < requiredIv - 1e-9) {
+        if (!Number.isFinite(built.baselineIv) || built.baselineIv <= 0) {
+          complete = false;
+          break;
+        }
+        built = buildIdentityRoster(
+          remainingReference,
+          context.archetype,
+          input.tier ?? 'standard',
+          club.budgetRemaining,
+          {
+            ...commonOptions,
+            // The public proof law anchors its IV floor to Full Sources, not to whichever cards a
+            // previous club left behind. Translate that exact floor onto this remaining-pool build.
+            valueFloorOverride: requiredIv / built.baselineIv,
+          },
+        );
+      }
+      const roster = built.players
+        .map((player) => playerById.get(player.id))
+        .filter((player): player is SnakeSeatingPlayer => Boolean(player));
+      if (roster.length !== LEGAL_ROSTER.size
+        || !built.legalRoster
+        || !built.solvent
+        || !built.floorMet
+        || built.totalIv < requiredIv - 1e-9
+        || built.embodiment.boostZ <= 0
+        || !isLegalRoster(roster.map((player) => player.shape))) {
+        complete = false;
+        break;
+      }
+      rosters[clubIndex] = roster;
+      const usedGroups = new Set(roster.map(deriveVersionGroupId));
+      remaining = remaining.filter((player) => !usedGroups.has(deriveVersionGroupId(player)));
+    }
+    if (!complete) continue;
+
+    const repairRepresentativeByGroup = new Map(rosters.flatMap((roster) => roster.map((player) => [
+      deriveVersionGroupId(player),
+      player,
+    ] as const)));
+    for (const player of [...players].sort((left, right) => (
+      left.price - right.price || left.playerId.localeCompare(right.playerId)
+    ))) {
+      const groupId = deriveVersionGroupId(player);
+      if (!repairRepresentativeByGroup.has(groupId)) repairRepresentativeByGroup.set(groupId, player);
+    }
+    const assignments = repairMatchedRosters(input, [...repairRepresentativeByGroup.values()], rosters);
+    if (!assignments) continue;
+    const proof: SnakeSeatingProof = {
+      feasible: true,
+      assignments,
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL, AFFORDABLE 22 THAT FITS ITS CHOSEN IDENTITY.',
+    };
+    if (validateConstructiveSnakeSeatingProof(input, proof)) return proof;
+  }
+  return null;
+}
+
 function proveIdentitySetupConstructively(
   input: SimultaneousSnakeSeatingInput,
   players: readonly SnakeSeatingPlayer[],
@@ -1769,6 +1921,10 @@ function proveIdentitySetupConstructively(
       embodimentReference: reference,
     });
     return {
+      archetype: club.identityArchetype,
+      reference,
+      taxCaps,
+      seed,
       scorer: archetypeFitScorer(club.identityArchetype, tier, 'optimal', reference),
       seedIds: new Set(seed.players.map((player) => player.id)),
       zeroVarianceIdentity: seed.embodiment.boostRows.length > 0
@@ -1778,6 +1934,8 @@ function proveIdentitySetupConstructively(
   // Exact early impossibility under the canonical strict-z gate: when every boosted cohort has
   // zero variance, every possible roster has z=0 and no roster can clear the required >0.
   if (contexts.some((context) => context?.zeroVarianceIdentity)) return null;
+  const directIdentityProof = proveIdentitySetupFromDisjointBuilds(input, players, contexts);
+  if (directIdentityProof) return directIdentityProof;
   const slots = buildDefaultDesignSlots();
   const globalSlots = input.clubs.flatMap((_, clubIndex) => slots.map((slot, localSlotIndex) => ({
     clubIndex,

@@ -1276,3 +1276,12 @@ The prior live header recorded Snake walkthrough wave 2 implementation `c4f1c58f
 interaction gates green and JK's real browser re-walk still pending. This correctness lane supersedes
 that top header with independently approved identity-only FIT and exact certificate-backed named
 pool bounds. Performance integration, one combined preview, and JK's browser walk remain open.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 production-identity certificate close
+
+The prior live header recorded independently approved identity-only FIT and exact 238/264 membership
+on `codex/draft-fit-pool-calibration`, with performance integration next. The performance browser
+gate then proved that calibration had omitted production `identityArchetype` and honestly fell back
+UNKNOWN to 440. FINDING-228 corrects that coverage and bounded certificate construction; a separate
+auditor approved it with zero findings. Performance re-integration, combined audit, one preview, and
+JK's browser walk remain open.

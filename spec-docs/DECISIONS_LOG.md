@@ -4135,3 +4135,22 @@ This is a correctness law, not a performance ruling. Proof search, execution pla
 fingerprints, cancellation, caching, refresh strategy, duplicate diagnostics, and latency gates
 remain owned by the separate performance lane. Help-button law remains canon, and JK's real browser
 walk remains the final product gate.
+
+## 2026-07-17 — Chosen-identity SUCCESS requires a production-input simultaneous certificate
+
+Permanent chosen-identity calibration must enter the engine through production
+`buildSnakeSetupProofInput`, including both `capIdentity` and `identityArchetype`; a cap-only proof
+does not cover Draft Setup readiness. A constructive candidate may build canonical identity rosters
+only from the remaining whole-person version groups, and every club's required IV floor stays
+anchored to its immutable Full Sources baseline.
+
+When multiple Legend versions exist, construction may select the version that actually embodies the
+chosen identity, but assigning one version consumes the whole person group. Construction is never
+the authority: the unchanged independent validator must re-prove distinct people, legal 22, exact
+salary/tax settlement and affordability, the source-relative IV floor, and strict positive identity
+embodiment before SUCCESS. If bounded construction and the existing generic matcher do not prove a
+candidate, `identity-proof-unknown` remains the honest result.
+
+This ruling changes no FIT threshold, archetype multiplier, named pool size, auto-widen law,
+readiness meaning, proof scheduling, worker, caching, refresh, cancellation, or latency behavior.
+Performance re-integration and JK's browser walk remain separate downstream gates.

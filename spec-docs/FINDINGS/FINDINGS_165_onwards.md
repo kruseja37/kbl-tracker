@@ -456,7 +456,7 @@ production-build, and diff-integrity gates passed. A separate non-builder audito
 with zero Major and zero Minor findings. JK's real browser walk remains the acceptance gate.
 
 ### FINDING-226
-**Date:** 2026-07-17 | **Phase:** Snake Draft browser walkthrough correctness follow-up | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING
+**Date:** 2026-07-17 | **Phase:** Snake Draft browser walkthrough correctness follow-up | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING
 **Files:** `src/engines/poolFromDemand.ts`, `src/engines/snakeEarlyDraftSeating.ts`, `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
 **Evidence:** JK reports that a four-team archetype selection over the 440-player SMB base can leave a chosen identity grayed out and that LOOSE, despite its 50%-surplus target, can still fail the legal/archetype finish gate. Existing production-shape coverage proves one fixed eight-archetype set and deliberately treats count presets as guides rather than universal readiness guarantees; it does not exhaust all 24 identities or all selected-team combinations. A first real-data stress repeated each of the 24 identities across four clubs. Competitive, Loose, and Full Sources all produced a simultaneous legal/solvent finish with no LOCKED verdict. However, Competitive's 119-card guide expanded to 177-182 cards and Loose's 132-card guide expanded to 185-190 because selected-identity claims are hard-kept. The run emitted all 72 scenario verdicts but crossed its 300-second harness timeout after the final result. The checked-in eight-club production-shape test also seeds and proves all 506 SMB4 records, while JK's selected stock-team source contains exactly 440 assigned players and excludes the 66 unassigned free agents. Re-running that exact eight-identity room against the selected 440 produces simultaneous legal/solvent finishes with no LOCKED identities, but Competitive expands from its 238-card guide to 336 and Loose from 264 to 344. Full Sources is 440. The current branch therefore avoids the old lock by retaining 72%-76% of Full Sources and overshooting the named curves by 80-98 players, not by building a sufficient pool near the requested competition level. The live cause is explicit: Snake callers set `preserveSelectedIdentityClaims`; `extractPoolFromDemand` turns every `extractDraftPool` identity seed id and every structural-floor id into `protectedIds`, inserts every floor player before numeric shaping, and permits those protected classes to exceed the target. `extractDraftPool` independently builds one best 22 for every selected identity plus oversupplied structural/cheap-depth floors, even though those independent rosters are neither disjoint nor the final simultaneous club assignment.
 **Impact:** A target-sized shaped pool can appear generous while omitting the role-specific identity depth needed by the selected clubs; after the prior repair, the opposite failure is also possible—the preset silently grows by roughly 40%-50% beyond its guide. Existing green proof can mask the browser source selection by relying on 66 cards the user did not include.
@@ -478,3 +478,44 @@ The final separate re-audit returned APPROVE with zero Major and zero Minor find
 scheduling, search law, workers, caching, refresh, cancellation, and latency behavior were not
 changed; those remain the separate performance lane. JK's real browser walk remains the acceptance
 gate.
+
+### FINDING-228
+**Date:** 2026-07-17 | **Phase:** Combined Snake correctness/performance browser gate | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING
+**Files:** `src/engines/__tests__/snakeFitPoolCalibration.test.ts`,
+`test-utils/journeys/14-snake-pool-assembly.spec.ts`,
+`src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+**Evidence:** The exact-440 calibration's `prove` helper supplies each club's `capIdentity` but omits
+the `identityArchetype` that production Draft Setup always adds through `buildSnakeSetupProofInput`.
+Its exact 238/264 result therefore proves legal/cap seating, not the UI's required strict chosen-
+identity certificate. The real eight-club Draft Setup journey ends at honest 440 Full Sources with
+`identity-proof-unknown` instead of its expected 238. A separate two-club Standard room using
+Murderers Row and Whiteyball reproduces the same honest 440 fallback. Running the unchanged engine
+synchronously on the exact real-browser 440 input returns the same UNKNOWN result, excluding worker
+transport, serialization, scheduling, and cache behavior as the cause. Correcting the permanent
+calibration to supply `identityArchetype` reproduces the same failure at Full Sources in 26.35s.
+**Impact:** The independently approved claim that the real named browser build certifies every chosen
+identity at 238/264 is not covered by the cited calibration, and the existing browser journey is red.
+Performance is repaired, but a normal Standard Snake setup can remain unable to lock because Full
+Sources cannot mint the required identity-aware certificate.
+**Action:** Use the exact production `buildSnakeSetupProofInput` in permanent real-data calibration,
+then repair only the bounded identity-certificate construction while preserving its independent
+validator and every legal, money, value-floor, strict-embodiment, version, and disjointness law. Do
+not weaken readiness, hide UNKNOWN, remove `identityArchetype`, or fold this correctness change into
+FINDING-227.
+**Builder evidence:** The bounded certifier now tries deterministic disjoint canonical identity
+builds before the generic slot matcher. Each club consumes exact version groups; a later club builds
+from the remaining versions/people, but its IV floor stays anchored to Full Sources. A candidate can
+return SUCCESS only after the unchanged independent validator recomputes unique people, legal 22,
+exact settlement money, Full Sources IV floor, strict positive embodiment, and every assignment bill.
+The exact production adapter calibration passes Full Sources plus exact 238/264 for the mixed
+eight-club room, the reported two-club Murderers Row/Whiteyball room, and four simultaneous clubs for
+each of all 24 archetypes on the exact 440. The existing synthetic bounded-UNKNOWN case stays UNKNOWN.
+Builder gates: 107/107 proof/adapter/pool/desk; 49/49 Draft Setup; 4/4 exact-440 calibration;
+TypeScript, changed-file ESLint, 2,729-module production build/PWA, and diff integrity green.
+**Independent evidence:** A separate non-builder auditor returned APPROVE with zero Major and zero
+Minor findings. It independently reran the exact production-input calibration 4/4 in 278.32s,
+seating proof 14/14, adapter proof 12/12, TypeScript, changed-file ESLint, the 2,729-module production
+build, and diff integrity. Its source trace confirmed four bounded deterministic orders, immutable
+Full Sources IV-floor translation, identity-specific Legend version choice with whole-person
+consumption, unchanged exact billing/legality/strict-embodiment validation, and the honest UNKNOWN
+tail. Performance integration and JK's browser walk remain downstream gates.

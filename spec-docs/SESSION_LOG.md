@@ -7627,3 +7627,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending:** commit and hand this correctness result to the performance lane. That lane rebases,
   then the combined diff receives an independent audit and one preview. JK's real browser walk is
   the final acceptance gate. No merge or deploy is authorized.
+
+## 2026-07-17 (Codex, production-identity certificate repair) — independently approved; re-integration pending
+
+- Performance browser integration exposed that the exact-440 calibration supplied `capIdentity`
+  without production's `identityArchetype`. The real eight-club room and a two-club Murderers
+  Row/Whiteyball room therefore returned honest `identity-proof-unknown` even at Full Sources;
+  synchronous reproduction excluded worker serialization and scheduling.
+- Added contract `SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36` and corrected permanent calibration to
+  use `buildSnakeSetupProofInput`. The red-first production input failed exact 440 before shaping.
+- Implemented a bounded generic constructor in `snakeSeatingProof`: up to four deterministic club
+  orders, canonical identity rosters built from remaining whole-person groups, identity-specific
+  Legend version selection, and immutable Full Sources IV-floor translation. The existing validator
+  remains the sole SUCCESS authority and honest UNKNOWN remains available.
+- Builder gates passed proof/adapter/pool/desk 107/107, Draft Setup 49/49, exact-440 calibration 4/4,
+  TypeScript, changed-file ESLint, the 2,729-module production build/PWA, and diff integrity.
+- A separate non-builder auditor returned **APPROVE — Major 0 / Minor 0** and independently reran
+  exact calibration 4/4 in 278.32s, seating proof 14/14, adapter proof 12/12, TypeScript, lint, build,
+  and diff integrity. Its source trace confirmed all preserved legal, money, value-floor, embodiment,
+  version-group, and disjointness laws.
+- **Pending:** commit and exact-file handoff to the performance lane. That lane owns re-integration,
+  combined independent audit, and one preview. JK's real browser walk remains the final acceptance
+  gate. No merge or deploy is authorized.

@@ -32033,3 +32033,65 @@ file, or overlapping runtime edits with the performance lane.
 
 Use high reasoning effort.
 <!-- ===== END CONTRACT: SNAKE-FIT-POOL-CORRECTNESS-34 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 ===== -->
+# SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 — PRODUCTION-TRUE CHOSEN-IDENTITY CERTIFICATE
+
+**ROUTE:** Codex correctness builder | high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-fit-pool-calibration`
+
+## ROLE AND GOAL
+Close FINDING-228 without changing the product law: make the bounded simultaneous certifier find and
+independently validate viable disjoint chosen-identity rosters for the exact production Draft Setup
+input, then prove the 440-player Full Sources and bounded 238/264 builds through that exact adapter.
+
+## SOURCE OF TRUTH
+- FINDING-228 and the production browser evidence returned by the performance lane.
+- Production `buildSnakeSetupProofInput`, which supplies both `capIdentity` and
+  `identityArchetype` for every chosen MLB archetype.
+- The exact 440 assigned SMB4 players; the 66 unassigned free agents remain excluded.
+- Existing `validateConstructiveSnakeSeatingProof` law: unique people, legal 22, exact Snake money,
+  optimal-posture IV floor, and strict positive identity embodiment for every club.
+- Help-Button UI Law and JK's real browser walk remain final product gates.
+
+## ALLOWED FILES
+- `src/engines/snakeSeatingProof.ts`
+- `src/engines/__tests__/snakeSeatingProof.test.ts`
+- `src/engines/__tests__/snakeFitPoolCalibration.test.ts`
+- Required FINDING-228 contract, audit, decision, status, and session documents
+
+## DO NOT TOUCH
+- FIT math, archetype definitions or thresholds, cap/tax/IV/salary formulas, roster law, value-floor
+  percentage, strict `boostZ > 0`, version/person exclusivity, pool membership shaping, position
+  floors, named 238/264 bounds, auto-widen order, blocker meaning, Auction, FARM, Supabase, or schema
+- Performance-lane worker, fingerprint, cancellation, cache, refresh, persistence, latency, journey,
+  or page scheduling files
+- `identity-proof-unknown` semantics; bounded failure remains UNKNOWN, never a fabricated success or
+  a confirmed shortage
+
+## REQUIRED BEHAVIOR
+- Permanent real-data calibration constructs its proof input through production
+  `buildSnakeSetupProofInput` and asserts every chosen club carries `identityArchetype`.
+- Exact 440 Full Sources must mint a disjoint 22-per-club certificate for the checked eight-club room;
+  its assignment IDs seed the unchanged 238/264 membership shaper.
+- The final exact 238 Competitive and 264 Loose inputs must independently re-prove every chosen
+  identity through the same production adapter input.
+- The two-club Murderers Row/Whiteyball browser case must also certify on exact Full Sources.
+- Any new deterministic construction is only a certificate candidate. It may return SUCCESS only
+  after the unchanged independent constructive validator accepts every assignment and bill.
+- Existing synthetic UNKNOWN coverage must remain UNKNOWN when the bounded constructor cannot prove
+  strict identity embodiment.
+
+## VERIFICATION
+- Start with the corrected exact-440 calibration red at Full Sources.
+- Add focused constructor/validator regressions, then run exact-440 identity-aware calibration,
+  complete Snake seating proof tests, surrounding pool/Draft Setup correctness gates, TypeScript,
+  changed-file ESLint, production build, and `git diff --check`.
+- Freeze the final diff and require a separate non-builder auditor to try to disprove the exact
+  adapter input, certificate law, named bounds, and UNKNOWN preservation.
+
+## STOP CONDITIONS
+Stop rather than weakening any product law, editing performance files, hard-coding the stock result,
+accepting an unvalidated assignment, hiding UNKNOWN, merging, pushing, deploying, or claiming product
+acceptance before combined audit, one preview, and JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 ===== -->

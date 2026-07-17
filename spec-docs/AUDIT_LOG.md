@@ -1407,7 +1407,56 @@ remains the sole product-acceptance gate.
 | Finding | Date | Status | Surface | Required resolution |
 |---------|------|--------|---------|---------------------|
 | FINDING-225 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING | Snake room FIT | FIT is identity-only across the exact 440; tax remains separate. |
-| FINDING-226 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING | Snake shaped pool | Exact certificate-backed Competitive/Loose pools hold 238/264 and widen only through named modes. |
+| FINDING-226 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING | Snake shaped pool | Production-identity exact 238/264 proof independently verified. |
+| FINDING-228 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING | Snake chosen-identity certificate | Exact adapter Full/238/264 and all-24 four-club proof independently verified. |
+
+### 2026-07-17 Snake chosen-identity certificate coverage gap
+
+Performance integration supplied the first real production-browser proof of the correctness commit.
+The page stayed responsive, but the eight-club journey honestly auto-widened to 440 with
+`identity-proof-unknown`. A two-club Murderers Row/Whiteyball room and a synchronous direct engine
+call on the same exact 440 input returned the same result, excluding worker transport. The permanent
+calibration was false-green because it supplied `capIdentity` without production's
+`identityArchetype`; correcting that field reproduces the Full Sources failure in 26.35 seconds.
+
+FINDING-226 is reopened under FINDING-228. Performance code remains frozen and green. Contract
+`SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36` owns a separate bounded search-construction repair and
+production-input calibration, followed by a separate non-builder audit. No readiness, identity,
+money, legality, value-floor, embodiment, version, pool-size, or performance law may be weakened.
+
+### 2026-07-17 Snake chosen-identity certificate — builder repair
+
+The corrected production-input regression failed at exact 440 Full Sources before shaping. The
+narrow repair adds one generic deterministic constructor inside `snakeSeatingProof`: clubs build
+canonical identity rosters from remaining version groups in four bounded orderings, while each
+club's value floor remains anchored to its Full Sources baseline. No assignment is trusted from that
+construction. The existing independent validator recomputes and must accept disjoint people, legal
+22, exact settlement money and bills, the Full Sources optimal-posture IV floor, and strict positive
+identity embodiment before SUCCESS can return. The prior generic matcher and honest UNKNOWN tail
+remain unchanged fallbacks.
+
+Builder proof passes the exact production adapter rather than a hand-built cap-only input: mixed
+eight-club Full Sources plus 238 Competitive and 264 Loose, two-club Murderers Row/Whiteyball Full
+Sources, and four simultaneous clubs for every one of the 24 archetypes against exactly 440 assigned
+SMB4 players. The original synthetic strict-identity UNKNOWN remains UNKNOWN. Surrounding gates are
+107/107 proof/adapter/pool/desk, 49/49 Draft Setup, TypeScript, changed-file lint, 2,729-module
+production build/PWA, and diff integrity. This is builder evidence only; the diff is now frozen for
+a separate non-builder audit. Performance integration and browser latency files remain untouched.
+
+### 2026-07-17 Snake chosen-identity certificate — independent close
+
+A separate non-builder auditor returned **APPROVE — Major 0 / Minor 0**. It traced the real
+`buildSnakeSetupProofInput` path and confirmed that both `capIdentity` and `identityArchetype` reach
+the permanent exact-440 calibration. It verified the bounded four-order constructor, immutable Full
+Sources value-floor translation, identity-specific Legend version selection with whole-person group
+consumption, and the unchanged validator's independent checks for disjoint identities, legal 22,
+exact settlement bills and money, source-relative IV floor, and strict positive identity embodiment.
+The honest UNKNOWN fallback remains intact.
+
+Independent reruns passed the exact calibration 4/4 in 278.32s, seating proof 14/14, adapter proof
+12/12, TypeScript, changed-file ESLint, the 2,729-module production build/PWA, and diff integrity.
+This closes the correctness-lane audit only. Performance re-integration, combined independent audit,
+one preview, and JK's real browser walk remain open; no merge or deployment is authorized.
 
 ### 2026-07-17 Snake FIT and shaped-pool correctness — independent close
 
