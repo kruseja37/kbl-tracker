@@ -200,6 +200,39 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.queryByText("PLAYER POOL")).not.toBeInTheDocument();
   });
 
+  test("a source-library URL resolves to the draft league and selection keeps the URL honest", async () => {
+    const sourceLibrary = makeLeague({
+      id: "legends-library-career",
+      name: "Legends Library Career",
+      teamIds: [],
+      sourceLibrary: { kind: "historical-legends", profileType: "Career" },
+    });
+    const fourTeamLeague = makeLeague({ id: "four-team-mock", name: "4-team mock" });
+    const secondDraftLeague = makeLeague({ id: "second-draft", name: "Second Draft" });
+    window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=legends-library-career");
+    mockLeagueData({
+      league: fourTeamLeague,
+      leagues: [sourceLibrary, fourTeamLeague, secondDraftLeague],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const leagueSelect = await waitFor(() => {
+      const match = screen.getAllByRole("combobox")
+        .find((element) => (element as HTMLSelectElement).value === "four-team-mock");
+      expect(match).toBeDefined();
+      return match as HTMLSelectElement;
+    });
+    expect(leagueSelect).toHaveValue("four-team-mock");
+    await act(async () => {
+      fireEvent.change(leagueSelect, { target: { value: "second-draft" } });
+    });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/league-builder/draft-setup?leagueId=second-draft",
+      { replace: true },
+    );
+  });
+
   test("auction format renders only the auction adapter", async () => {
     render(<LeagueBuilderDraftSetup />);
 

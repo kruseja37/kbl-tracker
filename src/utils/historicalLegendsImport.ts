@@ -21,6 +21,7 @@ import {
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const PROFILE_TYPES: HistoricalLegendProfileType[] = ['Career', 'Peak', 'Draft Pool'];
+const STOCK_SOURCE_LEAGUE_IDS = new Set(['sml', 'mlb']);
 
 export interface HistoricalLegendsImportResult {
   players: number;
@@ -59,7 +60,9 @@ function legacyOwnershipRepairBlocker(
     if (current.sourceDatabase !== 'League Builder') {
       return `${current.id} is owned by ${current.sourceDatabase ?? 'UNKNOWN'}`;
     }
-    if ((current.leagueAssignments ?? []).length > 0) return `${current.id} is assigned to a league`;
+    if ((current.leagueAssignments ?? []).some((assignment) => (
+      !STOCK_SOURCE_LEAGUE_IDS.has(assignment.leagueId)
+    ))) return `${current.id} is assigned to a user league`;
   }
   return null;
 }
@@ -232,7 +235,12 @@ export async function importHistoricalLegendsPayload(
       // Visible personality remains exactly as authored by the frozen source payload.
       hiddenPersonalityModifiers: curatedHiddenByPersonId.get(player.historicalSourceId)
         ?? generateHiddenPersonalityModifiers(`historical-legend:${player.historicalSourceId}`),
-      leagueAssignments: (matchingLegend?.leagueAssignments ?? []).map((assignment) => ({ ...assignment })),
+      // Stock source leagues are closed source shelves, not user leagues. Legacy partial imports
+      // accidentally stamped Legends cards into SML; retaining that assignment makes the SML
+      // source appear to contain SMB4 + all Legends. Preserve ordinary user-league assignments.
+      leagueAssignments: (matchingLegend?.leagueAssignments ?? [])
+        .filter((assignment) => !STOCK_SOURCE_LEAGUE_IDS.has(assignment.leagueId))
+        .map((assignment) => ({ ...assignment })),
     } satisfies HistoricalLegendAppPlayer;
   });
 

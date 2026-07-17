@@ -4610,20 +4610,41 @@ async function seedFromSMB4DatabaseWrites(clearExisting: boolean): Promise<{ tea
 
   await initLeagueBuilderDatabase();
 
+  const preservedTeamLeagueIds = new Map<string, string[]>();
+  const preservedPlayerAssignments = new Map<string, NonNullable<Player['leagueAssignments']>>();
+  const userLeagueTeamIds = new Set<string>();
+
   if (clearExisting) {
     // Only remove SML teams/players — preserve other leagues (e.g., MLB)
     const smlTeamIds = new Set(Object.values(SMB4_TEAMS).map(t => t.id).filter(id => id !== 'free-agent'));
     const existingTeams = await getAllTeams();
     const existingPlayers = await getAllPlayers();
+    const existingLeagues = await getAllLeagueTemplates();
+    for (const league of existingLeagues) {
+      if (league.sourceLibrary || league.id === 'sml' || league.id === 'mlb') continue;
+      for (const teamId of league.teamIds) userLeagueTeamIds.add(teamId);
+    }
 
     for (const t of existingTeams) {
       if (smlTeamIds.has(t.id)) {
-        await deleteTeam(t.id);
+        preservedTeamLeagueIds.set(t.id, (t.leagueIds ?? []).filter((leagueId) => leagueId !== 'sml'));
       }
     }
     for (const p of existingPlayers) {
-      if (p.leagueAssignments?.some(a => a.leagueId === 'sml') || (p.leagueAssignments?.[0]?.teamId && smlTeamIds.has(p.leagueAssignments[0].teamId))) {
-        await deletePlayer(p.id);
+      const stockPlayer = SMB4_PLAYERS[p.id];
+      const isOwnedSmb4Player = Boolean(stockPlayer) && p.sourceDatabase === 'SMB4';
+      const isLegacySmb4Player = Boolean(stockPlayer)
+        && !p.sourceDatabase
+        && Boolean(p.leagueAssignments?.some((assignment) => (
+          assignment.leagueId === 'sml' && assignment.teamId === stockPlayer.teamId
+        )));
+      if (isOwnedSmb4Player || isLegacySmb4Player) {
+        preservedPlayerAssignments.set(
+          p.id,
+          (p.leagueAssignments ?? [])
+            .filter((assignment) => assignment.leagueId !== 'sml')
+            .map((assignment) => ({ ...assignment })),
+        );
       }
     }
   }
@@ -4637,19 +4658,36 @@ async function seedFromSMB4DatabaseWrites(clearExisting: boolean): Promise<{ tea
   for (const teamData of Object.values(SMB4_TEAMS)) {
     if (teamData.id === 'free-agent') continue; // Skip free agent pool
 
-    const team = convertTeam(teamData);
+    const convertedTeam = convertTeam(teamData);
+    const team = {
+      ...convertedTeam,
+      leagueIds: Array.from(new Set([
+        ...(convertedTeam.leagueIds ?? []),
+        ...(preservedTeamLeagueIds.get(convertedTeam.id) ?? []),
+      ])),
+    };
     seededTeams.push(await saveTeam(team));
     teamCount++;
   }
 
   // Seed players
   for (const playerData of Object.values(SMB4_PLAYERS)) {
-    const player = convertPlayer(playerData);
+    const convertedPlayer = convertPlayer(playerData);
+    const player = {
+      ...convertedPlayer,
+      leagueAssignments: [
+        ...(convertedPlayer.leagueAssignments ?? []),
+        ...(preservedPlayerAssignments.get(convertedPlayer.id) ?? []),
+      ],
+    };
     seededPlayers.push(await savePlayer(player));
     playerCount++;
   }
 
   for (const team of seededTeams) {
+    // A stock club can be reused by a user league. Its one durable roster is shared by team ID,
+    // so refreshing the closed SML source must not replace that user's roster construction.
+    if (userLeagueTeamIds.has(team.id)) continue;
     const teamPlayers = seededPlayers.filter((player) =>
       player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
     );

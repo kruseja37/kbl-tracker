@@ -207,6 +207,24 @@ describe('Historical Legends app import', () => {
     expect((await getAllPlayers())[0].leagueAssignments).toEqual([assignment]);
   });
 
+  test('removes stale stock-source assignments while preserving user-league assignments', async () => {
+    const career = card('Career', 'career');
+    await savePlayer({
+      ...career,
+      sourceDatabase: 'HISTORICAL_LEGENDS',
+      leagueAssignments: [
+        { leagueId: 'sml', teamId: 'sirloins', rosterStatus: 'MLB' },
+        { leagueId: 'my-custom-league', teamId: 'legends', rosterStatus: 'MLB' },
+      ],
+    });
+
+    await importHistoricalLegendsPayload(payload([career]), SOURCE_SHA);
+
+    expect((await getAllPlayers())[0].leagueAssignments).toEqual([
+      { leagueId: 'my-custom-league', teamId: 'legends', rosterStatus: 'MLB' },
+    ]);
+  });
+
   test('system-library assignment does not block removal of a stale Legends card', async () => {
     const stale = {
       ...card('Career', 'career'),
@@ -349,6 +367,25 @@ describe('Historical Legends app import', () => {
       'hl:aaroh101:peak',
     ]);
     expect(players.find((player) => player.id === 'stock-player')).toMatchObject({ sourceDatabase: 'SMB4' });
+  });
+
+  test('repairs verified legacy Legends assigned only to a stock source league', async () => {
+    const career = card('Career', 'career');
+    await savePlayer({
+      ...career,
+      sourceDatabase: 'League Builder',
+      leagueAssignments: [{ leagueId: 'sml', teamId: 'sirloins', rosterStatus: 'MLB' }],
+    });
+
+    const failure = await importHistoricalLegendsPayload(payload([career]), SOURCE_SHA)
+      .then(() => null, (error: unknown) => error);
+    expect(isRecoverableHistoricalLegendsOwnershipCollision(failure)).toBe(true);
+
+    await repairHistoricalLegendsPayload(payload([career]), SOURCE_SHA);
+    expect((await getAllPlayers())[0]).toMatchObject({
+      sourceDatabase: 'HISTORICAL_LEGENDS',
+      leagueAssignments: [],
+    });
   });
 
   test.each([

@@ -25,8 +25,11 @@ import {
   getRegisteredPool,
   initLeagueBuilderDatabase,
   seedFromSMB4Database,
+  savePlayer,
+  saveLeagueTemplate,
   saveMlbDraftSession,
   saveTeam,
+  saveTeamRoster,
   saveRegisteredPool,
 } from '../leagueBuilderStorage';
 import type { RegisteredPool } from '../../engines/leagueConstruction';
@@ -81,6 +84,16 @@ function getAllFromStore<T = Record<string, unknown>>(db: IDBDatabase, storeName
     const request = tx.objectStore(storeName).getAll();
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
+  });
+}
+
+function putInStore(db: IDBDatabase, storeName: string, value: Record<string, unknown>): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).put(value);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
   });
 }
 
@@ -589,6 +602,83 @@ describe('leagueBuilderStorage v10 stock closer migration', () => {
       const roster = await getTeamRoster(teamId);
       expect(roster?.closingPitcher, `${teamId} needs a seeded closer slot`).toBeTruthy();
       expect(players.find((player) => player.id === roster?.closingPitcher)?.primaryPosition).toBe('CP');
+    }
+  });
+
+  test('SMB4 refresh never deletes a non-SMB4 player carrying a stale SML assignment', async () => {
+    await seedFromSMB4Database(true);
+    const stock = (await getAllPlayers())[0];
+    await savePlayer({
+      ...stock,
+      id: 'hl:legacy:draft',
+      sourceDatabase: 'HISTORICAL_LEGENDS',
+      leagueAssignments: [{ leagueId: 'sml', teamId: 'sirloins', rosterStatus: 'MLB' }],
+    });
+
+    await seedFromSMB4Database(true);
+
+    expect(await getAllPlayers()).toContainEqual(expect.objectContaining({
+      id: 'hl:legacy:draft',
+      sourceDatabase: 'HISTORICAL_LEGENDS',
+    }));
+  });
+
+  test('SMB4 refresh preserves stock team and player assignments to a user league', async () => {
+    await seedFromSMB4Database(true);
+    const smlLeague = await getLeagueTemplate('sml');
+    expect(smlLeague).toBeTruthy();
+    await saveLeagueTemplate({
+      ...smlLeague!,
+      id: 'four-team-draft',
+      name: 'Four Team Draft',
+    });
+    const stock = (await getAllPlayers()).find((player) => (
+      player.sourceDatabase === 'SMB4'
+      && player.leagueAssignments?.some((assignment) => assignment.leagueId === 'sml')
+    ));
+    expect(stock).toBeTruthy();
+    const smlAssignment = stock!.leagueAssignments!.find((assignment) => assignment.leagueId === 'sml')!;
+    await savePlayer({
+      ...stock!,
+      leagueAssignments: [
+        ...stock!.leagueAssignments!,
+        { leagueId: 'four-team-draft', teamId: 'custom-club', rosterStatus: 'MLB' },
+      ],
+    });
+    expect((await getAllPlayers()).find((player) => player.id === stock!.id)?.leagueAssignments)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ leagueId: 'four-team-draft', teamId: 'custom-club' }),
+      ]));
+    const stockTeam = await getTeam(smlAssignment.teamId!);
+    expect(stockTeam).toBeTruthy();
+    const stockRoster = await getTeamRoster(smlAssignment.teamId!);
+    expect(stockRoster).toBeTruthy();
+    await saveTeamRoster({ ...stockRoster!, closingPitcher: 'custom-choice' });
+    const durableDraftRecords = {
+      registeredPools: { leagueId: 'four-team-draft', marker: 'pool' },
+      mlbDraftSessions: { id: 'four-team-draft::1', leagueId: 'four-team-draft', marker: 'mlb' },
+      startupDraftSessions: { id: 'four-team-draft::1', leagueId: 'four-team-draft', marker: 'startup' },
+      snakeSeatBoards: { id: 'four-team-draft::seat', leagueId: 'four-team-draft', marker: 'seat' },
+      auctionSessions: { id: 'four-team-draft::auction', leagueId: 'four-team-draft', marker: 'auction' },
+    } as const;
+    const db = await initLeagueBuilderDatabase();
+    for (const [storeName, record] of Object.entries(durableDraftRecords)) {
+      await putInStore(db, storeName, record);
+    }
+
+    await seedFromSMB4Database(true);
+
+    expect((await getAllPlayers()).find((player) => player.id === stock!.id)?.leagueAssignments)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ leagueId: 'sml', teamId: smlAssignment.teamId }),
+        expect.objectContaining({ leagueId: 'four-team-draft', teamId: 'custom-club' }),
+      ]));
+    expect((await getTeam(smlAssignment.teamId!))?.leagueIds).toEqual(stockTeam!.leagueIds);
+    expect((await getLeagueTemplate('four-team-draft'))?.teamIds).toContain(smlAssignment.teamId);
+    expect((await getTeamRoster(smlAssignment.teamId!))?.closingPitcher).toBe('custom-choice');
+    const refreshedDb = await initLeagueBuilderDatabase();
+    for (const [storeName, record] of Object.entries(durableDraftRecords)) {
+      expect(await getAllFromStore(refreshedDb, storeName)).toContainEqual(record);
     }
   });
 

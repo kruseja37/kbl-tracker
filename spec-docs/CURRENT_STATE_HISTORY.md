@@ -1285,3 +1285,11 @@ gate then proved that calibration had omitted production `identityArchetype` and
 UNKNOWN to 440. FINDING-228 corrects that coverage and bounded certificate construction; a separate
 auditor approved it with zero findings. Performance re-integration, combined audit, one preview, and
 JK's browser walk remain open.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 Legends recovery close
+
+The prior live header recorded combined Snake correctness and responsiveness approval at integration
+`68c0f0c0`, with JK's real Draft Setup/full Snake browser walk as the remaining gate. During that walk,
+a legacy partial Legends import exposed crossed source ownership and an invalid source-library draft
+target. FINDING-230 now closes those recovery seams without resetting the user's four-team league;
+the browser walk remains the final gate.

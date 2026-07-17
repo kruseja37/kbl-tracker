@@ -7666,3 +7666,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending:** commit and exact-file handoff to the performance lane. That lane owns re-integration,
   combined independent audit, and one preview. JK's real browser walk remains the final acceptance
   gate. No merge or deploy is authorized.
+
+## 2026-07-17 (Codex, Legends import + four-team target recovery) — independently approved; JK retest pending
+
+- Reproduced the legacy partial-import state: 506 SMB4 players plus 835 Legends cards were all shown
+  under SML, exact Legends ownership blocked reimport, and a source-library URL could displace the
+  user's real four-team draft target.
+- Added a payload-bounded repair path that removes only closed SML/MLB assignments from verified
+  Legends cards. Any user-league assignment remains a hard blocker. Draft Setup now excludes source
+  libraries from targets and keeps later league selection synchronized with the URL.
+- The separate auditor rejected three unsafe refresh drafts. The final path never cascades through
+  player/team deletion, proves legacy stock identity by canonical ID and team, and protects reused
+  stock rosters from authoritative user league templates. The regression preserves the four-team
+  template, custom assignment, roster, pool, and all four durable draft-session stores.
+- Final non-builder verdict: **APPROVE — Major 0 / Minor 0**. Focused 115/115, TypeScript,
+  changed-file ESLint, 2,730-module build/PWA, and diff integrity are green.
+- **Pending:** JK reloads League Builder, clicks Import Legends, then Repair Legends Import. The
+  expected result is three Legends source libraries, SML back to 506 source players, and the existing
+  four-team league still selected and intact. No merge, push, deploy, or product acceptance occurred.

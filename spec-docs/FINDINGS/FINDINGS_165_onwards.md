@@ -550,3 +550,24 @@ recovery retains this possible stall.
 **Action:** Keep this outside the current release repair unless legacy saved-session recovery becomes
 a release gate. A later ticket can route it through the worker without changing validation or
 fail-closed room behavior.
+
+### FINDING-230
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / League Builder recovery | **Status:** FIXED — INDEPENDENTLY APPROVED
+**Files:** `src/src_figma/app/pages/LeagueBuilder.tsx`, `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, `src/utils/historicalLegendsImport.ts`, `src/utils/leagueBuilderStorage.ts`
+**Evidence:** A partial legacy Legends import left exact `hl:` cards owned by `League Builder` and
+assigned to the closed SML source, making the SML count 1,341 and blocking the verified three-library
+import. Draft Setup could also route through a Legends source library instead of the user's real
+four-team league. The first audit pass additionally proved that naive stock refresh could prune a
+user league's reused stock team, player assignment, roster, pool, or draft-session truth.
+**Impact:** JK could neither repair the Legends libraries nor trust that recovery would preserve the
+four-team draft already under test.
+**Action:** Permit repair only when every conflicting payload-owned card has stock-source-only
+SML/MLB assignments; strip only those stock assignments and keep all user assignments protected.
+Exclude source libraries from draft targets, keep the selected target in the URL, refresh exact stock
+records without cascading deletes, and derive protected reused teams from authoritative user league
+templates. Regression proof freezes the user template, player assignment, shared roster, registered
+pool, and all four draft-session stores.
+**Verification:** Separate non-builder audit returned **APPROVE — Major 0 / Minor 0** after three
+data-preservation findings were repaired. Focused 115/115, TypeScript, changed-file ESLint, the
+2,730-module production build/PWA, and diff integrity passed. JK's real IndexedDB browser repair is
+the remaining product gate; no merge, push, or deploy is authorized.

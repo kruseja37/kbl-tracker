@@ -1595,13 +1595,18 @@ export function LeagueBuilderDraftSetup() {
     () => leagues.filter((candidate) => !candidate.sourceLibrary),
     [leagues],
   );
+  const requestedLeague = useMemo(
+    () => leagues.find((candidate) => candidate.id === requestedLeagueId) ?? null,
+    [leagues, requestedLeagueId],
+  );
+  const draftTargetRequestId = requestedLeague?.sourceLibrary ? null : requestedLeagueId;
   const [selectedLeagueId, setActiveLeagueId] = useState<string>("");
   const activeLeagueId = useMemo(() => {
     if (selectedLeagueId && draftTargetLeagues.some((candidate) => candidate.id === selectedLeagueId)) {
       return selectedLeagueId;
     }
-    return resolveInitialLeagueId(draftTargetLeagues, requestedLeagueId);
-  }, [draftTargetLeagues, requestedLeagueId, selectedLeagueId]);
+    return resolveInitialLeagueId(draftTargetLeagues, draftTargetRequestId);
+  }, [draftTargetLeagues, draftTargetRequestId, selectedLeagueId]);
   const [showHelp, setShowHelp] = useState(false);
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
   const [clubEditorMode, setClubEditorMode] = useState<ClubEditorMode>("identity");
@@ -5079,7 +5084,13 @@ export function LeagueBuilderDraftSetup() {
             <div className="flex flex-wrap items-center gap-4">
               <select
                 value={activeLeagueId}
-                onChange={(event) => setActiveLeagueId(event.target.value)}
+                onChange={(event) => {
+                  const nextLeagueId = event.target.value;
+                  setActiveLeagueId(nextLeagueId);
+                  const params = new URLSearchParams(location.search);
+                  params.set("leagueId", nextLeagueId);
+                  navigate(`/league-builder/draft-setup?${params.toString()}`, { replace: true });
+                }}
                 className="bg-[var(--ballpark-action-green)] border-4 border-[var(--ballpark-chalk)] text-[var(--ballpark-chalk)] px-4 py-2 text-sm font-bold tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,0.8)] cursor-pointer"
               >
                 {draftTargetLeagues.map((candidate) => (

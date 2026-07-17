@@ -1491,3 +1491,13 @@ are byte-identical to approved `ca4cc14b`, performance runtime is byte-identical
 close the documentation gate. Exact-stock calibration 4/4 remained green in the builder integration
 run. FINDING-229 stays deferred for legacy/malformed saved-room recovery. JK's real browser walk is
 the final acceptance gate; no merge or deploy is authorized.
+
+### 2026-07-17 — Legends import and four-team Draft Setup recovery
+
+FINDING-230 is fixed under contract `LEGENDS-DRAFT-TARGET-RECOVERY-37`. Exact legacy Legends cards
+with only closed SML/MLB assignments can now be reclaimed; user assignments still block repair.
+Draft Setup cannot target a source library, and stock refresh preserves authoritative user-league
+team membership, player assignments, rosters, registered pools, and draft sessions. The separate
+auditor returned **APPROVE — Major 0 / Minor 0** after rejecting three earlier preservation gaps.
+Focused 115/115, TypeScript, lint, production build, and diff integrity are green. JK's browser repair
+click remains the product gate; no merge, push, or deploy is authorized.

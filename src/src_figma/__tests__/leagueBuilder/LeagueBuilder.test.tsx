@@ -84,8 +84,12 @@ vi.mock('../../hooks/useLeagueBuilderData', () => ({
 // ============================================
 
 describe('LeagueBuilder Component', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+    vi.mocked(useLeagueBuilderData).mockReturnValue(
+      createMockHookReturn() as ReturnType<typeof useLeagueBuilderData>,
+    );
   });
 
   describe('Header', () => {
@@ -250,6 +254,9 @@ describe('LeagueBuilder Component', () => {
       fireEvent.click(screen.getByRole('button', { name: /IMPORT LEGENDS/i }));
       fireEvent.click(await screen.findByRole('button', { name: /REPAIR LEGENDS IMPORT/i }));
 
+      expect(window.confirm).toHaveBeenLastCalledWith(expect.stringContaining(
+        'Stock-source-only SML/MLB assignments will be removed',
+      ));
       expect(repairHistoricalLegendsData).not.toHaveBeenCalled();
       expect(screen.getByRole('button', { name: /REPAIR LEGENDS IMPORT/i })).toBeInTheDocument();
     });
@@ -312,6 +319,42 @@ describe('LeagueBuilder Component', () => {
       fireEvent.click(screen.getByText('Draft Setup'));
       expect(mockNavigate).toHaveBeenCalledWith(
         expect.stringContaining('/league-builder/draft-setup'),
+      );
+    });
+
+    test('Draft Setup card never routes a source library as the draft target', async () => {
+      const { useLeagueBuilderData } = await import('../../hooks/useLeagueBuilderData');
+      vi.mocked(useLeagueBuilderData).mockReturnValue(createMockHookReturn({
+        leagues: [
+          {
+            id: 'legends-library-career',
+            name: 'Legends Career',
+            teamIds: [],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            sourceLibrary: { kind: 'historical-legends', profileType: 'Career' },
+            createdDate: '2026-01-01',
+            lastModified: '2026-01-01',
+          },
+          {
+            id: 'four-team-mock',
+            name: '4-team mock',
+            teamIds: ['team-1', 'team-2'],
+            conferences: [],
+            divisions: [],
+            defaultRulesPreset: 'preset-1',
+            createdDate: '2026-01-01',
+            lastModified: '2026-01-01',
+          },
+        ],
+      }) as ReturnType<typeof useLeagueBuilderData>);
+
+      render(<LeagueBuilder />);
+      fireEvent.click(screen.getByText('Draft Setup'));
+
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/league-builder/draft-setup?leagueId=four-team-mock',
       );
     });
 

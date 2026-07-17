@@ -36,6 +36,7 @@ export function LeagueBuilder() {
   const [areLegendsSeeded, setAreLegendsSeeded] = useState(false);
   const smlPlayerCount = players.filter((player) => player.sourceDatabase === 'SMB4').length;
   const mlbPlayerCount = players.filter((player) => player.sourceDatabase === 'MLB').length;
+  const draftTargetLeagues = leagues.filter((league) => !league.sourceLibrary);
 
   // Check if already seeded on mount
   useEffect(() => {
@@ -96,7 +97,7 @@ export function LeagueBuilder() {
   const handleRepairLegendsImport = async () => {
     if (isSeeding || !canRepairLegendsImport) return;
     const confirmed = window.confirm(
-      'This will reclaim only unassigned, verified Historical Legends cards left behind as League Builder players, then complete the Draft / Career / Peak import. Other players and leagues are preserved.\n\nContinue?'
+      'This will reclaim verified Historical Legends cards left behind as League Builder players. Stock-source-only SML/MLB assignments will be removed; user-league assignments still block repair and remain protected. It will then complete the Draft / Career / Peak import.\n\nContinue?'
     );
     if (!confirmed) return;
 
@@ -316,7 +317,9 @@ export function LeagueBuilder() {
             description="Build the pool, set identities, lock, and draft"
             count="Setup"
             color="#3B7DD8"
-            onClick={() => navigate(leagues[0] ? `/league-builder/draft-setup?leagueId=${leagues[0].id}` : "/league-builder/draft-setup")}
+            onClick={() => navigate(draftTargetLeagues[0]
+              ? `/league-builder/draft-setup?leagueId=${draftTargetLeagues[0].id}`
+              : "/league-builder/draft-setup")}
           />
 
         </div>

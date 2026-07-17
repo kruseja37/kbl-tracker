@@ -32156,3 +32156,52 @@ Stop rather than weakening proof or frozen correctness law, adding a synchronous
 accepting duplicate stable-input proof, hiding failure, merging, pushing, deploying, or declaring
 product acceptance without JK's browser walk.
 <!-- ===== END CONTRACT: SNAKE-DRAFT-SETUP-PERFORMANCE-35 ===== -->
+
+<!-- ===== CONTRACT: LEGENDS-DRAFT-TARGET-RECOVERY-37 ===== -->
+# LEGENDS-DRAFT-TARGET-RECOVERY-37 — RECOVER STOCK-SOURCE COLLISION WITHOUT LOSING THE FOUR-TEAM DRAFT
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair the exact browser state where the League Builder dashboard routes Draft Setup through a
+Legends source-library id and legacy verified Legends cards retain a false SML assignment, blocking
+the Legends repair and inflating the SML source from 506 to 1,341 players.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 browser evidence: the intended target is the existing four-team league; importing
+  Legends fails on `hl:ryann001:draft` owned by `League Builder`; Draft Setup shows SML 1,341.
+- System source libraries feed draft pools but are not draft targets.
+- The exact count identity is 506 stock SMB4 players + 835 Legends cards = 1,341.
+- Existing user-created league assignments are durable and must remain protected.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/LeagueBuilder.tsx`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/utils/historicalLegendsImport.ts`
+- `src/utils/leagueBuilderStorage.ts`
+- focused tests for those paths
+- required session documents
+
+## REQUIRED BEHAVIOR
+- Dashboard Draft Setup never selects a `sourceLibrary` as the target.
+- Draft Setup treats a requested source-library id as source context, resolves the real draft target,
+  and writes later league selections into the URL.
+- A verified payload-owned `hl:` legacy card may be repaired when every prior assignment is only to
+  a closed stock source (`sml`/`mlb`). Any user-league assignment still blocks ownership repair.
+- Legends reimport removes stale stock-source assignments while preserving ordinary user-league
+  assignments and provisioning the three version libraries.
+- SMB4 refresh deletes only SMB4-owned or proven legacy SMB4 rows; it cannot delete a non-SMB4 row
+  merely because that row carries the stale SML assignment.
+- No four-team league, draft session, roster, custom assignment, or cloud snapshot is reset.
+
+## VERIFICATION
+- Focused Legends import, League Builder navigation, Draft Setup routing, and SMB4-refresh tests.
+- TypeScript, changed-file ESLint, production build, and diff integrity.
+- Separate non-builder audit before JK retries the browser import/repair path.
+
+## STOP CONDITIONS
+Stop rather than auto-deleting a custom assignment, resetting the four-team league, changing draft
+math, altering Supabase data, merging, pushing, deploying, or claiming product acceptance before
+JK's browser walk.
+<!-- ===== END CONTRACT: LEGENDS-DRAFT-TARGET-RECOVERY-37 ===== -->
