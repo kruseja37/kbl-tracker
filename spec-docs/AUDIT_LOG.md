@@ -1371,3 +1371,15 @@ unselected start forces Assistant `INCOMPLETE_BOARD` independently of the winnin
 auditor's narrow run passed 48/48 tests and `git diff --check`; no diagnostic or test-only production
 seam was found. This is code-audit approval only. JK's browser re-walk remains the sole
 product-acceptance gate. No commit, merge, push, or deploy occurred.
+
+### 2026-07-16 Snake Draft browser walkthrough wave 2 intake
+
+JK approved the next live-room correction batch. FINDING-220 through FINDING-224 record the five
+confirmed seams: inconsistent CP assignment, visually ambiguous committed players, repeated
+per-row unavailable-risk noise, missing local GM decision views, and stale explanatory/placeholder
+copy. Contract `SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33` freezes the scope and performance law.
+
+The clean PR #115 head `d7858e7b` is the implementation base; the dirty root checkout is excluded.
+Baseline production build is green. The pre-change full-suite result is being recorded separately
+before implementation. Builder work is not an audit, and JK's real-browser walkthrough remains the
+only product-acceptance gate.

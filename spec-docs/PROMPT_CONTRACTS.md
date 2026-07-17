@@ -31877,3 +31877,67 @@ Stop if the adjustment requires changing shared layout behavior or any other hom
 
 Use medium reasoning effort.
 <!-- ===== END CONTRACT: HOMEBAR-1 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 ===== -->
+# SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 — LIVE GM DECISION DESK CORRECTIONS
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-16 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair the approved Snake Draft walkthrough defects on the clean PR #115 branch without changing
+the tax, salary, cap, archetype, setup-pool, auction, or persistence contracts. The completed desk
+must make committed roster truth obvious, assign closers consistently, expose fast local decision
+views, and remove non-actionable clutter without introducing interaction lag.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-16 walkthrough notes and approvals.
+- `spec-docs/NOW/SNAKE_DRAFT.md`, `spec-docs/DECISIONS_LOG.md`, and FINDING-220 through FINDING-224.
+- Snake salary is frozen IV. Do not add a redundant Salary sort.
+- `TAX IF PICKED` is signed marginal tax for adding the player to this club now.
+- `TRUE COST` is frozen IV plus that signed marginal tax.
+- JK's browser walkthrough remains the sole product-acceptance gate.
+
+## ALLOWED FILES
+- `src/engines/snakeAssistantBoard.ts` and focused tests
+- `src/src_figma/app/components/snake/desk/deskModel.ts`, `deskRoomModel.ts`, `RankingsView.tsx`,
+  `DeskCandidateRow.tsx`, `BoardView.tsx`, `PrivateDesk.tsx`, `SelectedPlayerCard.tsx`, and focused tests
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, preview fixtures, and focused tests
+- required findings, decision, truth-map, execution-report, status, audit, and session documents
+
+## REQUIRED BEHAVIOR
+- Both My Board and Assistant GM treat drafted players owned by the active club as committed. The
+  highest-IV owned CP occupies CP; additional owned CPs remain legal depth. Once CP is owned, no
+  undrafted extra CP enters a normal 22 unless it is the explicit Optimize Around target.
+- Own drafted players remain locked and are marked by team color plus `ROSTER`. Rival-drafted
+  players leave actionable boards and Player Pool. Activity remains the public pick record.
+- Player Pool and position views can filter All/Strong/Solid/Weak and sort by Board order, Fit, IV,
+  signed Tax If Picked, True Cost, POW, CON, SPD, FLD, ARM, VEL, JNK, or ACC. Do not add Salary.
+- Sort/filter is view-only, stable, memoized local state. It must not call an optimizer, worker,
+  persistence writer, board reconciler, or full pool rebuild. Direction changes are local.
+- `TOP` always persists the selected player to the top of the current Overall or position ranking,
+  including from a sorted or filtered view.
+- Candidate rows show only actionable risk. Unavailable risk becomes one compact board-level state;
+  details remain behind Help. Remove the dead selected-card placeholder and shorten the visible
+  Assistant heading to `ASST GM 22`.
+- Main and companion desks use the same board, CP, sort/filter, branding, and privacy laws.
+
+## PERFORMANCE AND PROOF
+- Before edits, record the clean branch's build and full-suite baseline; pre-existing failures stay
+  distinct from this change.
+- Focused tests must prove the CP invariant, committed/rival state, team-branded roster rows,
+  sort/filter order, signed tax and true-cost ordering, rating order, and context-aware `TOP`.
+- Tests must prove sort/filter changes trigger zero persistence, optimizer, worker, or board
+  recalculation calls; `TOP` triggers one intended reorder only.
+- Run focused tests after each bounded batch, then TypeScript, changed-file lint, production build,
+  final full tests once, and `git diff --check`.
+- Run a bounded real-browser Mac and iPad-viewport journey. Record repeated sort/filter response
+  time and verify no console error, blink loop, indefinite calculation, or stale private state.
+- A separate read-only auditor must inspect the committed diff and try to disprove the state and
+  performance claims before handoff to JK.
+
+## STOP CONDITIONS
+Stop rather than changing economy/archetype math, adding a schema or Supabase migration, weakening
+private-desk cover, exposing insider data, enabling Farm trades, changing auction behavior, hiding a
+correctness failure behind copy, or accepting a measurable interaction regression.
+<!-- ===== END CONTRACT: SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 ===== -->

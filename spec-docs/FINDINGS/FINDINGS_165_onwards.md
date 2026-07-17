@@ -400,3 +400,38 @@ browser walk remains the sole product-acceptance gate.
 **Impact:** The durable league appears missing during the handoff, then the browser main thread stalls while hidden pool optimization runs. The league eventually reappears, making the failure look intermittent even though the mount path is deterministic.
 **Action:** Resolve the requested league synchronously from the loaded route/data, and never run the expensive multi-candidate BUILD transaction implicitly on mount. BUILD remains an explicit user action with its existing identity/legal/money guarantees. Regressions pin both the no-false-empty handoff and the no-auto-build mount contract.
 **Independent evidence:** A separate non-builder auditor returned APPROVE with zero findings. It verified the removed effect was the only implicit BUILD caller, the visible BUILD transaction remains wired and covered, and the route/no-auto regressions plus TypeScript and diff checks pass.
+
+### FINDING-220
+**Date:** 2026-07-16 | **Phase:** Snake Draft browser walkthrough wave 2 | **Status:** CONFIRMED-OPEN — APPROVED FOR BUILD
+**Files:** `deskModel.ts`, `snakeAssistantBoard.ts`, main/companion board call sites
+**Evidence:** My Board gives CP a dedicated slot, while the Assistant's RP scope also admits CP. Neither path consistently reserves the highest-IV committed closer for CP or prevents an available second closer from entering a completed plan after a closer is already owned.
+**Impact:** A drafted closer can remain outside CP, a lower-value closer can own CP, or a recommendation can spend a scarce roster slot on an unnecessary second closer.
+**Action:** Make committed roster truth the first constraint on both boards: highest-IV owned CP occupies CP, additional owned CPs remain legal committed depth, and no available extra CP enters either 22 unless the GM explicitly optimizes around that player.
+
+### FINDING-221
+**Date:** 2026-07-16 | **Phase:** Snake Draft browser walkthrough wave 2 | **Status:** CONFIRMED-OPEN — APPROVED FOR BUILD
+**Files:** `DeskCandidateRow.tsx`, `BoardView.tsx`, `PrivateDesk.tsx`
+**Evidence:** The data model distinguishes a player's own roster from another club's drafted player, but the board row does not use the active club's branding and drafted state is easy to miss among undrafted board entries.
+**Impact:** GMs cannot scan their 22 and immediately separate committed roster from future targets.
+**Action:** Keep own drafted players locked in both private 22s with team color plus an explicit `ROSTER` label; remove rival-drafted players from actionable boards and the Player Pool while retaining the public activity record.
+
+### FINDING-222
+**Date:** 2026-07-16 | **Phase:** Snake Draft browser walkthrough wave 2 | **Status:** CONFIRMED-OPEN — APPROVED FOR BUILD
+**Files:** `DeskCandidateRow.tsx`, `BoardView.tsx`, `useSnakeRationalRisks.ts`
+**Evidence:** Each candidate row repeats `RISK UNAVAILABLE` when the optional risk worker cannot certify an answer, even though unavailable risk is not a player property or an actionable decision.
+**Impact:** A room-level telemetry state becomes dozens of false player warnings and crowds out useful board information.
+**Action:** Show only actionable row risk (`AT RISK` or `LIKELY GONE`). Collapse unavailable risk into one compact board-level state with details behind Help; keep the internal fail-closed reason.
+
+### FINDING-223
+**Date:** 2026-07-16 | **Phase:** Snake Draft browser walkthrough wave 2 | **Status:** CONFIRMED-OPEN — APPROVED FOR BUILD
+**Files:** `RankingsView.tsx`, desk candidate model and tests
+**Evidence:** Position and Overall views support manual rank changes and search, but the remaining pool cannot be filtered by fit or viewed by IV, marginal tax, true cost, or a specific rating. In Snake, frozen IV is the salary, making separate IV and Salary sorts redundant.
+**Impact:** GMs must visually hunt for the strongest available match and cannot compare the immediate team-specific financial effect of taking a player now.
+**Action:** Add view-only Fit, IV, `TAX IF PICKED`, `TRUE COST`, and rating sorts plus Strong/Solid/Weak filtering. Do not add Salary. Sorting/filtering must be local memoized view state with no engine, persistence, worker, or board recalculation. `TOP` must still persist the chosen player to the top of the current Overall or position board.
+
+### FINDING-224
+**Date:** 2026-07-16 | **Phase:** Snake Draft browser walkthrough wave 2 | **Status:** CONFIRMED-OPEN — APPROVED FOR BUILD
+**Files:** `PrivateDesk.tsx`, `BoardView.tsx`, `SelectedPlayerCard.tsx`
+**Evidence:** The live desk still exposes implementation copy (`ARCHETYPE FIRST`, `>=90% FROZEN IV`), a large plan-unavailable panel, and a dead selected-player placeholder.
+**Impact:** Methodology and non-actions compete with the live GM decisions the page exists to support.
+**Action:** Reduce the visible Assistant title to `ASST GM 22`, remove the dead placeholder, keep only compact state/consequence copy, and move methodology or diagnostic explanation behind Help.
