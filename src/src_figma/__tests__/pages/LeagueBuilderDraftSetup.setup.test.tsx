@@ -297,6 +297,7 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
 
     const card = await screen.findByRole("button", { name: /Bomba Squad/i });
+    await waitFor(() => expect(card).toBeEnabled());
     vi.clearAllMocks();
     fireEvent.click(card);
 

@@ -328,6 +328,7 @@ describe("LeagueBuilderDraftSetup", () => {
     await waitFor(() => expect(leagueData.replaceLeagueLocal).toHaveBeenCalledWith(expect.objectContaining({
       snakePoolSizeMultiplier: 1.5,
     })));
+    expect(leagueData.refresh).not.toHaveBeenCalled();
 
     view.rerender(<LeagueBuilderDraftSetup />);
 
@@ -340,10 +341,12 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(resetOptions.preserveSelectedIdentityClaims).toBe(false);
     const resetProofPoolSizes = vi.mocked(proveSimultaneousSnakeSeating).mock.calls
       .map(([input]) => input.pool.length);
-    expect(resetProofPoolSizes).toContain(300);
-    expect(resetProofPoolSizes).toContain(264);
+    // Reset re-enters the same certificate path, but unchanged complete proof fingerprints reuse
+    // the already-validated 300/264 results instead of blocking on two duplicate searches.
+    expect(resetProofPoolSizes).toEqual([]);
     expect(await screen.findByText(/BUILT LOOSE SHAPED BUILD/i, {}, { timeout: 12_000 }))
       .toHaveTextContent(/264 PLAYERS · EVERY CHOSEN IDENTITY CERTIFIED TOGETHER/i);
+    expect(leagueData.refresh).not.toHaveBeenCalled();
   }, 20_000);
 
   test("SNAKE POOL GUIDE: an uncertified full source truth loads Full Sources and names the blocker", async () => {

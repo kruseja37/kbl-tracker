@@ -32,8 +32,9 @@ import {
   snakePlayerSourceId,
   snakePlayerVersionGroupId,
 } from '../../../../../utils/snakePlayerIdentity';
+import type { SnakeSetupProofRunner } from './snakeSetupProofClient';
 
-export type ProofRunner = (input: SimultaneousSnakeSeatingInput) => SnakeSeatingProof | Promise<SnakeSeatingProof>;
+export type ProofRunner = SnakeSetupProofRunner;
 
 export const MAX_SNAKE_COMPANION_PACKAGES = 3;
 
@@ -56,7 +57,7 @@ export interface SnakeSetupAdapterInput {
   flushBoardRankings: () => Promise<Team[]>;
   navigateToRoom: (leagueId: string) => void;
   navigateToPracticeRoom?: (leagueId: string) => void;
-  runProof?: ProofRunner;
+  runProof: ProofRunner;
 }
 
 function fullName(player: Player): string {
