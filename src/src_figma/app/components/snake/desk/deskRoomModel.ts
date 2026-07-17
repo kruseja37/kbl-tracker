@@ -271,11 +271,26 @@ export function reconcileExistingSeatBoards(input: {
       [...input.unavailablePlayerIds].filter((playerId) => !committedSet.has(playerId)),
     );
     let workingBoard = board;
+    const candidateById = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
     const committedMissingFromBoard = committedPlayerIds.some((playerId) => (
       !Object.values(workingBoard.slots).includes(playerId)
     ));
-    if (committedMissingFromBoard) {
-      const candidateById = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
+    const primaryCommittedCloser = committedPlayerIds
+      .flatMap((playerId) => {
+        const candidate = candidateById.get(playerId);
+        return candidate?.position === 'CP' ? [candidate] : [];
+      })
+      .sort((left, right) => (right.iv ?? 0) - (left.iv ?? 0) || left.id.localeCompare(right.id))[0];
+    const committedCloserAssignmentWrong = Boolean(
+      primaryCommittedCloser && workingBoard.slots.CP !== primaryCommittedCloser.id,
+    );
+    const hasUndraftedExtraCloser = Object.entries(workingBoard.slots).some(([slotId, playerId]) => (
+      slotId !== 'CP'
+      && Boolean(playerId)
+      && candidateById.get(playerId!)?.position === 'CP'
+      && !committedSet.has(playerId!)
+    ));
+    if (committedMissingFromBoard || committedCloserAssignmentWrong || hasUndraftedExtraCloser) {
       const rankings: SnakeSeatBoardRecord['rankings'] = {
         ...workingBoard.rankings,
         global: [

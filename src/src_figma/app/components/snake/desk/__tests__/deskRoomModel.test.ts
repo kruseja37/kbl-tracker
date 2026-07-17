@@ -260,6 +260,86 @@ describe('private desk room assembly', () => {
     });
   });
 
+  it('repairs a complete saved board so the highest-IV committed closer owns CP', () => {
+    const fixture = canonicalBackfillFixture('closer-order');
+    const lower: DeskEligibilityCandidate = {
+      id: 'lower-owned-cp', iv: 40, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'lower-owned-cp-human',
+    };
+    const higher: DeskEligibilityCandidate = {
+      id: 'higher-owned-cp', iv: 80, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'higher-owned-cp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, CP: lower.id, RP1: higher.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [lower.id, higher.id, ...fixture.board.rankings.global],
+        byPosition: { CP: [lower.id, higher.id] },
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [lower, higher].map((candidate, index) => ({
+        round: 1, pick: index + 1, pickIndex: index, teamId: 'a', playerId: candidate.id,
+        versionGroupId: candidate.versionGroupId!, settledSalary: candidate.iv!, marginalTax: 0,
+      })),
+      seatBoards: { a: savedBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, lower, higher],
+      unavailablePlayerIds: new Set([lower.id, higher.id]),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.seatBoards?.a.slots.CP).toBe(higher.id);
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).toContain(lower.id);
+    expect(savedBoard.slots.CP).toBe(lower.id);
+  });
+
+  it('repairs a complete saved board that carries an undrafted extra closer as relief depth', () => {
+    const fixture = canonicalBackfillFixture('extra-closer');
+    const owned: DeskEligibilityCandidate = {
+      id: 'owned-cp', iv: 80, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'owned-cp-human',
+    };
+    const availableExtra: DeskEligibilityCandidate = {
+      id: 'available-extra-cp', iv: 90, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'available-extra-cp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, CP: owned.id, RP1: availableExtra.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [availableExtra.id, owned.id, ...fixture.board.rankings.global],
+        byPosition: { CP: [availableExtra.id, owned.id] },
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: owned.id,
+        versionGroupId: owned.versionGroupId!, settledSalary: owned.iv!, marginalTax: 0,
+      }],
+      seatBoards: { a: savedBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, owned, availableExtra],
+      unavailablePlayerIds: new Set([owned.id]),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.seatBoards?.a.slots.CP).toBe(owned.id);
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).not.toContain(availableExtra.id);
+    expect(result.session.seatBoards?.a.slots.RP1).toBe(fixture.board.slots.RP1);
+  });
+
   it('only marks an existing board changed when automatic FLEX backfill can prove canonical version-unique truth', () => {
     const fixture = canonicalBackfillFixture('automatic');
     const gonePlayerId = fixture.board.slots.FLEX1;
