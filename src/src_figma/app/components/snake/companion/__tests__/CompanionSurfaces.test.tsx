@@ -250,14 +250,21 @@ describe('S5 companion surfaces', () => {
 
   it('keeps pending-device explanation behind Help and exposes the signed-in account control', () => {
     const signOut = vi.fn();
+    const onClaim = vi.fn();
     render(<CompanionClaimScreen
       pending
       accountEmail="owner@example.com"
       onSignOut={signOut}
-      onClaim={vi.fn()}
+      onClaim={onClaim}
     />);
 
     expect(screen.getByText(/ACCOUNT OWNER@EXAMPLE.COM/)).toBeInTheDocument();
+    expect(screen.getByLabelText('GM NAME')).toBeInTheDocument();
+    expect(screen.getByLabelText('ROOM CODE')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('GM NAME'), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByLabelText('ROOM CODE'), { target: { value: '4821' } });
+    fireEvent.click(screen.getByRole('button', { name: 'SEND REQUEST AGAIN' }));
+    expect(onClaim).toHaveBeenCalledWith('Alex', '4821');
     expect(screen.queryByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
     expect(screen.getByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).toBeInTheDocument();

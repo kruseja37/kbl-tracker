@@ -79,6 +79,7 @@ export interface SnakeDraftRoomViewProps {
   tradeGuide?: HelpAwareRoomContent;
   commissionerTrade?: HelpAwareRoomContent;
   companionApproval?: ReactNode;
+  pendingCompanionCount?: number;
   roomHelpNotes?: readonly string[];
   writeNotice?: string | null;
   onReloadRoom?: () => void | Promise<void>;
@@ -141,6 +142,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const farmMode = props.draftActionLabel === 'DRAFT PROSPECT';
   const activeSeatOnClock = Boolean(props.activeSeatId && currentOrder?.teamId === props.activeSeatId);
   const draftComplete = props.currentPickIndex >= props.order.length;
+  const pendingCompanionCount = Math.max(0, Math.floor(props.pendingCompanionCount ?? 0));
   const orderWindow = useMemo(() => {
     if (props.order.length <= 7) return props.order.map((slot, index) => ({ slot, index }));
     const liveIndex = Math.min(Math.max(props.currentPickIndex, 0), props.order.length - 1);
@@ -447,7 +449,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </button> : null}
           {!props.consolidatedMlb && !draftComplete && props.tradeGuide && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'GUIDE' ? null : 'GUIDE')}>THE GUIDE</button>}
           {!draftComplete && props.commissionerTrade && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'TRADE' ? null : 'TRADE')}>TRADE</button>}
-          {!draftComplete && props.companionApproval && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}>COMPANIONS</button>}
+          {!draftComplete && props.companionApproval && <button
+            className={`ballpark-press-button ballpark-press-sm min-h-11 ${pendingCompanionCount > 0 ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
+            onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}
+          >COMPANIONS{pendingCompanionCount > 0 ? ` ${pendingCompanionCount}` : ''}</button>}
         </div>
       </header>
 

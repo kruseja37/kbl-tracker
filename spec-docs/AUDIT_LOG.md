@@ -1514,3 +1514,5 @@ click remains the product gate; no merge, push, or deploy is authorized.
   build/PWA, and diff integrity green. JK's browser retry remains the only acceptance gate.
 
 | FINDING-232 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED | deskModel.ts / deskRoomModel.ts / SnakeDraftSetupAdapter.helpers.ts | Exact certified legal staffs now materialize without a stricter display-row law or outside substitution. |
+| FINDING-233 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK BROWSER VERIFIED | LoginForm.tsx / supabase.ts / focused tests | Chrome quota now falls back only the Supabase token to tab storage; rejected/stalled sign-in has actionable status. |
+| FINDING-234 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | CompanionClaimScreen.tsx / SnakeDraftRoomView.tsx / SnakeDraftRoom.tsx | Pending devices can resend room claims; Hotseat shows an exact pending count without auto-opening private details. |

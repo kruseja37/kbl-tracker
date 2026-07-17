@@ -618,3 +618,53 @@ cover every supported legal 13/9 and 14/8 SP–SP/RP–RP–CP distribution, exa
 membership, the two prior live-room regressions, and fail-closed unaffordable membership. Final
 gates: 13 files / 160 tests, TypeScript, changed-file ESLint, production build, and diff integrity
 green. JK's same four-team browser retry remains the only product-acceptance gate.
+
+### FINDING-233
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / companion entry | **Status:** FIXED — INDEPENDENTLY APPROVED — JK BROWSER VERIFIED
+**Files:** `src/src_figma/app/components/LoginForm.tsx`, `src/supabase.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`, `src/src_figma/__tests__/app/supabaseAuthStorage.test.ts`
+**Evidence:** After Draft Setup passed JK's browser gate, the home Cloud Sync form appeared to do
+nothing when he pressed Sign In. Browser reproduction proved the current Supabase project and submit
+handler are reachable: a deliberately invalid account returned `Invalid login credentials`. Code
+trace found that a rejected or indefinitely pending `onSignIn` promise is not rendered by the shared
+home form; `finally` only clears its loading state, so the button silently returns to `SIGN IN`.
+JK's Chrome retry then exposed the exact rejected operation: Supabase successfully reached
+`signInWithPassword`, but `_saveSession` threw `QuotaExceededError` while writing only its own
+`sb-...-auth-token` key to Chrome's full `localhost` local storage. The same account working in a
+different browser confirms that this is origin-local storage exhaustion, not an account, project,
+provider, room, or draft failure.
+**Impact:** A rejected, stalled, or locally unpersistable Auth request blocks main-device
+authentication and therefore companion entry. Clearing all site storage would risk unrelated league
+and draft data and is not an acceptable repair.
+**Action:** Preserve local storage as Supabase Auth's normal persistent store. When and only when its
+token write throws a quota error, store that token in same-tab session storage instead; read the
+fallback token first and remove only the same Supabase token key from both stores on sign-out. Never
+clear, overwrite, enumerate, or inspect league/draft keys. Also bound the shared form's wait, map
+thrown network failures to existing account-service copy, render a timeout, preserve provider-returned
+credential errors, and never log, retain, or inspect credentials.
+**Verification:** JK's Chrome retry signed in successfully with the same account after one hard
+refresh. Separate non-builder verdict: **APPROVE — Major 0 / Minor 0**. Independent proof passed
+9 files / 51 tests, TypeScript, changed-file ESLint, the 2,730-module production build/PWA, and diff
+integrity. Ordinary local persistence, quota-only tab fallback, fresh-token precedence, key-scoped
+sign-out, and non-quota rejection are all pinned.
+
+### FINDING-234
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / companion admission | **Status:** FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING
+**Files:** `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`, `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, focused companion/room tests
+**Evidence:** After Chrome sign-in passed, companion devices skipped the room-code form and waited
+forever while Hotseat showed no approval notice. Code trace found two exact UI seams. A recovered
+pending claim makes `CompanionClaimScreen` return a waiting-only surface, so a stale or missed request
+cannot be corrected or resent without finding a separate fixed-position Forget control. Independently,
+`SnakeDraftRoomView` renders the COMPANIONS button identically for zero or many pending claims and
+intentionally keeps the approval panel closed, so Hotseat receives no visible pending state.
+**Impact:** A prior pending attempt can strand a companion before room entry, and a valid current
+attempt can remain unnoticed on the main device even though approval data exists.
+**Action:** Keep private content covered and keep approval explicit. A pending device retains the
+room/GM form and can resend instead of entering a dead-end waiting screen. Hotseat's existing
+COMPANIONS control displays the current pending claim count and alert styling without auto-opening
+private or approval content. Do not change claim identity, account, room-code validation, sync,
+capacity, approval authority, privacy, or pick/trade behavior.
+**Verification:** Separate non-builder verdict: **APPROVE — Major 0 / Minor 0**. Independent proof
+passed 10 files / 93 tests, TypeScript, delta ESLint, the 2,730-module production build/PWA, and diff
+integrity. The auditor confirmed the unchanged privacy gate, atomic claim patch, validation/version/
+capacity model, exact pending count, zero-count styling, and explicit-open-only approval details.
+JK's same-device admission retry remains the product gate.

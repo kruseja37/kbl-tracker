@@ -7720,3 +7720,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   every club at zero and does not consume those source-team roster assignments.
 - Fresh `origin/main` at close: `ba7f97d6`. No merge, push, deploy, or product acceptance. JK reloads
   the same four-team Draft Setup and presses Start Draft; no roster, league, or pool rebuild is needed.
+
+## 2026-07-17 — FINDING-233/234: Chrome Auth quota and companion admission
+
+- JK's four-team Start Draft retry passed, then Chrome Auth failed after successful credential
+  validation because Supabase `_saveSession` exceeded the full `localhost` local-storage quota.
+- Added a Supabase Auth storage adapter that keeps local persistence normally and falls back only a
+  quota-rejected Auth key to same-tab session storage. It never clears, enumerates, or rewrites
+  league/draft keys. Shared home/companion sign-in also has bounded retryable error/timeout state.
+- JK hard-refreshed Chrome and verified the same account signs in again. Contract 40's separate
+  auditor returned APPROVE — Major 0 / Minor 0.
+- The next live pass found recovered pending devices entering a waiting-only screen while Hotseat's
+  closed COMPANIONS control showed no pending state. Pending devices now retain GM/room fields and can
+  resend; Hotseat shows exact gold `COMPANIONS N` without auto-opening claimant details.
+- Combined focused proof is 10 files / 93 tests; TypeScript, changed-file ESLint, production build
+  (2,730 modules/PWA), and diff integrity are green. Contract 41's separate auditor returned APPROVE
+  — Major 0 / Minor 0.
+- Fresh `origin/main` at close: `ba7f97d6`. No push, merge, deploy, or product acceptance. JK refreshes
+  the companion page, resends the current room code, then opens the gold Hotseat control and approves.

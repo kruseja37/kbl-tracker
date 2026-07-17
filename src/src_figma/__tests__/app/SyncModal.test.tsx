@@ -80,6 +80,7 @@ describe("SyncModal diagnostics status", () => {
   beforeEach(() => {
     vi.useRealTimers();
     mocks.getDiagnostics.mockReset();
+    mocks.signIn.mockReset();
     mocks.init.mockReset();
     mocks.flush.mockReset();
     mocks.pull.mockReset();
@@ -244,5 +245,41 @@ describe("SyncModal diagnostics status", () => {
     fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
 
     await waitFor(() => expect(mocks.signIn).toHaveBeenCalledWith("scorekeeper@example.com", "secret"));
+  });
+
+  test("shows the existing account-service copy when home sign in rejects at the network boundary", async () => {
+    mocks.auth.user = null;
+    mocks.auth.isAuthenticated = false;
+    mocks.signIn.mockRejectedValue(new TypeError("Load failed"));
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "scorekeeper@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AUTH SERVICE UNREACHABLE — CHECK PROJECT CONNECTION.",
+    );
+    expect(screen.getByRole("button", { name: "SIGN IN" })).toBeEnabled();
+  });
+
+  test("ends a stalled home sign in with a retryable timeout", async () => {
+    vi.useFakeTimers();
+    mocks.auth.user = null;
+    mocks.auth.isAuthenticated = false;
+    mocks.signIn.mockReturnValue(new Promise(() => undefined));
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "scorekeeper@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
+    expect(screen.getByRole("button", { name: "SIGNING IN..." })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("SIGN IN TIMED OUT — TRY AGAIN.");
+    expect(screen.getByRole("button", { name: "SIGN IN" })).toBeEnabled();
   });
 });

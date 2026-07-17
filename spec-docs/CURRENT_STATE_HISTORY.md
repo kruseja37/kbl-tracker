@@ -1305,3 +1305,13 @@ aggregate-staff/display-row mismatch that moved between Sirloins and Herbisaurs.
 materializes every supported exact certified 13/9 or 14/8 staff without changing the certificate or
 substituting players. Separate audit approved the repair with zero findings; JK's same browser retry
 remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion entry close
+
+The prior live header recorded independently approved FINDING-232, with JK's same four-team Start
+Draft retry as the product gate. That setup retry passed and the walk advanced to companion entry,
+where Chrome exposed a full-origin Supabase token-save failure and recovered pending claims exposed
+a waiting-only admission dead end with no Hotseat notice. FINDING-233 now preserves normal Auth
+persistence with a quota-only tab fallback and JK verified Chrome sign-in. FINDING-234 retains room
+re-entry/resend on pending devices and adds an explicit pending count to Hotseat; its browser retry
+remains the sole product gate.

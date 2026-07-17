@@ -691,4 +691,17 @@ describe('companion approval room tool (S5 mount stitch)', () => {
     expect(screen.getByText('COMPANION DEVICES')).toBeInTheDocument();
     unmount();
   });
+
+  it('shows a pending approval count without opening or exposing the approval surface', () => {
+    render(<SnakeDraftRoomView {...props({
+      companionApproval: <div>PRIVATE-CLAIM-DETAILS</div>,
+      pendingCompanionCount: 1,
+    })} />);
+
+    const companions = screen.getByRole('button', { name: 'COMPANIONS 1' });
+    expect(companions).toHaveClass('ballpark-press-gold');
+    expect(screen.queryByText('PRIVATE-CLAIM-DETAILS')).toBeNull();
+    fireEvent.click(companions);
+    expect(screen.getByText('PRIVATE-CLAIM-DETAILS')).toBeInTheDocument();
+  });
 });

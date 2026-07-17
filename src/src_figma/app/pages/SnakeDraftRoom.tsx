@@ -2539,6 +2539,7 @@ function MlbSnakeDraftRoom() {
         onApprovePick={(request) => recordPick(request.playerId, request)}
         onChange={acceptCompanionSession}
       />}
+      pendingCompanionCount={practiceMode ? 0 : (session.snakeCompanions?.claims.filter((claim) => claim.status === 'pending').length ?? 0)}
       onPauseChange={setPaused}
       onPracticeFastForwardChange={setPracticeFastForward}
       onRecordPick={async (playerId) => {

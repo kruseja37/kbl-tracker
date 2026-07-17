@@ -1,5 +1,19 @@
 import { useState, type ReactNode } from 'react';
 
+import { companionAuthErrorCopy } from './snake/companion/companionAuthError';
+
+const SIGN_IN_TIMEOUT_MS = 15_000;
+
+function withSignInTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error('SIGN IN TIMED OUT — TRY AGAIN.')), SIGN_IN_TIMEOUT_MS);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  });
+}
+
 export function LoginForm(props: {
   onSignIn: (email: string, password: string) => Promise<void>;
   error: string | null;
@@ -13,12 +27,17 @@ export function LoginForm(props: {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const error = localError ?? props.error;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setLocalError(null);
     setLoading(true);
     try {
-      await props.onSignIn(email, password);
+      await withSignInTimeout(props.onSignIn(email, password));
+    } catch (cause) {
+      setLocalError(companionAuthErrorCopy(cause) ?? 'SIGN IN FAILED.');
     } finally {
       setLoading(false);
     }
@@ -47,7 +66,7 @@ export function LoginForm(props: {
         required
       />
 
-      {props.error && <p className={ballpark ? 'text-sm font-bold text-[var(--ballpark-warn-text)]' : 'text-[#FF4444] text-[10px]'} role="alert">{props.error}</p>}
+      {error && <p className={ballpark ? 'text-sm font-bold text-[var(--ballpark-warn-text)]' : 'text-[#FF4444] text-[10px]'} role="alert">{error}</p>}
 
       <button
         type="submit"

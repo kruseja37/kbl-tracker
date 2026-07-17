@@ -32289,3 +32289,81 @@ pitching-role law through UI storage rows.
 
 **Gates:** focused desk/adapter suites, TypeScript, changed-file ESLint, production build, diff
 integrity, separate non-builder audit, then JK's same four-team browser retry.
+
+## SNAKE-COMPANION-HOME-SIGNIN-FEEDBACK-40
+
+**Role:** Companion-entry UI builder.
+
+**Goal:** The home Cloud Sync sign-in form must never silently absorb a rejected or stalled Auth
+request. Every attempt ends in authenticated state, provider error, network-unreachable copy, or a
+bounded timeout that permits retry.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/LoginForm.tsx`
+- `src/supabase.ts`
+- `src/src_figma/__tests__/app/SyncModal.test.tsx`
+- `src/src_figma/__tests__/app/supabaseAuthStorage.test.ts`
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Do not change Supabase project configuration, credentials, Auth provider, sync semantics,
+  companion claims, or room admission.
+- Preserve local storage as the normal persistent Auth store. Only a quota-exceeded token write may
+  fall back to same-tab session storage; never clear, inspect, enumerate, or overwrite any unrelated
+  league/draft key.
+- Do not log, inspect, serialize, or persist email/password values.
+- Preserve returned provider errors such as invalid credentials.
+- Preserve the existing loading/disabled submit state and shared home/companion form.
+- Keep explanatory copy out of the normal surface; visible error and loading state are actionable
+  status, while methodology remains behind Help.
+
+**Required red-first proof:**
+
+- A rejected `Load failed` sign-in promise produces the existing account-service-unreachable copy.
+- A never-settling sign-in promise exits loading after the bounded wait and shows a retryable timeout.
+- The existing successful submit wiring and provider-error rendering remain green.
+- A normal Auth-token write uses local storage and leaves no session fallback behind.
+- A quota-exceeded local token write succeeds through session storage, whose newer token wins over a
+  stale local copy; sign-out removes that same token key from both stores.
+- A non-quota storage failure still rejects instead of hiding a different defect.
+
+**Gates:** focused SyncModal and companion sign-in suites, TypeScript, changed-file ESLint,
+production build, diff integrity, separate non-builder audit, then JK's home sign-in retry.
+
+## SNAKE-COMPANION-PENDING-ADMISSION-FEEDBACK-41
+
+**Role:** Companion-admission UI builder.
+
+**Goal:** A recovered pending request must never trap the companion in a waiting-only screen, and
+Hotseat must see that current claims await action without opening the approval panel automatically.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- focused existing companion/room view tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Keep companion content covered until the exact claim is approved on Hotseat.
+- Preserve GM/package matching, four-digit room validation, device capacity, claim identities and
+  versions, explicit Hotseat approval, cloud sync, FARM no-trade law, and all private board/pick/trade
+  guards.
+- Do not auto-open the approval panel or expose a claimant's GM/team details on the shared surface.
+- Keep explanatory copy behind Help; a pending count and resend action are operational state.
+
+**Required red-first proof:**
+
+- A pending CompanionClaimScreen still exposes GM name and room-code fields and can submit again.
+- The normal fresh claim screen remains unchanged and the pending Help copy remains behind Help.
+- Hotseat shows `COMPANIONS 1` (and alert styling) for one pending claim while the approval surface
+  remains absent until that button is pressed.
+- Zero pending claims retain the ordinary `COMPANIONS` control.
+
+**Gates:** focused CompanionSurfaces/AuthFlow/SnakeDraftRoomView suites, TypeScript, changed-file
+ESLint, production build, diff integrity, separate non-builder audit, then JK's same-device admission
+retry. No push, merge, or deploy.
