@@ -1383,3 +1383,21 @@ The clean PR #115 head `d7858e7b` is the implementation base; the dirty root che
 Baseline production build is green. The pre-change full-suite result is being recorded separately
 before implementation. Builder work is not an audit, and JK's real-browser walkthrough remains the
 only product-acceptance gate.
+
+### 2026-07-16 Snake Draft browser walkthrough wave 2 — independent close
+
+Implementation `c4f1c58f` and test-alignment follow-up `cf033728` close FINDING-220 through
+FINDING-224: committed-roster/CP truth, team-colored roster rows, actionable-only player risk,
+memoized GM sorts and filters with context-aware `TOP`, and Help-gated methodology. The first
+separate read-only audit returned NOT VERIFIED with one confirmed edge: a complete saved board could
+skip CP refitting when both owned closers were already present but assigned in the wrong order.
+
+Repair `8a2602eb` changes only saved-board reconciliation and its direct regressions. The same
+auditor returned **APPROVE — zero findings** after verifying the exact persisted-board case, the
+fail-closed committed-player checks, undrafted-extra-closer removal, 40/40 desk proof, the exact
+Assistant closer proof, and diff integrity. Builder combined gates passed 67/67 closer/model/Assistant
+and 45/45 main/companion. The broader production/page/model gate is 139/139 and lifecycle proof is
+36/36; TypeScript, changed-file lint, production build, and diff integrity are green. Live Mac/iPad
+checks found no horizontal overflow or console errors; local sorts measured 38-61 ms, fit filters
+22-83 ms, and position-context `TOP` 279 ms. This is engineering approval only. JK's browser re-walk
+remains the sole product-acceptance gate.

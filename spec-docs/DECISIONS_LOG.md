@@ -4097,3 +4097,22 @@ and value constraint while preventing a nominally optimized roster from failing 
 its headline strength. Bomba Squad is the proved boundary: its positive-power candidate keeps 98%
 of baseline IV and is selected over a marginally higher aggregate-fit candidate with negative power
 embodiment.
+
+## 2026-07-16 — Snake live desk uses one roster truth and local decision views
+
+My Board and Assistant GM Board obey the same committed-roster law with different team inputs. The
+highest-IV owned closer owns CP; additional owned closers are legal committed depth; a normal plan
+does not add an undrafted extra closer. Complete saved boards are reconciled to that law on reopen.
+Owned players remain visible as active-team-colored `ROSTER` rows, while rival picks leave private
+actionable boards and Player Pool.
+
+Snake IV is the frozen draft salary, so a separate Salary sort is redundant and prohibited. `TAX IF
+PICKED` is the signed marginal tax against this club's committed roster at this pick; `TRUE COST` is
+frozen IV plus that signed marginal tax. Fit, IV, tax, true cost, rating sorts, and fit filters are
+memoized view state only. They do not invoke an engine, worker, persistence, or board recalculation;
+only `TOP` persists the chosen player to the current Overall or position board.
+
+Risk-worker lifecycle belongs at board level, not repeated on player rows. Rows expose only actionable
+`AT RISK` or `LIKELY GONE`; methodology and diagnostics follow the Help-button law. These are product
+laws for every team desk, not special cases for room size or one team. Independent audit is APPROVE
+after repair `8a2602eb`; JK's browser re-walk remains the acceptance gate.

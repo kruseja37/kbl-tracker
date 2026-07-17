@@ -4,6 +4,25 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## VERIFIED / JK RE-WALK OPEN (2026-07-16; WALKTHROUGH WAVE 2)
+- The live decision desk now keeps committed roster truth ahead of projections: the highest-IV
+  owned closer owns CP, other owned closers remain legal depth, complete saved boards are repaired
+  on reopen, and undrafted extra closers do not enter normal completed plans.
+- Owned players remain on both private 22s as team-colored `ROSTER` rows; rival picks leave private
+  actionable boards and Player Pool. Player Pool adds local fit filtering and Board/Fit/IV/signed
+  Tax If Picked/True Cost/rating views. Snake IV is salary, so no duplicate Salary sort exists;
+  only `TOP` writes to the current Overall or position board.
+- Repeated per-player unavailable/calculating copy is gone. Only actionable player risk remains;
+  Assistant methodology and diagnostics stay behind Help, and the live title is `ASST GM 22`.
+- Focused gates are 139/139 plus lifecycle 36/36; the post-audit closer gate is 67/67 and the
+  main/companion gate is 45/45. TypeScript, changed-file lint, production build, and diff integrity
+  are green. Mac/iPad checks found no overflow or console errors; sorts measured 38-61 ms, filters
+  22-83 ms, and contextual `TOP` 279 ms.
+- A separate auditor found one complete-saved-board CP bypass, verified narrow repair `8a2602eb`,
+  then returned **APPROVE with zero findings**. No merge or deploy is authorized here. **Next move:**
+  update PR #115 and return the room to JK for browser walkthrough wave 2; that walk is the sole
+  product-acceptance gate.
+
 ## BUILDER COMPLETE / AUDIT PENDING (2026-07-16; RELEASE-SUITE REPAIR)
 - The isolated release-suite failures are repaired without weakening production validation. The
   identity builder now keeps legality, solvency, and IV floor first, then requires a feasible

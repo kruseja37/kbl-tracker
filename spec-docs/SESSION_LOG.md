@@ -7580,3 +7580,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Safe cache cleanup removed only obsolete Playwright browser downloads and rebuildable npm cache,
   recovering available disk space from 137MiB to 2.4GiB. Codex session history and all worktrees were
   preserved; the 30GiB recent session-history store remains the dominant space consumer.
+
+## 2026-07-16 (Codex, Snake walkthrough wave 2) — independently verified; JK re-walk pending
+
+- Built the approved live-GM decision pass on clean PR #115 base `d7858e7b`, isolated from the dirty
+  root checkout. Existing ranking, profile, reorder, Assistant, signed marginal-tax, and private-desk
+  systems were retained; the work replaces only the incorrect or missing decision seams.
+- Both private 22s now reserve CP for the highest-IV owned closer, retain other owned closers as legal
+  depth, reject undrafted extra closers from normal plans, and repair complete stale assignments on
+  reopen. Owned rows are team-colored `ROSTER`; rival picks leave actionable private views.
+- Player Pool adds memoized Board/Fit/IV/signed Tax If Picked/True Cost/rating sorts, fit filters, and
+  context-aware `TOP`. IV already is Snake salary, so no Salary sort was added. Sorting/filtering is
+  view-only until `TOP`; row-level unavailable/calculating noise and dead placeholders are removed,
+  while methodology and diagnostics remain behind Help.
+- Verification: production/page/model 139/139; lifecycle/preview 36/36; post-audit closer/model/
+  Assistant 67/67; post-audit main/companion 45/45; TypeScript, changed-file ESLint, production build,
+  and diff integrity green. One repository run recorded 10,405 pass / 10 fail / 15 skip before three
+  stale copy assertions were repaired; the seven residual reds were pre-existing or resource-only,
+  and every affected Snake file passed focused proof, so the characterized long batch was not looped.
+- Live Mac 1440x900 and iPad 1024x1366 checks had no horizontal overflow or console error. Repeated
+  sorts measured 38-61 ms, fit filters 22-83 ms, and contextual `TOP` 279 ms; no indefinite
+  `CALCULATING` appeared.
+- The separate auditor initially rejected one complete-saved-board CP bypass. Narrow repair
+  `8a2602eb` changed only reconciliation and regressions; the same auditor re-ran the exact case and
+  returned **APPROVE — zero findings**. Builder and auditor remained separate. PR #115 is the delivery
+  path; no merge or deployment is authorized. JK's browser walkthrough wave 2 is the sole product gate.
