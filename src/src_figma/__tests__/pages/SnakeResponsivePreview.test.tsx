@@ -32,7 +32,7 @@ describe('SnakeResponsivePreview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
     expect(screen.getByTestId('my-board-view')).toHaveTextContent('TAYLOR UTILITY');
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('22/22');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('QUINN VERSATILE');
 
