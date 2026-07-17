@@ -479,6 +479,21 @@ scheduling, search law, workers, caching, refresh, cancellation, and latency beh
 changed; those remain the separate performance lane. JK's real browser walk remains the acceptance
 gate.
 
+### FINDING-227
+**Date:** 2026-07-17 | **Phase:** Snake Draft Setup performance follow-up | **Status:** BUILT — COMBINED RE-AUDIT PENDING
+**Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, Snake setup proof transport
+**Evidence:** Adapter, BUILD, Reset, and legacy restore evaluated the expensive seating proof on the
+browser thread; successful pool writes then broadly refreshed League Builder data. Full Sources could
+therefore freeze the tab before its busy state painted.
+**Action:** Contract `SNAKE-DRAFT-SETUP-PERFORMANCE-35` moves production proof to one cancellable,
+fingerprinted ES-module worker client with in-flight/resolved reuse, stale rejection, fail-closed
+transport, no duplicate Snake legacy diagnostic, and narrow local membership patches.
+**Builder evidence:** Combined gates pass 109/109 UI/runtime, 95/95 surrounding engine, exact
+production-stock calibration 4/4, TypeScript, changed-file ESLint, a 2,730-module production build
+with the proof worker emitted, and diff integrity. Earlier production Mac/iPad probes stayed
+responsive through the roughly 19-second Full Sources proof. Practice restart now obtains its fresh
+empty-room certificate through the same worker before rebuilding boards.
+
 ### FINDING-228
 **Date:** 2026-07-17 | **Phase:** Combined Snake correctness/performance browser gate | **Status:** IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING
 **Files:** `src/engines/__tests__/snakeFitPoolCalibration.test.ts`,
@@ -519,3 +534,15 @@ build, and diff integrity. Its source trace confirmed four bounded deterministic
 Full Sources IV-floor translation, identity-specific Legend version choice with whole-person
 consumption, unchanged exact billing/legality/strict-embodiment validation, and the honest UNKNOWN
 tail. Performance integration and JK's browser walk remain downstream gates.
+
+### FINDING-229
+**Date:** 2026-07-17 | **Phase:** Snake room compatibility performance | **Status:** DOCUMENTED — DEFERRED HARDENING
+**Files:** `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/engines/snakeGuideTrade.ts`
+**Evidence:** New rooms persist and refresh the setup certificate. A legacy or malformed saved room
+whose certificate is absent or invalid can still schedule the unchanged compatibility proof through
+`requestIdleCallback`/`setTimeout`, which defers but does not move that recovery proof off-thread.
+**Impact:** Current new Draft Setup and Practice paths are repaired; only old or damaged saved-room
+recovery retains this possible stall.
+**Action:** Keep this outside the current release repair unless legacy saved-session recovery becomes
+a release gate. A later ticket can route it through the worker without changing validation or
+fail-closed room behavior.

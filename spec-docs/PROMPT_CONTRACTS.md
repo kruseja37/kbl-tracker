@@ -32095,3 +32095,64 @@ Stop rather than weakening any product law, editing performance files, hard-codi
 accepting an unvalidated assignment, hiding UNKNOWN, merging, pushing, deploying, or claiming product
 acceptance before combined audit, one preview, and JK's browser walk.
 <!-- ===== END CONTRACT: SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-DRAFT-SETUP-PERFORMANCE-35 ===== -->
+# SNAKE-DRAFT-SETUP-PERFORMANCE-35 — NON-BLOCKING PROOF AND NARROW STATE UPDATES
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair only the confirmed Snake proof-scheduling responsiveness defects after rebasing onto the
+approved correctness lane. Exact seating proof must run outside the browser main thread, identical
+stable inputs must share one proof, stale work must be cancelled, and successful pool writes must
+patch local state instead of reloading the complete League Builder dataset.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 production walkthrough: two-team Loose could not proceed; switching to all 440
+  players froze Draft Setup and left League Builder sticky or unresponsive.
+- FINDING-227.
+- Correctness contracts `SNAKE-FIT-POOL-CORRECTNESS-34` and
+  `SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36`; their FIT, membership, identity-certificate,
+  named-bound, auto-widen, reset, readiness, and honest-UNKNOWN laws are frozen.
+- Help-Button UI Law remains canon. JK's real browser walk remains the product-acceptance gate.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx` (Practice restart proof only)
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- the focused Snake setup proof client and worker
+- focused Draft Setup/proof-client tests and required session documents
+
+## DO NOT TOUCH
+- Proof caps, search order, result meaning, certificate validator law, FIT math, archetype thresholds,
+  identity-support membership, position floors, named bounds, auto-widen order, roster legality,
+  IV/salary/tax, Auction, FARM, Supabase, schema, deploy, or production configuration
+- Inline explanatory copy or a weakened/hard-coded readiness result
+
+## REQUIRED BEHAVIOR
+- Production Draft Setup invokes simultaneous seating only through an ES-module Web Worker; no
+  production fallback may execute the proof on the main thread.
+- A deterministic complete-input fingerprint shares equivalent in-flight/resolved work through a
+  bounded cache. Changed inputs cannot reuse stale results.
+- Each caller has cancellable interest; unowned stale workers terminate, and late results cannot
+  update later readiness or BUILD state.
+- Adapter readiness, BUILD, Reset, and legacy restore share the worker client. Snake's duplicate
+  legacy salary diagnostic does not run.
+- Practice restart obtains and injects a fresh empty-room worker certificate before rebuilding.
+- Successful membership writes patch returned players locally and do not trigger a broad refresh.
+- Worker failure fails closed and never fabricates feasibility.
+
+## VERIFICATION
+- Focused tests cover fingerprinting, deduplication, bounded reuse, input separation, cancellation,
+  stale rejection, fail-closed transport, BUILD/Reset receipts, local patches, and Practice restart.
+- Re-run correctness gates, exact production-input calibration, TypeScript, changed-file ESLint,
+  production build, and diff integrity.
+- Production Mac/iPad browser gates must remain responsive during two-team and Full Sources proofs.
+- A separate non-builder auditor must approve the combined result before one preview reaches JK.
+
+## STOP CONDITIONS
+Stop rather than weakening proof or frozen correctness law, adding a synchronous production fallback,
+accepting duplicate stable-input proof, hiding failure, merging, pushing, deploying, or declaring
+product acceptance without JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-DRAFT-SETUP-PERFORMANCE-35 ===== -->
