@@ -11,6 +11,7 @@ import {
   buildSnakeSetupProofInput,
   deriveSnakeVersionGroups,
   lockedSnakeVersionSelections,
+  rebuildPracticeSnakeSeatBoards,
   selectedSnakePoolIds,
   validateSnakeCompanionSeats,
 } from '../../app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
@@ -46,6 +47,45 @@ function rosterLocalTaxFixture(players: Player[]): Player[] {
 }
 
 describe('SnakeDraftSetupAdapter', () => {
+  test('fails closed when production board construction has no seating certificate', () => {
+    const players = rosterLocalTaxFixture(makeLegalRosterPlayers());
+    expect(() => buildInitialSnakeSeatBoards({
+      teams: [makeTeam('team-a')],
+      players,
+      pool: pool(players),
+    })).toThrow(/without a valid seating certificate/i);
+  });
+
+  test('rebuilds Practice boards from the injected asynchronous proof receipt', async () => {
+    const players = rosterLocalTaxFixture(makeLegalRosterPlayers());
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: players.map((player) => player.id),
+        salaryCost: players.length * 1_000,
+        addedTax: 0,
+        allInCost: players.length * 1_000,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+    const runProof = vi.fn(async () => certificate);
+
+    const boards = await rebuildPracticeSnakeSeatBoards({
+      teams: [team],
+      players,
+      pool: locked,
+      runProof,
+    });
+
+    expect(runProof).toHaveBeenCalledOnce();
+    expect(runProof.mock.calls[0][0]).toEqual(buildSnakeSetupProofInput({ teams: [team], players, pool: locked }));
+    expect(Object.values(boards[team.id].slots)).toHaveLength(22);
+  });
+
   test('an absent order team uses exact neutral copy without exposing the internal id', () => {
     const missingTeamId = 'setup-internal-team-key-51';
     const adapter = {
@@ -273,7 +313,12 @@ describe('SnakeDraftSetupAdapter', () => {
     ]);
     const handRanked = players.at(-1)!;
     const team = makeTeam('team-a', { boardRankOverrides: { global: [handRanked.id] } });
-    const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: pool(players) });
+    const boards = buildInitialSnakeSeatBoards({
+      teams: [team],
+      players,
+      pool: pool(players),
+      allowSynchronousProof: true,
+    });
     expect(boards['team-a'].rankings.global?.[0]).toBe(handRanked.id);
     expect(boards['team-a'].rankings.frozenPlayerIds).toContain(handRanked.id);
   });
@@ -288,7 +333,12 @@ describe('SnakeDraftSetupAdapter', () => {
       makePlayer(304, { id: 'floor-rf', primaryPosition: 'RF' }),
       makePlayer(305, { id: 'floor-cp', primaryPosition: 'CP' }),
     ]);
-    const boards = buildInitialSnakeSeatBoards({ teams: [makeTeam('team-a')], players, pool: pool(players) });
+    const boards = buildInitialSnakeSeatBoards({
+      teams: [makeTeam('team-a')],
+      players,
+      pool: pool(players),
+      allowSynchronousProof: true,
+    });
     const board = boards['team-a'];
 
     expect(new Set(board.rankings.global.slice(0, 22))).toEqual(new Set(Object.values(board.slots)));

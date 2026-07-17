@@ -2,6 +2,20 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-17 (Codex, Snake proof performance follow-up) — Practice restart freeze path repaired; re-audit pending
+
+The independent performance auditor confirmed the Draft Setup worker/cache/local-patch repair and
+then found one adjacent newly reachable main-thread proof: `RESTART PRACTICE` discarded the saved
+room state and rebuilt every seat board through the helper's synchronous fallback. The repair now
+asks the shared proof worker for a fresh empty-room certificate, refuses an infeasible/failed receipt,
+and injects the certificate into board construction. The focused adapter/room performance gate is
+15/15; TypeScript, changed-file lint, and diff integrity are green. The auditor separately identified
+an inherited compatibility fallback for legacy/malformed rooms with no valid saved certificate; new
+rooms seed and refresh their certificate normally, so that path is logged as FINDING-229 rather than
+folded into the present release repair. No correctness math, proof law, FIT, pool membership, tax,
+readiness, merge, push, deploy, or product acceptance changed. Re-audit and the separately owned
+FINDING-228 correctness repair remain pending before combined preview.
+
 ## 2026-07-12 — BLOCKFIX: Draft Setup blocked-pool message now names the REAL constraint (built + browser-verified, UNCOMMITTED — awaiting JK's word to PR)
 
 **Trigger:** the chip from the previous booking pass — the pool-first "can't legally seat every club at 22 under the cap — add players or raise the cap" readiness line misdirected JK's SML repro (raising cap 1.2M→10M changed nothing; the true constraint was role supply).

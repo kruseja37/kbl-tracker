@@ -99,7 +99,10 @@ import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId, type SnakeCompanionPickReq
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
 import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
-import { buildInitialSnakeSeatBoards } from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import {
+  rebuildPracticeSnakeSeatBoards,
+} from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import { useSnakeSetupProofClient } from '../components/snake/setup/snakeSetupProofClient';
 import {
   executeAskedPickTrade,
   guideForAskedPick,
@@ -710,6 +713,7 @@ function FarmSnakeRoom() {
 function MlbSnakeDraftRoom() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { runProof: runSnakeSetupProof } = useSnakeSetupProofClient();
   const {
     leagues,
     teams,
@@ -2123,7 +2127,12 @@ function MlbSnakeDraftRoom() {
         ...session,
         completedPicks: [],
         currentPickIndex: 0,
-        seatBoards: buildInitialSnakeSeatBoards({ teams: leagueTeams, players, pool }),
+        seatBoards: await rebuildPracticeSnakeSeatBoards({
+          teams: leagueTeams,
+          players,
+          pool,
+          runProof: runSnakeSetupProof,
+        }),
         versionState: undefined,
         correctionSnapshots: [],
         trades: [],
@@ -2145,7 +2154,7 @@ function MlbSnakeDraftRoom() {
     } finally {
       setCommittingRecap(false);
     }
-  }, [leagueTeams, persist, players, pool, practiceMode, session]);
+  }, [leagueTeams, persist, players, pool, practiceMode, runSnakeSetupProof, session]);
 
   const confirmMlb = useCallback(async () => {
     if (recapCommitInFlight.current || !league || !session || !pool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;

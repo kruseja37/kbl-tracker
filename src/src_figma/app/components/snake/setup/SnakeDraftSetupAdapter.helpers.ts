@@ -167,6 +167,23 @@ export function buildSnakeSetupProofInput(input: {
   };
 }
 
+/** Rebuild Practice boards from a fresh, worker-backed setup certificate. */
+export async function rebuildPracticeSnakeSeatBoards(input: {
+  teams: readonly Team[];
+  players: readonly Player[];
+  pool: RegisteredPool;
+  runProof: ProofRunner;
+}): Promise<Record<string, SnakeSeatBoardRecord>> {
+  const certificate = await input.runProof(buildSnakeSetupProofInput(input));
+  if (!certificate.feasible) throw new Error(certificate.message);
+  return buildInitialSnakeSeatBoards({
+    teams: input.teams,
+    players: input.players,
+    pool: input.pool,
+    certificate,
+  });
+}
+
 function materializeOrder(natural: readonly string[], explicit: readonly string[] | undefined): string[] {
   if (!explicit?.length) return [...natural];
   const allowed = new Set(natural);
@@ -237,6 +254,8 @@ export function buildInitialSnakeSeatBoards(input: {
   players: readonly Player[];
   pool: RegisteredPool;
   certificate?: SnakeSeatingProof | null;
+  /** Focused legacy tests only. Production callers must inject a worker-backed certificate. */
+  allowSynchronousProof?: boolean;
 }): Record<string, SnakeSeatBoardRecord> {
   const playerById = new Map(input.players.map((player) => [player.id, player]));
   const seatingById = new Map(buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }).map((player) => [player.playerId, player]));
@@ -276,6 +295,9 @@ export function buildInitialSnakeSeatBoards(input: {
     const certifiedAssignment = input.certificate?.feasible
       ? input.certificate.assignments.find((assignment) => assignment.teamId === team.id)
       : null;
+    if (!certifiedAssignment && input.allowSynchronousProof !== true) {
+      throw new Error(`Could not seed ${team.name}'s board without a valid seating certificate.`);
+    }
     const completion: SnakeSeatingProof = certifiedAssignment ? {
       feasible: true,
       assignments: [certifiedAssignment],
