@@ -591,3 +591,30 @@ candidates remain preferred; unique player and version-group laws remain unchang
 passed 13 affected files / 154 tests, TypeScript, changed-file ESLint, the 2,730-module production
 build/PWA, and diff integrity. Exact adapter and desk regressions prove a unique legal 22 with the
 Two Way catcher retained in the staff. JK's browser retry is the remaining product gate.
+
+### FINDING-232
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / certified-board role materialization | **Status:** FIXED — INDEPENDENTLY APPROVED
+**Files:** `src/src_figma/app/components/snake/desk/deskModel.ts`, `src/src_figma/app/components/snake/desk/deskRoomModel.ts`, `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+**Evidence:** JK's same four-team setup still failed after FINDING-231, first for Sirloins with
+`RP3, SWING` broken and then for Herbisaurs with `SP3, SP4, SWING` broken. Replacing the drafting
+club moved the failure, proving it follows the assigned 22-player configuration rather than a team
+record or pool-size shortage. Code trace confirms the simultaneous certificate validates aggregate
+canonical roster law, where SP/RP can satisfy both starter and reliever minima and the ninth pitcher
+may be a surplus starter or closer. The board matcher instead consumes one distinct player per rigid
+SP/RP/CP display row and restricts `SWING`, so some legal certified sets have no display matching.
+**Impact:** One club in an otherwise valid new room can be prevented from starting; changing clubs,
+expanding the pool, or rebuilding the league merely moves or reshuffles the false blocker.
+**Action:** Treat the certified legal 22 as authoritative roster membership and deterministically
+materialize that exact set into stable board-storage rows. Preserve four startable rows and the
+highest-ranked closer row where possible, then use the remaining pitcher rows as display depth
+without inventing a second legality law. The unchanged canonical whole-roster validator remains the
+final gate. Do not alter the certificate, pool, FIT, tax, archetype, salary, or roster law.
+The adapter now fails closed unless the exact certified 22 materializes and remains affordable; it
+never substitutes an outside player. Room reconciliation preserves a pre-draft surplus closer, but
+once the club owns a closer the highest-IV owned closer still controls CP and an undrafted extra is
+removed. A ninth pure starter can backfill SWING only when final whole-board validation succeeds.
+**Verification:** Separate non-builder verdict: **APPROVE — Major 0 / Minor 0**. Exhaustive tests
+cover every supported legal 13/9 and 14/8 SP–SP/RP–RP–CP distribution, exact player/person
+membership, the two prior live-room regressions, and fail-closed unaffordable membership. Final
+gates: 13 files / 160 tests, TypeScript, changed-file ESLint, production build, and diff integrity
+green. JK's same four-team browser retry remains the only product-acceptance gate.

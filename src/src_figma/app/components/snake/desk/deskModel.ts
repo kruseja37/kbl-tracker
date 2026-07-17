@@ -1,5 +1,12 @@
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
-import { isLegalRoster, type RosterSlotPlayer } from '../../../../../data/rosterConstruction';
+import {
+  canCover,
+  canRelieve,
+  canStart,
+  isCloser,
+  isLegalRoster,
+  type RosterSlotPlayer,
+} from '../../../../../data/rosterConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import {
   assignLuxuryTaxPitchingGroups,
@@ -181,6 +188,120 @@ export function seedPositionalRankings(
       candidate.eligiblePositions ?? [candidate.position]
     ).includes(position))).map((candidate) => candidate.id),
   ]));
+}
+
+export function seedBoardRankings(candidates: readonly DeskCandidate[]): SnakeSeatBoardRecord['rankings'] {
+  return {
+    byPosition: seedPositionalRankings(candidates),
+    global: sortedByAdvisorWorth(candidates).map((candidate) => candidate.id),
+    frozenPlayerIds: [],
+  };
+}
+
+/**
+ * A seating certificate proves one exact legal 22 as a roster set. Board row ids are stable UI
+ * storage, not a second roster law: SP/RP can satisfy both aggregate staff minima, while a ninth
+ * pitcher may be a surplus starter or closer. Materialize the certified set deterministically and
+ * let the unchanged whole-roster validator remain authoritative.
+ */
+export function buildCertifiedSeatBoard(candidates: readonly DeskCandidate[]): {
+  board: SnakeSeatBoardRecord | null;
+  brokenSlots: SnakeBoardSlotId[];
+} {
+  const rankings = seedBoardRankings(candidates);
+  const ordered = sortedByAdvisorWorth(candidates);
+  if (ordered.length !== SNAKE_BOARD_SLOT_IDS.length) {
+    return { board: null, brokenSlots: [...SNAKE_BOARD_SLOT_IDS] };
+  }
+  if (new Set(ordered.map((candidate) => candidate.id)).size !== ordered.length) {
+    return { board: null, brokenSlots: [...SNAKE_BOARD_SLOT_IDS] };
+  }
+  if (new Set(ordered.map(candidateVersionGroupId)).size !== ordered.length) {
+    return { board: null, brokenSlots: [...SNAKE_BOARD_SLOT_IDS] };
+  }
+  if (!isLegalRoster(ordered.map(candidateRosterShape))) {
+    return { board: null, brokenSlots: [...SNAKE_BOARD_SLOT_IDS] };
+  }
+
+  const remaining = new Map(ordered.map((candidate) => [candidate.id, candidate]));
+  const slots: Partial<Record<SnakeBoardSlotId, string>> = {};
+  const take = (
+    slotId: SnakeBoardSlotId,
+    predicate: (candidate: DeskCandidate) => boolean,
+    preferredOrder: readonly DeskCandidate[] = ordered,
+  ): boolean => {
+    const candidate = preferredOrder.find((entry) => remaining.has(entry.id) && predicate(entry));
+    if (!candidate) return false;
+    slots[slotId] = candidate.id;
+    remaining.delete(candidate.id);
+    return true;
+  };
+
+  for (const slotId of ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const) {
+    if (!take(slotId, (candidate) => {
+      const shape = candidateRosterShape(candidate);
+      return !shape.isPitcher && shape.position === slotId;
+    })) return { board: null, brokenSlots: [slotId] };
+  }
+
+  if (!take('CP', (candidate) => isCloser(candidateRosterShape(candidate)))) {
+    return { board: null, brokenSlots: ['CP'] };
+  }
+
+  const starterOrder = [...ordered].sort((left, right) => {
+    const leftShape = candidateRosterShape(left);
+    const rightShape = candidateRosterShape(right);
+    const leftPure = leftShape.role === 'SP' ? 0 : 1;
+    const rightPure = rightShape.role === 'SP' ? 0 : 1;
+    return leftPure - rightPure || right.advisorWorth - left.advisorWorth || left.id.localeCompare(right.id);
+  });
+  for (const slotId of ['SP1', 'SP2', 'SP3', 'SP4'] as const) {
+    if (!take(slotId, (candidate) => canStart(candidateRosterShape(candidate)), starterOrder)) {
+      return { board: null, brokenSlots: [slotId] };
+    }
+  }
+
+  const remainingHitters = () => ordered.filter((candidate) => (
+    remaining.has(candidate.id) && !candidateRosterShape(candidate).isPitcher
+  ));
+  const backupC = remainingHitters().find((candidate) => canCover(candidateRosterShape(candidate), 'C'));
+  if (!take('BACKUP_C', (candidate) => !candidateRosterShape(candidate).isPitcher, backupC
+    ? [backupC, ...ordered.filter((candidate) => candidate.id !== backupC.id)]
+    : ordered)) {
+    return { board: null, brokenSlots: ['BACKUP_C'] };
+  }
+  for (const slotId of ['FLEX1', 'FLEX2', 'FLEX3', 'FLEX4'] as const) {
+    if (!take(slotId, (candidate) => !candidateRosterShape(candidate).isPitcher)) {
+      return { board: null, brokenSlots: [slotId] };
+    }
+  }
+
+  const reliefDepthOrder = [...ordered].sort((left, right) => {
+    const leftShape = candidateRosterShape(left);
+    const rightShape = candidateRosterShape(right);
+    const leftRelief = canRelieve(leftShape) ? 0 : 1;
+    const rightRelief = canRelieve(rightShape) ? 0 : 1;
+    return leftRelief - rightRelief || right.advisorWorth - left.advisorWorth || left.id.localeCompare(right.id);
+  });
+  for (const slotId of ['RP1', 'RP2', 'RP3'] as const) {
+    if (!take(slotId, (candidate) => candidateRosterShape(candidate).isPitcher, reliefDepthOrder)) {
+      return { board: null, brokenSlots: [slotId] };
+    }
+  }
+
+  const finalCandidate = [...remaining.values()];
+  if (finalCandidate.length !== 1) {
+    return { board: null, brokenSlots: ['SWING'] };
+  }
+  slots.SWING = finalCandidate[0].id;
+
+  if (!isCanonicalSnakeBoard({ slots, candidates })) {
+    return { board: null, brokenSlots: [...SNAKE_BOARD_SLOT_IDS] };
+  }
+  return {
+    board: { slots: slots as Record<SnakeBoardSlotId, string>, rankings, revision: 0 },
+    brokenSlots: [],
+  };
 }
 
 export function refitBoardSlots(input: {
@@ -420,12 +541,7 @@ export function buildSeededSeatBoard(candidates: readonly DeskCandidate[]): {
   board: SnakeSeatBoardRecord | null;
   brokenSlots: SnakeBoardSlotId[];
 } {
-  const rankings = seedPositionalRankings(candidates);
-  const fullRankings: SnakeSeatBoardRecord['rankings'] = {
-    byPosition: rankings,
-    global: sortedByAdvisorWorth(candidates).map((candidate) => candidate.id),
-    frozenPlayerIds: [],
-  };
+  const fullRankings = seedBoardRankings(candidates);
   const refit = refitBoardSlots({ rankings: fullRankings, candidates });
 
   if (refit.brokenSlots.length > 0 || refit.invalidRoster) return { board: null, brokenSlots: refit.brokenSlots };
@@ -444,7 +560,10 @@ function rankedBackfillIds(input: {
   board: SnakeSeatBoardRecord;
   candidates: readonly DeskEligibilityCandidate[];
 }): string[] {
-  const eligibleIds = new Set(input.candidates.filter((candidate) => eligibleForSlot(input.slotId, candidate)).map((candidate) => candidate.id));
+  const eligibleIds = new Set(input.candidates.filter((candidate) => (
+    eligibleForSlot(input.slotId, candidate)
+      || (input.slotId === 'SWING' && candidate.position === 'SP')
+  )).map((candidate) => candidate.id));
   const position = boardSlotPosition(input.slotId);
   const ownPositionOrder = position ? input.board.rankings.byPosition?.[position] ?? [] : [];
   return [...new Set([

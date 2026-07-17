@@ -264,6 +264,88 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(new Set(Object.values(boards[team.id].slots))).toHaveLength(22);
   });
 
+  test('materializes a legal certified roster with surplus closers instead of demanding rigid relief rows', () => {
+    const players = rosterLocalTaxFixture(makeLegalRosterPlayers(10_000).map((player) => (
+      player.id === 'legal-rp-2' || player.id === 'legal-swing'
+        ? { ...player, primaryPosition: 'CP' as const }
+        : player
+    )));
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: players.map((player) => player.id),
+        salaryCost: players.length * 1_000,
+        addedTax: 0,
+        allInCost: players.length * 1_000,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+
+    const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: locked, certificate });
+    const plannedIds = Object.values(boards[team.id].slots);
+    expect(plannedIds).toHaveLength(22);
+    expect(new Set(plannedIds)).toHaveLength(22);
+    expect(new Set(plannedIds)).toEqual(new Set(players.map((player) => player.id)));
+  });
+
+  test('materializes a legal certified roster whose ninth pitcher is a surplus pure starter', () => {
+    const players = rosterLocalTaxFixture(makeLegalRosterPlayers(10_000).map((player) => (
+      player.id === 'legal-swing' ? { ...player, primaryPosition: 'SP' as const } : player
+    )));
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: players.map((player) => player.id),
+        salaryCost: players.length * 1_000,
+        addedTax: 0,
+        allInCost: players.length * 1_000,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+
+    const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: locked, certificate });
+    const plannedIds = Object.values(boards[team.id].slots);
+    expect(plannedIds).toHaveLength(22);
+    expect(new Set(plannedIds)).toHaveLength(22);
+    expect(new Set(plannedIds)).toEqual(new Set(players.map((player) => player.id)));
+  });
+
+  test('never replaces an unaffordable certified player with an outside pool candidate', () => {
+    const certifiedPlayers = rosterLocalTaxFixture(makeLegalRosterPlayers(10_000));
+    const outside = makePlayer(999, {
+      id: '000-outside-cf',
+      primaryPosition: 'CF',
+      secondaryPosition: 'RF',
+      salary: 1,
+    });
+    const players = [...certifiedPlayers, outside];
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: certifiedPlayers.map((player) => player.id),
+        salaryCost: locked.tierCap + 1,
+        addedTax: 0,
+        allInCost: locked.tierCap + 1,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+
+    expect(() => buildInitialSnakeSeatBoards({ teams: [team], players, pool: locked, certificate }))
+      .toThrow(/not affordable under the certified cap identity/i);
+  });
+
   test('passes each chosen archetype cap identity into the simultaneous proof', () => {
     const players = [
       ...makeLegalRosterPlayerSet('first', 10_000),

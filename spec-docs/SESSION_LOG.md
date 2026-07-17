@@ -7698,3 +7698,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   build/PWA, diff integrity; auditor **APPROVE — Major 0 / Minor 0**.
 - Fresh `origin/main` at close: `ba7f97d6`. No merge, push, deploy, or product acceptance. JK reloads
   the same Draft Setup and presses Start Draft again; no pool or league rebuild is required.
+
+## 2026-07-17 — FINDING-232: every certified Snake staff materializes
+
+- JK's same four-team retry moved the board-seeding failure from Sirloins (`RP3, SWING`) to
+  Herbisaurs (`SP3, SP4, SWING`), proving the blocker followed the exact assigned 22 rather than the
+  team identity or current roster count.
+- Reproduced the root contradiction: aggregate canonical roster law permits SP/RP overlap and a
+  ninth surplus starter or closer, while rigid board rows demanded one distinct role match per row.
+- Added an exact-certificate materializer that preserves the certified 22, unique player/person
+  groups, unchanged roster legality, and certified affordability. The adapter no longer substitutes
+  any player outside the certificate.
+- Repaired the live room seam so a pre-draft surplus closer remains valid; once that team owns a
+  closer, the existing highest-IV-owned-CP and redundant-closer cleanup still applies. A pure starter
+  can backfill SWING only through final canonical validation.
+- Red-first regressions failed on surplus CP, surplus SP, and outside-certificate substitution before
+  repair. Final proof: 13 files / 160 tests, TypeScript, changed-file ESLint, production build, and
+  diff integrity green. Separate auditor verdict: **APPROVE — Major 0 / Minor 0**.
+- The Rosters page observation is league-scoped: a stock team added to the four-team league has no
+  assignments in that new league even though its SML roster remains intact. New Snake proof starts
+  every club at zero and does not consume those source-team roster assignments.
+- Fresh `origin/main` at close: `ba7f97d6`. No merge, push, deploy, or product acceptance. JK reloads
+  the same four-team Draft Setup and presses Start Draft; no roster, league, or pool rebuild is needed.

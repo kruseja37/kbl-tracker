@@ -32250,3 +32250,42 @@ Stop rather than weakening `isLegalRoster`, duplicating one player across two ro
 pitcher's role, changing the certificate, resetting the league, merging, pushing, deploying, or
 claiming product acceptance before JK's browser walk.
 <!-- ===== END CONTRACT: SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 ===== -->
+## SNAKE-CERTIFIED-BOARD-ROLE-MATERIALIZATION-39
+
+**Role:** Snake private-board materialization builder.
+
+**Goal:** Every exact 22-player roster accepted by the existing simultaneous legal-finish
+certificate must materialize into one complete private board without imposing a stricter second
+pitching-role law through UI storage rows.
+
+**Source of truth:** FINDING-232 and `src/data/rosterConstruction.ts` canonical `isLegalRoster`.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- focused tests for those surfaces
+- required session/finding/status records
+
+**Frozen behavior:**
+
+- Do not alter simultaneous proof, pool membership, source selection, named pool sizes, FIT, tax,
+  archetypes, salary/IV, affordability, version-person uniqueness, or canonical roster legality.
+- Do not duplicate a player to visually satisfy both starter and reliever rows.
+- Do not require the certificate to select a different 22 merely to satisfy board labels.
+- Keep the persisted 22-slot board schema compatible.
+- The final selected set must still pass the unchanged `isLegalRoster`, unique-id, and unique-person
+  checks before a board is returned.
+- Preserve GM rankings, reorder/backfill fail-closed behavior, and My/Assistant shared rendering.
+
+**Required red-first proof:**
+
+- A legal 13-hitter/9-pitcher certificate with surplus closers that currently breaks `RP3, SWING`.
+- A legal 13-hitter/9-pitcher certificate whose ninth arm is a surplus pure starter.
+- Existing Two Way catcher 14/8 coverage remains green.
+- The materialized board contains exactly 22 unique ids and unique version groups and the exact
+  certified membership.
+
+**Gates:** focused desk/adapter suites, TypeScript, changed-file ESLint, production build, diff
+integrity, separate non-builder audit, then JK's same four-team browser retry.

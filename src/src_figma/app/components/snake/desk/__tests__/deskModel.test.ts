@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildAdvisorLog,
+  buildCertifiedSeatBoard,
   buildSeededSeatBoard,
   buildTaxCoreRows,
   isCandidateEligibleForBoardSlot,
@@ -340,6 +341,33 @@ describe('private desk model', () => {
     expect(refit.invalidRoster).toBe(false);
     expect(refit.slots.SP1).toBe('CONTROL-SP-1');
     expect(pool.find((row) => row.id === refit.slots.BACKUP_C)?.construction.isPitcher).toBe(false);
+  });
+
+  it('materializes every legal SP, SP/RP, RP, and CP distribution for both canonical roster splits', () => {
+    for (const split of ['13/9', '14/8'] as const) {
+      const pitcherCount = split === '13/9' ? 9 : 8;
+      const hitters = canonicalControlPool(split).filter((row) => !row.construction.isPitcher);
+      for (let starters = 0; starters <= pitcherCount; starters += 1) {
+        for (let swings = 0; swings <= pitcherCount - starters; swings += 1) {
+          for (let relievers = 0; relievers <= pitcherCount - starters - swings; relievers += 1) {
+            const closers = pitcherCount - starters - swings - relievers;
+            if (closers < 1 || starters + swings < 4 || swings + relievers + closers < 4) continue;
+            const pitchers = [
+              ...Array.from({ length: starters }, (_, index) => candidate(`${split}-SP-${index}`, 'SP', 1_500 - index)),
+              ...Array.from({ length: swings }, (_, index) => candidate(`${split}-SW-${index}`, 'SP/RP', 1_400 - index)),
+              ...Array.from({ length: relievers }, (_, index) => candidate(`${split}-RP-${index}`, 'RP', 1_300 - index)),
+              ...Array.from({ length: closers }, (_, index) => candidate(`${split}-CP-${index}`, 'CP', 1_200 - index)),
+            ];
+            const roster = [...hitters, ...pitchers];
+            const materialized = buildCertifiedSeatBoard(roster);
+            const label = `${split}: SP ${starters}, SP/RP ${swings}, RP ${relievers}, CP ${closers}`;
+            expect(materialized.board, label).not.toBeNull();
+            expect(materialized.brokenSlots, label).toEqual([]);
+            expect(new Set(Object.values(materialized.board!.slots)), label).toEqual(new Set(roster.map((row) => row.id)));
+          }
+        }
+      }
+    }
   });
 
   it('treats sibling cards as alternatives and finds a complete unique-person refit', () => {

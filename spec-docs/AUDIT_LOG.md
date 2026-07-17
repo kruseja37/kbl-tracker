@@ -1512,3 +1512,5 @@ click remains the product gate; no merge, push, or deploy is authorized.
   shared My/Assistant rendering.
 - Independent gates: 13 files / 154 tests, TypeScript, changed-file ESLint, 2,730-module production
   build/PWA, and diff integrity green. JK's browser retry remains the only acceptance gate.
+
+| FINDING-232 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED | deskModel.ts / deskRoomModel.ts / SnakeDraftSetupAdapter.helpers.ts | Exact certified legal staffs now materialize without a stricter display-row law or outside substitution. |

@@ -275,12 +275,13 @@ export function reconcileExistingSeatBoards(input: {
     const committedCloserAssignmentWrong = Boolean(
       primaryCommittedCloser && workingBoard.slots.CP !== primaryCommittedCloser.id,
     );
-    const hasUndraftedExtraCloser = Object.entries(workingBoard.slots).some(([slotId, playerId]) => (
-      slotId !== 'CP'
-      && Boolean(playerId)
-      && candidateById.get(playerId!)?.position === 'CP'
-      && !committedSet.has(playerId!)
-    ));
+    const hasUndraftedExtraCloser = Boolean(primaryCommittedCloser)
+      && Object.entries(workingBoard.slots).some(([slotId, playerId]) => (
+        slotId !== 'CP'
+        && Boolean(playerId)
+        && candidateById.get(playerId!)?.position === 'CP'
+        && !committedSet.has(playerId!)
+      ));
     if (committedMissingFromBoard || committedCloserAssignmentWrong || hasUndraftedExtraCloser) {
       const rankings: SnakeSeatBoardRecord['rankings'] = {
         ...workingBoard.rankings,

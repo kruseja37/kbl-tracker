@@ -26,7 +26,11 @@ import {
   type SnakeSeatBoardRecord,
   type Team,
 } from '../../../../../utils/leagueBuilderStorage';
-import { buildSeededSeatBoard, type DeskCandidate } from '../desk/deskModel';
+import {
+  buildCertifiedSeatBoard,
+  seedBoardRankings,
+  type DeskCandidate,
+} from '../desk/deskModel';
 import { buildDeskRoomPlayer, fitWord as deskFitWord, type DeskRoomPlayer } from '../desk/deskRoomModel';
 import {
   snakePlayerSourceId,
@@ -325,30 +329,17 @@ export function buildInitialSnakeSeatBoards(input: {
       const tax = luxuryTax(selected.map((row) => row.construction), shiftedCaps, 'taxed').charged;
       return snakeMoneyAffordable(salary + tax, input.pool.tierCap);
     };
-    let seeded = buildSeededSeatBoard(completionCandidates);
-    if (!affordable(seeded.board)) {
-      const extras = candidates
-        .filter((candidate) => !completionIds.has(candidate.id))
-        .sort((left, right) => left.trueCost - right.trueCost || left.id.localeCompare(right.id));
-      for (const extra of extras) {
-        const trial = buildSeededSeatBoard([...completionCandidates, extra]);
-        if (!affordable(trial.board)) continue;
-        seeded = trial;
-        break;
-      }
-    }
-    const fullRankings = buildSeededSeatBoard(candidates).board?.rankings;
+    const seeded = buildCertifiedSeatBoard(completionCandidates);
+    const fullRankings = seedBoardRankings(candidates);
     if (!completion.feasible) {
       throw new Error(`Could not prove ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
     }
-    if (!seeded.board || !affordable(seeded.board) || !fullRankings) {
+    if (!seeded.board || !affordable(seeded.board)) {
       const state = seeded.brokenSlots.length > 0
         ? `broken slots ${seeded.brokenSlots.join(', ')}`
         : !seeded.board
           ? 'no canonical 22-slot assignment'
-          : !affordable(seeded.board)
-            ? 'the materialized board is not affordable under the certified cap identity'
-            : 'the complete pool could not produce canonical rankings';
+          : 'the materialized board is not affordable under the certified cap identity';
       throw new Error(`Snake board seeding disagreed with the legal-finish certificate for ${team.name}: ${state}.`);
     }
     const overrides = team.boardRankOverrides;

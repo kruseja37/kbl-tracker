@@ -1296,3 +1296,12 @@ the browser walk remains the final gate.
 # 2026-07-17 — outgoing live header before FINDING-231
 
 > ## RIGHT NOW — LEGENDS RECOVERY + SNAKE SETUP APPROVED; JK BROWSER RETEST IS THE GATE (2026-07-17; branch `codex/draft-setup-browser-fixes`, base integration `68c0f0c0`). FINDING-230 repairs the legacy state where all 835 Legends cards polluted SML and blocked their three source libraries. Verified stock-only collisions can be reclaimed; any user-league assignment still blocks. Source libraries cannot become draft targets, and SML refresh preserves the real four-team template, reused stock-player assignments, roster, registered pool, and all durable draft sessions. Separate repair audit: **APPROVE — Major 0 / Minor 0** after three preservation repairs; focused 115/115, TypeScript, lint, 2,730-module build/PWA, and diff integrity green. **NEXT:** JK reloads League Builder, runs Import Legends → Repair Legends Import, confirms SML 506 + three Legends libraries + intact four-team target, then resumes the full Snake browser walk. No merge, push, deploy, or product acceptance is authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 certified staff materialization close
+
+The prior live header recorded independently approved FINDING-231, which fixed Two Way catcher
+depth but left JK's same four-team Start Draft retry as the product gate. That retry exposed a wider
+aggregate-staff/display-row mismatch that moved between Sirloins and Herbisaurs. FINDING-232 now
+materializes every supported exact certified 13/9 or 14/8 staff without changing the certificate or
+substituting players. Separate audit approved the repair with zero findings; JK's same browser retry
+remains the sole acceptance gate.
