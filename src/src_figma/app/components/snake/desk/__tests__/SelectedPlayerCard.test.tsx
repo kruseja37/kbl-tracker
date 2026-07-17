@@ -134,7 +134,7 @@ describe('SelectedPlayerCard', () => {
     />);
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('Jovita Pulo');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('MY BOARD—');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('BOARD CONSEQUENCES —');
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('BOARD CONSEQUENCES —');
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('SAFE');
     expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('$0');

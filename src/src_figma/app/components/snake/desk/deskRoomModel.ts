@@ -296,6 +296,7 @@ export function reconcileExistingSeatBoards(input: {
         rankings,
         candidates: input.candidates,
         unavailablePlayerIds: teamUnavailable,
+        committedPlayerIds: committedSet,
       });
       const refitPlayerIds = Object.values(refit.slots);
       if (refit.brokenSlots.length === 0 && !refit.invalidRoster

@@ -7,6 +7,7 @@ export function DeskCandidateRow(props: {
   selected?: boolean;
   warning?: string | null;
   onSelect?: (candidateId: string) => void;
+  teamColors?: { primary: string; secondary: string };
 }) {
   const identity = props.candidate.identityChips?.join(' · ') ?? '';
   const fit = props.candidate.consequencesKnown === false ? 'UNKNOWN' : props.candidate.fitWord;
@@ -17,16 +18,13 @@ export function DeskCandidateRow(props: {
       ? 'text-[var(--ballpark-warn-text)]'
       : 'text-[var(--ballpark-brass)]';
   const risk = props.candidate.draftedByActiveTeam
-    ? 'ON ROSTER'
+    ? 'ROSTER'
     : props.candidate.drafted
     ? `DRAFTED${props.candidate.draftedByTeamName ? ` BY ${props.candidate.draftedByTeamName}` : ''}`
     : props.candidate.risk !== 'SAFE_TO_WAIT'
     ? props.candidate.risk.replaceAll('_', ' ')
-    : props.candidate.riskPending
-      ? 'CALCULATING'
-      : props.candidate.riskUnavailable
-        ? 'RISK UNAVAILABLE'
-        : null;
+    : null;
+  const warning = props.warning && props.warning !== risk ? props.warning : null;
   return (
     <div className="grid min-h-12 w-full min-w-0 grid-cols-1 items-stretch gap-1">
     <button
@@ -37,12 +35,17 @@ export function DeskCandidateRow(props: {
       aria-pressed={props.selected}
       disabled={props.candidate.drafted && !props.candidate.draftedByActiveTeam}
       onClick={() => props.onSelect?.(props.candidate.id)}
+      style={props.candidate.draftedByActiveTeam && props.teamColors ? {
+        borderLeftWidth: '8px',
+        borderLeftColor: props.teamColors.primary,
+        boxShadow: `inset 0 -3px 0 ${props.teamColors.secondary}`,
+      } : undefined}
     >
       <span className="min-w-0">
         {props.prefix ? <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[var(--ballpark-brass)]">{props.prefix}</span> : null}
         <span className="block break-words font-black uppercase leading-tight">{props.candidate.name}</span>
         {identity ? <span className="block break-words text-[10px] font-black text-[var(--ballpark-brass)]">{identity}</span> : null}
-        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{risk ? ` · ${risk}` : ''}{props.warning ? ` · ${props.warning}` : ''}</span>
+        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{risk ? ` · ${risk}` : ''}{warning ? ` · ${warning}` : ''}</span>
       </span>
       <span className="text-right text-[11px] font-black">
         <span className="block">${Math.round(props.candidate.trueCost).toLocaleString()}</span>

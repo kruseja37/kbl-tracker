@@ -73,4 +73,23 @@ describe('BoardView Batch 5 ledger', () => {
     expect(board.querySelectorAll('[data-board-slot]')).toHaveLength(22);
     expect(board.querySelector('details')).toBeNull();
   });
+
+  it('marks an owned drafted player as roster truth with team branding and no unavailable-plan panel', () => {
+    const rosterPlayer = { ...candidate('owned', 'OWNED PLAYER', true), draftedByActiveTeam: true };
+    render(<BoardView
+      candidates={[rosterPlayer]}
+      boardSlots={{ SS: 'owned' }}
+      brokenSlots={[]}
+      planBill={null}
+      taxCoreRows={[]}
+      slotDepth={{}}
+      teamColors={{ primary: '#008B8B', secondary: '#FFD700' }}
+    />);
+
+    const row = screen.getByRole('button', { name: 'SELECT OWNED PLAYER' });
+    expect(row).toHaveTextContent('ROSTER');
+    expect(row).toHaveStyle({ borderLeftColor: '#008B8B', borderLeftWidth: '8px' });
+    expect(screen.getByTestId('board-slot-grid').querySelector('[data-board-slot="SS"]')).toHaveAttribute('data-board-state', 'ROSTER');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
+  });
 });

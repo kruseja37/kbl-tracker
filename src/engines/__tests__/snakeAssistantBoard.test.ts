@@ -158,6 +158,32 @@ describe('shared snake assistant board core', () => {
     expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
   });
 
+  it('keeps the owned closer at CP, excludes an extra available closer, and only replaces CP for an explicit higher-IV pin', () => {
+    const activePool = [
+      ...legalPool(),
+      candidate({ id: 'higher-cp', position: 'CP', role: 'CP', frozenIv: 150 }),
+    ];
+    const normal = buildSnakeAssistantBoard(engineInput({
+      activePool,
+      completedPicks: [{ teamId: 'mine', playerId: 'cp', settledSalary: 100 }],
+    }));
+    expect(normal.status).toBe('ready');
+    if (normal.status !== 'ready') return;
+    expect(normal.slots.find((slot) => slot.slotId === 'CP')?.playerId).toBe('cp');
+    expect(normal.playerIds).not.toContain('higher-cp');
+
+    const optimized = buildSnakeAssistantBoard(engineInput({
+      activePool,
+      completedPicks: [{ teamId: 'mine', playerId: 'cp', settledSalary: 100 }],
+      selectedPinPlayerId: 'higher-cp',
+    }));
+    expect(optimized.status).toBe('ready');
+    if (optimized.status !== 'ready') return;
+    expect(optimized.slots.find((slot) => slot.slotId === 'CP')?.playerId).toBe('higher-cp');
+    expect(optimized.playerIds).toContain('cp');
+    expect(optimized.playerIds).toContain('higher-cp');
+  });
+
   it('uses exact starter-batting fit in its recommendation and final 22', () => {
     const activePool = legalPool().filter((player) => player.playerId !== 'sp-3');
     activePool.push(

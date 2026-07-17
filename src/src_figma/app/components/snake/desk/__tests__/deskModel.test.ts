@@ -155,6 +155,38 @@ describe('private desk model', () => {
     expect(board.slots).toEqual(priorSlots);
   });
 
+  it('locks drafted closers into the plan, assigns the highest-IV owned closer to CP, and excludes undrafted extra closers', () => {
+    const pool = fullPool();
+    const board = buildSeededSeatBoard(pool).board!;
+    const higherOwned = pool.find((row) => row.id === 'CP-5')!;
+    const lowerOwned = pool.find((row) => row.id === 'CP-6')!;
+    const committedPlayerIds = new Set([higherOwned.id, lowerOwned.id]);
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: board.rankings,
+      committedPlayerIds,
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.slots.CP).toBe(higherOwned.id);
+    expect(Object.values(refit.slots)).toContain(lowerOwned.id);
+    expect(Object.values(refit.slots).filter((id) => id.startsWith('CP-')).sort()).toEqual([
+      higherOwned.id,
+      lowerOwned.id,
+    ].sort());
+
+    const reordered = reorderSeatBoardRankings({
+      board,
+      view: 'OVERALL',
+      orderedIds: [...board.rankings.global].reverse(),
+      candidates: pool,
+      committedPlayerIds,
+    });
+    expect(reordered.board).not.toBeNull();
+    expect(reordered.board!.slots.CP).toBe(higherOwned.id);
+    expect(Object.values(reordered.board!.slots)).toContain(lowerOwned.id);
+  });
+
   it('reports the exact broken slot instead of inventing a player', () => {
     const full = fullPool();
     const rankings = buildSeededSeatBoard(full).board!.rankings;

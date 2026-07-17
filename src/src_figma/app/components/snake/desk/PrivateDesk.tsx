@@ -44,6 +44,7 @@ export function PrivateDesk(props: {
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onReorderOverall?: (orderedIds: readonly string[]) => void;
   privateScopeKey?: string;
+  teamColors?: { primary: string; secondary: string };
 }) {
   const scopeKey = props.privateScopeKey ?? props.logScopeId ?? 'desk';
   const [tabState, setTabState] = useState<{
@@ -92,6 +93,11 @@ export function PrivateDesk(props: {
   const logScope = props.logScopeId ?? 'desk';
   const seen = new Set(seenByScope[logScope] ?? []);
   const unseen = consequentialActivity.filter((entry) => !seen.has(entry.key));
+  const riskState = props.candidates.some((candidate) => candidate.riskUnavailable)
+    ? 'OFFLINE'
+    : props.candidates.some((candidate) => candidate.riskPending)
+      ? 'UPDATING'
+      : null;
   const tabs = [
     ...DESK_TABS,
     ...(props.tradeGuide ? [{ id: 'TRADE_PICKS' as const, label: 'TRADE PICKS' }] : []),
@@ -100,6 +106,9 @@ export function PrivateDesk(props: {
   return (
     <section data-testid="private-draft-desk">
       {props.assistantNeed && props.draftedChemistry ? <AssistantGmStatusRow need={props.assistantNeed} chemistry={props.draftedChemistry} showHelp={props.showHelp ?? false} /> : null}
+      {riskState ? <p className="mb-3 inline-flex min-h-11 items-center border-2 border-[var(--ballpark-panel-border)] px-3 text-[10px] font-black" role="status" data-testid="board-risk-state">
+        RISK {riskState}{props.showHelp ? ' · NEXT-PICK PLAYOUT IS NOT READY; PLAYER FIT AND MONEY REMAIN LIVE.' : ''}
+      </p> : null}
       <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="Private draft desk views">
         {tabs.map((next) => (
           <button
@@ -120,7 +129,7 @@ export function PrivateDesk(props: {
         ))}
       </div>
       {tab === 'MY_BOARD' && <div role="region" id="private-desk-panel-my_board" aria-labelledby="private-desk-tab-my_board">
-        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} planChemistry={props.planChemistry} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} showHelp={props.showHelp ?? false} />
+        <BoardView candidates={props.candidates} boardSlots={props.boardSlots} brokenSlots={props.brokenSlots} planBill={props.planBill} planChemistry={props.planChemistry} taxCoreRows={props.taxCoreRows} slotDepth={props.slotDepth} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} showHelp={props.showHelp ?? false} teamColors={props.teamColors} />
       </div>}
       {tab === 'ASST_GM_BOARD' && <div role="region" id="private-desk-panel-asst_gm_board" aria-labelledby="private-desk-tab-asst_gm_board" data-testid="assistant-board-panel">
         {props.assistantOptimizationLabel ? <p className="mb-3 inline-flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="assistant-optimization-result">
@@ -135,17 +144,18 @@ export function PrivateDesk(props: {
               brokenSlots={[]}
               planBill={null}
               planLedger={props.assistantBoard.board.ledger}
-              planTitle="ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV"
+              planTitle="ASST GM 22"
               planChemistry={props.assistantBoard.board.chemistry}
               taxCoreRows={[]}
               slotDepth={{}}
               selectedCandidateId={props.selectedCandidateId}
               onSelectCandidate={props.onSelectCandidate}
               readOnly
+              teamColors={props.teamColors}
             />
           </>
         ) : <p className="border-4 border-[var(--ballpark-panel-border)] p-3 font-black" role="status">
-          {props.assistantBoard.status === 'pending' ? 'ASST GM BOARD CALCULATING…' : 'ASST GM BOARD UNAVAILABLE'}
+          {props.assistantBoard.status === 'pending' ? 'ASST GM 22 CALCULATING…' : 'ASST GM 22 UNAVAILABLE'}
         </p>}
       </div>}
       {tab === 'PLAYER_POOL' && <div role="region" id="private-desk-panel-player_pool" aria-labelledby="private-desk-tab-player_pool"><RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} /></div>}

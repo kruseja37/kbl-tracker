@@ -419,8 +419,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
-    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
@@ -650,6 +649,31 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body.innerHTML).not.toContain(missingPlayerId);
   });
 
+  test('companion keeps an own pick on the private board with team branding and removes it from the pool', async () => {
+    const source = session();
+    source.completedPicks = [
+      { round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0 },
+      { round: 1, pick: 2, teamId: 'a', playerId: 'closer', settledSalary: 11_700, marginalTax: 0 },
+    ];
+    source.currentPickIndex = 2;
+    prepare(source);
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const committed = screen.getByRole('button', { name: /SELECT CLOSER PLAYER/ });
+    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'ROSTER');
+    expect(committed).toHaveTextContent('ROSTER');
+    expect(committed).toHaveStyle({
+      borderLeftColor: '#234f32',
+      borderLeftWidth: '8px',
+      boxShadow: 'inset 0 -3px 0 #f5d77a',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByRole('button', { name: /SELECT CLOSER PLAYER/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SELECT DUAL PLAYER/ })).not.toBeInTheDocument();
+  });
+
   test('generic assistant failure and malformed guide state remain neutral on both pages', async () => {
     mocks.riskMode = 'URGENT';
     mocks.guideMode = 'MALFORMED';
@@ -754,8 +778,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(mocks.assistantRequests).toHaveLength(0);
     expect(mocks.assistantResults).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
-    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
+    expect(screen.getByText('ASST GM 22 UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByTestId('assistant-plan-truth-strip')).not.toBeInTheDocument();
   });
 
   test('main emits no assistant request, result, or board when one live player lacks contextual advisor worth', async () => {
@@ -777,8 +801,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await act(async () => {
       fireEvent.click(assistantTab);
     });
-    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
-    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
+    expect(screen.getByText('ASST GM 22 UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByTestId('assistant-plan-truth-strip')).not.toBeInTheDocument();
   });
 
   test('one device switches between two approved desks only through cover and keeps both boards isolated', async () => {

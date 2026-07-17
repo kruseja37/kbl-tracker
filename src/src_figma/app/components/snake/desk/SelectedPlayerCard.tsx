@@ -157,7 +157,7 @@ export function SelectedPlayerCard(props: {
             return <p key={row.family} className="border-2 border-[var(--ballpark-panel-border)] p-1 font-black">{row.word.toUpperCase()} {row.count ?? '—'} · {row.tier ?? '—'} → {after?.count ?? '—'} · {after?.tier ?? '—'}</p>;
           })}
         </div>
-      </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : <p className="mt-3 font-black">BOARD CONSEQUENCES —</p>}
+      </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : null}
       <div className="sticky bottom-0 -mx-3 -mb-3 mt-3 flex flex-wrap gap-2 border-t-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3">
         {decision?.kind === 'TRADE_TO_PICK' ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" onClick={() => props.onTradeDecision?.(decision)}>TRADE TO #{decision.targetPick}</button> : null}
         {decisionLabel ? <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="selected-player-decision">{decisionLabel}</span> : null}

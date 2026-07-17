@@ -19,6 +19,7 @@ export function BoardView(props: {
   onSelectCandidate?: (candidateId: string) => void;
   showHelp?: boolean;
   readOnly?: boolean;
+  teamColors?: { primary: string; secondary: string };
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   const ledger = props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null);
@@ -26,12 +27,7 @@ export function BoardView(props: {
     <div data-testid={props.readOnly ? 'assistant-board-view' : 'my-board-view'}>
       {ledger && props.planChemistry ? (
         <div className="mb-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={ledger} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
-      ) : (
-        <section className="mb-4 border-4 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-panel)] p-3" data-testid={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'}>
-          <h3 className="text-xs font-black tracking-[0.14em] text-[var(--ballpark-brass)]">{props.planTitle ?? '22-PLAYER PLAN'}</h3>
-          <p className="mt-2 font-black">PLAN TRUTH UNAVAILABLE</p>
-        </section>
-      )}
+      ) : null}
       <div
         className="grid grid-cols-1 gap-1"
         data-testid="board-slot-grid"
@@ -46,7 +42,7 @@ export function BoardView(props: {
               : !candidate
                 ? 'UNKNOWN PLAYER'
                 : candidate.draftedByActiveTeam
-                  ? 'COMMITTED'
+                  ? 'ROSTER'
                   : candidate.drafted
                   ? 'UNAVAILABLE'
                   : (props.slotDepth[slotId] ?? 3) <= 2
@@ -60,6 +56,7 @@ export function BoardView(props: {
                   selected={props.selectedCandidateId === playerId}
                   onSelect={props.onSelectCandidate}
                   warning={state}
+                  teamColors={props.teamColors}
                 />
               : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotId}</span>{state}</p>}
           </div>

@@ -1100,6 +1100,7 @@ function MlbSnakeDraftRoom() {
   }), [activePoolRows, deskRoomById, playerById, seatingById]);
   const boardEligibilityCandidates = useMemo(() => deskRoomPlayers.map((player) => ({
     id: player.playerId,
+    iv: player.price,
     position: player.position,
     eligiblePositions: player.eligiblePositions,
     rosterShape: player.shape,
@@ -1846,6 +1847,7 @@ function MlbSnakeDraftRoom() {
       orderedIds,
       candidates: boardEligibilityCandidates,
       unavailablePlayerIds: boardUnavailable,
+      committedPlayerIds: ownCommittedPlayerIds,
     });
     if (!reordered.board) {
       if (privateContextIsCurrent(guard)) {
@@ -1880,7 +1882,7 @@ function MlbSnakeDraftRoom() {
       identity: guard.identity,
       changedSlotCount: reordered.changedSlotCount,
     });
-  }, [boardEligibilityCandidates, boardUnavailable, capturePrivateContext, deskTeam, deskState, privateContextIsCurrent, session]);
+  }, [boardEligibilityCandidates, boardUnavailable, capturePrivateContext, deskTeam, deskState, ownCommittedPlayerIds, privateContextIsCurrent, session]);
 
   const undoBoardUpdate = useCallback(async () => {
     if (!session || !deskTeam || !boardUndo || boardUndo.teamId !== deskTeam.id || undoOperationRef.current) return;
@@ -2483,6 +2485,7 @@ function MlbSnakeDraftRoom() {
           onReorderOverall={(orderedIds) => {
             void reorderRanking('OVERALL', orderedIds);
           }}
+          teamColors={deskTeam?.colors}
           tradeGuide={<SnakeTradeGuide
             showHelp={showHelp}
             teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}

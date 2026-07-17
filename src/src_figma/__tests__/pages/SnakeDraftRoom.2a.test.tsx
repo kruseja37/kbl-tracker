@@ -355,7 +355,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ARCHETYPE ALIGNMENT · (STRONG|SOLID|WEAK)/);
     expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ROOM \d+\/\d+ · FAN [+-]?\d+/);
     const committed = screen.getByRole('button', { name: /SELECT GONE-C PLAYER/ });
-    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'COMMITTED');
+    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'ROSTER');
     expect(committed).toHaveTextContent('$10,700');
     expect(committed).toHaveTextContent('TAX +$700');
     fireEvent.click(committed);
@@ -465,8 +465,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
-    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));

@@ -17,6 +17,8 @@ import {
 
 export interface DeskEligibilityCandidate {
   id: string;
+  /** Frozen Snake IV. This is also the player's draft salary. */
+  iv?: number;
   position: TaxonomyPosition;
   eligiblePositions?: readonly TaxonomyPosition[];
   rosterShape?: RosterSlotPlayer;
@@ -100,18 +102,24 @@ function sortedByAdvisorWorth(candidates: readonly DeskCandidate[]): DeskCandida
   ));
 }
 
-function eligibleForSlot(slotId: SnakeBoardSlotId, candidate: DeskEligibilityCandidate): boolean {
+function eligibleForSlot(
+  slotId: SnakeBoardSlotId,
+  candidate: DeskEligibilityCandidate,
+  committedPlayerIds: ReadonlySet<string> = new Set<string>(),
+): boolean {
   const eligible = candidate.eligiblePositions ?? [candidate.position];
+  const committedCloser = candidate.position === 'CP' && committedPlayerIds.has(candidate.id);
   // Canonical roster law requires each starting field slot to be covered by a
   // player whose primary position matches. Secondary eligibility is depth,
   // never permission to build an invalid 22-player board.
   if (PRIMARY_FIELD_SLOTS.has(slotId)) return candidate.position === slotId;
   if (slotId === 'BACKUP_C') return eligible.includes('C');
   if (slotId.startsWith('SP')) return eligible.includes('SP') || eligible.includes('SP/RP');
-  if (slotId.startsWith('RP')) return eligible.includes('RP') || eligible.includes('SP/RP');
+  if (slotId.startsWith('RP')) return eligible.includes('RP') || eligible.includes('SP/RP') || committedCloser;
   if (slotId === 'SWING') {
     return !['SP', 'SP/RP', 'RP', 'CP'].includes(candidate.position)
-      || eligible.some((position) => ['SP/RP', 'RP', 'CP'].includes(position));
+      || eligible.some((position) => ['SP/RP', 'RP'].includes(position))
+      || committedCloser;
   }
   if (slotId.startsWith('FLEX')) return !(candidate.rosterShape?.isPitcher
     ?? ['SP', 'SP/RP', 'RP', 'CP'].includes(candidate.position));
@@ -174,6 +182,7 @@ export function refitBoardSlots(input: {
   rankings: SnakeSeatBoardRecord['rankings'];
   candidates: readonly DeskEligibilityCandidate[];
   unavailablePlayerIds?: ReadonlySet<string>;
+  committedPlayerIds?: ReadonlySet<string>;
 }): {
   slots: Partial<Record<SnakeBoardSlotId, string>>;
   brokenSlots: SnakeBoardSlotId[];
@@ -181,16 +190,22 @@ export function refitBoardSlots(input: {
 } {
   const byId = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
   const unavailable = input.unavailablePlayerIds ?? new Set<string>();
+  const committed = input.committedPlayerIds ?? new Set<string>();
   const canonicalIndex = new Map(SNAKE_BOARD_SLOT_IDS.map((slotId, index) => [slotId, index]));
   const rankedBySlot = new Map<SnakeBoardSlotId, string[]>();
   for (const slotId of SNAKE_BOARD_SLOT_IDS) {
     const position = boardSlotPosition(slotId);
     const rankedIds = [...new Set([
+      ...[...committed].sort((leftId, rightId) => {
+        const left = byId.get(leftId);
+        const right = byId.get(rightId);
+        return (right?.iv ?? 0) - (left?.iv ?? 0) || leftId.localeCompare(rightId);
+      }),
       ...(position ? input.rankings.byPosition?.[position] ?? [] : []),
       ...(input.rankings.global ?? []),
     ])].filter((id) => {
       const candidate = byId.get(id);
-      return Boolean(candidate && !unavailable.has(id) && eligibleForSlot(slotId, candidate));
+      return Boolean(candidate && !unavailable.has(id) && eligibleForSlot(slotId, candidate, committed));
     });
     rankedBySlot.set(slotId, rankedIds);
   }
@@ -226,9 +241,79 @@ export function refitBoardSlots(input: {
 
   const assigned = new Map<SnakeBoardSlotId, string>();
   const usedGroups = new Set<string>();
-  const fullyFeasible = canMatchEverySlot(assignmentOrder, usedGroups);
-  for (const [index, slotId] of assignmentOrder.entries()) {
-    const remainingSlots = assignmentOrder.slice(index + 1);
+
+  // A drafted player is roster truth, not another recommendation candidate. Match every
+  // committed player before filling the future plan. The highest-IV owned closer owns CP;
+  // any additional committed closer may use legal relief depth, while undrafted closers may not.
+  const committedCandidates = [...committed].flatMap((playerId) => {
+    const candidate = byId.get(playerId);
+    return candidate ? [candidate] : [];
+  });
+  let committedMatched = committedCandidates.length === committed.size
+    && committedCandidates.every((candidate) => !unavailable.has(candidate.id));
+  if (committedMatched && new Set(committedCandidates.map(candidateVersionGroupId)).size !== committedCandidates.length) {
+    committedMatched = false;
+  }
+  const committedClosers = committedCandidates
+    .filter((candidate) => candidate.position === 'CP')
+    .sort((left, right) => (right.iv ?? 0) - (left.iv ?? 0) || left.id.localeCompare(right.id));
+  const primaryCloser = committedClosers[0];
+  if (committedMatched && primaryCloser) {
+    assigned.set('CP', primaryCloser.id);
+    usedGroups.add(candidateVersionGroupId(primaryCloser));
+  }
+  const remainingCommitted = committedCandidates.filter((candidate) => candidate.id !== primaryCloser?.id);
+  let committedSearchNodes = 0;
+  const matchCommitted = (remaining: readonly DeskEligibilityCandidate[]): boolean => {
+    committedSearchNodes += 1;
+    if (committedSearchNodes > 25_000) return false;
+    if (remaining.length === 0) {
+      return canMatchEverySlot(assignmentOrder.filter((slotId) => !assigned.has(slotId)), usedGroups);
+    }
+    const ranked = [...remaining].sort((left, right) => {
+      const leftOptions = assignmentOrder.filter((slotId) => !assigned.has(slotId) && eligibleForSlot(slotId, left, committed)).length;
+      const rightOptions = assignmentOrder.filter((slotId) => !assigned.has(slotId) && eligibleForSlot(slotId, right, committed)).length;
+      return leftOptions - rightOptions || (right.iv ?? 0) - (left.iv ?? 0) || left.id.localeCompare(right.id);
+    });
+    const candidate = ranked[0];
+    const rest = remaining.filter((entry) => entry.id !== candidate.id);
+    const candidateGroup = candidateVersionGroupId(candidate);
+    const preferredSlots = assignmentOrder
+      .filter((slotId) => !assigned.has(slotId) && eligibleForSlot(slotId, candidate, committed))
+      .sort((left, right) => {
+        const preferred = (slotId: SnakeBoardSlotId) => {
+          if (candidate.position === 'CP') return slotId.startsWith('RP') ? 0 : slotId === 'SWING' ? 1 : 2;
+          if (candidate.position === 'SP' || candidate.position === 'SP/RP') return slotId.startsWith('SP') ? 0 : slotId.startsWith('RP') ? 1 : 2;
+          if (candidate.position === 'RP') return slotId.startsWith('RP') ? 0 : 1;
+          if (slotId === candidate.position) return 0;
+          if (slotId === 'BACKUP_C') return 1;
+          if (slotId.startsWith('FLEX')) return 2;
+          return 3;
+        };
+        return preferred(left) - preferred(right)
+          || (canonicalIndex.get(left) ?? 0) - (canonicalIndex.get(right) ?? 0);
+      });
+    for (const slotId of preferredSlots) {
+      if (usedGroups.has(candidateGroup)) continue;
+      assigned.set(slotId, candidate.id);
+      usedGroups.add(candidateGroup);
+      if (matchCommitted(rest)) return true;
+      usedGroups.delete(candidateGroup);
+      assigned.delete(slotId);
+    }
+    return false;
+  };
+  committedMatched = committedMatched && (
+    committedCandidates.length === 0 || matchCommitted(remainingCommitted)
+  );
+  if (!committedMatched) {
+    return { slots: {}, brokenSlots: [...SNAKE_BOARD_SLOT_IDS], invalidRoster: false };
+  }
+
+  const remainingAssignmentOrder = assignmentOrder.filter((slotId) => !assigned.has(slotId));
+  const fullyFeasible = canMatchEverySlot(remainingAssignmentOrder, usedGroups);
+  for (const [index, slotId] of remainingAssignmentOrder.entries()) {
+    const remainingSlots = remainingAssignmentOrder.slice(index + 1);
     for (const playerId of rankedBySlot.get(slotId) ?? []) {
       const groupId = versionGroupByPlayerId.get(playerId);
       if (!groupId || usedGroups.has(groupId)) continue;
@@ -262,6 +347,7 @@ export function reorderSeatBoardRankings(input: {
   orderedIds: readonly string[];
   candidates: readonly DeskEligibilityCandidate[];
   unavailablePlayerIds?: ReadonlySet<string>;
+  committedPlayerIds?: ReadonlySet<string>;
 }): {
   board: SnakeSeatBoardRecord | null;
   changedSlotCount: number;
@@ -302,6 +388,7 @@ export function reorderSeatBoardRankings(input: {
     rankings,
     candidates: input.candidates,
     unavailablePlayerIds: input.unavailablePlayerIds,
+    committedPlayerIds: input.committedPlayerIds,
   });
   if (refit.brokenSlots.length > 0 || refit.invalidRoster) {
     return { board: null, changedSlotCount: 0, brokenSlots: refit.brokenSlots, invalidRoster: refit.invalidRoster };

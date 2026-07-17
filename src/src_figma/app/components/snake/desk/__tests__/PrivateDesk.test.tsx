@@ -207,17 +207,35 @@ describe('PrivateDesk', () => {
       tradeGuide={<div>POSTED PRICE GUIDE</div>}
     />);
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
     expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('LEGAL AND SOLVENT FIRST');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('FROZEN IV CANNOT FALL BELOW 90%');
     expect(screen.getByTestId('assistant-plan-truth-strip')).toHaveTextContent('$90');
     expect(screen.queryByRole('button', { name: /KEEP/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
+  });
+
+  it('collapses unavailable risk into one board state and keeps its explanation behind Help', () => {
+    const offline = { ...candidate, risk: 'SAFE_TO_WAIT' as const, riskUnavailable: true };
+    const common = {
+      candidates: [offline], rankings: { SS: ['muraski'] }, overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' }, brokenSlots: [], planBill: null, advisorLog: [],
+      taxCoreRows: [], slotDepth: { SS: 1 }, assistantBoard: idleAssistant,
+      onReorder: () => undefined,
+    };
+    const { rerender } = render(<PrivateDesk {...common} />);
+    expect(screen.getByTestId('board-risk-state')).toHaveTextContent('RISK OFFLINE');
+    expect(screen.getAllByText(/RISK OFFLINE/)).toHaveLength(1);
+    expect(screen.queryByText(/NEXT-PICK PLAYOUT/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).not.toHaveTextContent('RISK UNAVAILABLE');
+
+    rerender(<PrivateDesk {...common} showHelp />);
+    expect(screen.getByTestId('board-risk-state')).toHaveTextContent('NEXT-PICK PLAYOUT IS NOT READY');
   });
 
   it('renders only the frozen tabs, adds Activity only for consequential history, and opens a verified trade prefill', () => {

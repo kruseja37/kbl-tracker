@@ -226,6 +226,23 @@ function deterministicPinMatching(
   const playerById = new Map(requiredPlayers.map((player) => [player.playerId, player]));
   const occupantBySlot = new Map<number, string>();
 
+  // Committed roster truth owns the named closer job. If Optimize Around adds a
+  // higher-IV closer, that higher-value closer becomes CP and the already-owned
+  // lower closer remains pinned as legal bullpen depth.
+  const requiredClosers = requiredPlayers
+    .filter((player) => player.seating.shape.role === 'CP')
+    .sort((left, right) => right.frozenIv - left.frozenIv || left.playerId.localeCompare(right.playerId));
+  const cpSlotIndex = slots.findIndex((slot) => slot.kind === 'cp');
+  const primaryCloser = requiredClosers[0];
+  if (primaryCloser) {
+    if (cpSlotIndex < 0 || !(eligibleSlotIndices.get(primaryCloser.playerId) ?? []).includes(cpSlotIndex)) return null;
+    occupantBySlot.set(cpSlotIndex, primaryCloser.playerId);
+    for (const closer of requiredClosers.slice(1)) {
+      eligibleSlotIndices.set(closer.playerId, (eligibleSlotIndices.get(closer.playerId) ?? [])
+        .filter((slotIndex) => slotIndex !== cpSlotIndex));
+    }
+  }
+
   const augment = (playerId: string, seenSlots: Set<number>): boolean => {
     for (const slotIndex of eligibleSlotIndices.get(playerId) ?? []) {
       if (seenSlots.has(slotIndex)) continue;
@@ -239,7 +256,7 @@ function deterministicPinMatching(
     return false;
   };
 
-  for (const player of orderedPlayers) {
+  for (const player of orderedPlayers.filter((entry) => entry.playerId !== primaryCloser?.playerId)) {
     if (!playerById.has(player.playerId) || !augment(player.playerId, new Set())) return null;
   }
   return new Map([...occupantBySlot.entries()]
@@ -292,15 +309,17 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   const retiredIds = unavailableVersionPlayerIds(input.versionState);
   const ownIds = new Set(ownPicks.map((pick) => pick.playerId));
   const rivalIds = new Set(input.completedPicks.filter((pick) => pick.teamId !== input.teamId).map((pick) => pick.playerId));
+  const selectedPin = input.selectedPinPlayerId ?? null;
+  const ownsCloser = ownPicks.some((pick) => byId.get(pick.playerId)?.seating.shape.role === 'CP');
   const available = versionValidPool.filter((player) => !picksById.has(player.playerId)
     && !retiredIds.has(player.playerId)
-    && !draftedGroups.has(deriveVersionGroupId(identityOf(player))));
+    && !draftedGroups.has(deriveVersionGroupId(identityOf(player)))
+    && (!ownsCloser || player.seating.shape.role !== 'CP' || player.playerId === selectedPin));
   const universe = [...ownPicks.map((pick) => byId.get(pick.playerId)!), ...available];
 
   if (universe.some((player) => rivalIds.has(player.playerId))) {
     return unavailable('VERSION_CONFLICT');
   }
-  const selectedPin = input.selectedPinPlayerId ?? null;
   if (selectedPin && !universe.some((player) => player.playerId === selectedPin)) {
     return unavailable('PIN_UNAVAILABLE');
   }
