@@ -35,6 +35,12 @@ export function BoardView(props: {
         {SNAKE_BOARD_SLOT_IDS.map((slotId) => {
           const playerId = props.boardSlots[slotId];
           const candidate = playerId ? byId.get(playerId) : undefined;
+          const slotLabel = slotId === 'BACKUP_C'
+            && candidate
+            && candidate.position !== 'C'
+            && !candidate.eligiblePositions?.includes('C')
+            ? 'FLEX5'
+            : slotId;
           const state = props.brokenSlots.includes(slotId)
             ? 'PLAN BROKEN'
             : !playerId
@@ -52,13 +58,13 @@ export function BoardView(props: {
             {candidate
               ? <DeskCandidateRow
                   candidate={candidate}
-                  prefix={slotId}
+                  prefix={slotLabel}
                   selected={props.selectedCandidateId === playerId}
                   onSelect={props.onSelectCandidate}
                   warning={state}
                   teamColors={props.teamColors}
                 />
-              : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotId}</span>{state}</p>}
+              : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotLabel}</span>{state}</p>}
           </div>
         })}
       </div>

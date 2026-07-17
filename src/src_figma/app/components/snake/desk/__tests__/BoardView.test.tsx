@@ -74,6 +74,21 @@ describe('BoardView Batch 5 ledger', () => {
     expect(board.querySelector('details')).toBeNull();
   });
 
+  it('labels the fifth bench body FLEX5 when catcher depth is supplied from the staff', () => {
+    const bench = candidate('bench-five', 'BENCH FIVE');
+    render(<BoardView
+      candidates={[bench]}
+      boardSlots={{ BACKUP_C: bench.id }}
+      brokenSlots={[]}
+      planBill={null}
+      taxCoreRows={[]}
+      slotDepth={{}}
+    />);
+
+    expect(screen.getByTestId('board-slot-grid').querySelector('[data-board-slot="BACKUP_C"]'))
+      .toHaveTextContent('FLEX5');
+  });
+
   it('marks an owned drafted player as roster truth with team branding and no unavailable-plan panel', () => {
     const rosterPlayer = { ...candidate('owned', 'OWNED PLAYER', true), draftedByActiveTeam: true };
     render(<BoardView

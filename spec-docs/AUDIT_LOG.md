@@ -1501,3 +1501,14 @@ team membership, player assignments, rosters, registered pools, and draft sessio
 auditor returned **APPROVE — Major 0 / Minor 0** after rejecting three earlier preservation gaps.
 Focused 115/115, TypeScript, lint, production build, and diff integrity are green. JK's browser repair
 click remains the product gate; no merge, push, or deploy is authorized.
+## 2026-07-17 — Snake Two Way catcher board materialization (Contract 38)
+
+- Builder reproduced the production blocker red-first with a legal 14-hitter/8-pitcher certificate
+  whose second catcher coverer is a Two Way starter. Before repair, setup failed with broken `SP4`.
+- The narrow repair changes only board-slot materialization and display: roster-wide canonical
+  legality remains the final authority, and ordinary fifth-bench rows display as `FLEX5`.
+- Separate non-builder verdict: **APPROVE — Major 0 / Minor 0**. The auditor confirmed catcher
+  preference, unique player/version enforcement, fail-closed seed/reorder/backfill validation, and
+  shared My/Assistant rendering.
+- Independent gates: 13 files / 154 tests, TypeScript, changed-file ESLint, 2,730-module production
+  build/PWA, and diff integrity green. JK's browser retry remains the only acceptance gate.

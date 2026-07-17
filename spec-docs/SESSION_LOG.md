@@ -7684,3 +7684,17 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - **Pending:** JK reloads League Builder, clicks Import Legends, then Repair Legends Import. The
   expected result is three Legends source libraries, SML back to 506 source players, and the existing
   four-team league still selected and intact. No merge, push, deploy, or product acceptance occurred.
+## 2026-07-17 — FINDING-231: new-room Two Way catcher board blocker
+
+- Resumed JK's four-team Snake browser walk after Full Sources repeated the same
+  `broken slots SP4, SWING` error.
+- Proved the league's owned rosters were correctly empty; the failure was in the projected private
+  22-player board, not persisted roster ownership or pool sufficiency.
+- Added red-first adapter and desk regressions for a legal 14-hitter/8-pitcher roster whose catcher
+  depth comes from a Two Way starter.
+- Repaired the board matcher so that pitcher remains in the staff while the fifth ordinary bench row
+  is stored compatibly and displayed as `FLEX5` across My Board and Assistant GM Board.
+- Builder gates and separate audit are green: 154/154 affected tests, TypeScript, lint, production
+  build/PWA, diff integrity; auditor **APPROVE — Major 0 / Minor 0**.
+- Fresh `origin/main` at close: `ba7f97d6`. No merge, push, deploy, or product acceptance. JK reloads
+  the same Draft Setup and presses Start Draft again; no pool or league rebuild is required.

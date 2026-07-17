@@ -32205,3 +32205,48 @@ Stop rather than auto-deleting a custom assignment, resetting the four-team leag
 math, altering Supabase data, merging, pushing, deploying, or claiming product acceptance before
 JK's browser walk.
 <!-- ===== END CONTRACT: LEGENDS-DRAFT-TARGET-RECOVERY-37 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 ===== -->
+# SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 — MATERIALIZE EVERY LEGAL 14/8 CERTIFICATE
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair JK's repeated Full Sources blocker where the Sirloins have a valid legal-finish certificate
+but initial board materialization reports broken `SP4, SWING`. Preserve the certificate, canonical
+roster law, and empty-roster draft start; change only how the private 22-player plan is represented.
+
+## SOURCE OF TRUTH
+- A new Snake league begins with empty drafted rosters. The certificate is a hypothetical legal and
+  affordable finish, and the initial board is a private 22-player plan—not roster ownership.
+- Canonical legality permits 14 hitters / 8 pitchers when catcher depth comes from a Two Way (C)
+  pitcher. That pitcher must remain in a staff slot; the fifth bench-body row becomes ordinary flex.
+- The same board law applies to My Board and the read-only Assistant board.
+
+## ALLOWED FILES
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/BoardView.tsx`
+- `src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx`
+- focused desk/BoardView tests and required session documents
+
+## REQUIRED BEHAVIOR
+- A legal 14/8 certificate with one primary C and Two Way (C) staff coverage materializes 22 unique
+  players without moving the Two Way pitcher out of the staff.
+- `BACKUP_C` continues to prefer actual C-coverers. It may hold the fifth ordinary position player
+  only when whole-roster legality independently proves catcher depth elsewhere.
+- When an ordinary hitter occupies that stored seat, both My Board and Assistant display `FLEX5`,
+  not a false backup-catcher label.
+- Missing closer, illegal roster, duplicate person/version, affordability, and certificate failures
+  remain fail-closed. No roster, pool, tax, FIT, archetype, or draft-session math changes.
+
+## VERIFICATION
+- Red-first exact 14/8 Two Way (C) adapter regression plus desk matching and BoardView label proof.
+- Full desk/adapter tests, TypeScript, changed-file ESLint, production build, and diff integrity.
+- Separate non-builder audit before JK retries Start Draft. JK's browser remains the product gate.
+
+## STOP CONDITIONS
+Stop rather than weakening `isLegalRoster`, duplicating one player across two rows, relabeling a
+pitcher's role, changing the certificate, resetting the league, merging, pushing, deploying, or
+claiming product acceptance before JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 ===== -->

@@ -214,7 +214,7 @@ describe('private desk model', () => {
     expect(board).toEqual(prior);
   });
 
-  it('protects a scarce C/1B dual from the 1B slot when only that player can finish BACKUP_C', () => {
+  it('keeps scarce catcher depth on the roster when the higher-value C/1B dual starts at 1B', () => {
     const pureC = candidate('pure-c', 'C', 3_000);
     const dual = candidate('dual-corner', '1B', 2_000, ['1B', 'C']);
     const pureFirst = candidate('pure-first', '1B', 1_000);
@@ -239,8 +239,9 @@ describe('private desk model', () => {
 
     expect(refit.brokenSlots).toEqual([]);
     expect(refit.slots.C).toBe(pureC.id);
-    expect(refit.slots['1B']).toBe(pureFirst.id);
-    expect(refit.slots.BACKUP_C).toBe(dual.id);
+    expect(refit.slots['1B']).toBe(dual.id);
+    expect(refit.slots.BACKUP_C).toBe(pureFirst.id);
+    expect(Object.values(refit.slots)).toContain(dual.id);
   });
 
   it('lets SWING hold the canonical 22nd bench bat or reliever without requiring an SP/RP card', () => {
@@ -311,6 +312,34 @@ describe('private desk model', () => {
     expect(fourteenEight.invalidRoster).toBe(false);
     expect(fourteenEight.slots.SWING).toBe('FIFTH-BENCH-BAT');
     expect(fit(fourteenEightPool)).toEqual(fourteenEight);
+  });
+
+  it('keeps all eight staff seats when a Two Way starter supplies catcher depth for a 14/8 roster', () => {
+    const pool = canonicalControlPool('14/8').map((row) => {
+      if (row.id === 'CONTROL-C-2') {
+        return candidate(row.id, '1B', row.advisorWorth);
+      }
+      if (row.id === 'CONTROL-SP-1') {
+        return {
+          ...candidate(row.id, 'SP', row.advisorWorth, ['SP', 'C']),
+          rosterShape: { isPitcher: true, position: 'SP', role: 'SP', twoWayVariant: 'C' as const },
+        };
+      }
+      return row;
+    });
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings: {
+        global: pool.map((row) => row.id),
+        byPosition: seedPositionalRankings(pool),
+        frozenPlayerIds: [],
+      },
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.invalidRoster).toBe(false);
+    expect(refit.slots.SP1).toBe('CONTROL-SP-1');
+    expect(pool.find((row) => row.id === refit.slots.BACKUP_C)?.construction.isPitcher).toBe(false);
   });
 
   it('treats sibling cards as alternatives and finds a complete unique-person refit', () => {

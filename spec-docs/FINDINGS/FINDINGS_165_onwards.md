@@ -571,3 +571,23 @@ pool, and all four draft-session stores.
 data-preservation findings were repaired. Focused 115/115, TypeScript, changed-file ESLint, the
 2,730-module production build/PWA, and diff integrity passed. JK's real IndexedDB browser repair is
 the remaining product gate; no merge, push, or deploy is authorized.
+
+### FINDING-231
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / initial private-board materialization | **Status:** FIXED — INDEPENDENTLY APPROVED
+**Files:** `src/src_figma/app/components/snake/desk/deskModel.ts`, `src/src_figma/app/components/snake/desk/BoardView.tsx`, `src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx`
+**Evidence:** A new four-team room had an empty owned roster and a legal 14-hitter/8-pitcher setup
+certificate whose second catcher coverer was a Two Way starting pitcher. The fixed 22-row board
+matcher forced that pitcher into `BACKUP_C`, leaving only seven players for the eight staff rows and
+falsely reporting `SP4` (and, in JK's browser state, `SWING`) as broken. Full Sources produced the
+same result, excluding pool scarcity as the cause.
+**Impact:** JK could not start the Snake draft from an otherwise legal new-league setup. Rebuilding
+the league or expanding the pool could not repair the representation mismatch.
+**Action:** Keep the unchanged roster-wide two-catcher law authoritative. Let the stored fifth bench
+row accept an ordinary position player only when the final canonical 22-player validator proves the
+roster still has two distinct catcher coverers elsewhere. Keep Two Way pitchers in staff rows and
+render that ordinary bench row as `FLEX5` on both My Board and Assistant GM Board. Catcher-ranked
+candidates remain preferred; unique player and version-group laws remain unchanged.
+**Verification:** Separate non-builder audit returned **APPROVE — Major 0 / Minor 0**. It independently
+passed 13 affected files / 154 tests, TypeScript, changed-file ESLint, the 2,730-module production
+build/PWA, and diff integrity. Exact adapter and desk regressions prove a unique legal 22 with the
+Two Way catcher retained in the staff. JK's browser retry is the remaining product gate.

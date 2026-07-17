@@ -231,6 +231,39 @@ describe('SnakeDraftSetupAdapter', () => {
     expect(plannedIds).toContain(starter.id);
   });
 
+  test('materializes a legal 14-hitter, 8-pitcher certificate whose catcher depth comes from a Two Way starter', () => {
+    const base = makeLegalRosterPlayers(10_000);
+    const starter = base.find((player) => player.primaryPosition === 'SP')!;
+    const players = rosterLocalTaxFixture([
+      ...base
+        .filter((player) => player.id !== 'legal-swing')
+        .map((player) => {
+          if (player.id === 'legal-backup-c') return { ...player, secondaryPosition: undefined };
+          if (player.id === starter.id) return { ...player, trait1: 'Two Way (C)' };
+          return player;
+        }),
+      makePlayer(999, { id: 'fifth-bench-hitter', primaryPosition: 'CF', secondaryPosition: 'RF' }),
+    ]);
+    const locked = pool(players, 1_000);
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const certificate = {
+      feasible: true,
+      assignments: [{
+        teamId: team.id,
+        playerIds: players.map((player) => player.id),
+        salaryCost: players.length * 1_000,
+        addedTax: 0,
+        allInCost: players.length * 1_000,
+      }],
+      shortfall: null,
+      message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+    } satisfies SnakeSeatingProof;
+
+    const boards = buildInitialSnakeSeatBoards({ teams: [team], players, pool: locked, certificate });
+    expect(Object.values(boards[team.id].slots)).toHaveLength(22);
+    expect(new Set(Object.values(boards[team.id].slots))).toHaveLength(22);
+  });
+
   test('passes each chosen archetype cap identity into the simultaneous proof', () => {
     const players = [
       ...makeLegalRosterPlayerSet('first', 10_000),

@@ -113,7 +113,12 @@ function eligibleForSlot(
   // player whose primary position matches. Secondary eligibility is depth,
   // never permission to build an invalid 22-player board.
   if (PRIMARY_FIELD_SLOTS.has(slotId)) return candidate.position === slotId;
-  if (slotId === 'BACKUP_C') return eligible.includes('C');
+  // BACKUP_C is the fifth bench-body seat in a 14/8 roster. Normally the
+  // second catcher occupies it. When catcher depth comes from a Two Way (C)
+  // pitcher in a staff slot, this seat must remain available to the fifth
+  // position player; whole-roster legality below still proves two C coverers.
+  if (slotId === 'BACKUP_C') return eligible.includes('C') || !(candidate.rosterShape?.isPitcher
+    ?? ['SP', 'SP/RP', 'RP', 'CP'].includes(candidate.position));
   if (slotId.startsWith('SP')) return eligible.includes('SP') || eligible.includes('SP/RP');
   if (slotId.startsWith('RP')) return eligible.includes('RP') || eligible.includes('SP/RP') || committedCloser;
   if (slotId === 'SWING') {
