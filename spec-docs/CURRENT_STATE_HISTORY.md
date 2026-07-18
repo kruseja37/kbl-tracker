@@ -1463,6 +1463,14 @@ not yet bound to the account captured for recovery. The new live header records 
 account-pinned drain repair, 133/133 focused proof, and the same-auditor re-audit as the next gate.
 JK's one-click retry remains held; no push, merge, or deploy was authorized.
 
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content audit close
+
+The prior live header recorded the first-audit account-binding repair with 133/133 focused proof
+and same-auditor re-audit pending. Frozen `a04e9534` received APPROVE with Major 0 / Minor 0 after
+independent tests, TypeScript, lint, production/PWA build, diff integrity, and exact account-switch
+challenge. The new live header leaves only the exact preview restart and JK's one-click browser
+retry. No push, merge, or deploy was authorized.
+
 ## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
 
 The prior live header recorded independent approval of the exact 2,001-card eight-team setup and

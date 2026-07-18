@@ -8064,3 +8064,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   fresh 2,735-module production/PWA build, and diff integrity are green.
 - Repair freeze and same-auditor re-audit remain. JK must not click Upload/Download; his one-click
   retry remains the product gate. No push, merge, or deploy.
+
+## 2026-07-18 — FINDING-242 final audit close
+
+- Frozen repair `a04e9534` received separate **APPROVE — Major 0 / Minor 0**.
+- Independent gates: focused 133/133; TypeScript; changed-file ESLint; 2,735-module production/PWA
+  build with 223 precache entries; account-switch boundary challenge; parent/cumulative diff checks;
+  exact clean worktree.
+- Engineering gate is closed. Restart exact port 5188, then JK hard-refreshes and presses only
+  `FREE SPACE + SYNC` once. Upload/Download remain off-limits. No push, merge, or deploy.

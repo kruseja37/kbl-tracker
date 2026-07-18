@@ -1786,3 +1786,15 @@ for existing drains, pins one account through both recovery drain paths, validat
 queue state, and checkpoints the protected queue before the first attempt. Direct regression plus
 all focused sync/UI proof is 133/133; TypeScript, changed-file ESLint, the 2,735-module production/PWA
 build, and diff integrity are green. Same-auditor re-audit remains; no JK click, push, merge, or deploy.
+
+### 2026-07-18 — FINDING-242 final independent approval
+
+Frozen repair `a04e9534` received **APPROVE — Major 0 / Minor 0**. The same non-builder auditor
+confirmed recovery blocks ordinary drains before waiting/capturing its owner, checkpoints the
+protected queue, and validates that captured account in both store and localStorage drains before
+moving queue state or writing cloud. The direct capture-to-first-drain switch test proves pending
+remains one, the durable queue retains the operation, and cloud remains empty. Exact equality,
+tombstones, source/concurrent drift, rollback, pagination, wire normalization, and Upload/Download
+separation remain fail-closed. Independent gates passed 133/133, TypeScript, changed-file ESLint,
+2,735-module production/PWA build with 223 precache entries, parent/cumulative diff checks, and a
+clean worktree. JK's live one-click retry remains; no push, merge, or deploy.

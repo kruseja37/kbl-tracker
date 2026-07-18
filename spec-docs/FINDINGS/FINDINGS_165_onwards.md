@@ -1035,3 +1035,13 @@ regression proves no cloud row is written and the queued operation stays durable
 proof is now 133/133; TypeScript, changed-file ESLint, the fresh 2,735-module production/PWA build,
 and diff integrity are green. Frozen repair commit, same-auditor re-audit, and JK's live retry remain.
 No push, merge, or deploy.
+
+**Final audit:** Frozen repair `a04e9534` is **APPROVE — Major 0 / Minor 0**. The same auditor
+confirmed the drain block begins before prior-drain wait and owner capture, the protected queue is
+checkpointed, both drain paths reject sign-out/account change before in-flight assignment or queue
+clear, and the regression genuinely flips auth between capture and first drain. Exact
+reconciliation, tombstones, source drift, concurrent replacement, checkpoint rollback, pagination,
+wire normalization, and the non-destructive UI boundary remain sound. Independent gates passed
+133/133, TypeScript, changed-file ESLint, the 2,735-module production/PWA build with 223 precache
+entries, parent/cumulative diff checks, and clean exact worktree. Only JK's live click remains. No
+push, merge, or deploy.
