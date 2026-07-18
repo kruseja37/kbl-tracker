@@ -1001,3 +1001,23 @@ preservation, receipt-before-prune ordering, mandatory account binding, and no U
 route. Independent gates passed 128/128 focused tests, TypeScript, changed-file ESLint, the
 2,735-module production/PWA build, and diff integrity. Only JK's live retry remains. No push,
 merge, or deploy.
+
+### FINDING-242
+**Date:** 2026-07-18 | **Phase:** Cloud sync / stale restored-queue reconciliation | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/utils/syncEngine.ts`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`
+**Evidence:** JK's live continuation kept 806 operations pending and reported five stale store writes
+plus one stale localStorage write. Those numbers were only the final processed batches: every
+remaining operation lacked a current accepted cloud base, so the unchanged atomic RPC correctly
+rejected it even when its desired state might already exist in cloud.
+**Impact:** Repeated recovery could never finish a queue made mostly of already-satisfied writes, but
+discarding by timestamp or blindly rebasing would risk overwriting genuine local/cloud differences.
+**Action:** After bounded no-progress passes, fetch current cloud rows and current local source truth.
+Retire an operation only when its queue payload, current local record/value, and cloud row have the
+same target, normalized content, and deletion state. Persist the smaller queue before reporting
+progress. Any difference, missing/unreadable source, concurrent replacement, account switch, or
+checkpoint failure leaves the operation protected. Never invoke Upload/Download or relax atomic
+stale-write protection.
+**Builder result:** Exact localStorage duplicate, mixed exact/different store rows, and local-source
+drift and account-switch regressions pass with all previous sync/UI cases: 132/132. TypeScript, changed-file ESLint,
+the fresh production/PWA build, and diff integrity are green. Frozen commit, separate audit, and
+JK's live retry remain. No push, merge, or deploy.

@@ -32689,3 +32689,31 @@ derived bases too early, looping on conflicts, or choosing a whole-side winner.
 cloud-unchanged with recovery visible; reloaded large base-less queue is eligible; prior no-loss,
 account-binding, cursor-before-prune, ordinary sync, and destructive-path regressions; TypeScript;
 lint; production/PWA build; separate audit; JK's browser retry. No push, merge, or deploy.
+
+## SNAKE-SYNC-EXACT-RECONCILIATION-49
+
+**Goal:** Finish a restored queue whose operations are stale only because their cloud write bases
+were lost, without discarding or overwriting any genuine device/cloud difference.
+
+**Frozen law:**
+
+- A queue operation may retire as already satisfied only when the queued state, current local source
+  state, and current cloud state match exactly in target, normalized payload, and deletion state.
+- Current local source means the actual IndexedDB record or synced localStorage product key, not only
+  the persisted queue copy. An unreadable/missing source that disagrees with the queued tombstone,
+  concurrent replacement, or later local mutation is protected.
+- Cloud timestamps alone never authorize retirement. Different content, different tombstone state,
+  or a missing cloud row remains queued behind the unchanged atomic stale-write guard.
+- The smaller queue must be durably checkpointed before recovery reports progress. A checkpoint
+  failure restores retired in-memory entries and fails closed.
+- One expected account owns the complete recovery. Sign-out or account change before reconciliation,
+  pull, or cursor save fails closed.
+- Recovery may fetch current rows and current local fingerprints once after bounded no-progress
+  passes. It never invokes full Upload/Download, rebases a conflict, changes Supabase schema/RLS, or
+  changes product data outside the ordinary receipt pull after pending reaches zero.
+
+**Required proof:** exact localStorage and IndexedDB duplicates retire; mixed exact/different rows
+shrink only the exact subset; current-local drift preserves the queue and cloud; prior quota,
+stale-write, account, cursor, ordinary sync, and destructive-path regressions; TypeScript;
+changed-file lint; production/PWA build; separate non-builder audit; JK's live click remains the
+product gate. No push, merge, or deploy.

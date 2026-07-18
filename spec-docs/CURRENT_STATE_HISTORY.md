@@ -1447,6 +1447,14 @@ receipt cursor could prune it. The new live header records typed recovery contin
 progress retries, queue durability, conflict preservation, and receipt-before-final-base persistence.
 No push, merge, or deploy was authorized.
 
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content sync reconciliation
+
+The prior live header recorded independent approval of bounded partial quota continuation. JK's live
+retry kept all 806 remaining operations safe but every restored write lacked a current cloud receipt,
+so the atomic stale guard returned the last store/local batch counts instead of making progress. The
+new live header records exact queue/current-local/current-cloud duplicate retirement and preservation
+of every actual difference as the narrow next recovery. No push, merge, or deploy was authorized.
+
 ## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
 
 The prior live header recorded independent approval of the exact 2,001-card eight-team setup and

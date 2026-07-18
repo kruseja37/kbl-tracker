@@ -508,6 +508,7 @@ export interface SyncStatus {
   pendingCount: number;
   error: string | null;
   quotaRecoveryAvailable: boolean;
+  protectedConflictCount: number;
 }
 
 export interface SyncStoreDiagnostic {
@@ -594,6 +595,7 @@ class SyncEngine {
   private queuePersistenceError: string | null = null;
   private writeBasePersistenceError: string | null = null;
   private quotaRecoveryContinuationRequired = false;
+  private protectedConflictSummaries: string[] = [];
   private drainTimer: ReturnType<typeof setInterval> | null = null;
   private pullTimer: ReturnType<typeof setInterval> | null = null;
   private initialized = false;
@@ -1268,6 +1270,10 @@ class SyncEngine {
       await this.flush({ throwOnPending: true });
       return;
     }
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session: recoverySession } } = await supabase.auth.getSession();
+    if (!recoverySession) throw new Error('Sync recovery failed: signed out during sync');
+    const recoveryUserId = recoverySession.user.id;
 
     const releasePersistedBases = () => {
       const previousWriteBaseError = this.writeBasePersistenceError;
@@ -1285,6 +1291,7 @@ class SyncEngine {
 
     releasePersistedBases();
     this.quotaRecoveryContinuationRequired = true;
+    this.protectedConflictSummaries = [];
 
     // A large restored queue can be concurrently draining when recovery
     // begins, or a transient batch can fail while later batches succeed. Keep
@@ -1307,12 +1314,25 @@ class SyncEngine {
     }
 
     if (pendingCount > 0) {
-      this.emitStatusChange();
-      throw new Error(
-        this._error
-          ? `Sync recovery paused safely with ${pendingCount} pending operation(s): ${this._error}`
-          : `Sync recovery incomplete with ${pendingCount} pending operation(s)`,
-      );
+      this.queueDrainsBlocked = true;
+      let reconciliation: Awaited<ReturnType<SyncEngine['retireQueuedOpsAlreadyInCloud']>>;
+      try {
+        await this.waitForQueueDrains();
+        reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
+      } finally {
+        this.queueDrainsBlocked = false;
+      }
+      pendingCount = this.getPendingOperationCount();
+      this.protectedConflictSummaries = reconciliation.protectedConflicts;
+
+      if (pendingCount > 0) {
+        const detail = reconciliation.protectedConflicts.length > 0
+          ? `${reconciliation.protectedConflicts.length} operation(s) are not exact matches across this device and cloud and remain protected`
+          : this._error ?? 'no exact cloud matches were found';
+        this._error = `Sync recovery paused safely with ${pendingCount} pending operation(s): ${detail}`;
+        this.emitStatusChange();
+        throw new Error(this._error);
+      }
     }
 
     // Do not force the full rebuilt base cache back into localStorage before
@@ -1320,10 +1340,12 @@ class SyncEngine {
     // is already durably empty; pull now rebuilds, cursor-saves, prunes, and
     // persists only the still-required bases.
     releasePersistedBases();
-    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Sync recovery failed: signed out during sync');
-    await this.pullForUser(session.user.id, { emitComplete: false });
+    if (session.user.id !== recoveryUserId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+    await this.pullForUser(recoveryUserId, { emitComplete: false });
 
     const queuePersisted = this.persistQueues();
     const basesPersisted = this.persistWriteBaseOverrides();
@@ -1334,6 +1356,7 @@ class SyncEngine {
       );
     }
     this.quotaRecoveryContinuationRequired = false;
+    this.protectedConflictSummaries = [];
     this._error = null;
     this.emitEvent('sync-complete');
   }
@@ -1353,6 +1376,7 @@ class SyncEngine {
       pendingCount: this.getPendingOperationCount(),
       error: this._error,
       quotaRecoveryAvailable: this.isQuotaRecoveryAvailable(),
+      protectedConflictCount: this.protectedConflictSummaries.length,
     };
   }
 
@@ -1805,6 +1829,141 @@ class SyncEngine {
       const cloudChangedAt = cloudChangedAtByKey.get(op.key);
       return cloudChangedAt === undefined || cloudChangedAt <= op.changedAt;
     });
+  }
+
+  /**
+   * Safely retire restored writes whose exact target state is already present
+   * in cloud. This is not conflict resolution: any content or tombstone
+   * difference remains queued and protected by the normal stale-write guard.
+   */
+  private async retireQueuedOpsAlreadyInCloud(userId: string): Promise<{
+    retiredCount: number;
+    protectedConflicts: string[];
+  }> {
+    const storeSnapshot = new Map(this.pushQueue);
+    const localSnapshot = new Map(this.localQueue);
+    if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
+      return { retiredCount: 0, protectedConflicts: [] };
+    }
+
+    const [storeRows, localRows] = await Promise.all([
+      storeSnapshot.size > 0 ? this.fetchStoreWriteBaseRows(userId) : Promise.resolve([]),
+      localSnapshot.size > 0 ? this.fetchLocalStorageWriteBaseRows(userId) : Promise.resolve([]),
+    ]);
+    const storeCloudByIdentity = new Map(
+      storeRows.map((row) => [
+        this.storeIdentityKey(row.db_name, row.store_name, row.record_key),
+        row,
+      ]),
+    );
+    const localCloudByKey = new Map(localRows.map((row) => [row.key, row]));
+    const localStoreFingerprintsByScope = new Map<string, Map<string, string> | null>();
+    const storeScopes = new Map<string, { dbName: string; storeName: string }>();
+    for (const op of storeSnapshot.values()) {
+      storeScopes.set(this.storeCountKey(op.dbName, op.storeName), {
+        dbName: op.dbName,
+        storeName: op.storeName,
+      });
+    }
+    await Promise.all(Array.from(storeScopes.entries()).map(async ([scope, { dbName, storeName }]) => {
+      const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+      localStoreFingerprintsByScope.set(
+        scope,
+        keyPath ? await this.getLocalStoreFingerprints(dbName, storeName, keyPath) : null,
+      );
+    }));
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sync recovery failed: signed out during sync');
+    if (session.user.id !== userId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+    const retiredStoreEntries: Array<[string, PendingOp, boolean]> = [];
+    const retiredLocalEntries: Array<[string, PendingLocalOp, boolean]> = [];
+    const protectedConflicts: string[] = [];
+
+    for (const [queueKey, op] of storeSnapshot) {
+      // A newer local mutation replaced this snapshot while cloud rows were
+      // loading. It is not eligible for duplicate retirement.
+      const identity = this.storeIdentityKey(op.dbName, op.storeName, op.recordKey);
+      if (this.pushQueue.get(queueKey) !== op) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      const cloudRow = storeCloudByIdentity.get(identity);
+      const localFingerprints = localStoreFingerprintsByScope.get(
+        this.storeCountKey(op.dbName, op.storeName),
+      );
+      const localMatchesQueued = localFingerprints !== null && localFingerprints !== undefined && (
+        op.deleted
+          ? !localFingerprints.has(identity)
+          : localFingerprints.get(identity) === this.fingerprintValue(op.data)
+      );
+      if (
+        localMatchesQueued
+        && cloudRow
+        && this.fingerprintStoreWriteState(cloudRow.data, cloudRow.deleted)
+          === this.fingerprintStoreWriteState(op.data, op.deleted)
+      ) {
+        retiredStoreEntries.push([queueKey, op, this.restoredPushQueueKeys.has(queueKey)]);
+        this.pushQueue.delete(queueKey);
+        this.restoredPushQueueKeys.delete(queueKey);
+      } else {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+      }
+    }
+
+    for (const [key, op] of localSnapshot) {
+      if (this.localQueue.get(key) !== op) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const cloudRow = localCloudByKey.get(key);
+      const currentLocalValue = localStorage.getItem(key);
+      const localMatchesQueued = op.deleted
+        ? currentLocalValue === null
+        : currentLocalValue !== null
+          && this.fingerprintLocalWriteState(currentLocalValue, false)
+            === this.fingerprintLocalWriteState(op.data, false);
+      if (
+        localMatchesQueued
+        && cloudRow
+        && this.fingerprintLocalWriteState(cloudRow.data, cloudRow.deleted)
+          === this.fingerprintLocalWriteState(op.data, op.deleted)
+      ) {
+        retiredLocalEntries.push([key, op, this.restoredLocalQueueKeys.has(key)]);
+        this.localQueue.delete(key);
+        this.restoredLocalQueueKeys.delete(key);
+      } else {
+        protectedConflicts.push(`localStorage[${key}]`);
+      }
+    }
+
+    const retiredCount = retiredStoreEntries.length + retiredLocalEntries.length;
+    if (retiredCount === 0) {
+      return { retiredCount, protectedConflicts };
+    }
+
+    if (!this.persistQueues()) {
+      // The durable shrink did not complete. Restore every retired in-memory
+      // operation and make a best-effort durability retry; never report it as
+      // reconciled when the queue checkpoint is uncertain.
+      for (const [queueKey, op, wasRestored] of retiredStoreEntries) {
+        if (!this.pushQueue.has(queueKey)) this.pushQueue.set(queueKey, op);
+        if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      }
+      for (const [key, op, wasRestored] of retiredLocalEntries) {
+        if (!this.localQueue.has(key)) this.localQueue.set(key, op);
+        if (wasRestored) this.restoredLocalQueueKeys.add(key);
+      }
+      this.persistQueues();
+      throw new Error(
+        this.queuePersistenceError
+          ?? 'Sync recovery could not save the exact-match reconciliation checkpoint.',
+      );
+    }
+
+    return { retiredCount, protectedConflicts };
   }
 
   private async waitForQueueDrains(): Promise<void> {

@@ -1039,11 +1039,8 @@ async function deleteCompletedGameRecord(gameId: string): Promise<void> {
 }
 
 async function putAtBatEventRecord(record: Record<string, unknown> & { eventId: string }): Promise<void> {
-  const db = await new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open("kbl-event-log");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  const { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } = await import("../backupRestore");
+  const db = await openDatabaseWithSchema("kbl-event-log", STATIC_DATABASE_SCHEMAS["kbl-event-log"]);
   const tx = db.transaction("atBatEvents", "readwrite");
   tx.objectStore("atBatEvents").put(record);
   await transactionToPromise(tx);
@@ -3764,12 +3761,241 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
       pendingCount: 1,
       quotaRecoveryAvailable: true,
-      error: expect.stringContaining("cloud has newer rows"),
+      protectedConflictCount: 1,
+      error: expect.stringContaining("not exact matches across this device and cloud"),
     }));
     expect(localStorage.getItem("kbl-sync-local-queue")).toContain("kbl-app-state");
     expect(mockState.localRows[0]).toEqual(expect.objectContaining({
       data: { selectedLeague: "cloud-newer" },
     }));
+  });
+
+  test("quota recovery retires an exact localStorage state already present in newer cloud", async () => {
+    mockState.localRows.push({
+      user_id: "user-1",
+      key: "kbl-app-state",
+      data: JSON.stringify({ selectedLeague: "same-league" }),
+      changed_at: Date.now() + 10_000,
+      received_at: "2026-07-18T18:05:00.000Z",
+      deleted: false,
+    });
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-local-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    localStorage.setItem("kbl-app-state", JSON.stringify({ selectedLeague: "same-league" }));
+    syncEngine.upsertLocal("kbl-app-state", { selectedLeague: "same-league" });
+    expect(syncEngine.getStatus().quotaRecoveryAvailable).toBe(true);
+
+    await syncEngine.recoverQuotaBlockedQueue();
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 0,
+      protectedConflictCount: 0,
+      quotaRecoveryAvailable: false,
+      error: null,
+    }));
+    expect(localStorage.getItem("kbl-sync-local-queue")).toBeNull();
+    expect(mockState.localRows).toHaveLength(1);
+    expect(mockState.localRows[0]).toEqual(expect.objectContaining({
+      data: JSON.stringify({ selectedLeague: "same-league" }),
+      changed_at: expect.any(Number),
+    }));
+  });
+
+  test("quota recovery retires exact store rows but preserves different cloud rows", async () => {
+    const now = Date.now();
+    mockState.cloudRows.push(
+      {
+        id: "cloud-exact-restored-event",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("exact-restored-event"),
+        data: { eventId: "exact-restored-event", result: "DOUBLE" },
+        changed_at: now + 10_000,
+        received_at: "2026-07-18T18:10:00.000Z",
+        deleted: false,
+      },
+      {
+        id: "cloud-different-restored-event",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("different-restored-event"),
+        data: { eventId: "different-restored-event", result: "HOME_RUN" },
+        changed_at: now + 10_001,
+        received_at: "2026-07-18T18:10:01.000Z",
+        deleted: false,
+      },
+    );
+    const syncEngine = await loadFreshSyncEngine();
+    await putAtBatEventRecord({
+      eventId: "exact-restored-event",
+      result: "DOUBLE",
+    });
+    await putAtBatEventRecord({
+      eventId: "different-restored-event",
+      result: "SINGLE",
+    });
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectedQueueSaves = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectedQueueSaves < 2) {
+        rejectedQueueSaves += 1;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "exact-restored-event", {
+      eventId: "exact-restored-event",
+      result: "DOUBLE",
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "different-restored-event", {
+      eventId: "different-restored-event",
+      result: "SINGLE",
+    });
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "1 operation(s) are not exact matches across this device and cloud and remain protected",
+    );
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 1,
+      protectedConflictCount: 1,
+      quotaRecoveryAvailable: true,
+    }));
+    const durableQueue = localStorage.getItem("kbl-sync-queue");
+    expect(durableQueue).not.toContain("exact-restored-event");
+    expect(durableQueue).toContain("different-restored-event");
+    expect(mockState.cloudRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        record_key: JSON.stringify("exact-restored-event"),
+        data: { eventId: "exact-restored-event", result: "DOUBLE" },
+      }),
+      expect.objectContaining({
+        record_key: JSON.stringify("different-restored-event"),
+        data: { eventId: "different-restored-event", result: "HOME_RUN" },
+      }),
+    ]));
+  });
+
+  test("quota recovery preserves a cloud-matching queue entry when its current local source changed", async () => {
+    const cloudData = { eventId: "source-drift-event", result: "DOUBLE" };
+    mockState.cloudRows.push({
+      id: "cloud-source-drift-event",
+      user_id: "user-1",
+      db_name: "kbl-event-log",
+      store_name: "atBatEvents",
+      record_key: JSON.stringify("source-drift-event"),
+      data: cloudData,
+      changed_at: Date.now() + 10_000,
+      received_at: "2026-07-18T18:15:00.000Z",
+      deleted: false,
+    });
+    await putAtBatEventRecord(cloudData);
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "source-drift-event", cloudData);
+    await putAtBatEventRecord({ eventId: "source-drift-event", result: "TRIPLE" });
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "not exact matches across this device and cloud",
+    );
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 1,
+      protectedConflictCount: 1,
+    }));
+    expect(mockState.cloudRows[0]).toEqual(expect.objectContaining({ data: cloudData }));
+    const localFingerprints = await new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
+      const request = indexedDB.open("kbl-event-log");
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("atBatEvents", "readonly");
+        const getAll = tx.objectStore("atBatEvents").getAll();
+        getAll.onsuccess = () => {
+          db.close();
+          resolve(getAll.result as Array<Record<string, unknown>>);
+        };
+        getAll.onerror = () => reject(getAll.error);
+      };
+      request.onerror = () => reject(request.error);
+    });
+    expect(localFingerprints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: "source-drift-event", result: "TRIPLE" }),
+    ]));
+  });
+
+  test("exact reconciliation keeps its queue when the signed-in account changes", async () => {
+    const exactData = { eventId: "account-switch-recovery", result: "DOUBLE" };
+    mockState.cloudRows.push({
+      id: "cloud-account-switch-recovery",
+      user_id: "user-1",
+      db_name: "kbl-event-log",
+      store_name: "atBatEvents",
+      record_key: JSON.stringify("account-switch-recovery"),
+      data: exactData,
+      changed_at: Date.now() + 10_000,
+      received_at: "2026-07-18T18:20:00.000Z",
+      deleted: false,
+    });
+    await putAtBatEventRecord(exactData);
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "account-switch-recovery", exactData);
+    mockState.afterSelect = (table) => {
+      if (table === "kbl_stores") mockState.sessionUserId = "user-2";
+    };
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "signed-in account changed during sync",
+    );
+
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(localStorage.getItem("kbl-sync-queue")).toContain("account-switch-recovery");
+    expect(mockState.cloudRows[0]).toEqual(expect.objectContaining({ data: exactData }));
   });
 
   test("a reloaded large restored queue without bases still exposes safe recovery", async () => {

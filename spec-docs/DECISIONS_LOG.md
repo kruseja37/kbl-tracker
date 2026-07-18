@@ -4223,3 +4223,13 @@ still enter exactly one settled pitching group. The draft UI must call the same 
 ledger that `luxuryTax` consumes. A parallel approximation, capped USED display, or separate
 Assistant formula is prohibited. The panel is a compact drill-in; methodology copy remains behind
 Help. No source, FIT, cap, archetype, tax coefficient, roster, salary/IV, or persistence law changes.
+
+## 2026-07-18 — Restored sync writes may retire only on queue/local/cloud exact equality
+
+Loss of a rebuildable cloud receipt does not make a pending write authoritative and does not make it
+disposable. After bounded atomic retries stop, recovery may classify an operation as already
+satisfied only when the queued payload, current local IndexedDB/localStorage source, and current
+cloud row agree exactly on target, normalized content, and deletion state. Timestamp comparison is
+insufficient. Any difference, unreadable source, concurrent mutation, account switch, or durability
+failure preserves the write behind the existing stale guard. Full Upload/Download remains an
+explicit destructive choice and is not part of this recovery.

@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
     pendingCount: 0,
     error: null,
     quotaRecoveryAvailable: false,
+    protectedConflictCount: 0,
     pull: vi.fn(),
     replaceCloudWithLocal: vi.fn(),
     replaceLocalWithCloud: vi.fn(),

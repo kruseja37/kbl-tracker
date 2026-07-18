@@ -8033,3 +8033,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   ESLint, production build, and diff checks. Engineering verification is closed; JK's real
   eight-team browser walk remains the sole product-acceptance gate. No push, merge, deploy, or
   product acceptance.
+
+## 2026-07-18 — FINDING-242 exact-content restored-queue recovery build
+
+- Fetched current `origin/main` at `ba7f97d68fd8`; active work remains isolated on
+  `codex/draft-setup-browser-fixes` in `/private/tmp/kbl-snake-browser-feedback`.
+- Interpreted JK's live `806 pending` screenshot: five store and one local stale writes were final
+  batch counts, while every restored operation still lacked a current accepted base.
+- Added exact reconciliation only after bounded no-progress passes. Queue, current local source, and
+  cloud must all match target/content/tombstone before an already-satisfied write retires.
+- Current-local drift, genuine cloud differences, missing/unreadable source, concurrent mutation,
+  account change, and checkpoint failure remain fail-closed. Upload/Download and Supabase schema are
+  untouched.
+- Added exact localStorage, mixed store, and local-source drift regressions. Focused sync/UI proof is
+  132/132, including account-switch preservation; TypeScript, changed-file ESLint, the fresh production/PWA build, and diff integrity are
+  green. Freeze/separate audit/preview retry remain.
+- No push, merge, deploy, destructive recovery, or product acceptance.
