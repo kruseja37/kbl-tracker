@@ -507,6 +507,7 @@ export interface SyncStatus {
   lastPullAt: number;
   pendingCount: number;
   error: string | null;
+  quotaRecoveryAvailable: boolean;
 }
 
 export interface SyncStoreDiagnostic {
@@ -575,6 +576,7 @@ const PULL_PAGE_SIZE = 500;
 const PUSH_BATCH_SIZE = 100;
 const UPLOAD_BATCH_SIZE = 200;
 const CLOUD_PAGE_SIZE = 1_000;
+const LARGE_RESTORED_QUEUE_RECOVERY_THRESHOLD = 100;
 
 // ============================================================
 // Sync Engine Singleton
@@ -591,6 +593,7 @@ class SyncEngine {
   private _error: string | null = null;
   private queuePersistenceError: string | null = null;
   private writeBasePersistenceError: string | null = null;
+  private quotaRecoveryContinuationRequired = false;
   private drainTimer: ReturnType<typeof setInterval> | null = null;
   private pullTimer: ReturnType<typeof setInterval> | null = null;
   private initialized = false;
@@ -1261,40 +1264,78 @@ class SyncEngine {
    * drain and pull rebuild the current bases from cloud receipt truth.
    */
   async recoverQuotaBlockedQueue(): Promise<void> {
-    const persistenceError = this.writeBasePersistenceError ?? this.queuePersistenceError;
-    if (!persistenceError || !this.isStorageQuotaError(persistenceError)) {
+    if (!this.isQuotaRecoveryAvailable()) {
       await this.flush({ throwOnPending: true });
       return;
     }
 
-    const previousWriteBaseError = this.writeBasePersistenceError;
-    try {
-      localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
-      localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
-    } catch (error) {
-      throw new Error(
-        `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    const releasePersistedBases = () => {
+      const previousWriteBaseError = this.writeBasePersistenceError;
+      try {
+        localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
+        localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+      } catch (error) {
+        throw new Error(
+          `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      this.writeBasePersistenceError = null;
+      if (this._error === previousWriteBaseError) this._error = null;
+    };
+
+    releasePersistedBases();
+    this.quotaRecoveryContinuationRequired = true;
+
+    // A large restored queue can be concurrently draining when recovery
+    // begins, or a transient batch can fail while later batches succeed. Keep
+    // making bounded progress, evicting only the rebuildable persisted bases
+    // between passes. Two consecutive no-progress passes stop safely instead
+    // of looping on a genuine stale-write conflict.
+    let pendingCount = this.getPendingOperationCount();
+    let stagnantPasses = 0;
+    for (let pass = 0; pass < 20 && pendingCount > 0; pass += 1) {
+      const before = pendingCount;
+      await this.flush();
+      pendingCount = this.getPendingOperationCount();
+      if (!this.persistQueues()) {
+        throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the remaining queue.');
+      }
+      if (pendingCount === 0) break;
+      releasePersistedBases();
+      stagnantPasses = pendingCount < before ? 0 : stagnantPasses + 1;
+      if (stagnantPasses >= 2) break;
     }
 
-    this.writeBasePersistenceError = null;
-    if (this._error === previousWriteBaseError) this._error = null;
-    // Drain first without the strict durability assertion. The old durable
-    // queue key remains until the drain finishes, so an accepted batch may be
-    // unable to persist its rebuilt bases during that brief overlap. Once the
-    // queue key has been removed, retry both derived bases and queue state.
-    await this.flush();
-    const basesPersisted = this.persistWriteBaseOverrides();
-    const queuePersisted = this.persistQueues();
-    const pendingCount = this.getPendingOperationCount();
-    const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
-    if (pendingCount > 0 || !basesPersisted || !queuePersisted || durabilityError) {
+    if (pendingCount > 0) {
+      this.emitStatusChange();
       throw new Error(
-        this._error || durabilityError
-          ? `Sync recovery incomplete with ${pendingCount} pending operation(s): ${this._error ?? durabilityError}`
+        this._error
+          ? `Sync recovery paused safely with ${pendingCount} pending operation(s): ${this._error}`
           : `Sync recovery incomplete with ${pendingCount} pending operation(s)`,
       );
     }
+
+    // Do not force the full rebuilt base cache back into localStorage before
+    // the receipt pull can advance the durable cursor and prune it. The queue
+    // is already durably empty; pull now rebuilds, cursor-saves, prunes, and
+    // persists only the still-required bases.
+    releasePersistedBases();
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sync recovery failed: signed out during sync');
+    await this.pullForUser(session.user.id, { emitComplete: false });
+
+    const queuePersisted = this.persistQueues();
+    const basesPersisted = this.persistWriteBaseOverrides();
+    const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
+    if (!queuePersisted || !basesPersisted || durabilityError) {
+      throw new Error(
+        `Sync recovery incomplete with 0 pending operation(s): ${durabilityError ?? 'browser persistence failed'}`,
+      );
+    }
+    this.quotaRecoveryContinuationRequired = false;
+    this._error = null;
+    this.emitEvent('sync-complete');
   }
 
   // ============================================================
@@ -1311,6 +1352,7 @@ class SyncEngine {
       lastPullAt: this.cursor.changedAt,
       pendingCount: this.getPendingOperationCount(),
       error: this._error,
+      quotaRecoveryAvailable: this.isQuotaRecoveryAvailable(),
     };
   }
 
@@ -4421,6 +4463,22 @@ class SyncEngine {
     const normalized = message.toLowerCase();
     return normalized.includes('quota') || (
       normalized.includes('storage') && normalized.includes('exceed')
+    );
+  }
+
+  private isQuotaRecoveryAvailable(): boolean {
+    return Boolean(
+      this.quotaRecoveryContinuationRequired
+      || (
+        (this.writeBasePersistenceError && this.isStorageQuotaError(this.writeBasePersistenceError))
+        || (this.queuePersistenceError && this.isStorageQuotaError(this.queuePersistenceError))
+      )
+      || (
+        this.getPendingOperationCount() >= LARGE_RESTORED_QUEUE_RECOVERY_THRESHOLD
+        && (this.restoredPushQueueKeys.size > 0 || this.restoredLocalQueueKeys.size > 0)
+        && this.storeWriteBaseOverrides.size === 0
+        && this.localWriteBaseOverrides.size === 0
+      )
     );
   }
 

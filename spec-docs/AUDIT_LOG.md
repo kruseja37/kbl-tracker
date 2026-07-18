@@ -4,6 +4,16 @@
 
 ---
 
+### 2026-07-18 — FINDING-241 partial quota continuation builder close
+
+JK's first live recovery safely reduced 1,398 operations to 806, then stopped on one stale local
+write plus renewed derived-base quota pressure. Recovery availability is now typed engine state and
+survives both a stale error wrapper and reload of a large restored base-less queue. The same click
+makes bounded continuation passes, durably saves each smaller queue, removes only persisted derived
+bases, and stops after two no-progress passes without altering a real conflict. At zero pending it
+pulls receipt truth before the final pruned-base persistence. Focused proof is 128/128. TypeScript,
+lint, build, separate audit, and JK's retry remain. No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-240 independently approved
 
 The final separate read-only audit of frozen `aa123d76` returned **APPROVE — Major 0 / Minor 0**.

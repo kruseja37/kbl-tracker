@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
     lastPullAt: 0,
     pendingCount: 0,
     error: null,
+    quotaRecoveryAvailable: false,
     pull: vi.fn(),
     replaceCloudWithLocal: vi.fn(),
     replaceLocalWithCloud: vi.fn(),
@@ -97,6 +98,7 @@ describe("SyncModal diagnostics status", () => {
     mocks.syncStatus.state = "idle";
     mocks.syncStatus.pendingCount = 0;
     mocks.syncStatus.error = null;
+    mocks.syncStatus.quotaRecoveryAvailable = false;
     mocks.syncStatus.lastPullAt = 0;
     mocks.syncStatus.pull = mocks.pull;
     mocks.syncStatus.replaceCloudWithLocal = mocks.replaceCloudWithLocal;
@@ -159,6 +161,7 @@ describe("SyncModal diagnostics status", () => {
   test("recovers a quota-blocked queue without invoking destructive upload or download", async () => {
     mocks.syncStatus.pendingCount = 1398;
     mocks.syncStatus.error = "Sync queue persistence failed: Setting the value exceeded the quota.";
+    mocks.syncStatus.quotaRecoveryAvailable = true;
     mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
 
     render(<SyncModal isOpen onClose={vi.fn()} />);
@@ -166,8 +169,8 @@ describe("SyncModal diagnostics status", () => {
 
     await waitFor(() => {
       expect(mocks.recoverQuotaBlockedQueue).toHaveBeenCalledTimes(1);
-      expect(mocks.pull).toHaveBeenCalledTimes(1);
     });
+    expect(mocks.pull).not.toHaveBeenCalled();
     expect(mocks.flush).not.toHaveBeenCalled();
     expect(mocks.replaceCloudWithLocal).not.toHaveBeenCalled();
     expect(mocks.replaceLocalWithCloud).not.toHaveBeenCalled();
@@ -176,6 +179,7 @@ describe("SyncModal diagnostics status", () => {
   test("does not offer storage recovery for an unrelated service quota error", async () => {
     mocks.syncStatus.pendingCount = 1;
     mocks.syncStatus.error = "Supabase API quota exceeded for this project.";
+    mocks.syncStatus.quotaRecoveryAvailable = false;
     mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
 
     render(<SyncModal isOpen onClose={vi.fn()} />);
@@ -191,6 +195,7 @@ describe("SyncModal diagnostics status", () => {
     mocks.syncStatus.pendingCount = 1;
     mocks.syncStatus.error =
       "Supabase rejected request: sync queue persistence failed because API quota exceeded.";
+    mocks.syncStatus.quotaRecoveryAvailable = false;
     mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
 
     render(<SyncModal isOpen onClose={vi.fn()} />);

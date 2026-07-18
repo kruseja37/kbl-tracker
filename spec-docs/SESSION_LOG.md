@@ -2,6 +2,17 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — partial continuation built; audit pending
+
+JK's live approved recovery moved 592 of 1,398 pending operations to cloud and safely retained 806,
+then exposed one stale local write and renewed write-base quota pressure. FINDING-241 keeps the
+special action available from typed engine state, including after reload of a large restored queue
+without bases. Recovery now retries transient batches while progress occurs, persists each shrinking
+queue, clears only persisted derived bases between passes, and stops after two stagnant passes on a
+real conflict. At zero pending, it performs the account-bound receipt pull before final pruned-base
+durability. Focused proof is 128/128; remaining gates are TypeScript, lint, production build,
+separate audit, then JK's retry at port 5188. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, sync quota) — independently approved; JK click remains
 
 Frozen implementation `aa123d76` passed the final separate hostile audit with **Major 0 / Minor

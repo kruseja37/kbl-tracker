@@ -1430,6 +1430,15 @@ non-builder audit and JK's clean browser walk remained. The auditor has now retu
 Major 0 / Minor 0; only JK's product-acceptance walk remains. No push, merge, or deploy was
 authorized.
 
+## Outgoing Live Header Snapshot — before 2026-07-18 partial quota continuation
+
+The prior live header recorded independent approval of the 1,398-item one-click quota recovery.
+JK's live click safely synced 592 operations and retained 806, but a stale-write wrapper hid the
+remaining storage-quota condition and the rebuilt derived cache again competed for space before its
+receipt cursor could prune it. The new live header records typed recovery continuation, bounded
+progress retries, queue durability, conflict preservation, and receipt-before-final-base persistence.
+No push, merge, or deploy was authorized.
+
 ## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
 
 The prior live header recorded independent approval of the exact 2,001-card eight-team setup and

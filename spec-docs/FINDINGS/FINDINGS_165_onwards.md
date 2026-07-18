@@ -973,3 +973,24 @@ not expose recovery. Focused proof is 126/126; final gates remain. No push, merg
 independently passed 126/126 focused tests, TypeScript, changed-file ESLint, the 2,735-module
 production/PWA build, and diff integrity, and confirmed every no-loss/account/durability boundary.
 Only JK's live one-click recovery and pending-zero observation remain. No push, merge, or deploy.
+
+### FINDING-241
+**Date:** 2026-07-18 | **Phase:** Cloud sync / partial quota continuation | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/utils/syncEngine.ts`, `src/src_figma/app/components/SyncModal.tsx`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`
+**Evidence:** JK's first live FINDING-240 recovery reduced the exact queue from 1,398 to 806, then
+reported one stale local write plus another write-base quota failure. The modal fell back to `SYNC
+NOW` because it inspected only the top stale-write string even though the engine still held the exact
+local persistence failure.
+**Impact:** The remaining legitimate queue stayed durable, but the safe recovery path became hidden
+after making progress. Repeating ordinary sync could rebuild the same derived cache before the
+receipt cursor had a chance to prune it.
+**Action:** Publish typed recovery availability from the engine, including a reloaded large restored
+queue whose derived bases are absent. Recovery now performs bounded continuation passes, persists the
+shrinking queue, evicts only persisted derived bases between passes, and stops after two consecutive
+no-progress passes rather than looping on a real conflict. Once pending reaches zero, pull receipt
+truth, durably save the exact account's cursor, prune, then persist only still-required bases. Never
+auto-rebase or discard a stale conflict; never call full Upload/Download.
+**Builder result:** Direct regressions prove a transient first batch completes in the same call, a
+real stale row remains queued/cloud-unchanged with recovery still visible, and a reloaded 100-item
+base-less queue remains recoverable. Focused sync/UI proof is 128/128. TypeScript, lint, build,
+separate audit, and JK's retry remain. No push, merge, or deploy.

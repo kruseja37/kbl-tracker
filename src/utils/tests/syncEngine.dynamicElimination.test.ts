@@ -3711,16 +3711,96 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       state: "error",
       pendingCount: 2,
       error: expect.stringContaining("exceeded the quota"),
+      quotaRecoveryAvailable: true,
     }));
 
+    // The first cloud batch fails transiently. Recovery must continue from
+    // the still-durable queue rather than requiring another browser click.
+    mockState.failNextUpsertTable = "kbl_stores";
     await syncEngine.recoverQuotaBlockedQueue();
 
-    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 0,
+      quotaRecoveryAvailable: false,
+    }));
     expect(mockState.cloudRows).toEqual(expect.arrayContaining([
       expect.objectContaining({ record_key: JSON.stringify("quota-recovery-1"), deleted: false }),
       expect.objectContaining({ record_key: JSON.stringify("quota-recovery-2"), deleted: false }),
     ]));
     expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+  });
+
+  test("partial quota recovery stays resumable without dropping a genuine stale write", async () => {
+    mockState.localRows.push({
+      user_id: "user-1",
+      key: "kbl-app-state",
+      data: { selectedLeague: "cloud-newer" },
+      changed_at: Date.now() + 10_000,
+      received_at: "2026-07-18T18:00:00.000Z",
+      deleted: false,
+    });
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-local-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    syncEngine.upsertLocal("kbl-app-state", { selectedLeague: "local-pending" });
+    expect(syncEngine.getStatus().quotaRecoveryAvailable).toBe(true);
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "paused safely with 1 pending operation",
+    );
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 1,
+      quotaRecoveryAvailable: true,
+      error: expect.stringContaining("cloud has newer rows"),
+    }));
+    expect(localStorage.getItem("kbl-sync-local-queue")).toContain("kbl-app-state");
+    expect(mockState.localRows[0]).toEqual(expect.objectContaining({
+      data: { selectedLeague: "cloud-newer" },
+    }));
+  });
+
+  test("a reloaded large restored queue without bases still exposes safe recovery", async () => {
+    const entries = Array.from({ length: 100 }, (_, index) => {
+      const op = {
+        opId: `restored-op-${index}`,
+        dbName: "kbl-event-log",
+        storeName: "atBatEvents",
+        recordKey: JSON.stringify(`restored-event-${index}`),
+        data: { eventId: `restored-event-${index}` },
+        changedAt: index + 1,
+        deleted: false,
+      };
+      return [`kbl-event-log|atBatEvents|${op.recordKey}`, op] as const;
+    });
+    localStorage.setItem("kbl-sync-queue", JSON.stringify(entries));
+
+    const syncEngine = await loadFreshSyncEngine();
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 100,
+      quotaRecoveryAvailable: true,
+    }));
+
+    await syncEngine.recoverQuotaBlockedQueue();
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      pendingCount: 0,
+      quotaRecoveryAvailable: false,
+    }));
+    expect(mockState.cloudRows).toHaveLength(100);
   });
 
   test("auth loss before cursor save leaves restored write bases durable and fails closed", async () => {

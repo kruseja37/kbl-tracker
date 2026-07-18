@@ -32667,3 +32667,25 @@ service quota errors retain ordinary sync behavior.
 destructive-download rollback. The rollback must carry the operation's starting account and reject
 before metadata persistence if the current session differs. “Prefix” is literal: quoted, wrapped, or
 embedded persistence wording must not expose the special recovery action.
+
+## SNAKE-SYNC-QUOTA-CONTINUATION-48
+
+**Goal:** Continue a partially drained large queue without hiding recovery, rebuilding quota-heavy
+derived bases too early, looping on conflicts, or choosing a whole-side winner.
+
+**Frozen law:**
+
+- Recovery availability is engine state, not parsing of whichever error string rendered last.
+- A large restored queue with no restored write bases remains eligible after reload.
+- Each continuation pass may remove only persisted derived bases and must durably save the shrinking
+  queue. In-memory bases and all pending/source/cloud product truth remain intact.
+- Retry while progress occurs; stop after two consecutive no-progress passes and preserve every
+  genuine stale conflict. Never auto-rebase or discard it.
+- At zero pending, pull cloud receipt truth, durably save the exact expected-account cursor, prune
+  cursor-covered bases, then persist only the remaining bases.
+- Recovery never calls full Upload or Download and never relaxes atomic stale-write protection.
+
+**Required proof:** transient batch finishes in one recovery call; real conflict remains queued and
+cloud-unchanged with recovery visible; reloaded large base-less queue is eligible; prior no-loss,
+account-binding, cursor-before-prune, ordinary sync, and destructive-path regressions; TypeScript;
+lint; production/PWA build; separate audit; JK's browser retry. No push, merge, or deploy.
