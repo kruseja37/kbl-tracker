@@ -723,3 +723,47 @@ The separate non-builder auditor returned **APPROVE — Major 0 / Minor 0** afte
 the exact-cloud intent guard, atomic write base, post-write verification, marker-backed queue
 retirement, rollback on queue-persistence failure, and the Hotseat control. JK's same-room click
 remains the product gate.
+
+### FINDING-237
+**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** BUILT — SEPARATE AUDIT PENDING
+**Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeEconomics.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/components/snake/desk/*`
+**Evidence:** In JK's first complete four-team room walk, two seats lost their Assistant GM several
+rounds before the end and one club reached 19/22 with no discoverable legal pick despite a positive
+current-roster money balance. Code trace proves the Assistant is local and independent of Auth or
+network idle state. It returns `INCOMPLETE_BOARD` when a bounded preferred-board search is incomplete
+and `INSOLVENT_BOARD` when that preferred 22 is over budget, even though the separate exact
+legal-finish engine may still prove an affordable completion. The hook deliberately hides those
+generic reasons behind `ASST GM 22 UNAVAILABLE`. Candidate rows expose current-roster marginal tax,
+but only the selected player runs the legal-finish calculation, so the GM must open candidates one
+at a time to discover `BLOCKED`. Drafted-board rows reuse signed remove-and-reinsert tax deltas as
+`TRUE COST`; role reassignment can make that delta negative and larger than salary, producing the
+observed negative player costs even though no player has negative salary.
+**Impact:** A valid four- or eight-team draft can become operationally unfinishable before round 22:
+the engine may still have a legal completion, but the Assistant disappears and the UI does not name
+the safe players. Tax can appear after the pick without the corresponding pre-pick projected finish
+bill, creating a bait-and-switch. The current row labels also misstate nonlinear tax-removal deltas
+as player prices.
+**Action:** Keep identity FIT unchanged and separate. Make the legal-finish engine the fallback source
+of a valid Assistant 22 whenever the preferred identity optimizer cannot produce one; never call a
+proved legal room unavailable merely because preference optimization is incomplete. Compute stable
+pick-level finish state off the render path and surface `DRAFTABLE`, `OPEN`, or `BLOCKED` plus
+projected final tax/money before selection, with a filter that always exposes the legal options.
+Label current roster salary and tax truth literally; do not render signed removal deltas as player
+cost. Prove full 22-round completion for four and eight teams, with eight-team latency gates.
+**Builder result:** The Assistant now consumes the room's independently validated simultaneous
+completion certificate and revalidates ownership, unique people, roster law, exact tax, salary, and
+slot materialization before using it as a fallback. Current drafted rows show settled salary and
+actual tax-core contributions; selectable rows expose separate identity FIT and finish safety, while
+the selected card quotes the exact projected final salary, tax, all-in cost, and money left. The GM
+can filter to guaranteed `DRAFTABLE` choices. The same desk adds private zero-interest, CSS rating
+bars, chemistry trait counts, a clickable full draft log, and on-clock companion colors. The
+Assistant worker is storage/Auth-free and 98.07 kB, and 20-row paging prevents a 506-card render.
+**Builder verification:** Exact production-shape simulations completed 88/88 four-team and 176/176
+eight-team picks with every final roster legal and solvent and the Assistant available at every
+turn. The final eight-team browser run used 506 players and a 176-pick order: room 862 ms, private
+desk 346 ms, Player Pool 581 ms, IV sort 300 ms, FIT filter 31 ms, finish filter 28 ms, player
+selection 342 ms, gavel/write 1.278 s, and a second page reopened the persisted room on pick 2 in
+922 ms with no console error. Companion recurring-pull proof advances to pick 2, adds the public
+pick log, and removes the drafted player. Final focused matrix: 17 files / 274 tests; TypeScript,
+changed-file ESLint, 2,732-module production build/PWA, worker-auth scan, and diff integrity green.
+JK's browser walk and the required separate non-builder audit remain open. No push, merge, or deploy.

@@ -174,6 +174,56 @@ describe('PrivateDesk', () => {
     expect(onReorderOverall).toHaveBeenCalledWith(['target', 'muraski']);
   });
 
+  it('opens the complete league draft log and loads any drafted player card', () => {
+    const onSelectCandidate = vi.fn();
+    render(<PrivateDesk
+      candidates={[candidate]}
+      rankings={{ SS: ['muraski'] }}
+      overallRankings={['muraski']}
+      boardSlots={{ SS: 'muraski' }}
+      brokenSlots={[]}
+      planBill={null}
+      advisorLog={[]}
+      taxCoreRows={[]}
+      slotDepth={{ SS: 1 }}
+      assistantBoard={idleAssistant}
+      onReorder={() => undefined}
+      onSelectCandidate={onSelectCandidate}
+      draftLog={[
+        { pick: 1, teamName: 'BEEWOLVES', playerId: 'jovita', playerName: 'JOVITA PULO', position: 'SP' },
+        { pick: 2, teamName: 'BUZZARDS', playerId: 'muraski', playerName: 'MURASKI', position: 'SS' },
+      ]}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT LOG' }));
+    expect(screen.getByTestId('full-draft-log')).toHaveTextContent('#1JOVITA PULOSPBEEWOLVES');
+    expect(screen.getByTestId('full-draft-log')).toHaveTextContent('#2MURASKISSBUZZARDS');
+    fireEvent.click(screen.getByRole('button', { name: /#1JOVITA PULO/ }));
+    expect(onSelectCandidate).toHaveBeenCalledWith('jovita');
+  });
+
+  it('returns to My Board if a draft correction removes the last log entry', () => {
+    const common = {
+      candidates: [candidate],
+      rankings: { SS: ['muraski'] },
+      overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' },
+      brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 1 },
+      assistantBoard: idleAssistant,
+      onReorder: () => undefined,
+    };
+    const { rerender } = render(<PrivateDesk
+      {...common}
+      draftLog={[{ pick: 1, teamName: 'BUZZARDS', playerId: 'muraski', playerName: 'MURASKI', position: 'SS' }]}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT LOG' }));
+    expect(screen.getByTestId('full-draft-log')).toBeInTheDocument();
+    rerender(<PrivateDesk {...common} draftLog={[]} />);
+    expect(screen.getByRole('button', { name: 'MY BOARD' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('full-draft-log')).not.toBeInTheDocument();
+  });
+
   it('renders a separate read-only assistant board and never renders the retired what-if controls', () => {
     render(<PrivateDesk
       candidates={[candidate]}

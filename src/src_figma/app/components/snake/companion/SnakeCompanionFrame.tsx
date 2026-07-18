@@ -74,6 +74,7 @@ export function SnakeCompanionFrame(props: {
   authorizedTeams?: readonly { id: string; name: string }[];
   onSwitchTeam?: (teamId: string) => void;
   currentPick: number;
+  onClockTeam?: { name: string; colors?: { primary?: string; secondary?: string; accent?: string } };
   order: readonly { pick: number; teamName: string }[];
   ticker: readonly string[];
   selectedPlayer?: ReactNode;
@@ -85,6 +86,7 @@ export function SnakeCompanionFrame(props: {
 }) {
   const logoUrl = safeCompanionLogoUrl(props.team.logoUrl);
   const branding = buildCompanionBranding(props.team.colors);
+  const liveBranding = buildCompanionBranding(props.onClockTeam?.colors);
   const [showHelp, setShowHelp] = useState(false);
   const privateDesk = typeof props.privateDesk === 'function' ? props.privateDesk(showHelp) : props.privateDesk;
   return (
@@ -124,9 +126,14 @@ export function SnakeCompanionFrame(props: {
         {props.helpNotes?.map((note) => <p className="mt-1" key={note}>{note}</p>)}
       </section> : null}
       {props.message ? <p className="mb-4 border-4 border-[var(--ballpark-panel-border)] p-3 font-bold" role="status">{props.message}</p> : null}
-      <section className="ballpark-panel mb-4 min-w-0 overflow-hidden" aria-label="Live draft strip" data-testid="companion-live-strip">
+      <section
+        className="ballpark-panel mb-4 min-w-0 overflow-hidden"
+        aria-label="Live draft strip"
+        data-testid="companion-live-strip"
+        style={{ backgroundColor: liveBranding.background, color: liveBranding.foreground, borderColor: liveBranding.border }}
+      >
         <div className="flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto pb-1">
-          <strong className="shrink-0 whitespace-nowrap text-[var(--ballpark-brass)]">PICK {props.currentPick}</strong>
+          <strong className="shrink-0 whitespace-nowrap">{props.onClockTeam?.name.toUpperCase() ?? 'ON CLOCK'} · PICK {props.currentPick}</strong>
           {props.order.map((slot) => <span key={slot.pick} className="shrink-0 whitespace-nowrap border-2 border-[var(--ballpark-panel-border)] px-2 py-1 text-sm">#{slot.pick} {slot.teamName.toUpperCase()}</span>)}
           <span className="h-7 shrink-0 border-l-2 border-[var(--ballpark-brass)]" aria-hidden="true" />
           {props.ticker.length ? props.ticker.map((line) => <span key={line} className="shrink-0 whitespace-nowrap text-sm font-bold">{line}</span>) : <span className="shrink-0 whitespace-nowrap text-sm">BOARD OPEN</span>}

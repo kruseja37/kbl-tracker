@@ -1,4 +1,4 @@
-import { isLegalRoster } from '../data/rosterConstruction';
+import { canCover, canRelieve, canStart, isCloser, isLegalRoster } from '../data/rosterConstruction';
 import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import type { LuxuryCapRow, TierKey } from '../data/tierParams';
 import type { Player, SnakeVersionState } from '../utils/leagueBuilderStorage';
@@ -14,7 +14,7 @@ import {
   isDesignPlayerEligibleForSlot,
   type DesignSlot,
 } from './rosterDesignFeasibility';
-import { evaluateSnakePlan, type SnakePlanBill } from './snakeEconomics';
+import { evaluateSnakeLegalFinish, evaluateSnakePlan, type SnakePlanBill } from './snakeEconomics';
 import { snakeMoneyNonnegative } from './snakeMoney';
 import { snakeLuxuryCaps } from './snakeLuxuryTax';
 import type { SnakeSeatingPlayer } from './snakeSeatingProof';
@@ -56,6 +56,10 @@ export interface SnakeAssistantBoardInput {
   archetype: SimArchetype;
   ownBandPriorities: BandPriorities;
   gmRankOverrides?: BoardRankOverrides;
+  /** Private seat exclusions. Own drafted players remain roster truth and cannot be excluded. */
+  zeroInterestPlayerIds?: readonly string[];
+  /** Current shared-room certificate reservation for this club; independently revalidated here. */
+  certifiedCompletionPlayerIds?: readonly string[];
   tier: TierKey;
   budget: number;
   baseCaps: readonly LuxuryCapRow[];
@@ -264,6 +268,93 @@ function deterministicPinMatching(
     .map(([slotIndex, playerId]) => [slots[slotIndex].slotId, playerId]));
 }
 
+/**
+ * A legal-finish certificate proves roster membership, not a rigid design-slot assignment.
+ * Materialize that exact legal 22 into the familiar desk rows without turning surplus starters,
+ * closers, or a Two Way catcher into a false Assistant-unavailable result.
+ */
+function materializeLegalRoster(
+  slots: readonly DesignSlot[],
+  players: readonly SnakeAssistantBoardPlayer[],
+  pinnedPlayerIds: ReadonlySet<string>,
+): SnakeAssistantBoardReady['slots'] | null {
+  if (slots.length !== 22 || players.length !== 22
+    || new Set(players.map((player) => player.playerId)).size !== 22
+    || !isLegalRoster(players.map((player) => player.seating.shape))) return null;
+
+  const remaining = new Map(players.map((player) => [player.playerId, player]));
+  const assignments = new Map<string, SnakeAssistantBoardPlayer>();
+  const ordered = [...players].sort((left, right) => (
+    right.frozenIv - left.frozenIv || left.playerId.localeCompare(right.playerId)
+  ));
+  const take = (
+    slot: DesignSlot | undefined,
+    predicate: (player: SnakeAssistantBoardPlayer) => boolean,
+    order: readonly SnakeAssistantBoardPlayer[] = ordered,
+  ): boolean => {
+    if (!slot) return false;
+    const player = order.find((candidate) => remaining.has(candidate.playerId) && predicate(candidate));
+    if (!player) return false;
+    assignments.set(slot.slotId, player);
+    remaining.delete(player.playerId);
+    return true;
+  };
+
+  for (const slot of slots.filter((candidate) => candidate.kind === 'pos')) {
+    if (!take(slot, (player) => !player.seating.shape.isPitcher
+      && player.seating.shape.position === slot.position)) return null;
+  }
+
+  const closerSlot = slots.find((slot) => slot.kind === 'cp');
+  if (!take(closerSlot, (player) => isCloser(player.seating.shape))) return null;
+
+  const starterOrder = [...ordered].sort((left, right) => {
+    const leftPure = left.seating.shape.role === 'SP' ? 0 : 1;
+    const rightPure = right.seating.shape.role === 'SP' ? 0 : 1;
+    return leftPure - rightPure || right.frozenIv - left.frozenIv
+      || left.playerId.localeCompare(right.playerId);
+  });
+  for (const slot of slots.filter((candidate) => candidate.kind === 'sp')) {
+    if (!take(slot, (player) => canStart(player.seating.shape), starterOrder)) return null;
+  }
+
+  const backupSlot = slots.find((slot) => slot.kind === 'backupC');
+  const backupCatcher = ordered.find((player) => remaining.has(player.playerId)
+    && !player.seating.shape.isPitcher && canCover(player.seating.shape, 'C'));
+  if (!take(backupSlot, (player) => !player.seating.shape.isPitcher,
+    backupCatcher ? [backupCatcher, ...ordered.filter((player) => player !== backupCatcher)] : ordered)) return null;
+
+  for (const slot of slots.filter((candidate) => candidate.kind === 'flex')) {
+    if (!take(slot, (player) => !player.seating.shape.isPitcher)) return null;
+  }
+
+  const reliefOrder = [...ordered].sort((left, right) => {
+    const leftRelief = canRelieve(left.seating.shape) ? 0 : 1;
+    const rightRelief = canRelieve(right.seating.shape) ? 0 : 1;
+    return leftRelief - rightRelief || right.frozenIv - left.frozenIv
+      || left.playerId.localeCompare(right.playerId);
+  });
+  for (const slot of slots.filter((candidate) => candidate.kind === 'rp')) {
+    if (!take(slot, (player) => player.seating.shape.isPitcher, reliefOrder)) return null;
+  }
+
+  const swingSlot = slots.find((slot) => slot.kind === 'swing');
+  const finalPlayer = [...remaining.values()];
+  if (!swingSlot || finalPlayer.length !== 1) return null;
+  assignments.set(swingSlot.slotId, finalPlayer[0]);
+  remaining.clear();
+
+  if (assignments.size !== slots.length) return null;
+  return slots.map((slot) => {
+    const player = assignments.get(slot.slotId)!;
+    return {
+      slotId: slot.slotId,
+      playerId: player.playerId,
+      pinned: pinnedPlayerIds.has(player.playerId),
+    };
+  });
+}
+
 export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): SnakeAssistantBoardCoreResult {
   if (!input.teamId || input.slots.length !== 22 || !Number.isInteger(input.realTeamCount) || input.realTeamCount < 1
     || !Number.isFinite(input.budget) || input.budget < 0) {
@@ -281,6 +372,17 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   }
 
   const pool = [...input.activePool].sort((left, right) => left.playerId.localeCompare(right.playerId));
+  if (input.zeroInterestPlayerIds !== undefined
+    && (!Array.isArray(input.zeroInterestPlayerIds)
+      || input.zeroInterestPlayerIds.some((playerId) => typeof playerId !== 'string' || !playerId))) {
+    return unavailable('MISSING_INPUT');
+  }
+  if (input.certifiedCompletionPlayerIds !== undefined
+    && (!Array.isArray(input.certifiedCompletionPlayerIds)
+      || new Set(input.certifiedCompletionPlayerIds).size !== input.certifiedCompletionPlayerIds.length
+      || input.certifiedCompletionPlayerIds.some((playerId) => typeof playerId !== 'string' || !playerId))) {
+    return unavailable('MISSING_INPUT');
+  }
   if (pool.length < 22 || new Set(pool.map((player) => player.playerId)).size !== pool.length
     || pool.some((player) => player.stored.id !== player.playerId
       || !Number.isFinite(player.frozenIv) || player.frozenIv < 0
@@ -310,9 +412,11 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   const ownIds = new Set(ownPicks.map((pick) => pick.playerId));
   const rivalIds = new Set(input.completedPicks.filter((pick) => pick.teamId !== input.teamId).map((pick) => pick.playerId));
   const selectedPin = input.selectedPinPlayerId ?? null;
+  const zeroInterestIds = new Set(input.zeroInterestPlayerIds ?? []);
   const ownsCloser = ownPicks.some((pick) => byId.get(pick.playerId)?.seating.shape.role === 'CP');
   const available = versionValidPool.filter((player) => !picksById.has(player.playerId)
     && !retiredIds.has(player.playerId)
+    && !zeroInterestIds.has(player.playerId)
     && !draftedGroups.has(deriveVersionGroupId(identityOf(player)))
     && (!ownsCloser || player.seating.shape.role !== 'CP' || player.playerId === selectedPin));
   const universe = [...ownPicks.map((pick) => byId.get(pick.playerId)!), ...available];
@@ -330,7 +434,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     return unavailable('PIN_UNMATCHED');
   }
   const pins = deterministicPinMatching(input.slots, requiredPlayers);
-  if (!pins || pins.size !== requiredIds.length) return unavailable('PIN_UNMATCHED');
+  const rigidPinsMatch = Boolean(pins && pins.size === requiredIds.length);
 
   const ownStoredPlayers = ownPicks.map((pick) => byId.get(pick.playerId)!.stored);
   const need = rosterNeedBreakdown(ownPicks.map((pick) => byId.get(pick.playerId)!.seating.shape));
@@ -384,32 +488,146 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   }));
   const classifiedById = new Map(optimizerUniverse.map((player) => [player.playerId, player.classification]));
 
+  const assembledIds = new Set(assembled.map((entry) => entry.playerId));
+  const recommendationOrder = [
+    ...assembled.map((entry) => entry.playerId),
+    ...universe
+      .map((player) => player.playerId)
+      .filter((playerId) => !assembledIds.has(playerId)),
+  ];
+  const legalFallback = (): SnakeAssistantBoardReady | null => {
+    const requiredGroups = new Set(requiredPlayers.map((player) => deriveVersionGroupId(identityOf(player))));
+    const currentRoster = requiredPlayers.map((player): SnakeSeatingPlayer => ({
+      ...player.seating,
+      playerId: player.playerId,
+      sourceId: player.sourceId ?? undefined,
+      versionGroupId: player.versionGroupId ?? undefined,
+      price: ownIds.has(player.playerId)
+        ? ownPicks.find((pick) => pick.playerId === player.playerId)!.settledSalary!
+        : player.frozenIv,
+    }));
+    const committedSpent = currentRoster.reduce((sum, player) => sum + player.price, 0);
+    const completionPool = available
+      .filter((player) => !requiredGroups.has(deriveVersionGroupId(identityOf(player))))
+      .map((player): SnakeSeatingPlayer => ({
+        ...player.seating,
+        playerId: player.playerId,
+        sourceId: player.sourceId ?? undefined,
+        versionGroupId: player.versionGroupId ?? undefined,
+        price: player.frozenIv,
+      }));
+    const buildReady = (completionPlayerIds: readonly string[]): SnakeAssistantBoardReady | null => {
+      const playerIds = [...requiredIds, ...completionPlayerIds.filter((playerId) => !requiredIds.includes(playerId))];
+      if (playerIds.length !== 22 || new Set(playerIds).size !== 22) return null;
+      const selectedPlayers = playerIds.map((playerId) => byId.get(playerId));
+      if (selectedPlayers.some((player) => !player)) return null;
+      const selected = selectedPlayers as SnakeAssistantBoardPlayer[];
+      const selectedGroups = selected.map((player) => deriveVersionGroupId(identityOf(player)));
+      if (new Set(selectedGroups).size !== selectedGroups.length
+        || selected.some((player) => rivalIds.has(player.playerId) || retiredIds.has(player.playerId))
+        || selected.some((player) => {
+          const selectedVersionId = selectedByGroup[deriveVersionGroupId(identityOf(player))];
+          return Boolean(selectedVersionId && selectedVersionId !== player.playerId);
+        })
+        || !isLegalRoster(selected.map((player) => player.seating.shape))) return null;
+      const materialized = materializeLegalRoster(input.slots, selected, new Set(requiredIds));
+      if (!materialized) return null;
+      const planPlayers = selected.map((player): SnakeSeatingPlayer => ({
+        ...player.seating,
+        playerId: player.playerId,
+        sourceId: player.sourceId ?? undefined,
+        versionGroupId: player.versionGroupId ?? undefined,
+        price: ownIds.has(player.playerId)
+          ? ownPicks.find((pick) => pick.playerId === player.playerId)!.settledSalary!
+          : player.frozenIv,
+      }));
+      let plan: SnakePlanBill;
+      try {
+        plan = evaluateSnakePlan({
+          boardPlayerIds: playerIds,
+          players: planPlayers,
+          budget: input.budget,
+          baseCaps: input.baseCaps,
+          realTeamCount: input.realTeamCount,
+          capIdentity: input.capIdentity,
+        });
+      } catch {
+        return null;
+      }
+      if (!allNumbersFinite(plan) || !snakeMoneyNonnegative(plan.planCushion)) return null;
+      const recommendationIds = new Set(recommendationOrder);
+      return {
+        status: 'ready',
+        teamId: input.teamId,
+        slots: materialized,
+        playerIds,
+        recommendationOrder: [
+          ...recommendationOrder,
+          ...playerIds.filter((playerId) => !recommendationIds.has(playerId)),
+        ],
+        plan,
+      };
+    };
+
+    // The shared certificate has already proved all clubs simultaneously. It is still treated as
+    // untrusted input here: recheck current ownership, version law, roster law and exact money
+    // before using it as the Assistant's fail-safe board.
+    if (input.certifiedCompletionPlayerIds
+      && !input.certifiedCompletionPlayerIds.some((playerId) => zeroInterestIds.has(playerId))) {
+      const certified = buildReady(input.certifiedCompletionPlayerIds);
+      if (certified) return certified;
+    }
+    let finish;
+    try {
+      finish = evaluateSnakeLegalFinish({
+        currentRoster,
+        committedSpent,
+        availablePool: completionPool,
+        budget: input.budget,
+        baseCaps: input.baseCaps,
+        realTeamCount: input.realTeamCount,
+        capIdentity: input.capIdentity,
+      });
+    } catch {
+      return null;
+    }
+    if (!finish.feasible || finish.affordability !== 'AFFORDABLE'
+      || !snakeMoneyNonnegative(finish.legalFinishCushion)) return null;
+    return buildReady(finish.completionPlayerIds);
+  };
+
+  if (!rigidPinsMatch) return legalFallback() ?? unavailable('PIN_UNMATCHED');
+
   let target;
   try {
     const taxCaps = input.capIdentity
       ? shiftLuxuryCaps(snakeLuxuryCaps([...input.baseCaps]), input.capIdentity)
       : snakeLuxuryCaps([...input.baseCaps]);
     target = buildBest22Target(optimizer.slots, simPool, classifiedById, input.archetype, input.tier,
-      input.budget, input.realTeamCount, pins, optimizer.ranks, taxCaps,
+      input.budget, input.realTeamCount, pins!, optimizer.ranks, taxCaps,
       new Map(optimizerUniverse.map((player) => [player.playerId, player.frozenIv])), 'snake-money',
       exclusiveGroupByPlayerId);
   } catch {
-    return unavailable('INCOMPLETE_BOARD');
+    return legalFallback() ?? unavailable('INCOMPLETE_BOARD');
   }
   if (!allNumbersFinite(target)) return unavailable('INVALID_NUMERIC_INPUT');
-  if (target.optimizationComplete === false) return unavailable('INCOMPLETE_BOARD');
-  if (target.pins.dropped.length || target.pins.honored.length !== requiredIds.length) return unavailable('DROPPED_PIN');
+  if (target.optimizationComplete === false) return legalFallback() ?? unavailable('INCOMPLETE_BOARD');
+  if (target.pins.dropped.length || target.pins.honored.length !== requiredIds.length) {
+    return legalFallback() ?? unavailable('DROPPED_PIN');
+  }
   const playerIds = target.picks.map((pick) => pick.playerId);
   if (playerIds.length !== 22 || playerIds.some((playerId) => !playerId)
     || new Set(playerIds).size !== playerIds.length
     || new Set(playerIds.map((playerId) => deriveVersionGroupId(identityOf(byId.get(playerId)!)))).size !== playerIds.length) {
-    return unavailable('INCOMPLETE_BOARD');
+    return legalFallback() ?? unavailable('INCOMPLETE_BOARD');
   }
   if (playerIds.some((playerId) => !ownIds.has(playerId) && !available.some((player) => player.playerId === playerId))) {
-    return unavailable('INCOMPLETE_BOARD');
+    return legalFallback() ?? unavailable('INCOMPLETE_BOARD');
   }
   const selectedPlayers = playerIds.map((playerId) => byId.get(playerId)!);
-  if (!isLegalRoster(selectedPlayers.map((player) => player.seating.shape))) return unavailable('ILLEGAL_BOARD');
+  if (!isLegalRoster(selectedPlayers.map((player) => player.seating.shape))) {
+    return legalFallback() ?? unavailable('ILLEGAL_BOARD');
+  }
 
   let plan: SnakePlanBill;
   try {
@@ -430,24 +648,19 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
       capIdentity: input.capIdentity,
     });
   } catch {
-    return unavailable('ILLEGAL_BOARD');
+    return legalFallback() ?? unavailable('ILLEGAL_BOARD');
   }
   if (!allNumbersFinite(plan)) return unavailable('INVALID_NUMERIC_INPUT');
-  if (!target.feasible || !snakeMoneyNonnegative(plan.planCushion)) return unavailable('INSOLVENT_BOARD');
-
-  const assembledIds = new Set(assembled.map((entry) => entry.playerId));
+  if (!target.feasible || !snakeMoneyNonnegative(plan.planCushion)) {
+    return legalFallback() ?? unavailable('INSOLVENT_BOARD');
+  }
 
   return {
     status: 'ready',
     teamId: input.teamId,
     slots: target.picks.map((pick) => ({ slotId: pick.slotId, playerId: pick.playerId, pinned: pick.pinned })),
     playerIds,
-    recommendationOrder: [
-      ...assembled.map((entry) => entry.playerId),
-      ...universe
-        .map((player) => player.playerId)
-        .filter((playerId) => !assembledIds.has(playerId)),
-    ],
+    recommendationOrder,
     plan,
   };
 }

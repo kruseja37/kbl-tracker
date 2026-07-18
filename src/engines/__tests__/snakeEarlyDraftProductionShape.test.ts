@@ -16,7 +16,7 @@ import { HISTORICAL_ARCHETYPES } from '../../data/historicalArchetypes';
 import { archetypeToCapIdentity, resolveClubBandPriorities } from '../archetypeIdentity';
 import { auctionMarginalTaxWithCaps } from '../auctionLuxuryTax';
 import { historicalToSimArchetype, rankArchetypeDraftability } from '../draftabilityRanker';
-import { buildSnakeOrder } from '../leagueConstruction';
+import { buildSnakeOrder, luxuryTax, shiftLuxuryCaps } from '../leagueConstruction';
 import { extractPoolFromDemand } from '../poolFromDemand';
 import { SNAKE_POOL_COMPETITION_PRESETS, snakePoolSizeGuide } from '../snakePoolAssembly';
 import { evaluateSnakePlan } from '../snakeEconomics';
@@ -35,6 +35,7 @@ import {
 } from '../snakeSeatingProof';
 import { buildDefaultDesignSlots } from '../rosterDesignFeasibility';
 import { toRosterSlotPlayer } from '../rosterNeed';
+import { isLegalRoster } from '../../data/rosterConstruction';
 import { buildDeskRoomPlayer } from '../../src_figma/app/components/snake/desk/deskRoomModel';
 import {
   buildSnakeAssistantBoardRequest,
@@ -123,6 +124,151 @@ afterAll(async () => {
 });
 
 describe('production-shape early snake intelligence', () => {
+  const runCompleteRoom = (teamCount: 4 | 8) => {
+    const archetypeIds = [
+      'murderers-row', 'whiteyball', 'junkball-surgeons', 'flamethrowers',
+      'nasty-boys', 'hdh-royals', 'the-opener', 'the-oriole-way',
+    ].slice(0, teamCount);
+    const roomTeamIds = TEAM_IDS.slice(0, teamCount);
+    const archetypes = archetypeIds.map((archetypeId) => (
+      HISTORICAL_ARCHETYPES.find((entry) => entry.id === archetypeId)!
+    ));
+    const capIdentityByTeamId = new Map(roomTeamIds.map((teamId, index) => [
+      teamId,
+      archetypeToCapIdentity(archetypes[index]),
+    ]));
+    const initialBudget = TIER_CAPS.standard.tierCap;
+    const rootInput = {
+      clubs: roomTeamIds.map((teamId, index) => ({
+        teamId,
+        roster: [],
+        budgetRemaining: initialBudget,
+        capIdentity: capIdentityByTeamId.get(teamId),
+        identityArchetype: historicalToSimArchetype(archetypes[index]),
+      })),
+      pool: seatingPlayers,
+      baseCaps: LUXURY_CAP_TABLES.standard,
+      realTeamCount: teamCount,
+      tier: 'standard' as const,
+    };
+    const root = proveSimultaneousSnakeSeating(rootInput);
+    let certificate = createTrustedSnakeSeatingCertificate(rootInput, root);
+    expect(certificate, `${teamCount}-team root certificate`).not.toBeNull();
+    if (!certificate) return null;
+
+    const pickOrder = buildSnakeOrder(roomTeamIds, 22);
+    const completedPicks: Array<{ teamId: string; playerId: string; settledSalary: number }> = [];
+    let slowestAssistantMs = 0;
+    const assistantUnavailable: Array<{ pick: number; teamId: string; reason: string }> = [];
+
+    pickOrder.forEach((pickSlot, pickIndex) => {
+      if (!certificate) return;
+      const { teamId } = pickSlot;
+      const teamIndex = roomTeamIds.indexOf(teamId);
+      const archetype = archetypes[teamIndex];
+      const request = buildSnakeAssistantBoardRequest({
+        identity: {
+          sessionId: `complete-${teamCount}-team-room`,
+          sessionRevision: pickIndex + 1,
+          teamId,
+          seatId: teamId,
+          deviceId: `device-${teamId}`,
+          privateEpoch: 1,
+          boardRevision: pickIndex + 1,
+        },
+        frozenPoolIdentity: `stock-smb4-standard-${teamCount}-team-room`,
+        engineInput: {
+          activePool: assistantPlayers,
+          completedPicks,
+          versionSelections: {},
+          selectedPinPlayerId: null,
+          archetype: historicalToSimArchetype(archetype),
+          ownBandPriorities: resolveClubBandPriorities({ mlbArchetypeKey: archetype.id })!,
+          gmRankOverrides: { global: assistantPlayers.map((player) => player.playerId) },
+          certifiedCompletionPlayerIds: certificate.proof.assignments
+            .find((assignment) => assignment.teamId === teamId)?.playerIds,
+          tier: 'standard',
+          budget: initialBudget,
+          baseCaps: LUXURY_CAP_TABLES.standard,
+          realTeamCount: teamCount,
+          capIdentity: capIdentityByTeamId.get(teamId),
+        },
+        savedDesignSlots: buildDefaultDesignSlots(),
+      });
+      const assistantStartedAt = performance.now();
+      const assistant = runSnakeAssistantBoardRequest(request);
+      slowestAssistantMs = Math.max(slowestAssistantMs, performance.now() - assistantStartedAt);
+      if (assistant.status !== 'ready') {
+        assistantUnavailable.push({ pick: pickIndex + 1, teamId, reason: assistant.reason });
+        return;
+      }
+      expect(validSnakeAssistantBoardWorkerResponse(
+        structuredClone({ key: request.key, result: assistant }),
+        request,
+      ), `${teamCount}-team Assistant response at pick ${pickIndex + 1}`).toBe(true);
+
+      const assignment = certificate.proof.assignments.find((row) => row.teamId === teamId);
+      expect(assignment, `${teamCount}-team reservation at pick ${pickIndex + 1}`).toBeTruthy();
+      if (!assignment) return;
+      const recommendationRank = new Map(assistant.board.recommendationOrder.map((playerId, index) => [playerId, index]));
+      const playerId = [...assignment.playerIds].sort((left, right) => (
+        (recommendationRank.get(left) ?? Number.MAX_SAFE_INTEGER)
+        - (recommendationRank.get(right) ?? Number.MAX_SAFE_INTEGER)
+        || left.localeCompare(right)
+      ))[0];
+      expect(playerId, `${teamCount}-team legal Assistant choice at pick ${pickIndex + 1}`).toBeTruthy();
+      if (!playerId) return;
+      const selected = seatingPlayers.find((player) => player.playerId === playerId);
+      const club = certificate.input.clubs.find((entry) => entry.teamId === teamId);
+      expect(selected).toBeTruthy();
+      expect(club).toBeTruthy();
+      if (!selected || !club) return;
+      const caps = shiftLuxuryCaps(
+        snakeLuxuryCaps([...LUXURY_CAP_TABLES.standard]),
+        capIdentityByTeamId.get(teamId)!,
+      );
+      const committed = club.committedConstruction ?? club.roster.map((player) => player.construction);
+      const currentTax = luxuryTax(committed, caps, 'taxed').charged;
+      const nextTax = luxuryTax([...committed, selected.construction], caps, 'taxed').charged;
+      const allInCost = selected.price + (nextTax - currentTax);
+      certificate = advanceTrustedSnakeSeatingCertificate({
+        certificate,
+        teamId,
+        playerId,
+        allInCost,
+      });
+      expect(certificate, `${teamCount}-team certificate after pick ${pickIndex + 1}`).not.toBeNull();
+      completedPicks.push({ teamId, playerId, settledSalary: selected.price });
+    });
+
+    expect(assistantUnavailable, `${teamCount}-team Assistant availability`).toEqual([]);
+    expect(completedPicks).toHaveLength(teamCount * 22);
+    expect(new Set(completedPicks.map((pick) => pick.playerId))).toHaveLength(teamCount * 22);
+    expect(certificate).not.toBeNull();
+    if (!certificate) return null;
+    certificate.input.clubs.forEach((club) => {
+      expect(club.roster, `${teamCount}-team ${club.teamId} roster count`).toHaveLength(22);
+      expect(isLegalRoster(club.roster.map((player) => player.shape)), `${teamCount}-team ${club.teamId} legal roster`).toBe(true);
+      expect(club.budgetRemaining, `${teamCount}-team ${club.teamId} affordable roster`).toBeGreaterThanOrEqual(-1e-6);
+      expect(certificate!.proof.assignments.find((row) => row.teamId === club.teamId)?.playerIds ?? [],
+        `${teamCount}-team ${club.teamId} no missing final slots`).toEqual([]);
+    });
+    return { picks: completedPicks.length, slowestAssistantMs };
+  };
+
+  test('completes four- and eight-team real-player rooms with a useful Assistant on every turn', () => {
+    const startedAt = performance.now();
+    const four = runCompleteRoom(4);
+    const eight = runCompleteRoom(8);
+    console.info('SNAKE_FULL_ROOM_SCALE', JSON.stringify({
+      elapsedMs: Math.round(performance.now() - startedAt),
+      four: four && { ...four, slowestAssistantMs: Math.round(four.slowestAssistantMs) },
+      eight: eight && { ...eight, slowestAssistantMs: Math.round(eight.slowestAssistantMs) },
+    }));
+    expect(four?.picks).toBe(88);
+    expect(eight?.picks).toBe(176);
+  }, 600_000);
+
   test('advances one early production certificate directly and constructively', () => {
     const input = {
       clubs: TEAM_IDS.map((teamId) => ({

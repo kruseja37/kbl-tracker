@@ -13,6 +13,7 @@ describe('SnakeCompanionFrame Batch 5 surface', () => {
     render(<SnakeCompanionFrame
       team={team}
       currentPick={19}
+      onClockTeam={{ name: 'Buzzards', colors: { primary: '#006b2d', secondary: '#ffdc00' } }}
       order={[{ pick: 19, teamName: 'Buzzards' }, { pick: 20, teamName: 'Beewolves' }]}
       ticker={['KODIAKS SELECTED JOVITA PULO']}
       selectedPlayer={<div data-testid="selected">SELECTED PROFILE</div>}
@@ -30,6 +31,8 @@ describe('SnakeCompanionFrame Batch 5 surface', () => {
       'lg:max-h-[calc(100vh-18rem)]',
     );
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('PICK 19');
+    expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('BUZZARDS · PICK 19');
+    expect(screen.getByTestId('companion-live-strip')).toHaveStyle({ backgroundColor: '#006b2d' });
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('#20 BEEWOLVES');
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('KODIAKS SELECTED JOVITA PULO');
     expect(screen.getByTestId('companion-live-strip').querySelector('.overflow-x-auto')).not.toBeNull();

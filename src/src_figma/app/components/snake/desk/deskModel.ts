@@ -11,8 +11,11 @@ import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import {
   assignLuxuryTaxPitchingGroups,
   luxuryRowPlayerRating,
+  luxuryTax,
   playerEligibleForLuxuryRow,
+  shiftLuxuryCaps,
   type ConstructionPlayer,
+  type TeamCapIdentity,
 } from '../../../../../engines/leagueConstruction';
 import type { SnakeRiskRead } from '../../../../../engines/snakeRationalRoom';
 import { deriveVersionGroupId } from '../../../../../engines/snakeVersioning';
@@ -38,6 +41,8 @@ export interface DeskCandidate extends DeskEligibilityCandidate {
   identityChips?: readonly string[];
   advisorWorth: number;
   iv: number;
+  /** Settled salary for rostered players; frozen IV salary otherwise. */
+  salary?: number;
   marginalTax: number;
   trueCost: number;
   archetypeChip: string;
@@ -50,6 +55,8 @@ export interface DeskCandidate extends DeskEligibilityCandidate {
   hasNextPick?: boolean;
   riskReason?: string;
   legalFinishLine: string;
+  /** Current shared completion certificate membership; independent from identity FIT. */
+  finishStatus?: 'DRAFTABLE' | 'OPEN' | 'BLOCKED';
   boardFallout?: string;
   construction: ConstructionPlayer;
   drafted?: boolean;
@@ -76,6 +83,7 @@ export interface TaxCoreRow {
   key: string;
   label: string;
   playerNames: string[];
+  tax?: number;
 }
 
 const POSITION_ORDER: readonly TaxonomyPosition[] = [
@@ -195,6 +203,24 @@ export function seedBoardRankings(candidates: readonly DeskCandidate[]): SnakeSe
     byPosition: seedPositionalRankings(candidates),
     global: sortedByAdvisorWorth(candidates).map((candidate) => candidate.id),
     frozenPlayerIds: [],
+  };
+}
+
+export function setSeatBoardZeroInterest(
+  board: SnakeSeatBoardRecord,
+  playerId: string,
+  zeroInterest: boolean,
+): SnakeSeatBoardRecord {
+  const current = new Set(board.rankings.zeroInterestPlayerIds ?? []);
+  if (zeroInterest) current.add(playerId);
+  else current.delete(playerId);
+  return {
+    ...structuredClone(board),
+    rankings: {
+      ...structuredClone(board.rankings),
+      zeroInterestPlayerIds: [...current].sort(),
+    },
+    revision: board.revision + 1,
   };
 }
 
@@ -663,10 +689,13 @@ export function buildTaxCoreRows(input: {
   candidates: readonly DeskCandidate[];
   boardPlayerIds: readonly string[];
   caps: readonly LuxuryCapRow[];
+  capIdentity?: TeamCapIdentity;
 }): TaxCoreRow[] {
   const boardIds = new Set(input.boardPlayerIds);
   const players = input.candidates.filter((candidate) => boardIds.has(candidate.id));
-  const pitchingGroups = assignLuxuryTaxPitchingGroups(players.map((candidate) => candidate.construction));
+  const settledCaps = input.capIdentity ? shiftLuxuryCaps([...input.caps], input.capIdentity) : [...input.caps];
+  const construction = players.map((candidate) => candidate.construction);
+  const pitchingGroups = assignLuxuryTaxPitchingGroups(construction);
   const rotationIds = new Set(pitchingGroups.rotation.map((player) => player.id));
   const bullpenIds = new Set(pitchingGroups.bullpen.map((player) => player.id));
   const inGroup = (player: ConstructionPlayer, group: LuxuryCapRow['group']): boolean => {
@@ -674,7 +703,10 @@ export function buildTaxCoreRows(input: {
     if (group === 'rotation') return rotationIds.has(player.id);
     return bullpenIds.has(player.id);
   };
-  return input.caps.map((cap) => {
+  const bindingByKey = new Map(luxuryTax(construction, settledCaps, 'taxed').binding.map((row) => [
+    `${row.group}:${row.stat}`, row.tax,
+  ]));
+  return settledCaps.map((cap) => {
     const groupWord = cap.group === 'hitters' ? 'HITTERS' : cap.group === 'rotation' ? 'STARTERS' : 'BULLPEN ARMS';
     const core = players
       .filter((candidate) => inGroup(candidate.construction, cap.group)
@@ -687,6 +719,7 @@ export function buildTaxCoreRows(input: {
       key: `${cap.group}:${cap.stat}`,
       label: `YOUR TOP ${cap.topN} ${groupWord} BY ${statWord(cap.stat)}`,
       playerNames: core.map((candidate) => candidate.name),
+      tax: bindingByKey.get(`${cap.group}:${cap.stat}`) ?? 0,
     };
   });
 }

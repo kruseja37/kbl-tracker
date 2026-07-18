@@ -95,6 +95,7 @@ describe('SelectedPlayerCard', () => {
     for (const label of ['CON', 'SPD', 'FLD', 'ARM', 'VEL', 'JNK', 'ACC']) expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByText('POW')).not.toBeInTheDocument();
     expect(screen.getByText('ARSENAL · 4F · SL · CH')).toBeInTheDocument();
+    expect(container.querySelectorAll('[aria-hidden="true"] span[style*="width"]')).toHaveLength(7);
     expect(screen.getByText('Big Hack')).toBeInTheDocument();
     expect(screen.getByText('Tough Out')).toBeInTheDocument();
     expect(screen.getByText('PLAYER ARCHETYPE · Effectively-Wild')).toBeInTheDocument();
@@ -123,6 +124,35 @@ describe('SelectedPlayerCard', () => {
     for (const control of container.querySelectorAll('button')) {
       expect(control).toHaveClass('min-h-11');
     }
+  });
+
+  it('persists zero-interest intent, shows live next-pick risk, and never attributes negative true cost to a drafted player', () => {
+    const onSetZeroInterest = vi.fn();
+    const { rerender } = render(<SelectedPlayerCard
+      player={player}
+      candidate={{ ...candidate, hasNextPick: true, risk: 'AT_RISK', riskReason: 'LIKELY GONE BEFORE #9' }}
+      consequence={null}
+      teamName="Beewolves"
+      zeroInterest={false}
+      onSetZeroInterest={onSetZeroInterest}
+    />);
+    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveTextContent('LIKELY GONE BEFORE #9');
+    fireEvent.click(screen.getByRole('button', { name: 'ZERO INTEREST' }));
+    expect(onSetZeroInterest).toHaveBeenCalledWith(true);
+
+    rerender(<SelectedPlayerCard
+      player={player}
+      candidate={{ ...candidate, drafted: true, salary: 90_000, marginalTax: -500_000, trueCost: -410_000 }}
+      consequence={null}
+      teamName="Beewolves"
+      zeroInterest
+      onSetZeroInterest={onSetZeroInterest}
+    />);
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('SALARY$90,000');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TAX IMPACTSEE TAX CORE');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST—');
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('-$410,000');
+    expect(screen.queryByRole('button', { name: 'RESTORE INTEREST' })).not.toBeInTheDocument();
   });
 
   it('keeps the inline profile contract and renders unknown consequences as dashes, never safe or zero', () => {

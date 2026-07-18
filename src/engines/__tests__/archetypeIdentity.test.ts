@@ -221,7 +221,7 @@ describe('archetype identity bridge', () => {
 
   test('selectTeamArchetype wires MLB and farm provenance and persists the team', async () => {
     const team = minimalTeam();
-    const returned = await selectTeamArchetype(team, 'murderers-row');
+    const returned = await selectTeamArchetype(team, 'murderers-row', undefined, saveTeam);
 
     expect(returned.mlbArchetypeKey).toBe('murderers-row');
     expect(returned.capIdentity?.rawShift).toBeDefined();
@@ -231,7 +231,12 @@ describe('archetype identity bridge', () => {
     expect(saveTeam).toHaveBeenCalledTimes(1);
 
     vi.mocked(saveTeam).mockClear();
-    const withFarm = await selectTeamArchetype(minimalTeam({ id: 'team-2' }), 'murderers-row', 'rangy-defenders');
+    const withFarm = await selectTeamArchetype(
+      minimalTeam({ id: 'team-2' }),
+      'murderers-row',
+      'rangy-defenders',
+      saveTeam,
+    );
     expect(withFarm.farmArchetypeKey).toBe('rangy-defenders');
     expect(withFarm.farmCapIdentity?.rawShift).toBeDefined();
     expect(withFarm.farmCapIdentity!.increase).toEqual(['SPD', 'ARM', 'FLD']);
@@ -242,7 +247,7 @@ describe('archetype identity bridge', () => {
   });
 
   test('throws on unknown archetype keys', async () => {
-    await expect(selectTeamArchetype(minimalTeam(), 'not-a-key')).rejects.toThrow();
+    await expect(selectTeamArchetype(minimalTeam(), 'not-a-key', undefined, saveTeam)).rejects.toThrow();
   });
 
   test('DJ-03 resolver prefers manual band priorities when any band is positive', () => {
@@ -330,7 +335,12 @@ describe('archetype identity bridge', () => {
     // The 3-boost regression case (rangy-defenders) — the exact pre-lock red — round-trips
     // through the persistence path like any 2-boost archetype.
     vi.mocked(saveTeam).mockClear();
-    const rangy = await selectTeamArchetype(minimalTeam({ id: 'team-rangy' }), 'rangy-defenders');
+    const rangy = await selectTeamArchetype(
+      minimalTeam({ id: 'team-rangy' }),
+      'rangy-defenders',
+      undefined,
+      saveTeam,
+    );
     expect(rangy.mlbArchetypeKey).toBe('rangy-defenders');
     expect(rangy.capIdentity?.rawShift).toBeDefined();
     expect(saveTeam).toHaveBeenCalledTimes(1);

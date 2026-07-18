@@ -405,8 +405,9 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ROOM \d+\/\d+ · FAN [+-]?\d+/);
     const committed = screen.getByRole('button', { name: /SELECT GONE-C PLAYER/ });
     expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'ROSTER');
-    expect(committed).toHaveTextContent('$10,700');
-    expect(committed).toHaveTextContent('TAX +$700');
+    expect(committed).toHaveTextContent('$10,000');
+    expect(committed).toHaveTextContent('SALARY');
+    expect(committed).not.toHaveTextContent('TAX +$700');
     fireEvent.click(committed);
     expect(screen.getByText('COMMITTED TO YOUR 22-MAN ROSTER.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('GONE-C PLAYER GONE');
@@ -663,6 +664,38 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(write.board.revision).toBe(source.seatBoards!.a.revision + 1);
     expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  test('stores zero-interest only on the active private seat and can restore it revision-safely', async () => {
+    const source = session(false);
+    const untouchedB = structuredClone(source.seatBoards!.b);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ZERO INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const excluded = mocks.patchBoard.mock.calls[0][0] as {
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(excluded.teamId).toBe('a');
+    expect(excluded.expectedBoardRevision).toBe(source.seatBoards!.a.revision);
+    expect(excluded.board.rankings.zeroInterestPlayerIds).toEqual(['a-replacement']);
+    expect(excluded.board.slots).toEqual(source.seatBoards!.a.slots);
+    expect(mocks.roomState?.seatBoards?.b).toEqual(untouchedB);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'RESTORE INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
+    const restored = mocks.patchBoard.mock.calls[1][0] as {
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(restored.expectedBoardRevision).toBe(excluded.board.revision);
+    expect(restored.board.rankings.zeroInterestPlayerIds).toEqual([]);
+    expect(restored.board.slots).toEqual(source.seatBoards!.a.slots);
+    expect(mocks.roomState?.seatBoards?.b).toEqual(untouchedB);
   });
 
   test('rapid double Undo produces exactly one revision-safe restore and no false stale error', async () => {

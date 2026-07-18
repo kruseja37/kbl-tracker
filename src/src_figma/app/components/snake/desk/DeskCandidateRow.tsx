@@ -45,11 +45,12 @@ export function DeskCandidateRow(props: {
         {props.prefix ? <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[var(--ballpark-brass)]">{props.prefix}</span> : null}
         <span className="block break-words font-black uppercase leading-tight">{props.candidate.name}</span>
         {identity ? <span className="block break-words text-[10px] font-black text-[var(--ballpark-brass)]">{identity}</span> : null}
-        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{risk ? ` · ${risk}` : ''}{warning ? ` · ${warning}` : ''}</span>
+        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{!props.candidate.drafted && props.candidate.finishStatus ? ` · ${props.candidate.finishStatus}` : ''}{risk ? ` · ${risk}` : ''}{warning ? ` · ${warning}` : ''}</span>
       </span>
       <span className="text-right text-[11px] font-black">
-        <span className="block">${Math.round(props.candidate.trueCost).toLocaleString()}</span>
-        {props.candidate.marginalTax !== 0 ? <span className={`block ${props.candidate.marginalTax < 0 ? 'text-[var(--ballpark-status-green)]' : 'text-[var(--ballpark-warn-text)]'}`}>TAX {props.candidate.marginalTax > 0 ? '+' : '−'}${Math.round(Math.abs(props.candidate.marginalTax)).toLocaleString()}</span> : null}
+        <span className="block">${Math.round(props.candidate.drafted ? props.candidate.salary ?? props.candidate.iv : props.candidate.trueCost).toLocaleString()}</span>
+        {props.candidate.drafted ? <span className="block text-[9px] text-[var(--ballpark-chalk)]/70">SALARY</span>
+          : props.candidate.marginalTax !== 0 ? <span className={`block ${props.candidate.marginalTax < 0 ? 'text-[var(--ballpark-status-green)]' : 'text-[var(--ballpark-warn-text)]'}`}>TAX {props.candidate.marginalTax > 0 ? '+' : '−'}${Math.round(Math.abs(props.candidate.marginalTax)).toLocaleString()}</span> : null}
       </span>
     </button>
     </div>

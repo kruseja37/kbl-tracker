@@ -25,6 +25,7 @@ import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/le
 import type { SnakePoolAssemblyMode } from '../engines/snakePoolAssembly';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
+import type { SnakeBoardSlotId } from '../engines/snakeBoardSlots';
 import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import type { TierKey } from '../data/tierParams';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
@@ -57,6 +58,7 @@ import {
 export type { EditHistoryEntry } from './editHistoryTracker';
 export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
+export { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId } from '../engines/snakeBoardSlots';
 
 const DB_NAME = 'kbl-league-builder';
 const DB_VERSION = 10;
@@ -377,14 +379,6 @@ export interface LeagueBuilderStartupDraftSession {
   lastModified: string;
 }
 
-export const SNAKE_BOARD_SLOT_IDS = [
-  'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'BACKUP_C',
-  'SP1', 'SP2', 'SP3', 'SP4', 'RP1', 'RP2', 'RP3', 'CP',
-  'FLEX1', 'FLEX2', 'FLEX3', 'FLEX4', 'SWING',
-] as const;
-
-export type SnakeBoardSlotId = (typeof SNAKE_BOARD_SLOT_IDS)[number];
-
 export interface SnakeSeatBoardRecord {
   /** Exactly one unique player id per canonical 22-man board slot. */
   slots: Record<SnakeBoardSlotId, string>;
@@ -393,6 +387,8 @@ export interface SnakeSeatBoardRecord {
     global?: string[];
     byPosition?: Partial<Record<TaxonomyPosition, string[]>>;
     frozenPlayerIds?: string[];
+    /** Private hard pass: excluded from this seat's Assistant board, never from the public pool. */
+    zeroInterestPlayerIds?: string[];
   };
   /** Last-write-wins revision scoped to this seat record. */
   revision: number;
@@ -2676,6 +2672,7 @@ function validateSeatBoardPayload(
     if (!isRecord(value.rankings)) throw malformed();
     if (value.rankings.global !== undefined && !isStringArray(value.rankings.global)) throw malformed();
     if (value.rankings.frozenPlayerIds !== undefined && !isStringArray(value.rankings.frozenPlayerIds)) throw malformed();
+    if (value.rankings.zeroInterestPlayerIds !== undefined && !isStringArray(value.rankings.zeroInterestPlayerIds)) throw malformed();
     if (value.rankings.byPosition !== undefined && (
       !isRecord(value.rankings.byPosition)
       || !Object.values(value.rankings.byPosition).every(isStringArray)

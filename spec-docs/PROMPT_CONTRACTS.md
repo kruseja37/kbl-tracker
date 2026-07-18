@@ -32453,3 +32453,54 @@ pick/trade.
 **Gates:** focused 250-test companion/room/sync matrix, TypeScript, changed-file ESLint, production
 build, diff integrity, separate non-builder audit, then JK's same-room recovery click. No push,
 merge, or deploy.
+
+## SNAKE-LATE-DRAFT-DECISION-TRUTH-44
+
+**Role:** Snake late-draft correctness and GM-decision builder.
+
+**Goal:** Every four- and eight-team room must remain finishable through 22 rounds. At every live
+turn the GM can immediately identify which available players preserve a legal affordable finish,
+see the projected tax/finish consequence before picking, and retain a useful Assistant GM board
+whenever any legal affordable completion exists.
+
+**Allowed implementation:** Snake Assistant, legal-finish and derived decision engines; main and
+companion Snake desks; private board schema only as needed for per-seat zero-interest state; focused
+engine/UI/browser tests; required finding/session/status records.
+
+**Frozen behavior:**
+
+- `STRONG/SOLID/WEAK FIT` remains identity-only under the ratified exact thresholds. Money or risk
+  may not relabel it. Add a distinct pick/finish state.
+- Salary is frozen IV. Current tax is exact roster tax. `TAX IF PICKED` is a signed current-pick
+  delta; projected finish tax and money must come from the exact legal-finish bill.
+- Never describe a signed remove-and-reinsert tax delta as a drafted player's salary or true cost.
+- A proved legal affordable completion outranks Assistant preference optimization. The Assistant may
+  say that preference optimization is limited, but it may not disappear while a valid 22 exists.
+- Zero-interest is private per-seat preference. It cannot delete a drafted player, break committed
+  roster truth, alter FIT/tax, leak to another seat, or weaken legality.
+- Keep all heavy calculations out of row render loops. Cache by stable team/session/player input,
+  cancel stale work, and preserve immediate sort/reorder/companion interaction.
+- Explanatory methodology stays behind Help. Visible status may name operational state and blockers.
+- Preserve pick/trade/correction, version-person uniqueness, companion privacy/admission/sync,
+  archetype, tax, cap, and FARM no-trade law.
+
+**Required proof:**
+
+- Red-first case where preferred Assistant optimization is unavailable but exact legal finish exists;
+  repaired result returns a legal solvent 22 containing every committed player.
+- At 19/22, all visible candidates receive stable `DRAFTABLE`, `OPEN`, or `BLOCKED` state without
+  one-by-one selection; at least one draftable candidate exists whenever the exact engine proves a
+  finish. Selected-card projected tax and money equal the pick validator.
+- Drafted roster rows never show negative salary/true cost; tax-core detail names actual tax rows and
+  projected consequences without false player attribution.
+- Four-team and eight-team deterministic real-player rooms complete all 22 rounds (88 and 176 picks)
+  with every team legal and affordable, Assistant availability at every turn, no stale drafted cards,
+  and no false final-round block.
+- Rating bars, zero-interest exclusion, chemistry trait counts, full clickable draft log, next-pick
+  risk, and companion on-clock colors receive focused UI proof.
+- Eight-team production-browser latency covers opening the desk, sorting/filtering, selecting a
+  player, advancing a pick, and companion refresh.
+
+**Gates:** focused red/green suites, four/eight-team completion journey, TypeScript, changed-file
+ESLint, production build/PWA, diff integrity, frozen diff for separate non-builder audit, then JK's
+real browser walk. No push, merge, or deploy.

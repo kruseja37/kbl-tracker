@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
 import { RankReorderList } from '../../shared/RankReorderList';
+import { moveRankedId } from '../../shared/RankReorderList';
 import { DeskCandidateRow } from './DeskCandidateRow';
 import type { DeskCandidate } from './deskModel';
 
@@ -8,6 +9,7 @@ export type SnakeRankingView = 'OVERALL' | TaxonomyPosition;
 type SnakeRankingSort = 'BOARD' | 'FIT' | 'IV' | 'TAX' | 'TRUE_COST'
   | 'POW' | 'CON' | 'SPD' | 'FLD' | 'ARM' | 'VEL' | 'JNK' | 'ACC';
 type SnakeFitFilter = 'ALL' | 'STRONG' | 'SOLID' | 'WEAK';
+type SnakeFinishFilter = 'ALL' | 'DRAFTABLE';
 
 const SORT_OPTIONS: ReadonlyArray<{ id: SnakeRankingSort; label: string }> = [
   { id: 'BOARD', label: 'BOARD' },
@@ -63,6 +65,7 @@ function metricPrefix(candidate: DeskCandidate, sort: SnakeRankingSort, boardRan
 const POSITION_ORDER: readonly TaxonomyPosition[] = [
   'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP',
 ];
+const RANKING_PAGE_SIZE = 20;
 
 export function RankingsView(props: {
   candidates: readonly DeskCandidate[];
@@ -84,6 +87,8 @@ export function RankingsView(props: {
   const [sort, setSort] = useState<SnakeRankingSort>('BOARD');
   const [direction, setDirection] = useState<'ASC' | 'DESC'>('ASC');
   const [fitFilter, setFitFilter] = useState<SnakeFitFilter>('ALL');
+  const [finishFilter, setFinishFilter] = useState<SnakeFinishFilter>('ALL');
+  const [page, setPage] = useState(0);
   const rankedIds = useMemo(() => (view === 'OVERALL'
     ? props.overallRankings ?? []
     : props.rankings[view] ?? []).filter((id) => byId.has(id)), [byId, props.overallRankings, props.rankings, view]);
@@ -99,7 +104,8 @@ export function RankingsView(props: {
         candidate.name,
         candidate.position,
         ...(candidate.identityChips ?? []),
-      ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery))));
+      ].some((value) => value.toLocaleLowerCase().includes(normalizedQuery)))
+      && (finishFilter === 'ALL' || candidate.finishStatus === 'DRAFTABLE'));
     if (sort === 'BOARD') return filtered;
     const boardOrder = new Map(availableIds.map((id, index) => [id, index]));
     return [...filtered].sort((left, right) => {
@@ -113,7 +119,14 @@ export function RankingsView(props: {
         - (boardOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
         || left.id.localeCompare(right.id);
     });
-  }, [availableIds, direction, fitFilter, normalizedQuery, rows, sort]);
+  }, [availableIds, direction, finishFilter, fitFilter, normalizedQuery, rows, sort]);
+  const pageCount = Math.max(1, Math.ceil(matchingRows.length / RANKING_PAGE_SIZE));
+  useEffect(() => {
+    if (page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
+  const pageStart = Math.min(page, pageCount - 1) * RANKING_PAGE_SIZE;
+  const visibleRows = matchingRows.slice(pageStart, pageStart + RANKING_PAGE_SIZE);
+  const changePage = (next: number) => setPage(Math.max(0, Math.min(next, pageCount - 1)));
   const persistOrder = (orderedAvailableIds: readonly string[]) => {
     let availableIndex = 0;
     const completeOrder = rankedIds.map((id) => (
@@ -132,7 +145,7 @@ export function RankingsView(props: {
             type="button"
             aria-pressed={view === next}
             className={`ballpark-press-button ballpark-press-sm min-h-11 min-w-11 ${view === next ? 'ballpark-press-action' : 'ballpark-press-default'}`}
-            onClick={() => setView(next)}
+            onClick={() => { setView(next); setPage(0); }}
           >
             {next}
           </button>
@@ -149,6 +162,7 @@ export function RankingsView(props: {
                 const next = event.target.value as SnakeRankingSort;
                 setSort(next);
                 setDirection(defaultDirection(next));
+                setPage(0);
               }}
               className="mt-1 block min-h-11 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-xs"
             >
@@ -160,29 +174,45 @@ export function RankingsView(props: {
             className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11 min-w-11"
             aria-label={`Sort ${direction === 'ASC' ? 'ascending' : 'descending'}`}
             disabled={sort === 'BOARD'}
-            onClick={() => setDirection((current) => current === 'ASC' ? 'DESC' : 'ASC')}
+            onClick={() => { setDirection((current) => current === 'ASC' ? 'DESC' : 'ASC'); setPage(0); }}
           >{direction === 'ASC' ? '↑' : '↓'}</button>
           <label className="text-[10px] font-black">FIT
             <select
               aria-label="Filter by fit"
               value={fitFilter}
-              onChange={(event) => setFitFilter(event.target.value as SnakeFitFilter)}
+              onChange={(event) => { setFitFilter(event.target.value as SnakeFitFilter); setPage(0); }}
               className="mt-1 block min-h-11 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-xs"
             >
               {(['ALL', 'STRONG', 'SOLID', 'WEAK'] as const).map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label className="text-[10px] font-black">FINISH
+            <select
+              aria-label="Filter by finish safety"
+              value={finishFilter}
+              onChange={(event) => { setFinishFilter(event.target.value as SnakeFinishFilter); setPage(0); }}
+              className="mt-1 block min-h-11 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-xs"
+            >
+              <option value="ALL">ALL</option>
+              <option value="DRAFTABLE">DRAFTABLE</option>
             </select>
           </label>
           <label className="text-[10px] font-black">FIND PLAYER
             <input
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => { setQuery(event.target.value); setPage(0); }}
               className="mt-1 block min-h-11 w-52 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 text-sm"
             />
           </label>
         </div>
-        {normalizedQuery || sort !== 'BOARD' || fitFilter !== 'ALL' ? <div className="space-y-1.5" aria-label={`${view} ranking results`}>
-          {matchingRows.map((candidate) => {
+        {matchingRows.length > RANKING_PAGE_SIZE ? <nav className="mb-2 flex items-center gap-2" aria-label={`${view} ranking pages`}>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={pageStart === 0} onClick={() => changePage(page - 1)}>PREV</button>
+          <span className="font-black">{pageStart + 1}–{Math.min(pageStart + RANKING_PAGE_SIZE, matchingRows.length)} / {matchingRows.length}</span>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={pageStart + RANKING_PAGE_SIZE >= matchingRows.length} onClick={() => changePage(page + 1)}>NEXT</button>
+        </nav> : null}
+        {normalizedQuery || sort !== 'BOARD' || fitFilter !== 'ALL' || finishFilter !== 'ALL' ? <div className="space-y-1.5" aria-label={`${view} ranking results`}>
+          {visibleRows.map((candidate) => {
             const rank = boardRankById.get(candidate.id) ?? 0;
             return <div
               key={candidate.id}
@@ -206,10 +236,13 @@ export function RankingsView(props: {
           })}
           {matchingRows.length === 0 ? <p className="border-2 border-[var(--ballpark-panel-border)] p-3 font-black">NO MATCHES</p> : null}
         </div> : <RankReorderList
-          items={matchingRows}
+          items={visibleRows}
           getId={(candidate) => candidate.id}
           itemLabel={(candidate) => candidate.name}
           onReorder={persistOrder}
+          onMove={(fromIndex, toIndex) => persistOrder(moveRankedId(matchingRows, (candidate) => candidate.id, fromIndex, toIndex))}
+          rankOffset={pageStart}
+          totalItemCount={matchingRows.length}
           renderContent={(candidate) => <DeskCandidateRow
             candidate={candidate}
             selected={props.selectedCandidateId === candidate.id}

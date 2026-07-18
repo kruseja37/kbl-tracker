@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { luxuryTax } from '../../../../../../engines/leagueConstruction';
+
 import {
   buildAdvisorLog,
   buildCertifiedSeatBoard,
@@ -11,6 +13,7 @@ import {
   refitBoardSlots,
   reorderSeatBoardRankings,
   seedPositionalRankings,
+  setSeatBoardZeroInterest,
   type DeskCandidate,
 } from '../deskModel';
 
@@ -154,6 +157,21 @@ describe('private desk model', () => {
     expect(reordered.board!.revision).toBe(board.revision + 1);
     expect(reordered.board!.rankings.frozenPlayerIds).toContain(target);
     expect(board.slots).toEqual(priorSlots);
+  });
+
+  it('revision-safely stores and clears private zero-interest without mutating board membership', () => {
+    const board = buildSeededSeatBoard(fullPool()).board!;
+    const before = structuredClone(board);
+    const excluded = setSeatBoardZeroInterest(board, 'SS-2', true);
+    expect(excluded.rankings.zeroInterestPlayerIds).toEqual(['SS-2']);
+    expect(excluded.slots).toEqual(board.slots);
+    expect(excluded.revision).toBe(board.revision + 1);
+    expect(board).toEqual(before);
+
+    const restored = setSeatBoardZeroInterest(excluded, 'SS-2', false);
+    expect(restored.rankings.zeroInterestPlayerIds).toEqual([]);
+    expect(restored.slots).toEqual(board.slots);
+    expect(restored.revision).toBe(excluded.revision + 1);
   });
 
   it('locks drafted closers into the plan, assigns the highest-IV owned closer to CP, and excludes undrafted extra closers', () => {
@@ -574,16 +592,21 @@ describe('private desk model', () => {
   });
 
   it('uses top-N bullpen arms copy and never creates a CP tax line', () => {
-    const rows = buildTaxCoreRows({
-      candidates: fullPool(),
-      boardPlayerIds: Object.values(buildSeededSeatBoard(fullPool()).board!.slots),
-      caps: [
+    const pool = fullPool();
+    const boardPlayerIds = Object.values(buildSeededSeatBoard(pool).board!.slots);
+    const caps = [
         { group: 'hitters', stat: 'POW', topN: 8, cap: 500, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
         { group: 'bullpen', stat: 'VEL', topN: 4, cap: 200, penaltyCurve: 1, penaltyPer100: 1, minAdder: 0 },
-      ],
+      ] as const;
+    const rows = buildTaxCoreRows({
+      candidates: pool,
+      boardPlayerIds,
+      caps,
     });
     expect(rows.map((row) => row.label)).toContain('YOUR TOP 4 BULLPEN ARMS BY VELOCITY');
     expect(rows.map((row) => row.label).join(' ')).not.toMatch(/\bCP\b/);
+    const construction = pool.filter((row) => boardPlayerIds.includes(row.id)).map((row) => row.construction);
+    expect(rows.reduce((sum, row) => sum + (row.tax ?? 0), 0)).toBe(luxuryTax(construction, [...caps], 'taxed').charged);
   });
 });
 

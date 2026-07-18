@@ -377,11 +377,41 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     });
   });
 
+  test('an already-open companion advances the live pick and removes the drafted player on its recurring pull', async () => {
+    const source = structuredClone(mocks.currentSession as LeagueBuilderMlbDraftSession);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.getByRole('button', { name: /SELECT DUAL PLAYER/ })).toBeInTheDocument();
+
+    mocks.currentSession = {
+      ...source,
+      completedPicks: [{
+        round: 1,
+        pick: 1,
+        teamId: 'b',
+        playerId: 'dual',
+        settledSalary: 10_100,
+        marginalTax: 0,
+      }],
+      currentPickIndex: 1,
+      revision: source.revision + 1,
+      lastModified: '2026-07-12T00:00:01.000Z',
+    };
+
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(screen.getByText('CLUB B SELECTED DUAL PLAYER')).toBeInTheDocument());
+    expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('CLUB A · PICK 2');
+    expect(screen.queryByRole('button', { name: /SELECT DUAL PLAYER/ })).not.toBeInTheDocument();
+  });
+
   test('an unrequested player-pool row never inherits another player risk calculation', async () => {
     mocks.riskMode = 'SAFE';
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NEXT' }));
 
     const unrequested = screen.getByRole('button', { name: /SELECT FLEX-8 PLAYER/i });
     expect(unrequested).not.toHaveTextContent('CALCULATING');
@@ -503,6 +533,34 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(write.board.revision).toBe(original.revision + 1);
     expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  test('stores and restores zero-interest through the approved companion seat only', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const original = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ZERO INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const excluded = mocks.patchBoard.mock.calls[0][0] as {
+      deviceId: string;
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(excluded).toMatchObject({ deviceId: 'ipad-a', teamId: 'a', expectedBoardRevision: original.revision });
+    expect(excluded.board.rankings.zeroInterestPlayerIds).toEqual(['dual']);
+    expect(excluded.board.slots).toEqual(original.slots);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'RESTORE INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
+    const restored = mocks.patchBoard.mock.calls[1][0] as {
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(restored.expectedBoardRevision).toBe(excluded.board.revision);
+    expect(restored.board.rankings.zeroInterestPlayerIds).toEqual([]);
+    expect(restored.board.slots).toEqual(original.slots);
   });
 
   test('actual main and companion page requests match, and Optimize pins the selected player through the derived board', async () => {

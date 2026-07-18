@@ -71,6 +71,7 @@ import {
   buildTaxCoreRows,
   isCanonicalSnakeBoard,
   reorderSeatBoardRankings,
+  setSeatBoardZeroInterest,
   type DeskCandidate,
 } from '../components/snake/desk/deskModel';
 import {
@@ -706,6 +707,10 @@ export default function SnakeCompanion() {
       need,
     });
     const advisorWorthById = new Map(assembled.map((row) => [row.playerId, row.worth]));
+    const certifiedFinishIds = new Set(
+      session.snakeSetup?.seatingCertificate?.assignments
+        .find((assignment) => assignment.teamId === team.id)?.playerIds ?? [],
+    );
     const completedPickByPlayerId = new Map(session.completedPicks.map((pick) => [pick.playerId, pick]));
     const teamNameById = new Map(leagueTeams.map((entry) => [entry.id, entry.name]));
     const candidates: DeskCandidate[] = deskPlayers.flatMap((entry) => {
@@ -737,6 +742,7 @@ export default function SnakeCompanion() {
         versionGroupId: entry.versionGroupId,
         advisorWorth: advisorWorth!,
         iv: entry.price,
+        salary: displayedSalary,
         marginalTax,
         trueCost: displayedSalary + marginalTax,
         archetypeChip: locked.archetypeName,
@@ -759,6 +765,7 @@ export default function SnakeCompanion() {
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
         legalFinishLine: '',
+        finishStatus: completedPick ? undefined : certifiedFinishIds.has(entry.playerId) ? 'DRAFTABLE' : 'OPEN',
         construction: entry.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -841,7 +848,7 @@ export default function SnakeCompanion() {
       draftedChemistry,
       planChemistry,
       assistantNeed: draftedPlayersComplete ? need : null,
-      taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps }),
+      taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }),
       advisorLog: brokenSlots.map((slotId) => ({ key: `broken:${slotId}`, text: `YOUR ${slotId} PLAN IS BROKEN — YOUR RANKING HAS NO AVAILABLE NAME.`, actionable: true })),
     };
   }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, boardUnavailable, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
@@ -853,7 +860,7 @@ export default function SnakeCompanion() {
     )) ?? deskState.candidates.find((candidate) => !boardUnavailable.has(candidate.id))?.id ?? null;
   }, [board, boardUnavailable, deskState]);
   const selectedCandidateId = selectedPlayerId
-    && !boardUnavailable.has(selectedPlayerId)
+    && (!boardUnavailable.has(selectedPlayerId) || session?.completedPicks.some((pick) => pick.playerId === selectedPlayerId))
     && deskState?.candidates.some((candidate) => candidate.id === selectedPlayerId)
       ? selectedPlayerId
       : defaultSelectedPlayerId;
@@ -890,6 +897,11 @@ export default function SnakeCompanion() {
         archetype: historical ? historicalToSimArchetype(historical) : { name: 'Balanced', rawShift: {} },
         ownBandPriorities: resolveLockedSeat({ team, session }).priorities,
         gmRankOverrides: board.rankings,
+        zeroInterestPlayerIds: board.rankings.zeroInterestPlayerIds,
+        certifiedCompletionPlayerIds: session.snakeSetup?.seatingCertificate?.feasible
+          ? session.snakeSetup.seatingCertificate.assignments
+            .find((assignment) => assignment.teamId === team.id)?.playerIds
+          : undefined,
         tier: league.tier ?? 'juiced',
         budget: pool.tierCap,
         baseCaps: pool.luxuryCaps,
@@ -1179,6 +1191,18 @@ export default function SnakeCompanion() {
     }
   }, [board, boardEligibilityCandidates, capturePrivateContext, getMlbDraftSession, ownDeviceId, privateContextIsCurrent, refreshSession, selectedConsequence, session, team]);
 
+  const setSelectedZeroInterest = useCallback(async (zeroInterest: boolean) => {
+    if (!selectedCandidateId || !board) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team?.id) return;
+    const outcome = await saveBoard(
+      setSeatBoardZeroInterest(board, selectedCandidateId, zeroInterest),
+      null,
+      guard,
+    );
+    if (outcome?.privateContextStillCurrent) setAssistantOptimizePlayerId(null);
+  }, [board, capturePrivateContext, saveBoard, selectedCandidateId, team?.id]);
+
   const pickValueChart = useMemo(() => derivePickValueChart(
     activePoolRows.map((row) => row.iv),
     session?.pickOrder.length ?? 0,
@@ -1392,6 +1416,10 @@ export default function SnakeCompanion() {
     })}
     onSwitchTeam={switchActiveTeam}
     currentPick={session.pickOrder[session.currentPickIndex]?.pick ?? session.currentPickIndex + 1}
+    onClockTeam={(() => {
+      const liveTeam = leagueTeams.find((entry) => entry.id === liveSlot?.teamId);
+      return liveTeam ? { name: liveTeam.name, colors: liveTeam.colors } : undefined;
+    })()}
     order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({ pick: slot.pick, teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? UNKNOWN_TEAM }))}
     ticker={ticker}
     message={message}
@@ -1408,11 +1436,23 @@ export default function SnakeCompanion() {
         setAssistantOptimizeRevision((revision) => revision + 1);
       }}
       onKeep={() => { void keepSelectedConsequence(); }}
+      zeroInterest={board.rankings.zeroInterestPlayerIds?.includes(selectedCandidateId ?? '') ?? false}
+      onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
+      actionConsequence={selectedConsequence?.status === 'ready'
+        ? selectedConsequence.after.legalFinish.affordability === 'OPEN'
+          ? 'FINISH COST CHECK OPEN.'
+          : selectedConsequence.after.legalFinish.feasible
+            ? `LEGAL 22 · $${Math.round(selectedConsequence.after.legalFinish.projectedSalary ?? 0).toLocaleString()} SALARY · $${Math.round(selectedConsequence.after.legalFinish.projectedTax ?? 0).toLocaleString()} TAX · $${Math.round(selectedConsequence.after.legalFinish.moneyLeft ?? 0).toLocaleString()} LEFT.`
+            : 'THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.'
+        : null}
+      blockReason={selectedConsequence?.status === 'ready' && !selectedConsequence.after.legalFinish.feasible
+        ? 'THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.'
+        : null}
       draftAction={liveSlot?.teamId === team.id ? (
         pickRequest ? (
           <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{pickRequest.pick} WAITING FOR HOTSEAT</span>
         ) : (
-          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused)} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || (selectedConsequence?.status === 'ready' && !selectedConsequence.after.legalFinish.feasible)} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
         )
       ) : undefined}
       decision={draftDecision}
@@ -1492,6 +1532,16 @@ export default function SnakeCompanion() {
       onSelectCandidate={selectCandidate}
       onReorder={(position, orderedIds) => { void reorder(position, orderedIds); }}
       onReorderOverall={(orderedIds) => { void reorder('OVERALL', orderedIds); }}
+      draftLog={session.completedPicks.map((pick) => {
+        const pickedPlayer = playerById.get(pick.playerId);
+        return {
+          pick: pick.pick,
+          teamName: leagueTeams.find((entry) => entry.id === pick.teamId)?.name ?? UNKNOWN_TEAM,
+          playerId: pick.playerId,
+          playerName: pickedPlayer ? fullName(pickedPlayer.firstName, pickedPlayer.lastName).toUpperCase() : UNKNOWN_PLAYER,
+          position: pickedPlayer?.primaryPosition ?? '—',
+        };
+      })}
       teamColors={team.colors}
       tradeGuide={<SnakeTradeGuide
         teams={leagueTeams.map((entry) => ({ id: entry.id, name: entry.name }))}

@@ -72,7 +72,7 @@ export function BoardView(props: {
         <summary className="flex min-h-11 cursor-pointer items-center font-black">YOUR TAX CORE</summary>
         {props.showHelp ? <p className="mt-2 text-sm font-bold">THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.</p> : null}
         <div className="mt-3 space-y-2">
-          {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
+          {props.taxCoreRows.map((row) => <p key={row.key}><strong>{row.label}{row.tax === undefined ? '' : ` · $${Math.round(row.tax).toLocaleString()} TAX`}</strong>: {row.playerNames.join(', ') || 'NONE'}</p>)}
         </div>
       </details> : null}
     </div>

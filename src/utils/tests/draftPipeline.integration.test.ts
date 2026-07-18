@@ -473,6 +473,8 @@ async function configureHubTeamOutput(): Promise<HubConfiguredTeamResult> {
   const configured = await selectTeamArchetype(
     { ...team, controlledBy: 'human' },
     HUB_ARCHETYPE_ID,
+    undefined,
+    saveTeam,
   );
   if (!configured.capIdentity?.rawShift) {
     throw new Error('Hub-configured archetype did not produce a raw-shift cap identity.');

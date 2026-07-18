@@ -7,6 +7,22 @@
 
 ## July 2026
 
+### 2026-07-17 (Snake late-draft law): exact legal completion outranks preference optimization at every room size
+
+**The ruling:** four-team testing is a repro size, not the product standard. A Snake room must preserve
+the same legality, tax, Assistant, privacy, and responsiveness law through a full 22 rounds for at
+least eight teams. When the room's exact simultaneous certificate proves an affordable legal finish,
+the Assistant may not disappear merely because its preferred identity/value search is incomplete or
+insolvent; it must show a revalidated legal 22. `STRONG/SOLID/WEAK FIT` remains identity-only. A
+separate `DRAFTABLE/OPEN/BLOCKED` state tells the GM whether a card preserves the current exact
+finish, and the selected card shows the projected final salary, tax, all-in, and money left before
+the pick. Current drafted rows show settled salary and actual tax-core contribution, never a signed
+remove/reinsert delta mislabeled as player cost. Zero-interest stays private and cannot alter roster,
+FIT, tax, or legal-finish truth. Full-source lists must page or virtualize; Assistant work must remain
+off the render path and free of storage/Auth imports. **Product gate:** deterministic 88- and
+176-pick completions plus eight-team production-browser latency, followed by a separate audit and
+JK's own browser walk.
+
 ### 2026-07-12 (snake completion law): recorded beat auto-advances; final pick stops at a durable recap and explicit roster commit
 
 **The ruling:** every non-final snake pick displays its recorded-pick beat and then advances automatically; there is no redundant manual next-pick button. The final MLB and farm picks never auto-advance. They stop at `VIEW DRAFT RECAP`, and the recap is recoverable directly from the completed saved session after reload. League Builder rosters are not written merely by rendering the recap: `CONFIRM MLB DRAFT` commits and routes to Scout Hire, while `CONFIRM FARM DRAFT` commits and routes to Staff Hire. A failed commit stays on a retryable recap and never navigates. **Rationale:** the draft ceremony remains readable without turning every pick into extra tapping, and finalization can no longer be lost in React-only state or silently mutate rosters before the commissioner confirms what was drafted.

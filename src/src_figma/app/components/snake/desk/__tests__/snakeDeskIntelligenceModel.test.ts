@@ -227,11 +227,11 @@ describe('snake assistant board serializable adapter', () => {
     if (result.status !== 'ready') return;
     expect(result.board.ledger).toEqual({ rosterCount: 22, salary: 2200, tax: 50, allIn: 2250, moneyLeft: 750 });
     expect(result.board.chemistry).toEqual([
-      { family: 'CMP', word: 'Competitive', count: 11, tier: 'L3' },
-      { family: 'SPI', word: 'Spirited', count: 0, tier: 'L1' },
-      { family: 'CRA', word: 'Crafty', count: 11, tier: 'L3' },
-      { family: 'SCH', word: 'Scholarly', count: 0, tier: 'L1' },
-      { family: 'DIS', word: 'Disciplined', count: 0, tier: 'L1' },
+      { family: 'CMP', word: 'Competitive', count: 11, traitCount: 0, tier: 'L3' },
+      { family: 'SPI', word: 'Spirited', count: 0, traitCount: 0, tier: 'L1' },
+      { family: 'CRA', word: 'Crafty', count: 11, traitCount: 0, tier: 'L3' },
+      { family: 'SCH', word: 'Scholarly', count: 0, traitCount: 0, tier: 'L1' },
+      { family: 'DIS', word: 'Disciplined', count: 0, traitCount: 0, tier: 'L1' },
     ]);
     expect(result.board).not.toHaveProperty('revision');
     expect(result.board.slots).toBeInstanceOf(Array);
@@ -239,7 +239,7 @@ describe('snake assistant board serializable adapter', () => {
     expect(result.board.kind).toBe('snake-assistant-board');
   });
 
-  it('downgrades a raw strong fit when the exact replacement materially raises 22-player tax', () => {
+  it('keeps identity fit separate when the exact replacement materially raises 22-player tax', () => {
     const selected = consequencePlayer({ id: 'new-ss-tax-heavy', position: 'SS', price: 50 });
     selected.seating.construction.bat.POW = 99;
     selected.simPlayer.bat.POW = 99;
@@ -264,7 +264,7 @@ describe('snake assistant board serializable adapter', () => {
     expect(result.status).toBe('ready');
     if (result.status !== 'ready') return;
     expect(result.after.ledger.tax).toBeGreaterThan(result.before.ledger.tax);
-    expect(result.after.fitWord).toBe('WEAK FIT');
+    expect(result.after.fitWord).toBe('STRONG FIT');
   });
 
   it('produces identical request and derived output for main and companion adapters with identical inputs', () => {
@@ -299,10 +299,12 @@ describe('snake assistant board serializable adapter', () => {
     expect(result.after.chemistry).toHaveLength(5);
     expect(result.after.chemistry.find((row) => row.family === 'SCH')?.count).toBe(1);
     expect(result.before.legalFinish).toEqual({
-      feasible: true, moneyLeft: 997_750, affordability: 'AFFORDABLE',
+      feasible: true, moneyLeft: 997_750, projectedSalary: 2_150, projectedTax: 100,
+      projectedAllIn: 2_250, affordability: 'AFFORDABLE',
     });
     expect(result.after.legalFinish).toEqual({
-      feasible: true, moneyLeft: 997_750, affordability: 'AFFORDABLE',
+      feasible: true, moneyLeft: 997_750, projectedSalary: 2_150, projectedTax: 100,
+      projectedAllIn: 2_250, affordability: 'AFFORDABLE',
     });
     expect(result.before.fitWord).toBe('SOLID FIT');
     expect(result.after.fitWord).toBe('STRONG FIT');

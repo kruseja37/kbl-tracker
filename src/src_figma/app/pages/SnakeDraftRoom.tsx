@@ -61,6 +61,7 @@ import {
   isCanonicalSnakeBoard,
   reconcileBoardAvailability,
   reorderSeatBoardRankings,
+  setSeatBoardZeroInterest,
   type AdvisorLogEntry,
   type BoardBackfillEvent,
   type DeskCandidate,
@@ -1200,7 +1201,7 @@ function MlbSnakeDraftRoom() {
         : null;
     const line = blockReason ?? (bill.affordability === 'OPEN'
       ? 'FINISH COST CHECK OPEN.'
-      : `AFTER THIS PICK AND A LEGAL FINISH: $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`);
+      : `LEGAL 22 · $${Math.round(bill.finalSalary).toLocaleString()} SALARY · $${Math.round(bill.finalTax).toLocaleString()} TAX · $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`);
     return {
       id: player.id,
       name: fullName(player.firstName, player.lastName),
@@ -1431,6 +1432,11 @@ function MlbSnakeDraftRoom() {
       need,
     });
     const advisorWorthById = new Map(assembled.map((row) => [row.playerId, row.worth]));
+    const certifiedFinishIds = new Set(
+      seatingProofResult?.feasible
+        ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds ?? []
+        : [],
+    );
     const candidates: DeskCandidate[] = deskRoomPlayers.flatMap((player) => {
       const advisorWorth = advisorWorthById.get(player.playerId);
       if (!contextualWorthComplete || !Number.isFinite(advisorWorth)) return [];
@@ -1460,6 +1466,7 @@ function MlbSnakeDraftRoom() {
         versionGroupId: player.versionGroupId,
         advisorWorth: advisorWorth!,
         iv: player.price,
+        salary: displayedSalary,
         marginalTax,
         trueCost: displayedSalary + marginalTax,
         archetypeChip: locked.archetypeName,
@@ -1482,6 +1489,7 @@ function MlbSnakeDraftRoom() {
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
         legalFinishLine: '',
+        finishStatus: completedPick ? undefined : certifiedFinishIds.has(player.playerId) ? 'DRAFTABLE' : 'OPEN',
         construction: player.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -1615,9 +1623,9 @@ function MlbSnakeDraftRoom() {
       activeLog,
       availability,
       slotDepth,
-      taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps }) : [],
+      taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }) : [],
     };
-  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, session, unavailable]);
+  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, seatingProofResult, session, unavailable]);
 
   const assistantIdentity = useMemo(() => session && deskTeam && deskState?.board && privateDeskActive ? {
     sessionId: session.id,
@@ -1650,6 +1658,10 @@ function MlbSnakeDraftRoom() {
         archetype: historical ? historicalToSimArchetype(historical) : { name: 'Balanced', rawShift: {} },
         ownBandPriorities: deskState.locked.priorities,
         gmRankOverrides: deskState.board.rankings,
+        zeroInterestPlayerIds: deskState.board.rankings.zeroInterestPlayerIds,
+        certifiedCompletionPlayerIds: seatingProofResult?.feasible
+          ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds
+          : undefined,
         tier: league.tier ?? 'juiced',
         budget: pool.tierCap,
         baseCaps: pool.luxuryCaps,
@@ -1658,7 +1670,7 @@ function MlbSnakeDraftRoom() {
       },
       savedDesignSlots: deskTeam.rosterDesign?.slots,
     });
-  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, deskState, deskTeam, league, leagueTeams.length, pool, privateDeskActive, session]);
+  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, deskState, deskTeam, league, leagueTeams.length, pool, privateDeskActive, seatingProofResult, session]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
   const consequencePlayers = useMemo(() => {
     const candidateById = new Map((deskState?.candidates ?? []).map((entry) => [entry.id, entry]));
@@ -1878,14 +1890,14 @@ function MlbSnakeDraftRoom() {
   }, [deskState, deskTeam, session]);
 
   const selectCandidate = useCallback((playerId: string) => {
-    if ((unavailable.has(playerId) && !ownCommittedPlayerIds.has(playerId))
+    if ((unavailable.has(playerId) && !completedPickByPlayerId.has(playerId))
       || !playerById.has(playerId)
       || !poolById.has(playerId)) return;
     if (deskTeam) {
       setAssistantOptimizePlayerId(null);
       setSelectedPlayerIdByTeam((current) => ({ ...current, [deskTeam.id]: playerId }));
     }
-  }, [deskTeam, ownCommittedPlayerIds, playerById, poolById, unavailable]);
+  }, [completedPickByPlayerId, deskTeam, playerById, poolById, unavailable]);
 
   const reorderRanking = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!session || !deskTeam || !deskState?.board) return;
@@ -2032,6 +2044,28 @@ function MlbSnakeDraftRoom() {
       }
     }
   }, [boardEligibilityCandidates, capturePrivateContext, deskState?.board, deskTeam, getMlbDraftSession, privateContextIsCurrent, refreshRoomTruth, selectedConsequence, session]);
+
+  const setSelectedZeroInterest = useCallback(async (zeroInterest: boolean) => {
+    if (!candidateId || !session || !deskTeam || !deskState?.board) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== deskTeam.id) return;
+    const nextBoard = setSeatBoardZeroInterest(deskState.board, candidateId, zeroInterest);
+    try {
+      const saved = await patchMlbDraftSessionSeatBoard({
+        leagueId: session.leagueId,
+        seasonNumber: session.seasonNumber,
+        teamId: deskTeam.id,
+        board: nextBoard,
+        expectedBoardRevision: deskState.board.revision,
+      });
+      if (privateContextIsCurrent(guard)) {
+        setSession(saved);
+        setAssistantOptimizePlayerId(null);
+      }
+    } catch (cause) {
+      if (privateContextIsCurrent(guard)) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    }
+  }, [candidateId, capturePrivateContext, deskState?.board, deskTeam, privateContextIsCurrent, session]);
 
   const recordPick = useCallback(async (playerId: string, companionRequest?: SnakeCompanionPickRequest) => {
     if (!session) throw new Error('The MLB snake draft session is no longer available.');
@@ -2452,6 +2486,8 @@ function MlbSnakeDraftRoom() {
             setAssistantOptimizeRevision((revision) => revision + 1);
           }}
           onKeep={() => { void keepSelectedConsequence(); }}
+          zeroInterest={deskState.board?.rankings.zeroInterestPlayerIds?.includes(candidateId) ?? false}
+          onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
           decision={draftDecision}
           onTradeDecision={prefillTradeDecision}
           actionConsequence={candidate?.consequence}
@@ -2561,6 +2597,16 @@ function MlbSnakeDraftRoom() {
           onReorderOverall={(orderedIds) => {
             void reorderRanking('OVERALL', orderedIds);
           }}
+          draftLog={session.completedPicks.map((pick) => {
+            const pickedPlayer = playerById.get(pick.playerId);
+            return {
+              pick: pick.pick,
+              teamName: leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM,
+              playerId: pick.playerId,
+              playerName: pickedPlayer ? fullName(pickedPlayer.firstName, pickedPlayer.lastName).toUpperCase() : UNKNOWN_PLAYER,
+              position: pickedPlayer?.primaryPosition ?? '—',
+            };
+          })}
           teamColors={deskTeam?.colors}
           tradeGuide={<SnakeTradeGuide
             showHelp={showHelp}

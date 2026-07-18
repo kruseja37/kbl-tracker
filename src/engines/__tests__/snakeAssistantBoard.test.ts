@@ -498,7 +498,67 @@ describe('shared snake assistant board core', () => {
     expect(result).toEqual({ status: 'unavailable', reason: 'INCOMPLETE_BOARD' });
   });
 
-  it('fails closed when only the secondary baseline start exhausts its cycle cap', () => {
+  it('uses a revalidated shared-room completion when preference search exhausts its cap', () => {
+    const hitterPositions = ['C', 'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'DH', 'DH', 'DH', 'DH'] as const;
+    const universalHitterVersions = Array.from({ length: 14 }, (_, groupIndex) =>
+      (['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const).map((position, positionIndex) => candidate({
+        id: `cert-person-${groupIndex}-${position}`,
+        position,
+        versionGroupId: `cert-person-${groupIndex}`,
+        frozenIv: 10_000 - groupIndex * 100 - positionIndex,
+      }))).flat();
+    const fixedPitchers = [
+      ...Array.from({ length: 4 }, (_, index) =>
+        candidate({ id: `cert-sp-${index}`, position: 'SP', role: 'SP', frozenIv: 1_000 })),
+      ...Array.from({ length: 3 }, (_, index) =>
+        candidate({ id: `cert-rp-${index}`, position: 'RP', role: 'RP', frozenIv: 1_000 })),
+      candidate({ id: 'cert-cp', position: 'CP', role: 'CP', frozenIv: 1_000 }),
+    ];
+    const certifiedCompletionPlayerIds = [
+      ...hitterPositions.map((position, groupIndex) => `cert-person-${groupIndex}-${position}`),
+      ...fixedPitchers.map((player) => player.playerId),
+    ];
+    const result = buildSnakeAssistantBoard(engineInput({
+      activePool: [...universalHitterVersions, ...fixedPitchers],
+      completedPicks: [],
+      versionSelections: {},
+      budget: 1_000_000_000,
+      baseCaps: TAX_CYCLE_CAPS,
+      certifiedCompletionPlayerIds,
+    }));
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toEqual(expect.arrayContaining(certifiedCompletionPlayerIds));
+    expect(result.playerIds).toHaveLength(22);
+    expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
+  });
+
+  it('keeps zero-interest private preference out of plans without deleting a committed pick', () => {
+    const replacement = candidate({ id: 'replacement-bench', position: 'LF', frozenIv: 90 });
+    const excluded = buildSnakeAssistantBoard(engineInput({
+      activePool: [...legalPool(), replacement],
+      zeroInterestPlayerIds: ['bench-0'],
+    }));
+    expect(excluded.status).toBe('ready');
+    if (excluded.status !== 'ready') return;
+    expect(excluded.playerIds).not.toContain('bench-0');
+    expect(excluded.playerIds).toContain(replacement.playerId);
+
+    const committed = buildSnakeAssistantBoard(engineInput({
+      activePool: [...legalPool(), replacement],
+      completedPicks: [
+        { teamId: 'mine', playerId: 'c', settledSalary: 37 },
+        { teamId: 'mine', playerId: 'bench-0', settledSalary: 50 },
+      ],
+      zeroInterestPlayerIds: ['bench-0'],
+    }));
+    expect(committed.status).toBe('ready');
+    if (committed.status !== 'ready') return;
+    expect(committed.playerIds).toContain('bench-0');
+  });
+
+  it('falls back to an exact solvent legal 22 when only the secondary preference start exhausts its cycle cap', () => {
     const fixedBoard = paddedCyclePool(new Set());
     const hitterPositions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;
     const fitOnlyVersions = Array.from({ length: 14 }, (_, groupIndex) =>
@@ -523,10 +583,14 @@ describe('shared snake assistant board core', () => {
       baseCaps: TAX_CYCLE_CAPS,
     }));
 
-    expect(result).toEqual({ status: 'unavailable', reason: 'INCOMPLETE_BOARD' });
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toHaveLength(22);
+    expect(result.playerIds).toEqual(expect.arrayContaining(fixedBoard.map((player) => player.playerId)));
+    expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
   });
 
-  it('fails closed when only the unselected identity start exhausts its cycle cap', () => {
+  it('falls back to an exact solvent legal 22 when an unselected identity start exhausts its cycle cap', () => {
     const cyclePositions = ['C', '1B', '2B', '3B', 'SS', 'LF'] as const;
     const fixedBoard = paddedCyclePool(new Set(cyclePositions));
     const rankedHighCards = cyclePositions.map((position, index) => candidate({
@@ -573,7 +637,11 @@ describe('shared snake assistant board core', () => {
       baseCaps: TAX_CYCLE_CAPS,
     }));
 
-    expect(result).toEqual({ status: 'unavailable', reason: 'INCOMPLETE_BOARD' });
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toHaveLength(22);
+    expect(new Set(result.playerIds).size).toBe(22);
+    expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
   }, 10_000);
 
   it('uses an augmenting path when first-free pin matching would strand a reliever', () => {
@@ -730,13 +798,30 @@ describe('shared snake assistant board core', () => {
     expect(result.playerIds).not.toContain(ineligible.playerId);
   });
 
-  it('fails closed when a selected pin cannot match any canonical slot', () => {
+  it('keeps a legal selected pin when membership is valid even if the rigid preference frame has no slot', () => {
     const invalid = candidate({ id: 'roleless-arm', position: 'P' });
     const result = buildSnakeAssistantBoard(engineInput({
       activePool: [...legalPool(), invalid],
       selectedPinPlayerId: invalid.playerId,
     }));
-    expect(result).toEqual({ status: 'unavailable', reason: 'PIN_UNMATCHED' });
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toContain(invalid.playerId);
+    expect(result.slots.find((slot) => slot.playerId === invalid.playerId)?.pinned).toBe(true);
+  });
+
+  it('keeps the Assistant available after a fifth pure starter is drafted', () => {
+    const extraStarter = candidate({ id: 'sp-5', position: 'SP', role: 'SP', frozenIv: 90 });
+    const activePool = [...legalPool(), extraStarter];
+    const completedPicks = ['sp-0', 'sp-1', 'sp-2', 'sp-3', 'sp-5'].map((playerId) => ({
+      teamId: 'mine', playerId, settledSalary: 50,
+    }));
+    const result = buildSnakeAssistantBoard(engineInput({ activePool, completedPicks }));
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toEqual(expect.arrayContaining(completedPicks.map((pick) => pick.playerId)));
+    expect(result.playerIds).toHaveLength(22);
+    expect(result.plan.planCushion).toBeGreaterThanOrEqual(0);
   });
 
   it('fails closed on non-finite tax inputs before an optimizer can manufacture a board', () => {

@@ -2,6 +2,28 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-17 (Codex, Snake late-draft decision truth) — eight-team builder complete; audit pending
+
+JK's first four-team full draft exposed a product-scale failure, not a four-team special case: the
+preference optimizer could hide the Assistant while exact legal completion still existed, and rows
+did not expose which picks preserved a solvent 22. FINDING-237 / contract
+`SNAKE-LATE-DRAFT-DECISION-TRUTH-44` makes the target explicitly eight teams. The Assistant now
+revalidates and materializes the shared legal-completion certificate before any bounded fallback;
+FIT remains identity-only; finish safety and exact final salary/tax/all-in/money are separate. Drafted
+rows show settled salary and tax-core truth instead of signed removal deltas. The approved desk
+additions are built: zero-interest, rating bars, chemistry trait counts, clickable full draft log,
+finish filter, risk state, and companion on-clock colors. Heavy Assistant work stays in a pure
+storage/Auth-free worker, and full-source ranks are paged 20 at a time.
+
+Scale proof completed 88/88 and 176/176 real production-shape picks with every four/eight-team final
+roster legal and solvent and no Assistant dropout. The real eight-team browser fixture used all 506
+SML cards and 176 picks; room/desk/pool/sort/filters/selection stayed inside the interaction gates,
+pick 1 persisted, and a second page reopened on pick 2 without console errors. The companion's
+recurring pull now has a direct regression proving pick advancement, public log update, and drafted
+player removal. Final builder gates are 17 focused files / 274 tests, TypeScript, changed-file ESLint,
+2,732-module build/PWA, worker-auth scan, and diff integrity. Separate audit and JK's browser walk
+remain; no push, merge, or deploy is authorized.
+
 ## 2026-07-17 (Codex, combined Snake correctness/performance close) — independently approved; JK walk pending
 
 The independent performance auditor confirmed the Draft Setup worker/cache/local-patch repair and

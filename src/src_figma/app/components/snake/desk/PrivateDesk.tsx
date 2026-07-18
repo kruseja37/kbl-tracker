@@ -11,7 +11,7 @@ import type { ChemistryStripRow } from './draftTruthModel';
 import type { AdvisorLogEntry, DeskCandidate, TaxCoreRow } from './deskModel';
 import type { SnakeAssistantBoardState } from './useSnakeAssistantBoard';
 
-type DeskTab = 'MY_BOARD' | 'ASST_GM_BOARD' | 'PLAYER_POOL' | 'TRADE_PICKS' | 'ACTIVITY';
+type DeskTab = 'MY_BOARD' | 'ASST_GM_BOARD' | 'PLAYER_POOL' | 'DRAFT_LOG' | 'TRADE_PICKS' | 'ACTIVITY';
 
 const DESK_TABS: ReadonlyArray<{ id: DeskTab; label: string }> = [
   { id: 'MY_BOARD', label: 'MY BOARD' },
@@ -43,6 +43,7 @@ export function PrivateDesk(props: {
   onSelectCandidate?: (candidateId: string) => void;
   onReorder: (position: TaxonomyPosition, orderedIds: readonly string[]) => void;
   onReorderOverall?: (orderedIds: readonly string[]) => void;
+  draftLog?: readonly { pick: number; teamName: string; playerId: string; playerName: string; position: string }[];
   privateScopeKey?: string;
   teamColors?: { primary: string; secondary: string };
 }) {
@@ -82,7 +83,9 @@ export function PrivateDesk(props: {
     ? 'MY_BOARD'
     : requestedTab === 'ACTIVITY' && consequentialActivity.length === 0
       ? 'MY_BOARD'
-      : requestedTab;
+      : requestedTab === 'DRAFT_LOG' && !props.draftLog?.length
+        ? 'MY_BOARD'
+        : requestedTab;
   const setTab = (next: DeskTab) => setTabState({
     scopeKey,
     tab: next,
@@ -100,6 +103,7 @@ export function PrivateDesk(props: {
       : null;
   const tabs = [
     ...DESK_TABS,
+    ...(props.draftLog?.length ? [{ id: 'DRAFT_LOG' as const, label: 'DRAFT LOG' }] : []),
     ...(props.tradeGuide ? [{ id: 'TRADE_PICKS' as const, label: 'TRADE PICKS' }] : []),
     ...(consequentialActivity.length > 0 ? [{ id: 'ACTIVITY' as const, label: 'ACTIVITY' }] : []),
   ];
@@ -159,6 +163,18 @@ export function PrivateDesk(props: {
         </p>}
       </div>}
       {tab === 'PLAYER_POOL' && <div role="region" id="private-desk-panel-player_pool" aria-labelledby="private-desk-tab-player_pool"><RankingsView candidates={props.candidates} rankings={props.rankings} overallRankings={props.overallRankings} onReorder={props.onReorder} onReorderOverall={props.onReorderOverall} selectedCandidateId={props.selectedCandidateId} onSelectCandidate={props.onSelectCandidate} /></div>}
+      {tab === 'DRAFT_LOG' && <div role="region" id="private-desk-panel-draft_log" aria-labelledby="private-desk-tab-draft_log" className="space-y-1.5" data-testid="full-draft-log">
+        {props.draftLog?.map((entry) => <button
+          key={`${entry.pick}:${entry.playerId}`}
+          type="button"
+          className="grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-3 text-left"
+          onClick={() => props.onSelectCandidate?.(entry.playerId)}
+        >
+          <strong>#{entry.pick}</strong>
+          <span className="min-w-0"><strong className="block break-words">{entry.playerName}</strong><span className="text-[10px] font-black text-[var(--ballpark-brass)]">{entry.position}</span></span>
+          <strong className="text-right text-[10px]">{entry.teamName}</strong>
+        </button>)}
+      </div>}
       {tab === 'TRADE_PICKS' && <div role="region" id="private-desk-panel-trade_picks" aria-labelledby="private-desk-tab-trade_picks">{props.tradeGuide}</div>}
       {tab === 'ACTIVITY' && <div role="region" id="private-desk-panel-activity" aria-labelledby="private-desk-tab-activity"><AdvisorLog entries={consequentialActivity} /></div>}
     </section>

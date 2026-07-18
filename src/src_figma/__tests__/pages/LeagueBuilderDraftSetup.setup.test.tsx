@@ -651,16 +651,19 @@ describe("LeagueBuilderDraftSetup", () => {
       expect.objectContaining({ id: "team-b" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-a" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-c" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
   });
 
@@ -695,11 +698,13 @@ describe("LeagueBuilderDraftSetup", () => {
       expect.objectContaining({ id: "team-a" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-b" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
   });
 

@@ -3103,7 +3103,7 @@ export function LeagueBuilderDraftSetup() {
         replaceTeamsLocal([saved]);
         return;
       }
-      const saved = await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey);
+      const saved = await selectTeamArchetype({ ...selectedTeam }, nextMlbKey, nextFarmKey, saveTeam);
       replaceTeamsLocal([saved]);
       setAutoFilledIdentitySlots((previous) => {
         const next = new Set(previous);
@@ -3126,7 +3126,7 @@ export function LeagueBuilderDraftSetup() {
         const nextMlbKey = assignment.mlbKey ?? team.mlbArchetypeKey;
         const nextFarmKey = assignment.farmKey ?? team.farmArchetypeKey;
         if (!nextMlbKey) continue;
-        const saved = await selectTeamArchetype({ ...team }, nextMlbKey, nextFarmKey);
+        const saved = await selectTeamArchetype({ ...team }, nextMlbKey, nextFarmKey, saveTeam);
         savedTeams.push(saved);
         for (const slot of assignment.slots) {
           nextAutoSlots.add(identityAutoFilledSlotKey(team.id, slot));

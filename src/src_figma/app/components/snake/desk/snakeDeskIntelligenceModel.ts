@@ -21,15 +21,18 @@ import {
 } from '../../../../../engines/snakeEconomics';
 import type { SnakeSeatingPlayer } from '../../../../../engines/snakeSeatingProof';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from '../../../../../engines/snakeVersioning';
-import {
-  SNAKE_BOARD_SLOT_IDS,
-  type SnakeBoardSlotId,
-  type SnakeSeatBoardRecord,
-  type SnakeVersionState,
-  type Player,
+import { SNAKE_BOARD_SLOT_IDS } from '../../../../../engines/snakeBoardSlots';
+import type {
+  SnakeBoardSlotId,
+  SnakeSeatBoardRecord,
+  SnakeVersionState,
+  Player,
 } from '../../../../../utils/leagueBuilderStorage';
-import { demandPlayerFromLeaguePlayer } from '../../../engines/leaguePlayerAdapter';
-import { buildChemistryStrip, buildPlanLedger, type ChemistryStripRow, type DraftMoneyLedger } from './draftTruthModel';
+import type { ChemistryStripRow, DraftMoneyLedger } from './draftTruthModel';
+import {
+  buildAssistantChemistryStrip,
+  buildAssistantPlanLedger,
+} from './snakeAssistantTruthModel';
 
 export interface SnakeAssistantPrivateIdentity {
   sessionId: string;
@@ -69,6 +72,9 @@ export type SelectedPlayerConsequencePlayer = SnakeAssistantBoardInput['activePo
 export interface SelectedPlayerLegalFinish {
   feasible: boolean;
   moneyLeft: number | null;
+  projectedSalary?: number | null;
+  projectedTax?: number | null;
+  projectedAllIn?: number | null;
   affordability?: 'AFFORDABLE' | 'BLOCKED' | 'OPEN';
 }
 
@@ -122,11 +128,35 @@ export function buildSnakeAssistantLivePlayer(input: {
   seating: SnakeSeatingPlayer;
   archetypeWeights?: Partial<Record<keyof BandPriorities, number>>;
 }): SnakeAssistantBoardInput['activePool'][number] {
-  const demand = demandPlayerFromLeaguePlayer(input.player);
-  const profile = demand.profile;
-  const simPlayer = Object.fromEntries(Object.entries(demand).filter(([key]) => (
-    !['id', 'iv', 'salary', 'name', 'profile'].includes(key)
-  ))) as SnakeAssistantBoardInput['activePool'][number]['simPlayer'];
+  const traits = [input.player.trait1, input.player.trait2];
+  const profile = {
+    isPitcher: input.seating.shape.isPitcher,
+    primaryPosition: input.player.primaryPosition,
+    secondaryPosition: input.player.secondaryPosition ?? null,
+    bats: input.player.bats,
+    throws: input.player.throws,
+    age: input.player.age,
+    power: input.player.power,
+    contact: input.player.contact,
+    speed: input.player.speed,
+    fielding: input.player.fielding,
+    arm: input.player.arm,
+    velocity: input.player.velocity,
+    junk: input.player.junk,
+    accuracy: input.player.accuracy,
+    traits,
+    arsenal: input.player.arsenal,
+    personality: input.player.personality,
+  };
+  const simPlayer: SnakeAssistantBoardInput['activePool'][number]['simPlayer'] = {
+    isPitcher: input.seating.shape.isPitcher,
+    position: input.seating.shape.position,
+    role: input.seating.shape.role as 'SP' | 'SP/RP' | 'RP' | 'CP' | undefined,
+    secondaryPosition: input.seating.shape.secondaryPosition,
+    twoWayVariant: input.seating.shape.twoWayVariant,
+    bat: { ...input.seating.construction.bat },
+    ...(input.seating.construction.pit ? { pit: { ...input.seating.construction.pit } } : {}),
+  };
   const seating = Object.fromEntries(Object.entries(input.seating).filter(([key]) => (
     !['playerId', 'sourceId', 'versionGroupId', 'price'].includes(key)
   ))) as SnakeAssistantBoardInput['activePool'][number]['seating'];
@@ -233,8 +263,8 @@ export function runSnakeAssistantBoardRequest(request: SnakeAssistantBoardReques
       slots,
       playerIds: result.playerIds,
       recommendationOrder: result.recommendationOrder,
-      ledger: buildPlanLedger(result.plan),
-      chemistry: buildChemistryStrip(storedPlayers as NonNullable<(typeof storedPlayers)[number]>[]),
+      ledger: buildAssistantPlanLedger(result.plan),
+      chemistry: buildAssistantChemistryStrip(storedPlayers as NonNullable<(typeof storedPlayers)[number]>[]),
     },
   };
 }
@@ -267,26 +297,18 @@ function seatingPlayer(player: SelectedPlayerConsequencePlayer, price: number): 
 }
 
 function legalFinish(value: ReturnType<typeof evaluateSnakeLegalFinish>): SelectedPlayerLegalFinish {
+  const projectedSalary = Number.isFinite(value.finalSalary) ? value.finalSalary : null;
+  const projectedTax = Number.isFinite(value.finalTax) ? value.finalTax : null;
   return {
     feasible: value.feasible && snakeMoneyNonnegative(value.legalFinishCushion),
     moneyLeft: Number.isFinite(value.legalFinishCushion) ? value.legalFinishCushion : null,
+    projectedSalary,
+    projectedTax,
+    projectedAllIn: projectedSalary !== null && projectedTax !== null
+      ? projectedSalary + projectedTax
+      : null,
     affordability: value.affordability,
   };
-}
-
-function planAwareFitWord(
-  rawFitWord: string,
-  before: ReturnType<typeof evaluateSnakePlan>,
-  after: ReturnType<typeof evaluateSnakePlan>,
-  playerValue: number,
-): string {
-  if (!snakeMoneyNonnegative(after.planCushion) && snakeMoneyNonnegative(before.planCushion)) return 'WEAK FIT';
-  const taxDelta = after.planTax - before.planTax;
-  const materialTax = Math.max(1_000, playerValue * 0.1);
-  if (taxDelta > materialTax) return 'WEAK FIT';
-  if (rawFitWord === 'STRONG FIT' && taxDelta > Math.max(1_000, playerValue * 0.03)) return 'SOLID FIT';
-  if (rawFitWord === 'SOLID FIT' && taxDelta < -materialTax) return 'STRONG FIT';
-  return rawFitWord;
 }
 
 function positionRank(
@@ -624,16 +646,16 @@ export function buildSelectedPlayerConsequence(input: SelectedPlayerConsequenceI
         revision: input.board.revision + 1,
       },
       before: {
-        ledger: buildPlanLedger(beforePlan),
-        chemistry: buildChemistryStrip(originalPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
+        ledger: buildAssistantPlanLedger(beforePlan),
+        chemistry: buildAssistantChemistryStrip(originalPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
         legalFinish: legalFinish(beforeFinish),
-        fitWord: planAwareFitWord(displaced.fitWord, afterPlan, beforePlan, displaced.frozenIv),
+        fitWord: displaced.fitWord,
       },
       after: {
-        ledger: buildPlanLedger(afterPlan),
-        chemistry: buildChemistryStrip(afterPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
+        ledger: buildAssistantPlanLedger(afterPlan),
+        chemistry: buildAssistantChemistryStrip(afterPlayerIds.map((playerId) => playerById.get(playerId)!.stored)),
         legalFinish: legalFinish(afterFinish),
-        fitWord: planAwareFitWord(selected.fitWord, beforePlan, afterPlan, selected.frozenIv),
+        fitWord: selected.fitWord,
       },
     };
   } catch {
