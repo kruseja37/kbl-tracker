@@ -4,6 +4,19 @@
 
 ---
 
+### 2026-07-18 — FINDING-240 first audit block and one-click repair
+
+The first auditor blocked frozen builder commit `b9c52371` because accepted batches rebuilt and
+persisted bases before the old durable queue key was removed. Under exact reverse quota pressure,
+all records could reach cloud, base persistence could fail, the queue key could then clear, and the
+strict flush could reject without retrying bases. That made recovery require a misleading second
+click. The repair drains first, retries both derived-base and queue durability after the old queue
+key is gone, and succeeds only with zero pending operations and both persistence writes green. The
+strengthened regression keeps an old durable queue, fails queue persistence while bases exist, then
+fails base persistence while the old queue exists; one recovery call still sends both records and
+clears the queue. Focused proof remains 122/122; TypeScript, changed-file lint, production/PWA build,
+and diff integrity are green. Final re-audit and JK's live click remain; no push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-240 sync-quota recovery builder close
 
 JK's exact preview showed 1,398 pending writes and quota failures persisting both `kbl-sync-queue`

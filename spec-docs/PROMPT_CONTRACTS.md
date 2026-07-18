@@ -32651,3 +32651,8 @@ local or cloud as a whole-side winner and without deleting product truth.
 ordinary sync regression; stale-write/conflict suite; TypeScript; changed-file lint; production/PWA
 build; separate non-builder audit; JK's live recovery remains the product gate. No push, merge, or
 deploy.
+
+**First audit repair:** The old durable queue may remain present until the atomic drain completes.
+Recovery must therefore retry derived-base and queue persistence after that key is gone; it must not
+report failure after accepted cloud writes merely because the pre-drain overlap prevented an early
+base-cache write. Success requires zero pending operations and both post-drain durability writes.

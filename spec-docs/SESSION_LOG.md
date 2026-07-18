@@ -2,6 +2,17 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — first audit repaired; final re-audit pending
+
+The separate auditor blocked `b9c52371` on an exact one-click edge: rebuilt bases were persisted
+while the old durable queue still occupied quota, but that queue was removed only after the drain.
+All cloud writes could succeed and the UI could still reject before retrying base durability. The
+narrow repair uses the same atomic drain, then retries base and queue persistence after the old
+queue key is gone; it returns success only at zero pending with both durable stores green. The test
+now forces both sides of the quota overlap. Focused sync/UI proof is still 122/122; TypeScript,
+changed-file lint, 2,735-module production/PWA build, and diff integrity are green. Final re-audit
+and JK's live one-click recovery remain. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, sync quota) — non-destructive recovery built; audit pending
 
 JK opened Cloud Sync on the exact Snake preview and exposed a new operational blocker: 1,398

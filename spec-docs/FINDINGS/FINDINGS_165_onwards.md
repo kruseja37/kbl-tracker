@@ -942,3 +942,12 @@ failure, reach cloud, and leave no queue residue. The modal regression proves th
 calls recovery and never Upload/Download. Focused sync/UI proof is 122/122; TypeScript,
 changed-file ESLint, the 2,735-module production/PWA build, and diff integrity are green. Separate
 audit and JK's live one-click recovery remain. No push, merge, or deploy.
+
+**First audit block and repair:** Frozen `b9c52371` could accept every cloud row yet require a
+second click. Accepted-batch base refresh occurred while the old durable queue still consumed quota;
+the queue key cleared only after the drain, and strict flush rejected before retrying bases. Recovery
+now drains without a premature durability assertion, retries both derived-base and queue persistence
+after the old queue key is gone, and succeeds only with zero pending writes and both stores durable.
+The regression forces queue-write failure while bases exist and base-write failure while the old
+queue exists, then proves one recovery call sends both records and clears the queue. Final re-audit
+and JK's live click remain. No push, merge, or deploy.

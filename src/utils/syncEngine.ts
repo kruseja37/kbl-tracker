@@ -1273,7 +1273,22 @@ class SyncEngine {
 
     this.writeBasePersistenceError = null;
     if (this._error === previousWriteBaseError) this._error = null;
-    await this.flush({ throwOnPending: true });
+    // Drain first without the strict durability assertion. The old durable
+    // queue key remains until the drain finishes, so an accepted batch may be
+    // unable to persist its rebuilt bases during that brief overlap. Once the
+    // queue key has been removed, retry both derived bases and queue state.
+    await this.flush();
+    const basesPersisted = this.persistWriteBaseOverrides();
+    const queuePersisted = this.persistQueues();
+    const pendingCount = this.getPendingOperationCount();
+    const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
+    if (pendingCount > 0 || !basesPersisted || !queuePersisted || durabilityError) {
+      throw new Error(
+        this._error || durabilityError
+          ? `Sync recovery incomplete with ${pendingCount} pending operation(s): ${this._error ?? durabilityError}`
+          : `Sync recovery incomplete with ${pendingCount} pending operation(s)`,
+      );
+    }
   }
 
   // ============================================================

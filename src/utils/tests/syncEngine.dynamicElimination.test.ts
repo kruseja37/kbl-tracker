@@ -3673,6 +3673,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
 
   test("quota recovery evicts only rebuildable bases and drains every queued record", async () => {
     const syncEngine = await loadFreshSyncEngine();
+    localStorage.setItem("kbl-sync-queue", "old-durable-queue-occupying-quota");
     localStorage.setItem("kbl-sync-store-write-bases", JSON.stringify([
       ["derived-base", { receivedAt: "2026-07-18T00:00:00.000Z", id: "derived-row" }],
     ]));
@@ -3683,6 +3684,9 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       value: string,
     ) {
       if (key === "kbl-sync-queue" && this.getItem("kbl-sync-store-write-bases")) {
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      if (key === "kbl-sync-store-write-bases" && this.getItem("kbl-sync-queue")) {
         throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
       }
       return originalSetItem.call(this, key, value);

@@ -1437,3 +1437,12 @@ Rating Room, with only JK's browser walk remaining. JK's first return to the exa
 1,398 pending sync writes plus browser quota failures for both the durable queue and conflict-base
 cache. The new live header records the narrow, non-destructive recovery and its separate audit as
 the next engineering gate. No push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota first-audit repair
+
+The prior live header recorded the quota-only `FREE SPACE + SYNC` builder repair at `b9c52371` with
+122/122 focused tests and separate audit pending. The auditor proved that accepted cloud batches
+could still fail their early rebuilt-base persistence while the old queue occupied quota, remove the
+queue only afterward, and reject without a post-drain retry. The live header now records the exact
+one-click repair and final re-audit as the remaining engineering gate. No push, merge, or deploy was
+authorized.
