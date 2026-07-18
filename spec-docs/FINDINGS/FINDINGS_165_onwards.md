@@ -975,7 +975,7 @@ production/PWA build, and diff integrity, and confirmed every no-loss/account/du
 Only JK's live one-click recovery and pending-zero observation remain. No push, merge, or deploy.
 
 ### FINDING-241
-**Date:** 2026-07-18 | **Phase:** Cloud sync / partial quota continuation | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-18 | **Phase:** Cloud sync / partial quota continuation | **Status:** FIXED — INDEPENDENTLY APPROVED — JK LIVE RETRY PENDING
 **Files:** `src/utils/syncEngine.ts`, `src/src_figma/app/components/SyncModal.tsx`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`
 **Evidence:** JK's first live FINDING-240 recovery reduced the exact queue from 1,398 to 806, then
 reported one stale local write plus another write-base quota failure. The modal fell back to `SYNC
@@ -994,3 +994,10 @@ auto-rebase or discard a stale conflict; never call full Upload/Download.
 real stale row remains queued/cloud-unchanged with recovery still visible, and a reloaded 100-item
 base-less queue remains recoverable. Focused sync/UI proof is 128/128. TypeScript, lint, build,
 separate audit, and JK's retry remain. No push, merge, or deploy.
+
+**Final audit:** Frozen `089d149a` is **APPROVE — Major 0 / Minor 0**. The separate auditor
+confirmed typed recovery entry, bounded progress, durable shrinking queues, stale conflict
+preservation, receipt-before-prune ordering, mandatory account binding, and no Upload/Download
+route. Independent gates passed 128/128 focused tests, TypeScript, changed-file ESLint, the
+2,735-module production/PWA build, and diff integrity. Only JK's live retry remains. No push,
+merge, or deploy.

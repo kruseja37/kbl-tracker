@@ -4,6 +4,17 @@
 
 ---
 
+### 2026-07-18 — FINDING-241 independently approved
+
+The final separate read-only audit of frozen `089d149a` returned **APPROVE — Major 0 / Minor 0**.
+It confirmed that typed recovery state drives both display and execution, including reload of a
+large restored base-less queue; each bounded pass removes only persisted derived bases and durably
+saves the shrinking queue; two stagnant passes preserve a genuine conflict; and zero-pending
+receipt pull saves the expected-account cursor before prune/final durability. Upload/Download are
+unreachable. Independent gates passed 128/128 focused tests, TypeScript, changed-file ESLint,
+2,735-module production/PWA build, and diff integrity. Only JK's live retry remains. No push, merge,
+or deploy.
+
 ### 2026-07-18 — FINDING-241 partial quota continuation builder close
 
 JK's first live recovery safely reduced 1,398 operations to 806, then stopped on one stale local

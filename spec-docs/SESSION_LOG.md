@@ -2,6 +2,16 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — partial continuation approved; JK retry remains
+
+Frozen FINDING-241 commit `089d149a` passed its separate hostile audit with **Major 0 / Minor 0**.
+The auditor independently verified the same typed predicate controls display and recovery entry,
+including a reloaded 100-item restored base-less queue; continuation is bounded and queue-durable;
+stale cloud conflict remains queued and unchanged; and receipt pull saves the exact account cursor
+before pruning/persisting bases. Independent proof passed 128/128 focused tests, TypeScript, lint,
+2,735-module production/PWA build, and diff integrity. Port 5188 serves the exact implementation.
+Only JK's hard-refresh and one `FREE SPACE + SYNC` retry remain. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, sync quota) — partial continuation built; audit pending
 
 JK's live approved recovery moved 592 of 1,398 pending operations to cloud and safely retained 806,
