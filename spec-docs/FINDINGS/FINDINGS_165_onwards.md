@@ -960,3 +960,11 @@ change. The recovery button also requires an exact local queue/write-base persis
 quota semantics; unrelated service quota text keeps ordinary sync behavior. Regressions prove auth
 loss preserves persisted bases and a Supabase quota response does not expose recovery. Focused proof
 is 124/124; final build and re-audit remain. No push, merge, or deploy.
+
+**Third audit block and repair:** Frozen `cb4e30ca` still left expected-account binding optional for
+destructive-download rollback, allowing a restored old-account cursor to target a newly active
+account's metadata. Cursor save now always requires an expected user; the download operation carries
+its starting user through rollback and fails before any cross-account metadata write. UI detection
+now literally starts with the local persistence failure marker rather than merely containing it.
+Regressions prove account-switch rollback cannot write cursor metadata and embedded service text does
+not expose recovery. Focused proof is 126/126; final gates remain. No push, merge, or deploy.

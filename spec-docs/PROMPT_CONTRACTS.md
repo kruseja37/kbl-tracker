@@ -32662,3 +32662,8 @@ if Supabase is unavailable, the user signs out, or the account changes, and no c
 may be pruned until the expected user's cursor is durably saved. The special UI action requires both
 an exact local queue/write-base persistence failure prefix and quota semantics; unrelated API or
 service quota errors retain ordinary sync behavior.
+
+**Third audit repair:** Expected-account binding is mandatory for every cursor save, including a
+destructive-download rollback. The rollback must carry the operation's starting account and reject
+before metadata persistence if the current session differs. “Prefix” is literal: quoted, wrapped, or
+embedded persistence wording must not expose the special recovery action.

@@ -4,6 +4,17 @@
 
 ---
 
+### 2026-07-18 — FINDING-240 third audit block and complete account binding
+
+The third audit of `cb4e30ca` returned **BLOCK — Major 1 / Minor 1**. Destructive-download rollback
+still called cursor save without its originating account, so an account switch during download could
+write the restored old-account cursor into the new account's metadata. The recovery predicate also
+used containment rather than a literal prefix. The operation now carries its starting user through
+rollback, every cursor save requires that exact user, and account mismatch fails the rollback before
+metadata can cross accounts. UI detection now uses `startsWith` for the exact local persistence
+markers. New account-switch rollback and embedded-marker regressions pass; focused proof is 126/126.
+TypeScript, lint, build, and final re-audit remain. No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-240 second audit block and fail-closed repair
 
 The second auditor blocked `12ce0030` with **Major 1 / Minor 1**. A pull could lose authentication

@@ -1455,3 +1455,12 @@ cursor that was not durable, and that generic service quota text could expose th
 action. The live header now records fail-closed expected-account cursor persistence and exact local
 persistence-error UI gating. Final build, freeze, re-audit, and JK's one-click recovery remain. No
 push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota third-audit repair
+
+The prior live header recorded fail-closed incremental cursor persistence and local-error UI gating
+at `cb4e30ca`. The third auditor found that destructive-download rollback still omitted the expected
+account and that the UI marker used containment rather than a literal prefix. The live header now
+records mandatory expected-account binding for every cursor save and literal prefix detection. Final
+verification, freeze, re-audit, and JK's one-click recovery remain. No push, merge, or deploy was
+authorized.

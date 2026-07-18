@@ -31,8 +31,8 @@ function isStoragePersistenceQuotaError(message: string | null): boolean {
   if (!message) return false;
   const normalized = message.toLowerCase();
   const isSyncPersistenceFailure =
-    normalized.includes('sync queue persistence failed') ||
-    normalized.includes('sync write-base persistence failed');
+    normalized.startsWith('sync queue persistence failed') ||
+    normalized.startsWith('sync write-base persistence failed');
   const isQuotaFailure =
     normalized.includes('quota') ||
     (normalized.includes('storage') && normalized.includes('exceed'));

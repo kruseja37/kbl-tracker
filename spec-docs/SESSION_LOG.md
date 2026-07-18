@@ -2,6 +2,17 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — third audit repaired; final re-audit pending
+
+The third audit of `cb4e30ca` found one remaining account-binding hole in destructive-download
+rollback and one exact-prefix mismatch. Rollback could restore user 1's local cursor after the active
+session switched to user 2, then save it without an expected account. `replaceLocalWithCloud` now
+captures its starting user, passes it through rollback, and every cursor save requires the exact
+account. The modal now uses a literal local persistence prefix rather than containment. New tests
+prove an account switch restores local records but cannot write cross-account cursor metadata, and
+embedded service wording cannot expose recovery. Focused sync/UI proof is 126/126. TypeScript, lint,
+build, freeze, and final re-audit remain. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, sync quota) — second audit repaired; final re-audit pending
 
 The second auditor blocked `12ce0030` with Major 1 / Minor 1. Cursor persistence silently returned

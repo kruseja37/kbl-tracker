@@ -936,6 +936,7 @@ class SyncEngine {
     await this.runSyncOperation(true, async () => {
       let rollbackSnapshot: LocalDownloadSnapshot | null = null;
       let queuesAtOperationStart: QueueSnapshot | null = null;
+      let operationUserId: string | null = null;
       try {
         this.queueDrainsBlocked = true;
         queuesAtOperationStart = this.snapshotQueues();
@@ -943,6 +944,7 @@ class SyncEngine {
 
         const { data: { session } } = await client.auth.getSession();
         if (!session) return;
+        operationUserId = session.user.id;
         await this.loadCursor();
 
         // Collect dynamic DB IDs BEFORE clearing meta stores.
@@ -1008,10 +1010,14 @@ class SyncEngine {
         this.emitEvent('sync-complete');
       } catch (err) {
         let rollbackError: unknown = null;
-        if (rollbackSnapshot) {
+        if (rollbackSnapshot && operationUserId) {
           const currentQueues = this.snapshotQueues();
           try {
-            await this.restoreLocalDownloadSnapshot(rollbackSnapshot, currentQueues);
+            await this.restoreLocalDownloadSnapshot(
+              rollbackSnapshot,
+              currentQueues,
+              operationUserId,
+            );
           } catch (restoreErr) {
             rollbackError = restoreErr;
             console.error('[syncEngine] Download rollback error:', restoreErr);
@@ -2838,6 +2844,7 @@ class SyncEngine {
   private async restoreLocalDownloadSnapshot(
     snapshot: LocalDownloadSnapshot,
     queuedDuringFailure: QueueSnapshot,
+    expectedUserId: string,
   ): Promise<void> {
     for (const dbName of snapshot.dynamicDbNames) {
       try {
@@ -2865,7 +2872,7 @@ class SyncEngine {
     await this.reapplyQueuedWritesToLocal();
     this.persistQueues();
     try {
-      await this.saveCursor();
+      await this.saveCursor(expectedUserId);
     } catch (err) {
       throw new Error(
         `Rollback restored local stores, localStorage, queues, and in-memory cursor but failed to persist restored cursor: ${
@@ -4241,12 +4248,12 @@ class SyncEngine {
     }
   }
 
-  private async saveCursor(expectedUserId?: string): Promise<void> {
+  private async saveCursor(expectedUserId: string): Promise<void> {
     if (!supabase) throw new Error('Sync cursor save failed: Supabase is not configured');
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Sync cursor save failed: signed out during sync');
-    if (expectedUserId && session.user.id !== expectedUserId) {
+    if (session.user.id !== expectedUserId) {
       throw new Error('Sync cursor save failed: signed-in account changed during sync');
     }
 

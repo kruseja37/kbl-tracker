@@ -5668,6 +5668,35 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(syncEngine.getStatus().error).toContain("failed to persist restored cursor");
   });
 
+  test("replaceLocalWithCloud rollback cannot save the old account cursor after an account switch", async () => {
+    await seedCompletedGameWithEventLog("game-account-switch-rollback");
+    mockState.cloudRows = [
+      {
+        id: "remote-unknown-store-account-switch",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "unknownEvents",
+        record_key: JSON.stringify("event-account-switch"),
+        data: { eventId: "event-account-switch" },
+        changed_at: 10,
+        deleted: false,
+      },
+    ];
+    mockState.afterSelect = (table) => {
+      if (table === "kbl_stores") mockState.sessionUserId = "user-2";
+    };
+    const syncEngine = await loadFreshSyncEngine();
+
+    await expect(syncEngine.replaceLocalWithCloud()).rejects.toThrow(
+      "signed-in account changed during sync",
+    );
+
+    expect(mockState.metaRows).toHaveLength(0);
+    await expect(getAllRecords<Record<string, unknown>>("kbl-tracker", "completedGames")).resolves.toEqual([
+      expect.objectContaining({ gameId: "game-account-switch-rollback" }),
+    ]);
+  });
+
   test("replaceCloudWithLocal fails verification when the accepted cloud row content differs from local", async () => {
     await seedCompletedGameWithEventLog("game-corrupt-cloud");
     mockState.corruptStoreRecordKey = JSON.stringify("game-corrupt-cloud");
