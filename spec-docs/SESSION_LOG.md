@@ -7758,4 +7758,5 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Builder and independent gates: 8 focused files / 230 tests, TypeScript, changed-file ESLint,
   2,730-module production build/PWA, and diff integrity green. The separate auditor returned
   **APPROVE — Major 0 / Minor 0**. JK's one-trade/one-pick/one-board-move companion retest remains.
-  Fresh `origin/main`: `ba7f97d6`; no push, merge, deploy, or product acceptance.
+  Implementation commit: `960bac2f`. Fresh `origin/main`: `ba7f97d6`; no push, merge, deploy, or
+  product acceptance.
