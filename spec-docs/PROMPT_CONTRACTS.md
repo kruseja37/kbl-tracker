@@ -32599,3 +32599,30 @@ verify both before reuse. Cancellation must be rechecked between each awaited ad
 in shaped and Full Sources builds; if the owning build is replaced or unmounted while one stage is
 pending, no subsequent membership or setup-persistence stage may begin. Permanent tests must alter
 only assignments and must pause both production paths inside add before abort.
+
+## SNAKE-RATING-ROOM-46
+
+**Goal:** Give every Snake GM an exact, compact view of how the current 22-player plan consumes each
+archetype-adjusted rating limit before or after tax begins.
+
+**Frozen product law:**
+
+- One canonical engine function owns row membership, role weighting, Two Way eligibility, used
+  points, allowed points, overage, and row tax; `luxuryTax` and the UI consume the same result.
+- USED is never clamped to LIMIT. A taxed row shows the complete accumulated top-N points and exact
+  points OVER, so the user can trace the cause instead of seeing a threshold-only summary.
+- Every row lists its exact contributors and weighted points. The currently selected player is
+  identified when that player is part of the row's top-N core.
+- My Board and Asst GM Board use identical systematic logic with their own 22-player inputs and the
+  active team's exact cap identity.
+- The panel is collapsed by default, uses labels/state/values on the main surface, and keeps
+  methodology behind the ratified Help control.
+- The calculation is bounded to 22 players times the configured rows. It performs no source-pool
+  scan, proof search, worker request, storage write, or network action.
+- Existing FIT, caps, archetypes, tax coefficients, SP/RP assignment, Two Way law, roster law,
+  salary/IV, draftability, and Assistant objectives remain unchanged.
+
+**Required proof:** row-ledger/tax parity; ordinary pitcher role weighting; Two Way no-duplication;
+archetype-shifted caps; My/Assistant rendering; accumulated over-limit points and contributor truth;
+Mac/iPad no-overflow; full Snake regression, TypeScript, lint, production build, and a separate
+non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or deploy.

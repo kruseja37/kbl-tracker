@@ -2,6 +2,26 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, Snake rating room) — builder verified; independent audit pending
+
+The frozen FINDING-238 second repair `1ae9c0a4` passed the separate re-audit **APPROVE — Major 0 /
+Minor 0**. JK then approved an aligned decision-truth addition: show every team's exact remaining
+rating capacity by settled tax row while drafting.
+
+FINDING-239 / contract `SNAKE-RATING-ROOM-46` extracts the per-row calculation already inside
+`luxuryTax` into one canonical ledger and makes settlement consume that same result. Both My Board
+and Asst GM Board now show the full accumulated top-N points, shifted limit, points LEFT or OVER,
+row tax, every exact contributor with role-weighted points, and the selected player's contribution
+when present. The values remain uncapped after the threshold. Ordinary pitcher use weights, single
+SP/RP group assignment, and Two Way no-duplication are unchanged and shared with settlement.
+
+Builder proof: 85/85 focused engine/desk tests; broad Snake 63 files / 628 tests; exact 176-pick
+eight-team completion with no Assistant dropout; Playwright 23/23 across responsive main/companion,
+complete franchise lifecycle, exact 2,001-card setup, and Mac/iPad latency; TypeScript, changed-file
+ESLint, 2,735-module production/PWA build, and diff integrity green. Remaining: freeze for a
+separate non-builder audit, then one clean preview for JK's sole browser-acceptance walk. No push,
+merge, or deploy.
+
 ## 2026-07-18 (Codex, Snake large-source setup) — second audit repaired; final re-audit pending
 
 The re-auditor of `6d45f11f` returned **BLOCK — Major 2 / Minor 0**. Source truth was bound but the

@@ -1651,6 +1651,15 @@ function MlbSnakeDraftRoom() {
     });
   }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, deskState, deskTeam, league, leagueTeams.length, pool, privateDeskActive, seatingProofResult, session]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
+  const assistantTaxCoreRows = useMemo(() => {
+    if (assistantBoardState.status !== 'ready' || !assistantBoardState.board || !deskState || !pool) return [];
+    return buildTaxCoreRows({
+      candidates: deskState.candidates,
+      boardPlayerIds: assistantBoardState.board.slots.map((slot) => slot.playerId),
+      caps: snakeLuxuryCaps(pool.luxuryCaps),
+      capIdentity: deskState.locked.capIdentity,
+    });
+  }, [assistantBoardState.board, assistantBoardState.status, deskState, pool]);
   const consequencePlayers = useMemo(() => {
     const candidateById = new Map((deskState?.candidates ?? []).map((entry) => [entry.id, entry]));
     return assistantLivePlayers.flatMap((player) => {
@@ -2544,6 +2553,7 @@ function MlbSnakeDraftRoom() {
             ...(advisorLogBySeat[deskTeam?.id ?? ''] ?? []).filter((entry) => !(session.roomLogByTeamId?.[deskTeam?.id ?? ''] ?? []).some((row) => row.id.endsWith(`:${entry.key}`))),
           ]}
           taxCoreRows={deskState.taxCoreRows}
+          assistantTaxCoreRows={assistantTaxCoreRows}
           slotDepth={deskState.slotDepth}
           assistantBoard={assistantBoardState}
           assistantOptimizationKey={assistantOptimizePlayerId

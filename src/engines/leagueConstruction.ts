@@ -26,6 +26,17 @@ export type IdentityComposition = { increase: string[]; decrease: string[]; rawS
 export type TeamCapIdentity = { bandPriorities?: BandPriorities; increase: string[]; decrease: string[]; rawShift?: Record<ModStat, number> };
 export type TaxBinding = { group: string; stat: string; over: number; tax: number };
 export type TaxResult = { charged: number; wouldBeTax: number; binding: TaxBinding[] };
+export type LuxuryRowUsage = {
+  group: LuxuryCapRow['group'];
+  stat: LuxuryCapRow['stat'];
+  topN: number;
+  used: number;
+  allowed: number;
+  room: number;
+  over: number;
+  tax: number;
+  contributors: Array<{ playerId: string; points: number }>;
+};
 export type PickValue = { pick: number; value: number };
 export type Pick = { pick: number };
 export type PoolPlayerPriced = { id: string; iv: number; salary: number };
@@ -349,29 +360,53 @@ export function assignLuxuryTaxPitchingGroups(roster: ConstructionRoster): Luxur
   };
 }
 
-export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode: BalanceMode): TaxResult {
+/**
+ * Canonical per-row ledger behind both luxury-tax settlement and the draft-room rating room.
+ * The UI must reuse this selection, role weighting, Two Way treatment, and cap arithmetic.
+ */
+export function luxuryRowUsage(
+  roster: ConstructionRoster,
+  caps: readonly LuxuryCapRow[],
+): LuxuryRowUsage[] {
   const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
-
-  let wouldBeTax = 0;
-  const binding: TaxBinding[] = [];
-
-  for (const row of caps) {
+  return caps.map((row) => {
     const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
-    const vals = group
+    const contributors = group
       .filter((player) => playerEligibleForLuxuryRow(player, row, caps))
-      .map((player) => luxuryRowPlayerRating(player, row, caps))
-      .sort((left, right) => right - left)
+      .map((player) => ({
+        playerId: player.id,
+        points: luxuryRowPlayerRating(player, row, caps),
+      }))
+      .sort((left, right) => right.points - left.points || left.playerId.localeCompare(right.playerId))
       .slice(0, row.topN);
-    const over = vals.reduce((sum, val) => sum + val, 0) - Math.max(row.cap, 0);
+    const used = contributors.reduce((sum, contributor) => sum + contributor.points, 0);
+    const allowed = Math.max(row.cap, 0);
+    const room = allowed - used;
+    const over = Math.max(0, -room);
+    const tax = over > 0
+      ? row.penaltyPer100 * (over / 100) ** row.penaltyCurve + row.minAdder
+      : 0;
+    return {
+      group: row.group,
+      stat: row.stat,
+      topN: row.topN,
+      used,
+      allowed,
+      room,
+      over,
+      tax,
+      contributors,
+    };
+  });
+}
 
-    if (over > 0) {
-      const tax = row.penaltyPer100 * (over / 100) ** row.penaltyCurve + row.minAdder;
-      wouldBeTax += tax;
-      binding.push({ group: row.group, stat: row.stat, over, tax });
-    }
-  }
-
-  binding.sort((left, right) => right.tax - left.tax);
+export function luxuryTax(roster: ConstructionRoster, caps: LuxuryCapRow[], mode: BalanceMode): TaxResult {
+  const usage = luxuryRowUsage(roster, caps);
+  const wouldBeTax = usage.reduce((sum, row) => sum + row.tax, 0);
+  const binding = usage
+    .filter((row) => row.over > 0)
+    .map((row): TaxBinding => ({ group: row.group, stat: row.stat, over: row.over, tax: row.tax }))
+    .sort((left, right) => right.tax - left.tax);
   return {
     charged: mode === 'taxed' ? wouldBeTax : 0,
     wouldBeTax,

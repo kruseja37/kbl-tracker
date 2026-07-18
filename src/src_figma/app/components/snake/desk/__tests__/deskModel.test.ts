@@ -603,10 +603,16 @@ describe('private desk model', () => {
       boardPlayerIds,
       caps,
     });
-    expect(rows.map((row) => row.label)).toContain('YOUR TOP 4 BULLPEN ARMS BY VELOCITY');
+    expect(rows.map((row) => row.label)).toContain('TOP 4 BULLPEN ARMS · VELOCITY');
     expect(rows.map((row) => row.label).join(' ')).not.toMatch(/\bCP\b/);
     const construction = pool.filter((row) => boardPlayerIds.includes(row.id)).map((row) => row.construction);
     expect(rows.reduce((sum, row) => sum + (row.tax ?? 0), 0)).toBe(luxuryTax(construction, [...caps], 'taxed').charged);
+    const bullpenVelocity = rows.find((row) => row.key === 'bullpen:VEL')!;
+    expect(bullpenVelocity.used).toBeCloseTo(
+      bullpenVelocity.contributors.reduce((sum, contributor) => sum + contributor.points, 0),
+      8,
+    );
+    expect(bullpenVelocity.room).toBeCloseTo(bullpenVelocity.allowed - bullpenVelocity.used, 8);
   });
 });
 

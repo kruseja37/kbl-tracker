@@ -9,10 +9,7 @@ import {
 } from '../../../../../data/rosterConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import {
-  assignLuxuryTaxPitchingGroups,
-  luxuryRowPlayerRating,
-  luxuryTax,
-  playerEligibleForLuxuryRow,
+  luxuryRowUsage,
   shiftLuxuryCaps,
   type ConstructionPlayer,
   type TeamCapIdentity,
@@ -81,9 +78,16 @@ export interface AdvisorLogEntry {
 
 export interface TaxCoreRow {
   key: string;
+  group: LuxuryCapRow['group'];
+  stat: LuxuryCapRow['stat'];
+  topN: number;
   label: string;
   playerNames: string[];
-  tax?: number;
+  used: number;
+  allowed: number;
+  room: number;
+  tax: number;
+  contributors: Array<{ playerId: string; playerName: string; points: number }>;
 }
 
 const POSITION_ORDER: readonly TaxonomyPosition[] = [
@@ -677,9 +681,7 @@ export function buildAdvisorLog(
   ];
 }
 
-// The explainer names arms exactly the way the settled tax groups them
-// (assignLuxuryTaxPitchingGroups — TAXSWING single assignment; a swing arm is never
-// listed in both groups).
+// The ledger names arms exactly the way the canonical settled-tax usage groups them.
 
 function statWord(stat: LuxuryCapRow['stat']): string {
   return ({ POW: 'POWER', CON: 'CONTACT', SPD: 'SPEED', FLD: 'FIELDING', ARM: 'ARM', VEL: 'VELOCITY', JNK: 'JUNK', ACC: 'ACCURACY' })[stat];
@@ -695,31 +697,26 @@ export function buildTaxCoreRows(input: {
   const players = input.candidates.filter((candidate) => boardIds.has(candidate.id));
   const settledCaps = input.capIdentity ? shiftLuxuryCaps([...input.caps], input.capIdentity) : [...input.caps];
   const construction = players.map((candidate) => candidate.construction);
-  const pitchingGroups = assignLuxuryTaxPitchingGroups(construction);
-  const rotationIds = new Set(pitchingGroups.rotation.map((player) => player.id));
-  const bullpenIds = new Set(pitchingGroups.bullpen.map((player) => player.id));
-  const inGroup = (player: ConstructionPlayer, group: LuxuryCapRow['group']): boolean => {
-    if (group === 'hitters') return true;
-    if (group === 'rotation') return rotationIds.has(player.id);
-    return bullpenIds.has(player.id);
-  };
-  const bindingByKey = new Map(luxuryTax(construction, settledCaps, 'taxed').binding.map((row) => [
-    `${row.group}:${row.stat}`, row.tax,
-  ]));
-  return settledCaps.map((cap) => {
-    const groupWord = cap.group === 'hitters' ? 'HITTERS' : cap.group === 'rotation' ? 'STARTERS' : 'BULLPEN ARMS';
-    const core = players
-      .filter((candidate) => inGroup(candidate.construction, cap.group)
-        && playerEligibleForLuxuryRow(candidate.construction, cap, input.caps))
-      .sort((left, right) => luxuryRowPlayerRating(right.construction, cap, input.caps)
-        - luxuryRowPlayerRating(left.construction, cap, input.caps)
-        || left.id.localeCompare(right.id))
-      .slice(0, cap.topN);
+  const candidateById = new Map(players.map((candidate) => [candidate.id, candidate]));
+  return luxuryRowUsage(construction, settledCaps).map((usage) => {
+    const groupWord = usage.group === 'hitters' ? 'HITTERS' : usage.group === 'rotation' ? 'STARTERS' : 'BULLPEN ARMS';
+    const contributors = usage.contributors.map((contributor) => ({
+      playerId: contributor.playerId,
+      playerName: candidateById.get(contributor.playerId)?.name ?? 'UNKNOWN PLAYER',
+      points: contributor.points,
+    }));
     return {
-      key: `${cap.group}:${cap.stat}`,
-      label: `YOUR TOP ${cap.topN} ${groupWord} BY ${statWord(cap.stat)}`,
-      playerNames: core.map((candidate) => candidate.name),
-      tax: bindingByKey.get(`${cap.group}:${cap.stat}`) ?? 0,
+      key: `${usage.group}:${usage.stat}`,
+      group: usage.group,
+      stat: usage.stat,
+      topN: usage.topN,
+      label: `TOP ${usage.topN} ${groupWord} · ${statWord(usage.stat)}`,
+      playerNames: contributors.map((contributor) => contributor.playerName),
+      used: usage.used,
+      allowed: usage.allowed,
+      room: usage.room,
+      tax: usage.tax,
+      contributors,
     };
   });
 }

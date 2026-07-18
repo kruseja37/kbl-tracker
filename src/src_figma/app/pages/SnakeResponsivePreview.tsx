@@ -18,6 +18,7 @@ import { CompanionCoveredScreen, SnakeCompanionFrame } from '../components/snake
 import { DraftTruthStrip } from '../components/snake/desk/DraftTruthStrip';
 import { PrivateDesk } from '../components/snake/desk/PrivateDesk';
 import { SelectedPlayerCard } from '../components/snake/desk/SelectedPlayerCard';
+import type { TaxCoreRow } from '../components/snake/desk/deskModel';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import {
@@ -598,6 +599,17 @@ function PreviewDesk(props: {
   const playerIds = previewBoardPlayerIds(props.board);
   const chemistry = previewChemistry(playerIds);
   const candidates = previewCandidates(props.unavailablePlayerIds);
+  const taxCoreRows: TaxCoreRow[] = [{
+    key: 'hitters:POW', group: 'hitters', stat: 'POW', topN: 8,
+    label: 'TOP 8 HITTERS · POWER',
+    playerNames: playerIds.slice(0, 3).map((id) => PREVIEW_CANDIDATES.find((candidate) => candidate.id === id)?.name ?? 'UNKNOWN PLAYER'),
+    used: 472, allowed: 586, room: 114, tax: 0,
+    contributors: playerIds.slice(0, 3).map((id, index) => ({
+      playerId: id,
+      playerName: PREVIEW_CANDIDATES.find((candidate) => candidate.id === id)?.name ?? 'UNKNOWN PLAYER',
+      points: 82 - index * 7,
+    })),
+  }];
   return <PrivateDesk
     candidates={candidates}
     rankings={props.board.rankings.byPosition ?? {}}
@@ -612,7 +624,8 @@ function PreviewDesk(props: {
       text: `PICK ${props.tradeTargetPick} IS AVAILABLE.`,
       actionable: true,
     }]}
-    taxCoreRows={[{ key: 'top', label: 'TOP SALARY', playerNames: playerIds.slice(0, 3).map((id) => PREVIEW_CANDIDATES.find((candidate) => candidate.id === id)?.name ?? 'UNKNOWN PLAYER') }]}
+    taxCoreRows={taxCoreRows}
+    assistantTaxCoreRows={taxCoreRows}
     slotDepth={Object.fromEntries(SNAKE_BOARD_SLOT_IDS.map((slotId) => [slotId, 3]))}
     assistantBoard={previewAssistantBoard(props.teamId, props.assistantPinId, props.unavailablePlayerIds)}
     assistantOptimizationKey={props.assistantPinId ? `${props.teamId}:${props.assistantPinId}:${props.assistantOptimizationRevision ?? 0}` : null}

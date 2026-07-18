@@ -4,6 +4,21 @@
 
 ---
 
+### 2026-07-18 — FINDING-238 approved; FINDING-239 rating-room builder close
+
+The independent re-auditor approved frozen large-source repair `1ae9c0a4` with **Major 0 / Minor
+0** after independently passing 58/58 focused tests, exact 2,001-source proof 3/3, lint, TypeScript,
+production build, and diff integrity. It confirmed source-plus-assignment binding and cancellation
+between every awaited membership/persistence stage.
+
+The next builder addition exposes the exact settled tax-row ledger on My Board and Asst GM Board.
+One engine function now owns contributors, usage-weighted points, allowed points, signed room,
+overage, and row tax, and `luxuryTax` consumes it. The UI shows uncapped accumulated points, exact
+LEFT/OVER, contributor names/points, selected-player contribution, and row tax in a collapsed
+RATING ROOM. Builder verification is focused 85/85, broad Snake 628/628, production browser 23/23,
+TypeScript, lint, production build, and diff integrity. FINDING-239 still needs a separate frozen
+non-builder audit; JK's browser walk remains the product gate. No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-238 second audit block and narrow repair
 
 The re-auditor blocked first-audit repair `6d45f11f` with **Major 2 / Minor 0**. The source

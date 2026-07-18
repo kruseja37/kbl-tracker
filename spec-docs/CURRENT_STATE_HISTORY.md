@@ -1412,3 +1412,10 @@ worker cancellation. The re-auditor found that assignment payloads were not boun
 that cancellation was not rechecked between asynchronous membership/persistence stages. The live
 header now records exact assignment binding and stage-by-stage cancellation as the final audit
 candidate.
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-239 rating-room build
+
+FINDING-238's second audit repair was frozen at `1ae9c0a4` after binding exact assignments to source
+authority and adding cancellation checkpoints between every awaited add/remove/save stage. Exact
+2,001-source proof was 3/3, focused proof 58/58, and the final independent re-audit was still
+pending. Next was that re-audit, then the newly approved rating-room/tax-ledger UI and one clean JK
+browser preview. No push, merge, deploy, or product acceptance was authorized.

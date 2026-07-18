@@ -100,6 +100,9 @@ for (const entry of cases) {
       await page.getByRole('button', { name: 'REVEAL BEEWOLVES SEAT' }).click();
       await expect(page.getByTestId('private-draft-desk')).toBeVisible();
       await expect(page.getByTestId('selected-player-card')).toBeVisible();
+      await page.getByTestId('rating-room').locator('summary').click();
+      await expect(page.getByTestId('rating-room-row-hitters:POW')).toContainText('USED 472 / LIMIT 586');
+      await expect(page.getByTestId('rating-room-row-hitters:POW')).toContainText('114 LEFT');
       await auditCurrentSurface(page);
       await expect(page.getByRole('button', { name: 'DRAFT PLAYER' })).toHaveCount(0);
       await expectControlInsideViewportWithScrollRescue(page, page.getByRole('button', { name: 'COVER' }));
@@ -189,6 +192,7 @@ for (const viewport of [{ width: 1024, height: 768 }, { width: 768, height: 1024
     await expect(page.getByTestId('assistant-board-panel')).toContainText('ASST GM');
     await expect(page.getByTestId('assistant-board-panel')).toContainText('22/22');
     await expect(page.getByTestId('assistant-board-panel')).toContainText('QUINN VERSATILE');
+    await expect(page.getByTestId('assistant-rating-room')).toBeVisible();
     await page.getByRole('button', { name: 'MY BOARD' }).click();
 
     if (viewport.width >= 1024) {

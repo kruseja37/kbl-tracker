@@ -32,6 +32,7 @@ export function PrivateDesk(props: {
   advisorLog: readonly AdvisorLogEntry[];
   logScopeId?: string;
   taxCoreRows: readonly TaxCoreRow[];
+  assistantTaxCoreRows?: readonly TaxCoreRow[];
   slotDepth: Partial<Record<SnakeBoardSlotId, number>>;
   assistantBoard: SnakeAssistantBoardState;
   assistantOptimizationKey?: string | null;
@@ -150,7 +151,7 @@ export function PrivateDesk(props: {
               planLedger={props.assistantBoard.board.ledger}
               planTitle="ASST GM 22"
               planChemistry={props.assistantBoard.board.chemistry}
-              taxCoreRows={[]}
+              taxCoreRows={props.assistantTaxCoreRows ?? []}
               slotDepth={{}}
               selectedCandidateId={props.selectedCandidateId}
               onSelectCandidate={props.onSelectCandidate}

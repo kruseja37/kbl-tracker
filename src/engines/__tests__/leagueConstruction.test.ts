@@ -29,6 +29,7 @@ import {
   computePoolTierCap,
   derivePickValueChart,
   identityCapShift,
+  luxuryRowUsage,
   luxuryTax,
   pickMarginalTax,
   registerPool,
@@ -333,6 +334,38 @@ describe('leagueConstruction T8a pure engine', () => {
       { group: 'hitters', stat: 'POW', over: 80, tax: 80 },
       { group: 'rotation', stat: 'VEL', over: 70, tax: 70 },
     ]);
+  });
+
+  test('rating-room usage is the exact row ledger consumed by luxuryTax', () => {
+    const ordinaryStarter = pitcher(
+      'ordinary', 'SP', { VEL: 75, JNK: 55, ACC: 45 },
+      { POW: 80, CON: 70, SPD: 60, FLD: 50, ARM: 99 },
+    );
+    const twoWay = {
+      ...pitcher('two-way', 'SP', { VEL: 85, JNK: 65, ACC: 55 }, { POW: 90, CON: 0, SPD: 0, FLD: 0, ARM: 99 }),
+      twoWayVariant: 'IF' as const,
+    };
+    const caps: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'POW', topN: 1, cap: 80, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'POW', topN: 1, cap: 10, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+      { group: 'rotation', stat: 'VEL', topN: 2, cap: 150, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0, ratingBasis: 'pitcher-role-usage-v1' },
+    ];
+    const usage = luxuryRowUsage([ordinaryStarter, twoWay], caps);
+    const tax = luxuryTax([ordinaryStarter, twoWay], caps, 'taxed');
+
+    expect(usage.find((row) => row.group === 'hitters')?.contributors).toEqual([
+      { playerId: 'two-way', points: 90 },
+    ]);
+    expect(usage.find((row) => row.group === 'rotation' && row.stat === 'POW')?.contributors[0].points)
+      .toBeCloseTo(15.7, 8);
+    const rotationPower = usage.find((row) => row.group === 'rotation' && row.stat === 'POW')!;
+    expect(rotationPower.allowed).toBe(10);
+    expect(rotationPower.room).toBeCloseTo(-5.7, 8);
+    expect(rotationPower.over).toBeCloseTo(5.7, 8);
+    expect(rotationPower.tax).toBeCloseTo(5.7, 8);
+    expect(usage.reduce((sum, row) => sum + row.tax, 0)).toBeCloseTo(tax.charged, 8);
+    expect(usage.filter((row) => row.over > 0).map(({ group, stat, over, tax: rowTax }) => ({ group, stat, over, tax: rowTax })))
+      .toEqual(expect.arrayContaining(tax.binding));
   });
 
   describe('TAXSWING named single-assignment scenarios', () => {

@@ -4206,3 +4206,20 @@ Proof lifecycle is semantic, not referential. A metadata-only session revision t
 rosters, pool cards, version state, caps, identities, and budgets unchanged must retain the current
 proof and visible safe rows. A real change to any of those inputs requires a fresh proof. This avoids
 an advisor-log feedback loop without weakening stale-result cancellation or mutation-time legality.
+
+## 2026-07-18 — Snake rating room is the uncapped canonical tax-row ledger
+
+My Board and Asst GM Board must expose the exact rating totals that the settled luxury-tax engine
+uses. Every configured row shows the full accumulated top-N total even after it crosses the limit,
+the club's archetype-adjusted allowed total, signed room as LEFT or OVER, the resulting row tax, and
+the exact contributing players and points. Hitter rows use the top eight; rotation secondary and
+pitching rows use the configured top four; bullpen secondary rows use the configured top four and
+VEL/JNK/ACC use the configured top three, including closers. The data table, not UI copy, remains
+authoritative when a row's configured top-N differs.
+
+Ordinary pitcher secondary ratings retain their role-usage weights. Two Way batting enters the
+hitter rows at full use and is not duplicated in rotation/bullpen secondary rows; pitching ratings
+still enter exactly one settled pitching group. The draft UI must call the same canonical row
+ledger that `luxuryTax` consumes. A parallel approximation, capped USED display, or separate
+Assistant formula is prohibited. The panel is a compact drill-in; methodology copy remains behind
+Help. No source, FIT, cap, archetype, tax coefficient, roster, salary/IV, or persistence law changes.

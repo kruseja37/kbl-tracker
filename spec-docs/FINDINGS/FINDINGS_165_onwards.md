@@ -831,7 +831,7 @@ real-player oracle passes 8/8 including 176/176 picks; the non-production Snake 
 Final non-builder audit and JK's walk remain open. No push, merge, or deploy.
 
 ### FINDING-238
-**Date:** 2026-07-18 | **Phase:** Eight-team Snake Draft Setup / large selected sources | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-18 | **Phase:** Eight-team Snake Draft Setup / large selected sources | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
 **Files:** `src/engines/snakeSeatingProof.ts`, `src/engines/poolFromDemand.ts`, `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`, `src/src_figma/app/components/snake/setup/snakePoolShapeClient.ts`, `src/src_figma/app/workers/snakePoolShape.worker.ts`, `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
 **Evidence:** JK selected nearly 2,000 cards for an eight-team Snake room and Draft Setup still could
 not certify a pool. The exact production repro combines 506 SML cards, 660 MLB cards, and 835
@@ -884,3 +884,33 @@ stage. Regressions alter only assignments and pause both paths inside add before
 support returns honest UNKNOWN and neither abandoned path begins a later remove or setup save.
 Focused proof is 58/58 and exact 2,001-source eight-team proof remains 3/3. Final re-audit and JK's
 real browser walk remain open.
+
+**Final audit:** Frozen second repair `1ae9c0a4` received **APPROVE — Major 0 / Minor 0**. The
+auditor independently confirmed exact source-plus-assignment receipt binding, assignment-only
+tamper rejection, cancellation after every awaited add/remove stage and around save, 58/58 focused
+tests, exact production 2,001-source 3/3, TypeScript, changed-file lint, production build, clean diff,
+and clean worktree. Engineering verification is closed; JK's browser walk remains the sole product
+gate. No push, merge, or deploy.
+
+### FINDING-239
+**Date:** 2026-07-18 | **Phase:** Snake draft decision truth / archetype tax visibility | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/engines/leagueConstruction.ts`, `src/src_figma/app/components/snake/desk/deskModel.ts`, `src/src_figma/app/components/snake/desk/BoardView.tsx`, `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`
+**Evidence:** The engine already settled 19 exact luxury rows with archetype-shifted caps, top-N
+cohorts, pitcher role-use weights, single SP/RP group assignment, and Two Way exceptions. The draft
+desk exposed only contributor names and row tax, so a GM could not see how many rating points were
+used, how much room remained, or how far a roster had crossed the threshold. The Assistant board
+hid this breakdown entirely.
+**Impact:** GMs could see tax after it appeared but could not trace the accumulating rating pressure
+that created it. A row over the limit did not expose the full accumulated total or each player's
+weighted contribution, weakening the practical value of team archetype and tax intelligence.
+**Action:** Extract one canonical per-row usage ledger and make `luxuryTax` consume it. Render the
+same uncapped USED / archetype-adjusted LIMIT / LEFT-or-OVER truth on both My Board and Asst GM
+Board, with exact contributing players and points, row tax, and selected-player contribution when
+the selected player is in that top-N core. Keep the panel collapsed by default and methodology
+behind Help. Add no pool scan, worker, persistence, or network work.
+**Builder result:** Focused engine/desk proof is 85/85; broad Snake is 63 files / 628 tests; the exact
+eight-team oracle completes 176/176 picks with every Assistant available. Playwright is 23/23 across
+responsive desks, companion privacy/sync, complete franchise launch, exact 2,001-source setup, and
+Mac/iPad latency. TypeScript, changed-file ESLint, the 2,735-module production/PWA build, and diff
+integrity are green. A separate non-builder audit and JK's browser walk remain. No push, merge, or
+deploy.

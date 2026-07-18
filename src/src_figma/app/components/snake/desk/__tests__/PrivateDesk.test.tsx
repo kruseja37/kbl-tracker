@@ -72,16 +72,22 @@ describe('PrivateDesk', () => {
       overallRankings: ['muraski'] as const,
       boardSlots: { SS: 'muraski' } as const,
       brokenSlots: [], planBill: null, advisorLog: [],
-      taxCoreRows: [{ key: 'core', label: 'TOP SALARY', playerNames: ['MURASKI'] }],
+      taxCoreRows: [{
+        key: 'hitters:POW', group: 'hitters' as const, stat: 'POW' as const, topN: 8,
+        label: 'TOP 8 HITTERS · POWER', playerNames: ['MURASKI'],
+        used: 70, allowed: 80, room: 10, tax: 0,
+        contributors: [{ playerId: 'muraski', playerName: 'MURASKI', points: 70 }],
+      }],
       slotDepth: { SS: 3 },
       assistantBoard: idleAssistant,
       onReorder: () => undefined,
     };
     const { rerender } = render(<PrivateDesk {...common} showHelp={false} />);
-    expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'TOP SALARY: MURASKI')).toBeInTheDocument();
-    expect(screen.queryByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rating-room-row-hitters:POW')).toHaveTextContent('USED 70 / LIMIT 80');
+    expect(screen.getByTestId('rating-room-row-hitters:POW')).toHaveTextContent('10 LEFT');
+    expect(screen.queryByText('USED IS THE EXACT TOP-N RATING TOTAL. LIMIT IS YOUR ARCHETYPE-ADJUSTED TAX LINE.')).not.toBeInTheDocument();
     rerender(<PrivateDesk {...common} showHelp />);
-    expect(screen.getByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).toBeInTheDocument();
+    expect(screen.getByText('USED IS THE EXACT TOP-N RATING TOTAL. LIMIT IS YOUR ARCHETYPE-ADJUSTED TAX LINE.')).toBeInTheDocument();
   });
 
   it('shows one chosen overall or position ranking and routes each reorder to the matching persisted list', () => {

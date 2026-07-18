@@ -941,6 +941,15 @@ export default function SnakeCompanion() {
     });
   }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, board, deskState, deviceCovered, league, leagueTeams.length, pool, session, team]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
+  const assistantTaxCoreRows = useMemo(() => {
+    if (assistantBoardState.status !== 'ready' || !assistantBoardState.board || !deskState || !pool || !team || !session) return [];
+    return buildTaxCoreRows({
+      candidates: deskState.candidates,
+      boardPlayerIds: assistantBoardState.board.slots.map((slot) => slot.playerId),
+      caps: snakeLuxuryCaps(pool.luxuryCaps),
+      capIdentity: resolveLockedSeat({ team, session }).capIdentity,
+    });
+  }, [assistantBoardState.board, assistantBoardState.status, deskState, pool, session, team]);
   const consequencePlayers = useMemo(() => {
     const candidateById = new Map((deskState?.candidates ?? []).map((entry) => [entry.id, entry]));
     return assistantLivePlayers.flatMap((player) => {
@@ -1512,6 +1521,7 @@ export default function SnakeCompanion() {
         ...deskState.advisorLog.filter((entry) => !(session.roomLogByTeamId?.[team.id] ?? []).some((row) => row.id.endsWith(`:${entry.key}`))),
       ]}
       taxCoreRows={deskState.taxCoreRows}
+      assistantTaxCoreRows={assistantTaxCoreRows}
       slotDepth={deskState.slotDepth}
       assistantBoard={assistantBoardState}
       assistantOptimizationKey={assistantOptimizePlayerId
