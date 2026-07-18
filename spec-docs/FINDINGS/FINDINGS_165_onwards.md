@@ -951,3 +951,12 @@ after the old queue key is gone, and succeeds only with zero pending writes and 
 The regression forces queue-write failure while bases exist and base-write failure while the old
 queue exists, then proves one recovery call sends both records and clears the queue. Final re-audit
 and JK's live click remain. No push, merge, or deploy.
+
+**Second audit block and repair:** Frozen `12ce0030` still allowed cursor persistence to silently
+return on auth loss before the pull pruned in-memory write bases. That could leave an older durable
+cursor without the exact conflict bases it still required after reload. Cursor save now requires the
+expected signed-in account and throws before prune on missing configuration, sign-out, or account
+change. The recovery button also requires an exact local queue/write-base persistence prefix plus
+quota semantics; unrelated service quota text keeps ordinary sync behavior. Regressions prove auth
+loss preserves persisted bases and a Supabase quota response does not expose recovery. Focused proof
+is 124/124; final build and re-audit remain. No push, merge, or deploy.

@@ -27,6 +27,18 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
   });
 }
 
+function isStoragePersistenceQuotaError(message: string | null): boolean {
+  if (!message) return false;
+  const normalized = message.toLowerCase();
+  const isSyncPersistenceFailure =
+    normalized.includes('sync queue persistence failed') ||
+    normalized.includes('sync write-base persistence failed');
+  const isQuotaFailure =
+    normalized.includes('quota') ||
+    (normalized.includes('storage') && normalized.includes('exceed'));
+  return isSyncPersistenceFailure && isQuotaFailure;
+}
+
 export function SyncModal({ isOpen, onClose }: SyncModalProps) {
   const { user, isAuthenticated, isLoading: authLoading, error: authError, signIn, signOut } = useAuth();
   const sync = useSyncStatus();
@@ -84,12 +96,7 @@ function SyncControls({
   const hasDiagnosticWarnings = (diagnostics?.warnings.length ?? 0) > 0;
   const hasLivePendingWrites = sync.pendingCount > 0;
   const hasOperationError = operationError !== null;
-  const hasStorageQuotaError = Boolean(
-    sync.error && (
-      sync.error.toLowerCase().includes('quota') ||
-      (sync.error.toLowerCase().includes('storage') && sync.error.toLowerCase().includes('exceed'))
-    )
-  );
+  const hasStorageQuotaError = isStoragePersistenceQuotaError(sync.error);
   const hasBuildFreshnessProblem = Boolean(
     diagnostics && (
       diagnostics.build.latest?.matchesCurrent === false ||

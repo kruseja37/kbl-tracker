@@ -1446,3 +1446,12 @@ could still fail their early rebuilt-base persistence while the old queue occupi
 queue only afterward, and reject without a post-drain retry. The live header now records the exact
 one-click repair and final re-audit as the remaining engineering gate. No push, merge, or deploy was
 authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota second-audit repair
+
+The prior live header recorded the repaired one-click recovery after frozen `12ce0030`. The second
+auditor found that auth loss during cursor persistence could allow pruning against an in-memory
+cursor that was not durable, and that generic service quota text could expose the special recovery
+action. The live header now records fail-closed expected-account cursor persistence and exact local
+persistence-error UI gating. Final build, freeze, re-audit, and JK's one-click recovery remain. No
+push, merge, or deploy was authorized.

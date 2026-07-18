@@ -4,6 +4,18 @@
 
 ---
 
+### 2026-07-18 — FINDING-240 second audit block and fail-closed repair
+
+The second auditor blocked `12ce0030` with **Major 1 / Minor 1**. A pull could lose authentication
+or switch accounts while saving the safe cursor; the old cursor save silently returned, after which
+in-memory base pruning could still run. A reload could then pair an older durable cursor with deleted
+conflict bases. Cursor persistence now requires the expected signed-in account and throws before any
+prune on missing Supabase, sign-out, or account change. The UI also requires an exact local
+queue/write-base persistence prefix plus quota semantics, so unrelated Supabase/API quota errors keep
+the ordinary action. New regressions prove auth loss retains durable bases and generic service quota
+text cannot expose recovery. Focused proof is 124/124; TypeScript and changed-file lint are green.
+Production build and final re-audit remain. No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-240 first audit block and one-click repair
 
 The first auditor blocked frozen builder commit `b9c52371` because accepted batches rebuilt and

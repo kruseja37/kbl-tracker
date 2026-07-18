@@ -1187,7 +1187,7 @@ class SyncEngine {
         }
 
         this.cursor = operationBaseCursor;
-        await this.saveCursor();
+        await this.saveCursor(session.user.id);
 
         this.queueDrainsBlocked = false;
         // A successful full replacement supersedes any incremental operations queued
@@ -1860,7 +1860,7 @@ class SyncEngine {
 
     // Save only the safe cursor. Queued local conflicts act as a cursor barrier
     // so future-dated stale cloud rows cannot hide later normal rows.
-    await this.saveCursor();
+    await this.saveCursor(userId);
 
     // Once the pull cursor reaches an accepted write, its per-row override is
     // redundant. Keeping every historical override indefinitely can crowd the
@@ -4241,11 +4241,14 @@ class SyncEngine {
     }
   }
 
-  private async saveCursor(): Promise<void> {
-    if (!supabase) return;
+  private async saveCursor(expectedUserId?: string): Promise<void> {
+    if (!supabase) throw new Error('Sync cursor save failed: Supabase is not configured');
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) throw new Error('Sync cursor save failed: signed out during sync');
+    if (expectedUserId && session.user.id !== expectedUserId) {
+      throw new Error('Sync cursor save failed: signed-in account changed during sync');
+    }
 
     const { error } = await supabase
       .from('kbl_sync_meta')

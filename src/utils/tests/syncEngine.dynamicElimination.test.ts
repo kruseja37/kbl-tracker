@@ -77,6 +77,7 @@ const mockState = vi.hoisted(() => ({
   resolveBlockedSelectStarted: null as (() => void) | null,
   releaseBlockedSelect: null as (() => void) | null,
   afterSelect: null as ((table: string, rows: Array<Record<string, unknown>>) => void) | null,
+  sessionUserId: "user-1" as string | null,
   reset() {
     this.cloudRows = [];
     this.localRows = [];
@@ -106,6 +107,7 @@ const mockState = vi.hoisted(() => ({
     this.resolveBlockedSelectStarted = null;
     this.releaseBlockedSelect = null;
     this.afterSelect = null;
+    this.sessionUserId = "user-1";
   },
   blockNextUpsert(table: string) {
     this.blockNextUpsertTable = table;
@@ -657,7 +659,11 @@ vi.mock("../../supabase", () => ({
   supabase: {
     auth: {
       getSession: vi.fn(async () => ({
-        data: { session: { user: { id: "user-1" } } },
+        data: {
+          session: mockState.sessionUserId
+            ? { user: { id: mockState.sessionUserId } }
+            : null,
+        },
       })),
     },
     rpc(functionName: string, args: { p_rows?: unknown[] }) {
@@ -3715,6 +3721,41 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       expect.objectContaining({ record_key: JSON.stringify("quota-recovery-2"), deleted: false }),
     ]));
     expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+  });
+
+  test("auth loss before cursor save leaves restored write bases durable and fails closed", async () => {
+    const cloudRow: StoreRow = {
+      id: "cloud-auth-loss-event",
+      user_id: "user-1",
+      db_name: "kbl-event-log",
+      store_name: "atBatEvents",
+      record_key: JSON.stringify("auth-loss-event"),
+      data: { eventId: "auth-loss-event", result: "DOUBLE" },
+      changed_at: 50,
+      received_at: "2026-07-18T12:00:00.000Z",
+      deleted: false,
+    };
+    mockState.cloudRows.push(cloudRow);
+    const baseIdentity = [
+      "kbl-event-log",
+      "atBatEvents",
+      JSON.stringify("auth-loss-event"),
+    ].join("\u0000");
+    const persistedBases = JSON.stringify([
+      [baseIdentity, { receivedAt: cloudRow.received_at, id: cloudRow.id }],
+    ]);
+    localStorage.setItem("kbl-sync-store-write-bases", persistedBases);
+    const syncEngine = await loadFreshSyncEngine();
+    mockState.afterSelect = (table) => {
+      if (table === "kbl_local_storage") mockState.sessionUserId = null;
+    };
+
+    await expect(syncEngine.pull({ throwOnError: true })).rejects.toThrow(
+      "signed out during sync",
+    );
+
+    expect(mockState.metaRows).toHaveLength(0);
+    expect(localStorage.getItem("kbl-sync-store-write-bases")).toBe(persistedBases);
   });
 
   test("strict incremental store flush rejects when accepted write bases cannot be persisted", async () => {

@@ -32656,3 +32656,9 @@ deploy.
 Recovery must therefore retry derived-base and queue persistence after that key is gone; it must not
 report failure after accepted cloud writes merely because the pre-drain overlap prevented an early
 base-cache write. Success requires zero pending operations and both post-drain durability writes.
+
+**Second audit repair:** Cursor persistence is part of the durability boundary. It must fail closed
+if Supabase is unavailable, the user signs out, or the account changes, and no cursor-covered base
+may be pruned until the expected user's cursor is durably saved. The special UI action requires both
+an exact local queue/write-base persistence failure prefix and quota semantics; unrelated API or
+service quota errors retain ordinary sync behavior.

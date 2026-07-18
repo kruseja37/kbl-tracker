@@ -173,6 +173,20 @@ describe("SyncModal diagnostics status", () => {
     expect(mocks.replaceLocalWithCloud).not.toHaveBeenCalled();
   });
 
+  test("does not offer storage recovery for an unrelated service quota error", async () => {
+    mocks.syncStatus.pendingCount = 1;
+    mocks.syncStatus.error = "Supabase API quota exceeded for this project.";
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "FREE SPACE + SYNC" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SYNC NOW" }));
+
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledTimes(1));
+    expect(mocks.recoverQuotaBlockedQueue).not.toHaveBeenCalled();
+  });
+
   test("confirmed upload replaces the existing cloud snapshot", async () => {
     mocks.replaceCloudWithLocal.mockResolvedValue(undefined);
     mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());

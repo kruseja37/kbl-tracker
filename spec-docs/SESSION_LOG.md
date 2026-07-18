@@ -2,6 +2,18 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — second audit repaired; final re-audit pending
+
+The second auditor blocked `12ce0030` with Major 1 / Minor 1. Cursor persistence silently returned
+if authentication vanished, but the subsequent pull could still prune exact write bases in memory;
+after reload, an older durable cursor would no longer have those conflict bases. `saveCursor` now
+requires the expected signed-in account and fails before prune on missing configuration, sign-out,
+or account change. Recovery UI detection now requires the exact queue/write-base persistence prefix
+as well as quota semantics, preventing unrelated cloud-service quota errors from offering cache
+recovery. The new auth-loss and false-positive regressions bring focused sync/UI proof to 124/124;
+TypeScript and changed-file lint are green. Production build, freeze, and final re-audit remain. No
+push, merge, or deploy.
+
 ## 2026-07-18 (Codex, sync quota) — first audit repaired; final re-audit pending
 
 The separate auditor blocked `b9c52371` on an exact one-click edge: rebuilt bases were persisted
