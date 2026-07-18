@@ -32524,3 +32524,10 @@ classifier input. Progress chunks do not publish React state, and scarcity depth
 current validated shared certificate. Fresh required proof is 114/114 plus the green eight-team
 browser latency pass. The same non-builder final re-audit and JK's real browser walk remain
 mandatory.
+
+**Third audit and repair:** The auditor blocked `4242ca69` because one cheapest version per person
+cannot prove impossibility when historical versions have different roles, and the key omitted four
+proof-receipt fields. The heuristic hard blocker is removed; before 22 committed players, bounded
+failure is `OPEN`, while an already-full illegal roster remains exact `BLOCKED`. The complete proof
+object is now part of the stable fingerprint. Final non-builder re-audit and JK's browser walk remain
+mandatory.

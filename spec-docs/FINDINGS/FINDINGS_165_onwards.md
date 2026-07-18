@@ -725,7 +725,7 @@ retirement, rollback on queue-persistence failure, and the Hotseat control. JK's
 remains the product gate.
 
 ### FINDING-237
-**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** SECOND AUDIT REPAIRED — FINAL RE-AUDIT PENDING
+**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** THIRD AUDIT REPAIRED — FINAL RE-AUDIT PENDING
 **Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeSeatingProof.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`, Snake desk hooks/workers and focused tests
 **Evidence:** In JK's first complete four-team room walk, two seats lost their Assistant GM several
 rounds before the end and one club reached 19/22 with no discoverable legal pick despite a positive
@@ -799,3 +799,11 @@ pool 335 ms, sort 214 ms, FIT 37 ms, finish filter 553 ms, selection 237 ms, sav
 and reload on pick 2 in 934 ms with the Assistant available and no console errors. TypeScript,
 changed-file ESLint, the 2,734-module production build/PWA, and diff integrity pass. Final re-audit
 and JK's browser walk remain open. No push, merge, or deploy.
+**Third audit correction:** The next read-only pass returned **BLOCK — Major 2 / Minor 0**. The new
+active-club hard gate still used one cheapest version per person plus a constructive heuristic, so a
+cheaper SP version could hide the same person's necessary CP version. The cache also omitted proof
+feasibility, assignment salary/tax, and message. The repair deletes that heuristic hard gate; only an
+already-full illegal 22 is blocked there, while earlier bounded uncertainty stays `OPEN`. The key now
+hashes the complete proof receipt. Fresh focused proof is 20/20, exact 506-card classification is
+184 ms, TypeScript/lint/build pass, and the eight-team browser again advances and reloads cleanly
+with the Assistant available and no console errors. Final re-audit remains open.

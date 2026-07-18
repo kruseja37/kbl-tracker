@@ -1316,6 +1316,16 @@ Contract: `contracts/CONTRACT_DRAFT_SETUP_BROWSER_FIXES_2026-07-16.md`. Builder 
 different agents. No commit, merge, or deploy is authorized; JK's browser re-walk remains the sole
 product-acceptance gate.
 
+### 2026-07-17 — FINDING-237 third audit block and narrow repair
+
+The next read-only pass rejected `4242ca69` with **BLOCK — Major 2 / Minor 0**. One cheapest version
+per person plus a constructive completion heuristic was not a valid hard-impossibility proof for
+mixed-position historical versions. The finish key also omitted proof feasibility, assignment
+salary/tax, and message. The repair removes the heuristic hard block, retains only the exact illegal
+full-22 check, and hashes the complete proof object. Fresh focused 20/20, exact 506-card classifier,
+TypeScript, changed-file lint, production build/PWA, diff integrity, and eight-team browser gates are
+green. Final independent re-audit remains mandatory.
+
 Builder repair handoff after the first rejected audit: all seven deltas are implemented. The exact
 repaired-tree focused matrix passes 8 files / 187 tests, TypeScript and changed-file ESLint are
 green, the post-lint seating-proof delta passes 14/14, and diff integrity is clean. Production build

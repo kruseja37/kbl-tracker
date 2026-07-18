@@ -1353,6 +1353,12 @@ final legal and financial truth. The live header now records the repaired worker
 Assistant/certificate overlap law, cumulative 614-test proof, and re-audit as the remaining engineering
 gate before JK's eight-team browser acceptance.
 
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 third audit repair
+
+The prior header recorded the second audit repair. The next pass found a mixed-position historical
+version false-block risk and four missing proof-fingerprint fields. The live header now records their
+narrow repair and final re-audit as the remaining engineering gate.
+
 ## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 second audit repair
 
 The prior live header recorded the first audit's repaired 614-test builder snapshot. The same

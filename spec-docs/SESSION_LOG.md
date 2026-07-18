@@ -2,7 +2,7 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
-## 2026-07-17 (Codex, Snake late-draft decision truth) — second audit repaired; final re-audit pending
+## 2026-07-17 (Codex, Snake late-draft decision truth) — third audit repaired; final re-audit pending
 
 JK's first four-team full draft exposed a product-scale failure, not a four-team special case: the
 preference optimizer could hide the Assistant while exact legal completion still existed, and rows
@@ -32,6 +32,12 @@ from the current shared certificate. Fresh proof is 114/114 targeted tests inclu
 176-pick eight-team replay, TypeScript/lint/build green, and an eight-team 506-card browser pass with
 all interactions below one second except the intentional 1.278-second gavel/write ritual. The same
 non-builder must approve the frozen repair before JK's browser gate.
+
+The third read-only pass found two static edges despite the green production replay: mixed-position
+versions of one historical player could be collapsed to the wrong role by a heuristic hard blocker,
+and four proof-receipt fields were absent from the cache key. That heuristic hard blocker is gone;
+early uncertainty remains `OPEN`, a full illegal 22 is still exact `BLOCKED`, and the key hashes the
+complete proof. Fresh focused, 506-card, type/lint/build, and eight-team browser gates are green.
 
 ## 2026-07-17 (Codex, combined Snake correctness/performance close) — independently approved; JK walk pending
 

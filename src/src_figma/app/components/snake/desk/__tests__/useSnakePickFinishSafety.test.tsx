@@ -106,7 +106,14 @@ describe('snake pick finish-safety worker hook', () => {
         }],
         realTeamCount: 1,
       },
-      proof: { feasible: true, assignments: [], shortfall: null, message: 'READY' },
+      proof: {
+        feasible: true,
+        assignments: [{
+          teamId: 'team', playerIds: ['p-b'], salaryCost: 100, addedTax: 0, allInCost: 100,
+        }],
+        shortfall: null,
+        message: 'READY',
+      },
       teamId: 'team', candidatePlayerIds: ['p-b'],
     };
     const key = buildSnakePickFinishWorkerRequest(base).key;
@@ -141,6 +148,26 @@ describe('snake pick finish-safety worker hook', () => {
           })),
         })),
       },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base, proof: { ...base.proof, feasible: false },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base,
+      proof: {
+        ...base.proof,
+        assignments: base.proof.assignments.map((assignment) => ({ ...assignment, salaryCost: 99 })),
+      },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base,
+      proof: {
+        ...base.proof,
+        assignments: base.proof.assignments.map((assignment) => ({ ...assignment, addedTax: 1 })),
+      },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base, proof: { ...base.proof, message: 'DIFFERENT RECEIPT' },
     }).key).not.toBe(key);
   });
 

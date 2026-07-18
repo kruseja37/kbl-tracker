@@ -55,9 +55,6 @@ export function buildSnakePickFinishWorkerRequest(input: Omit<SnakePickFinishWor
       player.construction,
     ])
   ));
-  const proofParts = input.proof.assignments.map((assignment) => (
-    `${assignment.teamId}:${assignment.playerIds.join(',')}:${assignment.allInCost}`
-  ));
   return {
     ...input,
     key: `snake-finish:${fnv1a([
@@ -66,10 +63,9 @@ export function buildSnakePickFinishWorkerRequest(input: Omit<SnakePickFinishWor
       String(input.current.tier ?? ''),
       JSON.stringify(input.current.baseCaps),
       JSON.stringify(input.current.versionState ?? null),
-      JSON.stringify(input.proof.shortfall ?? null),
+      JSON.stringify(input.proof),
       ...clubParts,
       ...poolParts,
-      ...proofParts,
       ...[...input.candidatePlayerIds].sort(),
     ])}`,
   };
