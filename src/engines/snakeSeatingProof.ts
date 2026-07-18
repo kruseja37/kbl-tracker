@@ -50,6 +50,7 @@ import {
 import {
   archetypeFitScorer,
   buildIdentityRoster,
+  buildIdentityValueBaseline,
   identityEmbodiment,
   type SimArchetype,
   type SimPlayer,
@@ -103,6 +104,12 @@ export interface SnakeSeatingProof {
   message: string;
 }
 
+export interface SnakeIdentitySupportCertificate {
+  readonly version: 1;
+  readonly sourceFingerprint: string;
+  readonly assignments: readonly SnakeSeatingAssignment[];
+}
+
 export interface SimultaneousSnakeSeatingInput {
   clubs: readonly SnakeSeatingClub[];
   pool: readonly SnakeSeatingPlayer[];
@@ -111,8 +118,8 @@ export interface SimultaneousSnakeSeatingInput {
    * `pool`, but adding/removing curve filler may not redefine what the chosen identity means.
    */
   identityReferencePool?: readonly SnakeSeatingPlayer[];
-  /** Full-source identity certificate retained inside the same shaped-build action. */
-  identitySupportAssignments?: readonly SnakeSeatingAssignment[];
+  /** Source-bound Full Sources identity certificate retained inside the same shaped-build action. */
+  identitySupportCertificate?: SnakeIdentitySupportCertificate;
   baseCaps: readonly LuxuryCapRow[];
   realTeamCount: number;
   tier?: TierKey;
@@ -127,6 +134,59 @@ export interface SimultaneousSnakeSeatingInput {
 export interface TrustedSnakeSeatingCertificate {
   readonly input: SimultaneousSnakeSeatingInput;
   readonly proof: SnakeSeatingProof;
+}
+
+function canonicalCertificateJson(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.keys(current as Record<string, unknown>)
+      .sort((left, right) => left.localeCompare(right))
+      .reduce<Record<string, unknown>>((sorted, key) => {
+        const entry = (current as Record<string, unknown>)[key];
+        if (entry !== undefined) sorted[key] = entry;
+        return sorted;
+      }, {});
+  });
+}
+
+function compactCertificateFingerprint(value: unknown): string {
+  const source = canonicalCertificateJson(value);
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    left = Math.imul(left ^ code, 0x01000193) >>> 0;
+    right = Math.imul(right ^ (code + index), 0x85ebca6b) >>> 0;
+  }
+  // This is an in-process identity checksum, not a security boundary. Two independent 32-bit
+  // streams plus the canonical byte length keep the structured-clone receipt compact.
+  return `${source.length.toString(36)}:${left.toString(16).padStart(8, '0')}:${right.toString(16).padStart(8, '0')}`;
+}
+
+function identityCertificateSourceFingerprint(input: SimultaneousSnakeSeatingInput): string {
+  return `snake-identity-source-v1:${compactCertificateFingerprint({
+    ...input,
+    pool: input.identityReferencePool ?? input.pool,
+    identityReferencePool: undefined,
+    identitySupportCertificate: undefined,
+  })}`;
+}
+
+/** Mint support only after the exact Full Sources proof passes the independent setup validator. */
+export function createSnakeIdentitySupportCertificate(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+): SnakeIdentitySupportCertificate | null {
+  if (input.identityReferencePool || input.identitySupportCertificate) return null;
+  if (!validateConstructiveSnakeSeatingProof(input, proof)) return null;
+  return {
+    version: 1,
+    sourceFingerprint: identityCertificateSourceFingerprint(input),
+    assignments: proof.assignments.map((assignment) => ({
+      ...assignment,
+      playerIds: [...assignment.playerIds],
+    })),
+  };
 }
 
 export type SnakePickFinishStatus = 'DRAFTABLE' | 'OPEN' | 'BLOCKED';
@@ -416,22 +476,12 @@ function validateConstructiveSnakeSeatingProofCore(
         || !snakeMoneyAffordable(allInCost, club.budgetRemaining)) return false;
     }
     if (!verifySetupIdentity) return true;
-    const identityAvailable = availableCards(input);
     const identitySourceAvailable = identityReferenceCards(input);
-    const identitySourceInput: SimultaneousSnakeSeatingInput = input.identityReferencePool
-      ? { ...input, pool: input.identityReferencePool, identityReferencePool: undefined }
-      : input;
-    const identitySourceCandidates = identityProofCandidatePlayers(
-      identitySourceInput,
-      identitySourceAvailable,
-    );
     return input.clubs.every((club, clubIndex) => identityRosterMeetsCanonicalFloor({
       seatingInput: input,
       club,
       roster: finalRosters[clubIndex],
-      available: identityAvailable,
       sourceAvailable: identitySourceAvailable,
-      sourceCandidates: identitySourceCandidates,
     }));
   } catch {
     return false;
@@ -1622,9 +1672,7 @@ function identityRosterMeetsCanonicalFloor(input: {
   seatingInput: SimultaneousSnakeSeatingInput;
   club: SnakeSeatingClub;
   roster: readonly SnakeSeatingPlayer[];
-  available: readonly SnakeSeatingPlayer[];
   sourceAvailable: readonly SnakeSeatingPlayer[];
-  sourceCandidates: readonly SnakeSeatingPlayer[];
 }): boolean {
   const archetype = input.club.identityArchetype;
   if (!archetype) return true;
@@ -1632,24 +1680,21 @@ function identityRosterMeetsCanonicalFloor(input: {
   // identity from an already drafted roster; room legality remains owned by its normal proof.
   if (input.club.roster.length > 0 || input.roster.length !== LEGAL_ROSTER.size) return false;
   const tier = input.seatingInput.tier ?? 'standard';
-  const reference = uniqueIdentityReference(input.sourceCandidates, archetype, tier);
   const embodimentReference = uniqueIdentityReference(input.sourceAvailable, archetype, tier);
   const normalizedCaps = snakeLuxuryCaps([...input.seatingInput.baseCaps]);
   const taxCaps = input.club.capIdentity
     ? shiftLuxuryCaps([...normalizedCaps], input.club.capIdentity)
     : [...normalizedCaps];
-  const baseline = buildIdentityRoster(reference, archetype, tier, input.club.budgetRemaining, {
+  const baseline = buildIdentityValueBaseline(embodimentReference, archetype, tier, input.club.budgetRemaining, {
     realTeamCount: input.seatingInput.realTeamCount,
     taxCaps,
     affordabilityLaw: 'snake-money',
     posture: 'optimal',
-    embodimentReference,
   });
   const roster = input.roster.map(toIdentitySimPlayer);
   const totalIv = roster.reduce((sum, player) => sum + player.iv, 0);
-  return baseline.legalRoster
-    && baseline.solvent
-    && baseline.floorMet
+  return baseline.optimizationComplete
+    && baseline.baselineIv > 0
     && totalIv >= baseline.baselineIv * baseline.valueFloor - 1e-9
     && identityEmbodiment(roster, archetype, tier, embodimentReference).boostZ > 0;
 }
@@ -2341,42 +2386,26 @@ function proveIdentitySetupConstructively(
   const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
   const proofPlayers = identityProofCandidatePlayers(input, players);
   const sourcePlayers = identityReferenceCards(input);
-  const sourceInput: SimultaneousSnakeSeatingInput = input.identityReferencePool
-    ? { ...input, pool: input.identityReferencePool, identityReferencePool: undefined }
-    : input;
-  const sourceCandidatePlayers = input.identityReferencePool
-    ? identityProofCandidatePlayers(sourceInput, sourcePlayers)
-    : proofPlayers;
   const contexts = input.clubs.map((club) => {
     if (!club.identityArchetype) return null;
     const reference = uniqueIdentityReference(sourcePlayers, club.identityArchetype, tier);
-    const sourceCandidateReference = uniqueIdentityReference(
-      sourceCandidatePlayers,
-      club.identityArchetype,
-      tier,
-    );
     const candidateReference = uniqueIdentityReference(proofPlayers, club.identityArchetype, tier);
     const taxCaps = club.capIdentity
       ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
       : [...normalizedCaps];
-    const sourceBaseline = input.identityReferencePool
-      ? buildIdentityRoster(
-          sourceCandidateReference,
-          club.identityArchetype,
-          tier,
-          club.budgetRemaining,
-          {
-            realTeamCount: input.realTeamCount,
-            taxCaps,
-            affordabilityLaw: 'snake-money',
-            posture: 'optimal',
-            embodimentReference: reference,
-          },
-        )
-      : null;
-    const requiredIv = sourceBaseline
-      ? sourceBaseline.baselineIv * sourceBaseline.valueFloor
-      : null;
+    const sourceBaseline = buildIdentityValueBaseline(
+      reference,
+      club.identityArchetype,
+      tier,
+      club.budgetRemaining,
+      {
+        realTeamCount: input.realTeamCount,
+        taxCaps,
+        affordabilityLaw: 'snake-money',
+        posture: 'optimal',
+      },
+    );
+    const requiredIv = sourceBaseline.baselineIv * sourceBaseline.valueFloor;
     let seed = buildIdentityCertificateRoster({
       reference: candidateReference,
       embodimentReference: reference,
@@ -2386,7 +2415,7 @@ function proveIdentitySetupConstructively(
       realTeamCount: input.realTeamCount,
       taxCaps,
     });
-    if (requiredIv !== null && seed.totalIv < requiredIv - 1e-9 && seed.baselineIv > 0) {
+    if (seed.totalIv < requiredIv - 1e-9 && seed.baselineIv > 0) {
       seed = buildIdentityCertificateRoster({
         reference: candidateReference,
         embodimentReference: reference,
@@ -2403,7 +2432,7 @@ function proveIdentitySetupConstructively(
       reference,
       taxCaps,
       seed,
-      requiredIv: requiredIv ?? seed.baselineIv * seed.valueFloor,
+      requiredIv,
       scorer: archetypeFitScorer(club.identityArchetype, tier, 'optimal', reference),
       seedIds: new Set(seed.players.map((player) => player.id)),
       zeroVarianceIdentity: seed.embodiment.boostRows.length > 0
@@ -2661,18 +2690,22 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
 
   if (input.clubs.every((club) => club.roster.length === 0)
     && input.clubs.some((club) => club.identityArchetype)) {
-    if (input.identitySupportAssignments?.length === input.clubs.length) {
+    const supportCertificate = input.identitySupportCertificate;
+    const supportBoundToSource = supportCertificate?.version === 1
+      && Boolean(input.identityReferencePool)
+      && supportCertificate.sourceFingerprint === identityCertificateSourceFingerprint(input);
+    if (supportCertificate && supportBoundToSource && supportCertificate.assignments.length === input.clubs.length) {
       const retainedSupport: SnakeSeatingProof = {
         feasible: true,
-        assignments: input.identitySupportAssignments.map((assignment) => ({
+        assignments: supportCertificate.assignments.map((assignment) => ({
           ...assignment,
           playerIds: [...assignment.playerIds],
         })),
         shortfall: null,
         message: 'EVERY CLUB CAN FINISH A LEGAL, AFFORDABLE 22 THAT FITS ITS CHOSEN IDENTITY.',
       };
-      // Identity was certified by the immediately preceding Full Sources proof. The shaped build
-      // retains those exact 176 IDs, so do not repeat the same multi-second identity optimization.
+      // Identity was independently certified against the exact fingerprinted Full Sources input.
+      // The shaped build retains those exact 176 IDs, so do not repeat the identity optimizer.
       // Recheck every property that the changed candidate membership can affect: availability,
       // distinct people, legal 22s, exact salary/tax bills, and affordability. Permanent source-
       // data regressions still run the full independent identity validator on the shaped result.

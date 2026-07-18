@@ -862,3 +862,15 @@ eight-club rooms. The Snake setup/room/companion/storage matrix passes 619/619. 
 Worst large-build main-thread gaps are 415/327 ms instead of an unresponsive page. TypeScript,
 changed-file ESLint, 2,735-module production/PWA build, and diff integrity are green. Separate audit
 and JK's real browser walk remain open. No push, merge, or deploy.
+
+**First audit and repair:** Frozen builder commit `17a3ec8b` received **BLOCK — Major 3 / Minor 0**.
+Both construction and validation had reduced the Full Sources IV baseline to the bounded candidate
+union; raw support assignments/ids were reusable without an independently validated source-bound
+receipt; and the page left pool shaping alive after navigation. The repair exposes one canonical
+Full Sources value-baseline calculation, requires an independent exact-source certificate before
+support reuse, binds numeric shaping to that same source plus all shaping inputs, and owns one abort
+signal through proof, shaping, and the post-worker write seam. Regressions prove that a shortlist
+cannot manufacture the 90% floor, changed Full Sources or IV invalidates the receipt, raw ids do not
+skip identity extraction, and unmount cancels the worker without writes. Exact large-source, named
+preset, 176-pick, 625-test Snake, build, and production-browser setup gates remain green. Final
+re-audit and JK's real browser walk remain open.

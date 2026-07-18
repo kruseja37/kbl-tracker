@@ -18,6 +18,13 @@ Once that support has been certified, the shaper must not rebuild the same ident
 shaping belongs off the UI thread. UNKNOWN stays honest, but visible copy may not call a 2,001-card
 source scarce without an actual source shortfall.
 
+**Audit clarification:** The bounded construction list is never the 90% IV-floor authority. That
+baseline is computed from immutable Full Sources by the same canonical value procedure used by the
+identity builder. Shaped support may be reused only through an independently validated certificate
+fingerprinted to exact Full Sources and a second receipt fingerprinted to the exact numeric-shaping
+inputs. Navigating away or starting a replacement build cancels the prior proof/shape chain before
+it can persist stale membership.
+
 ### 2026-07-17 (Snake late-draft law): exact legal completion outranks preference optimization at every room size
 
 **The ruling:** four-team testing is a repro size, not the product standard. A Snake room must preserve

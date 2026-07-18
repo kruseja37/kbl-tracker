@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildNumericPoolShapeDiagnostics,
   countCellMatches,
+  createPoolIdentitySupportReceipt,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   derivePoolQualityTuning,
@@ -1209,6 +1210,52 @@ describe('extractPoolFromDemand', () => {
       expect(result.floors.claimedIds.every((id) => selected.has(id))).toBe(true);
       expect(result.floors.verdicts.every((verdict) => verdict.band !== 'LOCKED')).toBe(true);
     }
+  });
+
+  it('skips duplicate identity extraction only for a receipt bound to the exact shaping universe', () => {
+    const source = universe();
+    const supportIds = source.slice(0, 44).map((player) => player.id);
+    const receipt = createPoolIdentitySupportReceipt({
+      universe: source,
+      selectedArchetypes: archetypes,
+      tier: 'standard',
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      playerIds: supportIds,
+      authorityFingerprint: 'validated-full-source-proof',
+    });
+    const certified = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      identitySupportReceipt: receipt,
+      preserveSelectedIdentityClaims: false,
+    });
+    const supportSignature = [...supportIds].sort().join('|');
+    expect([...certified.floors.claimedIds].sort().join('|')).toBe(supportSignature);
+
+    const rawOnly = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      preserveSelectedIdentityClaims: false,
+    });
+    expect([...rawOnly.floors.claimedIds].sort().join('|')).not.toBe(supportSignature);
+
+    const changedSource = source.map((player, index) => index === 0
+      ? { ...player, iv: player.iv + 1 }
+      : player);
+    const tampered = extractPoolFromDemand(changedSource, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      identitySupportReceipt: receipt,
+      preserveSelectedIdentityClaims: false,
+    });
+    expect([...tampered.floors.claimedIds].sort().join('|')).not.toBe(supportSignature);
   });
 
   it('does not let a manual removal silently defeat a chosen identity claim', () => {

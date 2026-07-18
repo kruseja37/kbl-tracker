@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import type {
   SimultaneousSnakeSeatingInput,
+  SnakeIdentitySupportCertificate,
   SnakeSeatingProof,
 } from '../../../../../engines/snakeSeatingProof';
 
 export interface SnakeSetupProofRunOptions {
   signal?: AbortSignal;
+  onIdentitySupportCertificate?: (certificate: SnakeIdentitySupportCertificate | null) => void;
 }
 
 export type SnakeSetupProofRunner = (
@@ -23,6 +25,7 @@ export type SnakeSetupProofWorkerResponse = {
   key: string;
   ok: true;
   proof: SnakeSeatingProof;
+  identitySupportCertificate: SnakeIdentitySupportCertificate | null;
 } | {
   key: string;
   ok: false;
@@ -42,6 +45,7 @@ interface Subscriber {
   resolve: (proof: SnakeSeatingProof) => void;
   reject: (error: Error) => void;
   detachAbort: () => void;
+  onIdentitySupportCertificate?: (certificate: SnakeIdentitySupportCertificate | null) => void;
 }
 
 interface InFlightJob {
@@ -54,7 +58,10 @@ interface InFlightJob {
 
 export interface SnakeSetupProofClientOptions {
   workerFactory?: WorkerFactory;
-  fallbackRunner?: (input: SimultaneousSnakeSeatingInput) => Promise<SnakeSeatingProof>;
+  fallbackRunner?: (input: SimultaneousSnakeSeatingInput) => Promise<{
+    proof: SnakeSeatingProof;
+    identitySupportCertificate: SnakeIdentitySupportCertificate | null;
+  }>;
   cacheSize?: number;
 }
 
@@ -101,16 +108,26 @@ function defaultWorkerFactory(): SnakeSetupProofWorkerLike {
   });
 }
 
-async function testOnlyFallback(input: SimultaneousSnakeSeatingInput): Promise<SnakeSeatingProof> {
+async function testOnlyFallback(input: SimultaneousSnakeSeatingInput): Promise<{
+  proof: SnakeSeatingProof;
+  identitySupportCertificate: SnakeIdentitySupportCertificate | null;
+}> {
   const engine = await import('../../../../../engines/snakeSeatingProof');
-  return engine.proveSimultaneousSnakeSeating(input);
+  const proof = engine.proveSimultaneousSnakeSeating(input);
+  return {
+    proof,
+    identitySupportCertificate: engine.createSnakeIdentitySupportCertificate(input, proof),
+  };
 }
 
 export class SnakeSetupProofClient {
   private readonly workerFactory: WorkerFactory;
   private readonly fallbackRunner: SnakeSetupProofClientOptions['fallbackRunner'];
   private readonly cacheSize: number;
-  private readonly cache = new Map<string, SnakeSeatingProof>();
+  private readonly cache = new Map<string, {
+    proof: SnakeSeatingProof;
+    identitySupportCertificate: SnakeIdentitySupportCertificate | null;
+  }>();
   private readonly inFlight = new Map<string, InFlightJob>();
 
   constructor(options: SnakeSetupProofClientOptions = {}) {
@@ -126,7 +143,8 @@ export class SnakeSetupProofClient {
     if (cached) {
       this.cache.delete(key);
       this.cache.set(key, cached);
-      return Promise.resolve(cached);
+      options.onIdentitySupportCertificate?.(cached.identitySupportCertificate);
+      return Promise.resolve(cached.proof);
     }
 
     let job = this.inFlight.get(key);
@@ -151,6 +169,7 @@ export class SnakeSetupProofClient {
         resolve,
         reject,
         detachAbort: () => options.signal?.removeEventListener('abort', onAbort),
+        onIdentitySupportCertificate: options.onIdentitySupportCertificate,
       });
     });
 
@@ -180,7 +199,7 @@ export class SnakeSetupProofClient {
           this.rejectJob(job, new Error('Snake setup proof worker returned an invalid result.'));
           return;
         }
-        this.resolveJob(job, response.proof);
+        this.resolveJob(job, response.proof, response.identitySupportCertificate ?? null);
       };
       job.worker.onerror = (event) => {
         this.rejectJob(job, new Error(event.message || 'Snake setup proof worker failed.'));
@@ -194,8 +213,8 @@ export class SnakeSetupProofClient {
         return;
       }
       void this.fallbackRunner(job.input).then(
-        (proof) => validProof(proof)
-          ? this.resolveJob(job, proof)
+        (result) => validProof(result.proof)
+          ? this.resolveJob(job, result.proof, result.identitySupportCertificate)
           : this.rejectJob(job, new Error('Snake setup proof fallback returned an invalid result.')),
         (fallbackError) => this.rejectJob(
           job,
@@ -205,12 +224,16 @@ export class SnakeSetupProofClient {
     }
   }
 
-  private resolveJob(job: InFlightJob, proof: SnakeSeatingProof): void {
+  private resolveJob(
+    job: InFlightJob,
+    proof: SnakeSeatingProof,
+    identitySupportCertificate: SnakeIdentitySupportCertificate | null,
+  ): void {
     if (job.settled || this.inFlight.get(job.key) !== job) return;
     job.settled = true;
     this.inFlight.delete(job.key);
     job.worker?.terminate();
-    this.cache.set(job.key, proof);
+    this.cache.set(job.key, { proof, identitySupportCertificate });
     while (this.cache.size > this.cacheSize) {
       const oldest = this.cache.keys().next().value as string | undefined;
       if (oldest === undefined) break;
@@ -218,6 +241,7 @@ export class SnakeSetupProofClient {
     }
     for (const subscriber of job.subscribers.values()) {
       subscriber.detachAbort();
+      subscriber.onIdentitySupportCertificate?.(identitySupportCertificate);
       subscriber.resolve(proof);
     }
     job.subscribers.clear();

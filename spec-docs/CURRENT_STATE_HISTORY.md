@@ -1396,3 +1396,11 @@ real eight-team browser walk remains.
   certificate completes 176/176 picks. Snake UI/storage is 619/619, responsive browser 17/17, full
   production lifecycle 1/1, pool assembly 3/3, latency 2/2, and the 2,735-module build is green.
   Separate audit and JK's browser walk remain. No push, merge, or deploy.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-238 first-audit repair
+
+The prior live header recorded exact 2,001-source construction, named pool shaping, and 176-pick
+completion with a separate audit still pending. That auditor blocked three real seams: shortlist-
+relative IV-floor authority, unbound support reuse, and absent production cancellation. The live
+header now records their narrow repair, the preserved scale gates, and final re-audit as the last
+engineering gate before JK's eight-team browser acceptance.

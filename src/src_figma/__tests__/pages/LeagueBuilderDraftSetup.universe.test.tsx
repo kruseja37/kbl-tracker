@@ -10,11 +10,12 @@ import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { proveSimultaneousSnakeSeating } from "../../../engines/snakeSeatingProof";
+import { runSnakePoolShape } from "../../app/components/snake/setup/snakePoolShapeClient";
 import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate } from "../../../utils/leagueBuilderStorage";
-import { addPlayersToLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
+import { addPlayersToLeaguePool, removePlayersFromLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
 import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 
@@ -78,6 +79,21 @@ vi.mock("../../../engines/snakeSeatingProof", async () => {
   return {
     ...actual,
     proveSimultaneousSnakeSeating: vi.fn(actual.proveSimultaneousSnakeSeating),
+    createSnakeIdentitySupportCertificate: vi.fn((input, proof) => proof.feasible ? ({
+      version: 1 as const,
+      sourceFingerprint: `test-source:${input.pool.map((player) => player.playerId).join("|")}`,
+      assignments: proof.assignments,
+    }) : null),
+  };
+});
+
+vi.mock("../../app/components/snake/setup/snakePoolShapeClient", async () => {
+  const actual = await vi.importActual<typeof import("../../app/components/snake/setup/snakePoolShapeClient")>(
+    "../../app/components/snake/setup/snakePoolShapeClient",
+  );
+  return {
+    ...actual,
+    runSnakePoolShape: vi.fn(actual.runSnakePoolShape),
   };
 });
 
@@ -155,6 +171,7 @@ import {
 } from "./LeagueBuilderDraftSetup.testUtils";
 
 const runActualSnakeProof = vi.mocked(proveSimultaneousSnakeSeating).getMockImplementation()!;
+const runActualSnakePoolShape = vi.mocked(runSnakePoolShape).getMockImplementation()!;
 
 function certifiedSnakeProof(teamIds: readonly string[], supportIds: readonly string[]) {
   return {
@@ -197,6 +214,7 @@ describe("LeagueBuilderDraftSetup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(proveSimultaneousSnakeSeating).mockImplementation(runActualSnakeProof);
+    vi.mocked(runSnakePoolShape).mockImplementation(runActualSnakePoolShape);
     vi.mocked(getAuctionSession).mockResolvedValue(null);
     vi.mocked(getMlbDraftSession).mockResolvedValue(null);
     vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(false);
@@ -214,6 +232,7 @@ describe("LeagueBuilderDraftSetup", () => {
     // leaked fake-timer state can never bleed into the next test's own (real-timer) waitFor calls.
     vi.useRealTimers();
     vi.mocked(proveSimultaneousSnakeSeating).mockImplementation(runActualSnakeProof);
+    vi.mocked(runSnakePoolShape).mockImplementation(runActualSnakePoolShape);
     cleanup();
     await act(async () => undefined);
     window.sessionStorage.clear();
@@ -264,6 +283,10 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(options.poolSizeMultiplier).toBe(1.35);
     expect(options.preserveSelectedIdentityClaims).toBe(false);
     expect(options.identitySupportIds).toEqual([...supportIds].sort((a, b) => a.localeCompare(b)));
+    expect(options.identitySupportReceipt).toEqual(expect.objectContaining({
+      version: 1,
+      playerIds: [...supportIds].sort((a, b) => a.localeCompare(b)),
+    }));
     const competitiveCallIndex = vi.mocked(extractPoolFromDemand).mock.calls.findIndex((call) =>
       call[4]?.poolSizeMultiplier === 1.35
     );
@@ -338,6 +361,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     const resetOptions = await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.5);
     expect(resetOptions.identitySupportIds).toEqual([...supportIds].sort((a, b) => a.localeCompare(b)));
+    expect(resetOptions.identitySupportReceipt).toEqual(expect.objectContaining({ version: 1 }));
     expect(resetOptions.preserveSelectedIdentityClaims).toBe(false);
     const resetProofPoolSizes = vi.mocked(proveSimultaneousSnakeSeating).mock.calls
       .map(([input]) => input.pool.length);
@@ -381,6 +405,59 @@ describe("LeagueBuilderDraftSetup", () => {
       players.map((player) => player.id).sort((a, b) => a.localeCompare(b)),
       "league-page",
     );
+  }, 20_000);
+
+  test("SNAKE POOL GUIDE: leaving during shaping aborts the worker and cannot persist a stale pool", async () => {
+    const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
+    const teams = teamIds.map((id, index) => makeTeam(id, {
+      name: `Club ${index + 1}`,
+      controlledBy: "ai",
+      gmSeatId: undefined,
+      gmSeatName: undefined,
+    }));
+    const players = makePositionDiversePlayers(300, 8, "snake-cancel");
+    const supportIds = players.slice(0, 176).map((player) => player.id);
+    mockLeagueData({
+      league: makeLeague({
+        teamIds,
+        draftFormat: "snake",
+        draftPoolMode: "pool-first",
+        poolAssemblyMode: "shape-to-teams",
+        poolSizeMultiplier: 1.35,
+        salaryCap: 10_000_000,
+      }),
+      teams,
+      players,
+      pool: makePool({ locked: false, players: [], totalSlots: 176 }),
+    });
+    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(certifiedSnakeProof(teamIds, supportIds));
+    let shapeSignal: AbortSignal | undefined;
+    vi.mocked(runSnakePoolShape).mockImplementation((_input, options) => new Promise((_resolve, reject) => {
+      shapeSignal = options?.signal;
+      const rejectAbort = () => {
+        const error = new Error("cancelled");
+        error.name = "AbortError";
+        reject(error);
+      };
+      if (shapeSignal?.aborted) rejectAbort();
+      else shapeSignal?.addEventListener("abort", rejectAbort, { once: true });
+    }));
+
+    const view = render(<LeagueBuilderDraftSetup />);
+    await clickDraftSetupButton("BUILD COMPETITIVE POOL");
+    await waitFor(() => expect(shapeSignal).toBeDefined());
+    expect(shapeSignal?.aborted).toBe(false);
+    vi.mocked(addPlayersToLeaguePool).mockClear();
+    vi.mocked(removePlayersFromLeaguePool).mockClear();
+    vi.mocked(saveLeagueTemplate).mockClear();
+
+    view.unmount();
+    await waitFor(() => expect(shapeSignal?.aborted).toBe(true));
+    await act(async () => undefined);
+
+    expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
+    expect(removePlayersFromLeaguePool).not.toHaveBeenCalled();
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
   }, 20_000);
 
   test("FULL SOURCES loads the exact selected source union instead of running the curve", async () => {

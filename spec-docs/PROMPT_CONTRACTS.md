@@ -32583,3 +32583,12 @@ roster, salary, tax, money, and identity checks; Mac/iPad setup; main-thread lat
 setup/room/companion/storage regression; TypeScript, lint, production build, diff integrity; then a
 separate non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or
 deploy is authorized.
+
+**First audit repair:** The 90% IV floor must be derived from exact immutable Full Sources, never the
+bounded construction shortlist. Reusable identity support is authority only when the independent
+validator mints a certificate fingerprinted to the exact Full Sources input; numeric shaping may
+skip extraction only with a second matching receipt over the exact universe, identities, tier,
+team count, budget, support ids, and certificate authority. Raw assignments or ids are not a receipt.
+Draft Setup owns cancellation across proof, shaping, and post-worker persistence; replacement or
+unmount must abort without stale pool writes. Permanent red/green tests must cover all four failure
+classes before final re-audit.

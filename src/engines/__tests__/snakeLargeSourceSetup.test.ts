@@ -40,12 +40,13 @@ import {
 } from '../leagueConstruction';
 import {
   advanceTrustedSnakeSeatingCertificate,
+  createSnakeIdentitySupportCertificate,
   createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
   validateConstructiveSnakeSeatingProof,
 } from '../snakeSeatingProof';
 import { snakeLuxuryCaps } from '../snakeLuxuryTax';
-import { extractPoolFromDemand } from '../poolFromDemand';
+import { createPoolIdentitySupportReceipt, extractPoolFromDemand } from '../poolFromDemand';
 import { SNAKE_POOL_COMPETITION_PRESETS, snakePoolSizeGuide } from '../snakePoolAssembly';
 import { demandUniverseFromPlayers } from '../../src_figma/app/engines/leaguePlayerAdapter';
 import { buildSnakeSetupProofInput } from '../../src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
@@ -190,8 +191,10 @@ describe('eight-club Snake setup on combined production sources', () => {
   }, 300_000);
 
   test('builds every named eight-club preset from the same large source certificate', () => {
-    const { teams, pool: fullSourcePool, proof } = buildLargeSourceRoom();
+    const { teams, pool: fullSourcePool, input: fullSourceInput, proof } = buildLargeSourceRoom();
     expect(proof.feasible).toBe(true);
+    const supportCertificate = createSnakeIdentitySupportCertificate(fullSourceInput, proof);
+    expect(supportCertificate).not.toBeNull();
     const supportIds = [...new Set(proof.assignments.flatMap((assignment) => assignment.playerIds))];
     expect(supportIds).toHaveLength(176);
     const demandUniverse = demandUniverseFromPlayers(sourcePlayers);
@@ -199,6 +202,15 @@ describe('eight-club Snake setup on combined production sources', () => {
     const selectedArchetypes = archetypeIds.map((archetypeId) => (
       HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === archetypeId)!
     ));
+    const supportReceipt = createPoolIdentitySupportReceipt({
+      universe: demandUniverse,
+      selectedArchetypes,
+      tier: 'standard',
+      teams: teams.length,
+      budgetPerTeam: TIER_CAPS.standard.tierCap,
+      playerIds: supportIds,
+      authorityFingerprint: supportCertificate!.sourceFingerprint,
+    });
 
     for (const preset of ['tight', 'competitive', 'loose'] as const) {
       const definition = SNAKE_POOL_COMPETITION_PRESETS[preset];
@@ -216,6 +228,7 @@ describe('eight-club Snake setup on combined production sources', () => {
           poolSizeMultiplier: definition.multiplier,
           poolSourceMode: 'full-pool',
           identitySupportIds: supportIds,
+          identitySupportReceipt: supportReceipt,
           preserveSelectedIdentityClaims: false,
         },
       );
@@ -237,7 +250,7 @@ describe('eight-club Snake setup on combined production sources', () => {
         players: sourcePlayers,
         pool,
         identityReferencePool: fullSourcePool,
-        identitySupportAssignments: proof.assignments,
+        identitySupportCertificate: supportCertificate!,
       });
       const shapedProof = proveSimultaneousSnakeSeating(input);
 

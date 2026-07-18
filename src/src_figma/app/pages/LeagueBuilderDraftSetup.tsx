@@ -66,7 +66,7 @@ import { buildSnakeOrder, registerPool, shiftLuxuryCaps, type RegisteredPool } f
 import { archetypeToCapIdentity } from "../../../engines/archetypeIdentity";
 import { seededSnakeShuffle } from "../../../engines/snakeShuffle";
 import {
-  type SnakeSeatingAssignment,
+  type SnakeIdentitySupportCertificate,
   type SnakeSeatingProof,
 } from "../../../engines/snakeSeatingProof";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
@@ -135,6 +135,7 @@ import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
 import {
   countCellMatches,
   buildNumericPoolShapeDiagnostics,
+  createPoolIdentitySupportReceipt,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   extractPoolFromDemand,
@@ -222,6 +223,16 @@ const ALL_TRAIT_NAMES: string[] = [...new Set(TRAIT_PRICING.map((t) => t.name))]
 const INITIAL_VISIBLE_POOL_ROWS = 100;
 const VISIBLE_POOL_ROW_STEP = 100;
 const BOARD_POSITION_GROUPS = boardPositionGroups();
+
+function snakeBuildAbortError(): Error {
+  const error = new Error("Snake pool build cancelled.");
+  error.name = "AbortError";
+  return error;
+}
+
+function assertSnakeBuildActive(mounted: boolean, signal?: AbortSignal): void {
+  if (!mounted || signal?.aborted) throw snakeBuildAbortError();
+}
 
 function draftabilityRecordFromRows(rows: readonly ArchetypeDraftability[]) {
   const next: Record<string, { band: "GREEN" | "YELLOW" | "LOCKED"; reason?: string }> = {};
@@ -1575,6 +1586,17 @@ export function LeagueBuilderDraftSetup() {
   const location = useLocation();
   const leagueBuilderData = useLeagueBuilderData();
   const { runProof: runSnakeSetupProof, cancelPendingProofs } = useSnakeSetupProofClient();
+  const pageMountedRef = useRef(true);
+  const activeSnakeBuildAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    pageMountedRef.current = true;
+    return () => {
+      pageMountedRef.current = false;
+      activeSnakeBuildAbortRef.current?.abort();
+      activeSnakeBuildAbortRef.current = null;
+      cancelPendingProofs();
+    };
+  }, [cancelPendingProofs]);
   const {
     leagues,
     teams,
@@ -2804,16 +2826,23 @@ export function LeagueBuilderDraftSetup() {
 
   const runAction = useCallback(
     async (fn: () => Promise<void>, options: { refreshData?: boolean; refreshPool?: boolean } = {}) => {
-      setBusy(true);
-      setActionError(null);
+      if (pageMountedRef.current) {
+        setBusy(true);
+        setActionError(null);
+      }
       try {
         await fn();
+        if (!pageMountedRef.current) return;
         if (options.refreshData ?? true) await refresh();
-        if (activeLeagueId && (options.refreshPool ?? true)) await refreshPool(activeLeagueId);
+        if (pageMountedRef.current && activeLeagueId && (options.refreshPool ?? true)) {
+          await refreshPool(activeLeagueId);
+        }
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : String(err));
+        if (pageMountedRef.current && (!(err instanceof Error) || err.name !== "AbortError")) {
+          setActionError(err instanceof Error ? err.message : String(err));
+        }
       } finally {
-        setBusy(false);
+        if (pageMountedRef.current) setBusy(false);
       }
     },
     [refresh, refreshPool, activeLeagueId],
@@ -2857,7 +2886,8 @@ export function LeagueBuilderDraftSetup() {
   const buildPoolFirstShapeResult = useCallback(async (
     provenance: PoolProvenanceState,
     sizeMultiplier: number = poolGenerationMultiplier,
-    identitySupportIds: readonly string[] = [],
+    identitySupportCertificate?: SnakeIdentitySupportCertificate,
+    signal?: AbortSignal,
   ): Promise<PoolFromDemandResult> => {
     if (!league) throw new Error("League not found.");
     const selectedArchetypes = leagueTeams
@@ -2865,10 +2895,25 @@ export function LeagueBuilderDraftSetup() {
       .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
     const hardKeepSet = setUnion(provenance.seedProtectedIds, provenance.userAddedIds, new Set(rosterDesignPinPlayerIds));
     const hardKeepIds = sortedIds([...hardKeepSet]);
+    const universe = demandUniverseFromPlayers(universePlayers);
+    const identitySupportIds = sortedIds(identitySupportCertificate
+      ? identitySupportCertificate.assignments.flatMap((assignment) => assignment.playerIds)
+      : []);
+    const identitySupportReceipt = identitySupportCertificate
+      ? createPoolIdentitySupportReceipt({
+          universe,
+          selectedArchetypes,
+          tier: league.tier ?? "juiced",
+          teams: league.teamIds.length,
+          budgetPerTeam: tierBudget,
+          playerIds: identitySupportIds,
+          authorityFingerprint: identitySupportCertificate.sourceFingerprint,
+        })
+      : undefined;
     const input = {
       // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2) — same filtered
       // input as buildModeAResult above; both extraction paths converge on this one seam.
-      universe: demandUniverseFromPlayers(universePlayers),
+      universe,
       designs: [],
       selectedArchetypes,
       tier: league.tier ?? "juiced",
@@ -2888,17 +2933,33 @@ export function LeagueBuilderDraftSetup() {
         priorityIds: sortedIds([...selectedTeamRosterIds]),
         preserveSelectedIdentityClaims: isSnakeFormat && identitySupportIds.length === 0,
         identitySupportIds: sortedIds(identitySupportIds),
+        ...(identitySupportReceipt ? { identitySupportReceipt } : {}),
       },
     };
-    return isSnakeFormat
-      ? runSnakePoolShape(input)
-      : extractPoolFromDemand(
-          input.universe,
-          input.designs,
-          input.selectedArchetypes,
-          input.tier,
-          input.options,
-        );
+    if (!isSnakeFormat) {
+      return extractPoolFromDemand(
+        input.universe,
+        input.designs,
+        input.selectedArchetypes,
+        input.tier,
+        input.options,
+      );
+    }
+    let ownedController: AbortController | null = null;
+    let activeSignal = signal;
+    if (!activeSignal) {
+      activeSnakeBuildAbortRef.current?.abort();
+      ownedController = new AbortController();
+      activeSnakeBuildAbortRef.current = ownedController;
+      activeSignal = ownedController.signal;
+    }
+    try {
+      return await runSnakePoolShape(input, { signal: activeSignal });
+    } finally {
+      if (ownedController && activeSnakeBuildAbortRef.current === ownedController) {
+        activeSnakeBuildAbortRef.current = null;
+      }
+    }
   }, [isSnakeFormat, league, leagueTeams, poolGenerationMultiplier, universePlayers, poolBalancePreset, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
 
   useEffect(() => {
@@ -3451,6 +3512,7 @@ export function LeagueBuilderDraftSetup() {
     baseProvenance: PoolProvenanceState,
     preparedResult?: PoolFromDemandResult,
     resolvedSnakePoolSizeMultiplier: number = poolSizingMultiplier,
+    signal?: AbortSignal,
   ) => {
     if (!league) return;
     assertPoolCanMutate();
@@ -3477,7 +3539,13 @@ export function LeagueBuilderDraftSetup() {
       seedProtectedIds,
       generationNonce: Math.max(0, Math.floor(baseProvenance.generationNonce)),
     };
-    const result = preparedResult ?? await buildPoolFirstShapeResult(normalizedProvenance);
+    const result = preparedResult ?? await buildPoolFirstShapeResult(
+      normalizedProvenance,
+      poolGenerationMultiplier,
+      undefined,
+      signal,
+    );
+    assertSnakeBuildActive(pageMountedRef.current, signal);
     const resultIds = new Set(result.players.map((player) => player.id));
     const hardKeepIds = setUnion(normalizedProvenance.seedProtectedIds, normalizedProvenance.userAddedIds, pinnedHardKeepIds);
     const engineGeneratedIds = setDifference(resultIds, hardKeepIds);
@@ -3488,7 +3556,7 @@ export function LeagueBuilderDraftSetup() {
       ...((toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? []),
       ...((toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? []),
     ];
-    replacePlayersLocal(changedPlayers);
+    if (pageMountedRef.current) replacePlayersLocal(changedPlayers);
     const actualManualExcludedIds = new Set([...normalizedProvenance.manualExcludedIds]
       .filter((id) => !nextIds.has(id)));
     const nextProvenance = {
@@ -3500,7 +3568,7 @@ export function LeagueBuilderDraftSetup() {
       seedProtectedIds: normalizedProvenance.seedProtectedIds,
       generationNonce: normalizedProvenance.generationNonce,
     };
-    setPoolProvenance(nextProvenance);
+    if (pageMountedRef.current) setPoolProvenance(nextProvenance);
     if (isSnakeFormat) {
       await saveLeagueDraftSetup({
         poolAssemblyMode: "shape-to-teams",
@@ -3511,13 +3579,14 @@ export function LeagueBuilderDraftSetup() {
       });
     }
     const report = modeAReportFromResult(result, 0);
-    setPoolFirstShapeReport(report);
+    if (pageMountedRef.current) setPoolFirstShapeReport(report);
     return { result, count: nextIds.size };
-  }, [activeLeagueId, assertPoolCanMutate, buildPoolFirstShapeResult, isSnakeFormat, league, players, poolSizingMultiplier, replacePlayersLocal, rosterDesignPinPlayerIds, saveLeagueDraftSetup]);
+  }, [activeLeagueId, assertPoolCanMutate, buildPoolFirstShapeResult, isSnakeFormat, league, players, poolGenerationMultiplier, poolSizingMultiplier, replacePlayersLocal, rosterDesignPinPlayerIds, saveLeagueDraftSetup]);
 
   const loadFullSourcePool = useCallback(async (
     baseProvenance: PoolProvenanceState,
     options: { persistMode?: boolean } = {},
+    signal?: AbortSignal,
   ) => {
     if (!league) return;
     assertPoolCanMutate();
@@ -3538,11 +3607,12 @@ export function LeagueBuilderDraftSetup() {
     const nextIdSet = new Set(nextIds);
     const toAdd = nextIds.filter((id) => !currentIds.has(id));
     const toRemove = [...currentIds].filter((id) => !nextIdSet.has(id));
+    assertSnakeBuildActive(pageMountedRef.current, signal);
     const changedPlayers = [
       ...((toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? []),
       ...((toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? []),
     ];
-    replacePlayersLocal(changedPlayers);
+    if (pageMountedRef.current) replacePlayersLocal(changedPlayers);
     const actualManualExcludedIds = new Set([...baseProvenance.manualExcludedIds]
       .filter((id) => !nextIdSet.has(id)));
     const nextProvenance: PoolProvenanceState = {
@@ -3556,8 +3626,10 @@ export function LeagueBuilderDraftSetup() {
       manualExcludedIds: actualManualExcludedIds,
       generationNonce: Math.max(0, Math.floor(baseProvenance.generationNonce)),
     };
-    setPoolProvenance(nextProvenance);
-    setPoolFirstShapeReport(null);
+    if (pageMountedRef.current) {
+      setPoolProvenance(nextProvenance);
+      setPoolFirstShapeReport(null);
+    }
     await saveLeagueDraftSetup({
       ...(options.persistMode === false ? {} : { poolAssemblyMode: "full-sources" as const }),
       poolFirstHandAdds: sortedIds([...nextProvenance.userAddedIds]),
@@ -3574,12 +3646,16 @@ export function LeagueBuilderDraftSetup() {
 
   const buildSelectedSnakePool = useCallback(async (buildProvenance: PoolProvenanceState) => {
       if (!league) return;
+      activeSnakeBuildAbortRef.current?.abort();
+      const buildController = new AbortController();
+      activeSnakeBuildAbortRef.current = buildController;
+      const { signal } = buildController;
       const playerById = new Map(players.map((player) => [player.id, player]));
-      const proveCandidate = (
+      const proveCandidate = async (
         candidateIds: readonly string[],
         candidateIvById: ReadonlyMap<string, number>,
         identityReferenceIds?: readonly string[],
-        identitySupportAssignments?: readonly SnakeSeatingAssignment[],
+        identitySupportCertificate?: SnakeIdentitySupportCertificate,
       ) => {
         const candidatePool = registerPool({
           leagueId: league.id,
@@ -3615,20 +3691,29 @@ export function LeagueBuilderDraftSetup() {
                 }),
               }
             : {}),
-          ...(identitySupportAssignments
-            ? { identitySupportAssignments }
+          ...(identitySupportCertificate
+            ? { identitySupportCertificate }
             : {}),
         });
         // A BUILD supersedes a different pre-lock proof, but joins an already-running identical
         // certificate rather than killing and repeating it.
         cancelPendingProofs(fingerprintSnakeSetupProofInput(candidateInput));
-        return runSnakeSetupProof(candidateInput);
+        let mintedCertificate: SnakeIdentitySupportCertificate | null = null;
+        const proof = await runSnakeSetupProof(candidateInput, {
+          signal,
+          onIdentitySupportCertificate: (certificate) => {
+            mintedCertificate = certificate;
+          },
+        });
+        assertSnakeBuildActive(pageMountedRef.current, signal);
+        return { proof, identitySupportCertificate: mintedCertificate };
       };
       const proofState = (proof: SnakeSeatingProof): 'success' | 'unknown' | 'infeasible' => (
         proof.feasible
           ? 'success'
           : proof.shortfall?.reason === 'identity-proof-unknown' ? 'unknown' : 'infeasible'
       );
+      try {
       if (poolAssemblyMode === "full-sources") {
         const fullIds = assembleFullSourcePoolIds({
           sourceIds: universePlayerIdList,
@@ -3637,8 +3722,9 @@ export function LeagueBuilderDraftSetup() {
           hardKeepIds: sortedIds([...buildProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
           validPlayerIds: players.map((player) => player.id),
         });
-        const proof = await proveCandidate(fullIds, ivById);
-        const loaded = await loadFullSourcePool(buildProvenance);
+        const { proof } = await proveCandidate(fullIds, ivById);
+        const loaded = await loadFullSourcePool(buildProvenance, {}, signal);
+        assertSnakeBuildActive(pageMountedRef.current, signal);
         setSnakeBuildReceipt({
           mode: 'full-sources',
           label: 'FULL SELECTED SOURCES',
@@ -3655,9 +3741,11 @@ export function LeagueBuilderDraftSetup() {
         hardKeepIds: sortedIds([...buildProvenance.seedProtectedIds, ...rosterDesignPinPlayerIds]),
         validPlayerIds: players.map((player) => player.id),
       });
-      const fullProof = await proveCandidate(fullIds, ivById);
+      const fullResult = await proveCandidate(fullIds, ivById);
+      const fullProof = fullResult.proof;
       if (!fullProof.feasible) {
-        const loaded = await loadFullSourcePool(buildProvenance);
+        const loaded = await loadFullSourcePool(buildProvenance, {}, signal);
+        assertSnakeBuildActive(pageMountedRef.current, signal);
         setSnakeBuildReceipt({
           mode: 'full-sources',
           label: `FULL SELECTED SOURCES · AUTO-WIDENED FROM ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label.toUpperCase()}`,
@@ -3666,16 +3754,26 @@ export function LeagueBuilderDraftSetup() {
         });
         return;
       }
-      const identitySupportIds = sortedIds([
-        ...new Set(fullProof.assignments.flatMap((assignment) => assignment.playerIds)),
-      ]);
+      const identitySupportCertificate = fullResult.identitySupportCertificate;
+      if (!identitySupportCertificate) {
+        const loaded = await loadFullSourcePool(buildProvenance, {}, signal);
+        assertSnakeBuildActive(pageMountedRef.current, signal);
+        setSnakeBuildReceipt({
+          mode: 'full-sources',
+          label: `FULL SELECTED SOURCES · AUTO-WIDENED FROM ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label.toUpperCase()}`,
+          count: loaded?.count ?? fullIds.length,
+          identityProof: 'unknown',
+        });
+        return;
+      }
 
       const selectedIndex = SNAKE_POOL_COMPETITION_ORDER.indexOf(snakeCompetitionPreset);
       for (const preset of SNAKE_POOL_COMPETITION_ORDER.slice(Math.max(0, selectedIndex))) {
         const result = await buildPoolFirstShapeResult(
           buildProvenance,
           SNAKE_POOL_COMPETITION_PRESETS[preset].multiplier,
-          identitySupportIds,
+          identitySupportCertificate,
+          signal,
         );
         const hardKeepIds = new Set([
           ...buildProvenance.seedProtectedIds,
@@ -3687,11 +3785,11 @@ export function LeagueBuilderDraftSetup() {
           ...hardKeepIds,
         ])]);
         const candidateIvById = new Map(result.players.map((player) => [player.id, player.iv]));
-        const proof = await proveCandidate(
+        const { proof } = await proveCandidate(
           candidateIds,
           candidateIvById,
           fullIds,
-          fullProof.assignments,
+          identitySupportCertificate,
         );
         const withinPresetBound = result.sizing == null
           || candidateIds.length <= result.sizing.effectiveTarget;
@@ -3700,7 +3798,9 @@ export function LeagueBuilderDraftSetup() {
             buildProvenance,
             result,
             SNAKE_POOL_COMPETITION_PRESETS[preset].multiplier,
+            signal,
           );
+          assertSnakeBuildActive(pageMountedRef.current, signal);
           setSnakeBuildReceipt({
             mode: 'shape-to-teams',
             label: preset === snakeCompetitionPreset
@@ -3715,13 +3815,19 @@ export function LeagueBuilderDraftSetup() {
 
       // The current BUILD action authorizes this last bounded recovery attempt. It changes the
       // resulting membership, not the user's selected preset/mode control, and reports that fact.
-      const loaded = await loadFullSourcePool(buildProvenance);
+      const loaded = await loadFullSourcePool(buildProvenance, {}, signal);
+      assertSnakeBuildActive(pageMountedRef.current, signal);
       setSnakeBuildReceipt({
         mode: 'full-sources',
         label: `FULL SELECTED SOURCES · AUTO-WIDENED FROM ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label.toUpperCase()}`,
         count: loaded?.count ?? fullIds.length,
         identityProof: proofState(fullProof),
       });
+      } finally {
+        if (activeSnakeBuildAbortRef.current === buildController) {
+          activeSnakeBuildAbortRef.current = null;
+        }
+      }
     }, [buildPoolFirstShapeResult, cancelPendingProofs, ivById, league, leagueTeams, loadFullSourcePool, players, poolAssemblyMode, regenerateProductionPool, rosterDesignPinPlayerIds, runSnakeSetupProof, snakeCompetitionPreset, tierBudget, universePlayerIdList]);
 
   const handleBuildSelectedSnakePool = useCallback(() =>

@@ -2,6 +2,24 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, Snake large-source setup) — first audit repaired; final re-audit pending
+
+The first non-builder audit of `17a3ec8b` returned **BLOCK — Major 3 / Minor 0**. It proved that the
+90% IV baseline was circularly computed from the bounded construction shortlist, that reusable
+support assignments/ids were not independently bound to exact Full Sources, and that Draft Setup
+never passed the worker client's existing abort signal through the production page lifecycle.
+
+The narrow repair makes immutable Full Sources the canonical value-floor authority while retaining
+the bounded list only for construction; adds an independently minted, exact-source support
+certificate plus an exact numeric-shaping receipt; rejects raw/stale receipts; and cancels proof,
+shape, and post-worker state work on replacement or unmount. Permanent regressions cover shortlist
+inflation, changed Full Sources, raw ids, changed IV, cached certificate delivery, and leaving during
+shape. Exact 2,001-source and 176-pick scale proof remains green, the broad Snake matrix passes
+625/625, TypeScript/lint/build/diff are green, and the real eight-club browser setup still certifies.
+The Mac/iPad latency file passes 2/2 alone; one concurrent four-worker stress run recorded a 279 ms
+Mac long task, versus 200 ms isolated, and is preserved as contention evidence. Next: freeze this
+repair for the same independent re-auditor, then JK's browser walk. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, Snake large-source setup) — builder repair verified; audit pending
 
 JK's eight-team browser walk exposed a false setup blocker with nearly 2,000 source cards. The exact

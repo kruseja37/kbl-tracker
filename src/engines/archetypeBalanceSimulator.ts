@@ -1203,6 +1203,112 @@ export interface BuildIdentityOptions {
   exclusiveGroupByPlayerId?: ReadonlyMap<string, string>;
 }
 
+export interface IdentityValueBaselineResult {
+  baselineIv: number;
+  valueFloor: number;
+  optimizationComplete: boolean;
+}
+
+function buildIdentityValueBaselineState(input: {
+  pool: SimPlayer[];
+  caps: LuxuryCapRow[];
+  budget: number;
+  valueFit: (player: SimPlayer) => number;
+  exclusiveGroupId?: (player: SimPlayer) => string;
+}) {
+  const objOf = (picks: SlotPick[]) => objective(picks.map((pick) => pick.player), input.caps, input.budget);
+  const assessValuePicks = (picks: readonly SlotPick[]): ValueObjective => {
+    const players = picks.map((pick) => pick.player);
+    const result = objective(players, input.caps, input.budget);
+    return {
+      over: result.over + (players.length === ROSTER_SIZE && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY),
+      iv: result.iv,
+    };
+  };
+  const buildExclusiveValueStart = (score: (player: SimPlayer) => number): ExclusiveCycleResult => {
+    if (!input.exclusiveGroupId) return { picks: [], complete: true };
+    const seed = exactExclusiveIdentityStart(input.pool, score, input.exclusiveGroupId) ?? [];
+    const climbed = constrainedExclusiveValueClimb(
+      seed,
+      input.pool,
+      input.caps,
+      input.budget,
+      input.valueFit,
+      input.exclusiveGroupId,
+    );
+    return improveExclusiveGroupCycles({
+      start: climbed,
+      pool: input.pool,
+      exclusiveGroupId: input.exclusiveGroupId,
+      assess: assessValuePicks,
+      better: betterObjective,
+    });
+  };
+  const fromValueState = input.exclusiveGroupId
+    ? buildExclusiveValueStart((player) => player.iv)
+    : {
+        picks: climb(
+          greedyStart(input.pool, (player) => player.iv),
+          input.pool,
+          input.caps,
+          input.budget,
+          input.valueFit,
+        ),
+        complete: true,
+      };
+  const fromFitState = input.exclusiveGroupId
+    ? (fromValueState.complete ? buildExclusiveValueStart(input.valueFit) : fromValueState)
+    : {
+        picks: climb(
+          greedyStart(input.pool, input.valueFit),
+          input.pool,
+          input.caps,
+          input.budget,
+          input.valueFit,
+        ),
+        complete: true,
+      };
+  const baselineState = betterObjective(objOf(fromFitState.picks), objOf(fromValueState.picks))
+    ? fromFitState
+    : fromValueState;
+  return {
+    picks: baselineState.picks,
+    baselineIv: baselineState.picks.reduce((sum, pick) => sum + pick.player.iv, 0),
+    optimizationComplete: fromValueState.complete && fromFitState.complete,
+  };
+}
+
+/**
+ * Canonical value-max floor authority without running the identity climb. Large Snake source
+ * certificates use this against immutable Full Sources, then run the bounded identity search on a
+ * smaller candidate union. `buildIdentityRoster` calls the same helper, so the floor has one math
+ * path rather than a test-only approximation.
+ */
+export function buildIdentityValueBaseline(
+  fullPool: SimPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+  budget: number,
+  options: BuildIdentityOptions,
+): IdentityValueBaselineResult {
+  const posture = options.posture ?? 'optimal';
+  const params = POSTURE_PARAMS[posture];
+  const pool = options.banned?.size ? fullPool.filter((player) => !options.banned!.has(player.id)) : fullPool;
+  const caps = options.taxCaps
+    ? [...options.taxCaps]
+    : archetypeTaxCaps(archetype, tier, options.realTeamCount);
+  const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
+  const exclusiveGroupId = options.exclusiveGroupByPlayerId
+    ? (player: SimPlayer) => options.exclusiveGroupByPlayerId!.get(player.id) ?? player.id
+    : undefined;
+  const baseline = buildIdentityValueBaselineState({ pool, caps, budget, valueFit, exclusiveGroupId });
+  return {
+    baselineIv: baseline.baselineIv,
+    valueFloor: options.valueFloorOverride ?? params.valueFloor,
+    optimizationComplete: baseline.optimizationComplete,
+  };
+}
+
 /**
  * Build a LEGAL roster that EMBODIES the archetype (FABLE-C1's generalized builder): maximize
  * archetype fit subject to legality + solvency + a posture-scaled value floor anchored to the pure
@@ -1228,48 +1334,13 @@ export function buildIdentityRoster(
     ? (player: SimPlayer) => options.exclusiveGroupByPlayerId!.get(player.id) ?? player.id
     : undefined;
 
-  // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
-  // to buildBestRoster, kept inline so that function stays byte-compatible for the frozen gate).
-  const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
-  const assessValuePicks = (picks: readonly SlotPick[]): ValueObjective => {
-    const players = picks.map((pick) => pick.player);
-    const result = objective(players, caps, budget);
-    return {
-      over: result.over + (players.length === ROSTER_SIZE && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY),
-      iv: result.iv,
-    };
-  };
-  const buildExclusiveValueStart = (score: (player: SimPlayer) => number): ExclusiveCycleResult => {
-    if (!exclusiveGroupId) return { picks: [], complete: true };
-    const seed = exactExclusiveIdentityStart(pool, score, exclusiveGroupId) ?? [];
-    const climbed = constrainedExclusiveValueClimb(seed, pool, caps, budget, valueFit, exclusiveGroupId);
-    return improveExclusiveGroupCycles({
-      start: climbed,
-      pool,
-      exclusiveGroupId,
-      assess: assessValuePicks,
-      better: betterObjective,
-    });
-  };
-  const fromValueState = exclusiveGroupId
-    ? buildExclusiveValueStart((player) => player.iv)
-    : { picks: climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, valueFit), complete: true };
-  const fromFitState = exclusiveGroupId
-    // Once a proof cap is hit the public result must be incomplete regardless of later starts.
-    // Keep a board-shaped result for diagnostics, but do not spend another bounded search pretending
-    // it could restore completion.
-    ? (fromValueState.complete ? buildExclusiveValueStart(valueFit) : fromValueState)
-    : { picks: climb(greedyStart(pool, valueFit), pool, caps, budget, valueFit), complete: true };
-  const baselineState = betterObjective(objOf(fromFitState.picks), objOf(fromValueState.picks))
-    ? fromFitState
-    : fromValueState;
-  // Completion belongs to the proof procedure, not just the board that wins the objective tie.
-  // An exhausted cap in either executed start leaves the bounded neighborhood unproved even when
-  // the other start supplies the displayed roster.
-  const baselineOptimizationComplete = fromValueState.complete && fromFitState.complete;
-  const baselinePicks = baselineState.picks;
-  const baselineIv = baselinePicks.reduce((s, p) => s + p.player.iv, 0);
-
+  // The pure value-max baseline on the SAME pool anchors the floor. The exported baseline-only
+  // authority uses this exact helper for large-source proof without paying for another identity
+  // climb.
+  const baseline = buildIdentityValueBaselineState({ pool, caps, budget, valueFit, exclusiveGroupId });
+  const baselineOptimizationComplete = baseline.optimizationComplete;
+  const baselinePicks = baseline.picks;
+  const baselineIv = baseline.baselineIv;
   const valueFloor = options.valueFloorOverride ?? params.valueFloor;
   const floorIv = baselineIv * valueFloor;
   const fitScore = makeFitScore(

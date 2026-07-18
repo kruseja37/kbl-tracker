@@ -141,6 +141,78 @@ export interface ClassifiedDemandPlayer {
   classification: ShapeClassification;
 }
 
+export interface PoolIdentitySupportReceipt {
+  readonly version: 1;
+  readonly authorityFingerprint: string;
+  readonly sourceFingerprint: string;
+  readonly playerIds: readonly string[];
+}
+
+function canonicalPoolReceiptJson(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.keys(current as Record<string, unknown>)
+      .sort((left, right) => left.localeCompare(right))
+      .reduce<Record<string, unknown>>((sorted, key) => {
+        const entry = (current as Record<string, unknown>)[key];
+        if (entry !== undefined) sorted[key] = entry;
+        return sorted;
+      }, {});
+  });
+}
+
+
+function compactPoolReceiptFingerprint(value: unknown): string {
+  const source = canonicalPoolReceiptJson(value);
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    left = Math.imul(left ^ code, 0x01000193) >>> 0;
+    right = Math.imul(right ^ (code + index), 0x85ebca6b) >>> 0;
+  }
+  return `${source.length.toString(36)}:${left.toString(16).padStart(8, '0')}:${right.toString(16).padStart(8, '0')}`;
+}
+
+function poolIdentitySupportFingerprint(input: {
+  universe: readonly DemandUniversePlayer[];
+  selectedArchetypes: readonly HistoricalArchetype[];
+  tier: TierKey;
+  teams: number;
+  budgetPerTeam?: number;
+  playerIds: readonly string[];
+  authorityFingerprint: string;
+}): string {
+  return `snake-pool-support-v1:${compactPoolReceiptFingerprint({
+    authorityFingerprint: input.authorityFingerprint,
+    budgetPerTeam: input.budgetPerTeam,
+    playerIds: [...input.playerIds].sort((left, right) => left.localeCompare(right)),
+    selectedArchetypes: input.selectedArchetypes,
+    teams: input.teams,
+    tier: input.tier,
+    universe: [...input.universe].sort((left, right) => left.id.localeCompare(right.id)),
+  })}`;
+}
+
+/** Bind the validated Snake support authority to the exact numeric-shaping input. */
+export function createPoolIdentitySupportReceipt(input: {
+  universe: readonly DemandUniversePlayer[];
+  selectedArchetypes: readonly HistoricalArchetype[];
+  tier: TierKey;
+  teams: number;
+  budgetPerTeam?: number;
+  playerIds: readonly string[];
+  authorityFingerprint: string;
+}): PoolIdentitySupportReceipt {
+  const playerIds = [...input.playerIds].sort((left, right) => left.localeCompare(right));
+  return {
+    version: 1,
+    authorityFingerprint: input.authorityFingerprint,
+    sourceFingerprint: poolIdentitySupportFingerprint({ ...input, playerIds }),
+    playerIds,
+  };
+}
+
 export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
 /**
  * CAPFIX iteration 3 final tune: one-shot sequential nomination needs the maximum approved
@@ -2013,6 +2085,8 @@ export function extractPoolFromDemand(
     preserveSelectedIdentityClaims?: boolean;
     /** Exact disjoint ids from the authoritative all-club Snake seating certificate. */
     identitySupportIds?: string[];
+    /** Fingerprint binding those ids to the exact validated Full Sources shaping input. */
+    identitySupportReceipt?: PoolIdentitySupportReceipt;
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
@@ -2034,6 +2108,20 @@ export function extractPoolFromDemand(
   const requestedPriorityIds = new Set(options.priorityIds ?? []);
   const requestedDesignPriorityIds = new Set(options.designPriorityIds ?? []);
   const requestedIdentitySupportIds = new Set(options.identitySupportIds ?? []);
+  const supportReceiptIds = options.identitySupportReceipt?.playerIds ?? [];
+  const certifiedIdentitySupport = options.identitySupportReceipt?.version === 1
+    && options.identitySupportReceipt.authorityFingerprint.length > 0
+    && supportReceiptIds.length === requestedIdentitySupportIds.size
+    && supportReceiptIds.every((id) => requestedIdentitySupportIds.has(id))
+    && options.identitySupportReceipt.sourceFingerprint === poolIdentitySupportFingerprint({
+      universe,
+      selectedArchetypes,
+      tier,
+      teams: teamsForSizing,
+      budgetPerTeam: options.budgetPerTeam,
+      playerIds: supportReceiptIds,
+      authorityFingerprint: options.identitySupportReceipt.authorityFingerprint,
+    });
   const designReconcileEnabled = requestedDesignPriorityIds.size > 0;
   const reconcileEnabled = handReconcileEnabled || designReconcileEnabled;
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
@@ -2103,7 +2191,6 @@ export function extractPoolFromDemand(
   // reconstruct the same claim set before the final shaped pool is validated against that
   // certificate. On large multi-source universes that duplicate work can hold the browser main
   // thread for minutes, so carry the certified support as the floor receipt instead.
-  const certifiedIdentitySupport = requestedIdentitySupportIds.size > 0;
   const floors: ExtractedPool = certifiedIdentitySupport
     ? {
         players: universe.filter((player) => requestedIdentitySupportIds.has(player.id)),

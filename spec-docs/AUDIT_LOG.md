@@ -4,6 +4,25 @@
 
 ---
 
+### 2026-07-18 — FINDING-238 first audit block and narrow repair
+
+The separate auditor blocked frozen builder commit `17a3ec8b` with **Major 3 / Minor 0**. The proof
+and its validator both anchored the 90% IV floor to the bounded candidate shortlist rather than exact
+Full Sources; raw assignments/ids could skip identity work without a source-bound independent
+receipt; and the page did not own or abort the pool-shape worker when the user navigated away.
+
+The repair extracts one canonical Full Sources value-baseline authority shared by construction and
+validation, mints support only after the exact independent validator passes, fingerprints the exact
+source and numeric-shaping inputs before reuse, and owns one AbortController across proof, shaping,
+and post-worker persistence. Exact false-shortlist, changed-source, raw-id, changed-IV, and unmount
+regressions are green. The broad Snake matrix is 625/625; exact 440 calibration is 4/4; exact 2,001
+source proof remains 3/3; TypeScript, changed-file ESLint, the 2,735-module build/PWA, and diff
+integrity are green. Playwright functional/setup gates are green, including the 3.5-minute real
+eight-club 2,001-source browser path. The Mac/iPad latency file is 2/2 in its serial production-like
+lane; one four-worker stress run measured a 279 ms Mac long task against a 250 ms gate while the
+isolated rerun measured 200 ms. Final re-audit and JK's browser walk remain; no push, merge, or
+deploy.
+
 ### 2026-07-18 — FINDING-238 large-source Snake setup builder close
 
 Exact 2,001-card production sources reproduced a false `identity-proof-unknown` and a synchronous

@@ -21,9 +21,13 @@ import {
 import { toRosterSlotPlayer } from '../rosterNeed';
 import { rankArchetypeDraftability } from '../draftabilityRanker';
 import { registerPool } from '../leagueConstruction';
-import { extractPoolFromDemand } from '../poolFromDemand';
+import { createPoolIdentitySupportReceipt, extractPoolFromDemand } from '../poolFromDemand';
 import { SNAKE_POOL_COMPETITION_PRESETS, snakePoolSizeGuide } from '../snakePoolAssembly';
-import { proveSimultaneousSnakeSeating, validateConstructiveSnakeSeatingProof } from '../snakeSeatingProof';
+import {
+  createSnakeIdentitySupportCertificate,
+  proveSimultaneousSnakeSeating,
+  validateConstructiveSnakeSeatingProof,
+} from '../snakeSeatingProof';
 import { snakeLuxuryCaps } from '../snakeLuxuryTax';
 import { buildDeskRoomPlayer, fitWord } from '../../src_figma/app/components/snake/desk/deskRoomModel';
 import { demandUniverseFromPlayers } from '../../src_figma/app/engines/leaguePlayerAdapter';
@@ -186,8 +190,19 @@ describe('stock SMB4 Snake FIT and pool calibration', () => {
     const fullProof = full.proof;
     expect(fullProof.feasible).toBe(true);
     expect(validateConstructiveSnakeSeatingProof(full.input, fullProof)).toBe(true);
+    const supportCertificate = createSnakeIdentitySupportCertificate(full.input, fullProof);
+    expect(supportCertificate).not.toBeNull();
     const supportIds = [...new Set(fullProof.assignments.flatMap((assignment) => assignment.playerIds))];
     expect(supportIds).toHaveLength(teamIds.length * 22);
+    const supportReceipt = createPoolIdentitySupportReceipt({
+      universe: demandUniverse,
+      selectedArchetypes,
+      tier: 'standard',
+      teams: teamIds.length,
+      budgetPerTeam: TIER_CAPS.standard.tierCap,
+      playerIds: supportIds,
+      authorityFingerprint: supportCertificate!.sourceFingerprint,
+    });
 
     for (const preset of ['competitive', 'loose'] as const) {
         const definition = SNAKE_POOL_COMPETITION_PRESETS[preset];
@@ -205,6 +220,7 @@ describe('stock SMB4 Snake FIT and pool calibration', () => {
             poolSizeMultiplier: definition.multiplier,
             poolSourceMode: 'full-pool',
             identitySupportIds: supportIds,
+            identitySupportReceipt: supportReceipt,
             preserveSelectedIdentityClaims: false,
           },
         );

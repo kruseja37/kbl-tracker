@@ -5,6 +5,7 @@ import {
   advanceTrustedSnakeSeatingCertificate,
   classifySnakePickFinishSafety,
   countSnakeSupplyByPosition,
+  createSnakeIdentitySupportCertificate,
   createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
   proveSnakePickKeepsAllClubsSeated,
@@ -227,6 +228,108 @@ describe('simultaneous snake seating proof', () => {
       .map((playerId) => poolWithSibling.find((player) => player.playerId === playerId)!)
       .map((player) => player.sourceId);
     expect(new Set(assignedGroups)).toHaveLength(44);
+  });
+
+  test('rejects a shaped roster below the canonical Full Sources IV floor even when its shortlist floor passes', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const withValueAndPower = (
+      players: SnakeSeatingPlayer[],
+      price: number,
+      hitterPower: number,
+    ) => players.map((player) => ({
+      ...player,
+      price,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.shape.isPitcher ? 5 : hitterPower,
+        },
+      },
+    }));
+    const shapedRoster = withValueAndPower(oneClubPool('floor-shaped'), 10, 95);
+    const shapedSlack = withValueAndPower(floorSlackExtras('floor-slack'), 1, 5);
+    const fullSourceStars = withValueAndPower(oneClubPool('floor-full-stars'), 100, 80);
+    const proof = {
+      feasible: true,
+      assignments: [{
+        teamId: 'floor-club',
+        playerIds: shapedRoster.map((player) => player.playerId),
+        salaryCost: 220,
+        addedTax: 0,
+        allInCost: 220,
+      }],
+      shortfall: null,
+      message: 'SHORTLIST CERTIFICATE',
+    };
+    const shortlistInput = {
+      clubs: [{
+        teamId: 'floor-club',
+        roster: [],
+        budgetRemaining: 10_000,
+        identityArchetype: powerIdentity,
+      }],
+      pool: [...shapedRoster, ...shapedSlack],
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+
+    expect(validateConstructiveSnakeSeatingProof(shortlistInput, proof)).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof({
+      ...shortlistInput,
+      identityReferencePool: [...shortlistInput.pool, ...fullSourceStars],
+    }, proof)).toBe(false);
+  });
+
+  test('rejects identity support when the Full Sources fingerprint changes', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const source = [
+      ...oneClubPool('receipt-source'),
+      ...floorSlackExtras('receipt-slack'),
+    ].map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.playerId.startsWith('receipt-source') && !player.shape.isPitcher ? 95 : 5,
+        },
+      },
+    }));
+    const fullInput = {
+      clubs: [{ teamId: 'receipt-club', roster: [], budgetRemaining: 10_000, identityArchetype: powerIdentity }],
+      pool: source,
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+    const fullProof = proveSimultaneousSnakeSeating(fullInput);
+    expect(fullProof.feasible, fullProof.message).toBe(true);
+    const certificate = createSnakeIdentitySupportCertificate(fullInput, fullProof);
+    expect(certificate).not.toBeNull();
+    const shapedInput = {
+      ...fullInput,
+      pool: source,
+      identityReferencePool: source,
+      identitySupportCertificate: certificate!,
+    };
+    const reused = proveSimultaneousSnakeSeating(shapedInput);
+    expect(reused.feasible, reused.message).toBe(true);
+
+    const tamperedReference = source.map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: { ...player.construction.bat, POW: player.shape.isPitcher ? 5 : 50 },
+      },
+    }));
+    const tampered = proveSimultaneousSnakeSeating({
+      ...shapedInput,
+      identityReferencePool: tamperedReference,
+    });
+    expect(tampered.feasible).toBe(false);
+    expect(tampered.shortfall?.reason).toBe('identity-proof-unknown');
   });
 
   test('reports bounded identity uncertainty separately from a proven legal impossibility', () => {

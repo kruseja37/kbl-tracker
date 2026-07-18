@@ -1,6 +1,9 @@
 /// <reference lib="webworker" />
 
-import { proveSimultaneousSnakeSeating } from '../../../engines/snakeSeatingProof';
+import {
+  createSnakeIdentitySupportCertificate,
+  proveSimultaneousSnakeSeating,
+} from '../../../engines/snakeSeatingProof';
 import type {
   SnakeSetupProofWorkerRequest,
   SnakeSetupProofWorkerResponse,
@@ -9,10 +12,14 @@ import type {
 self.onmessage = (event: MessageEvent<SnakeSetupProofWorkerRequest>) => {
   const { key, input } = event.data;
   try {
+    const proof = proveSimultaneousSnakeSeating(input);
     const response: SnakeSetupProofWorkerResponse = {
       key,
       ok: true,
-      proof: proveSimultaneousSnakeSeating(input),
+      proof,
+      // This independent validation stays in the disposable worker. A successful search result is
+      // not reusable shaping authority until it is rebound to the exact Full Sources input here.
+      identitySupportCertificate: createSnakeIdentitySupportCertificate(input, proof),
     };
     self.postMessage(response);
   } catch (error) {

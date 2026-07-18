@@ -80,14 +80,21 @@ describe('SnakeSetupProofClient', () => {
 
   it('shares one in-flight worker and reuses the resolved proof for the same fingerprint', async () => {
     const { client, workers } = clientHarness();
-    const first = client.run(proofInput());
+    const received: unknown[] = [];
+    const certificate = { version: 1 as const, sourceFingerprint: 'full-source', assignments: [] };
+    const first = client.run(proofInput(), {
+      onIdentitySupportCertificate: (value) => received.push(value),
+    });
     const second = client.run(proofInput());
     expect(workers).toHaveLength(1);
     expect(workers[0].messages).toHaveLength(1);
     const key = workers[0].messages[0].key;
-    workers[0].emit({ key, ok: true, proof: READY_PROOF });
+    workers[0].emit({ key, ok: true, proof: READY_PROOF, identitySupportCertificate: certificate });
     await expect(Promise.all([first, second])).resolves.toEqual([READY_PROOF, READY_PROOF]);
-    await expect(client.run(proofInput())).resolves.toBe(READY_PROOF);
+    await expect(client.run(proofInput(), {
+      onIdentitySupportCertificate: (value) => received.push(value),
+    })).resolves.toBe(READY_PROOF);
+    expect(received).toEqual([certificate, certificate]);
     expect(workers).toHaveLength(1);
   });
 
@@ -96,8 +103,8 @@ describe('SnakeSetupProofClient', () => {
     const first = client.run(proofInput('team-a'));
     const second = client.run(proofInput('team-b'));
     expect(workers).toHaveLength(2);
-    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF });
-    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
+    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await expect(Promise.all([first, second])).resolves.toHaveLength(2);
   });
 
@@ -118,10 +125,10 @@ describe('SnakeSetupProofClient', () => {
     await secondRejected;
 
     // A late response from the terminated worker is stale and cannot populate the cache.
-    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     const retry = client.run(proofInput());
     expect(workers).toHaveLength(2);
-    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await expect(retry).resolves.toBe(READY_PROOF);
   });
 
@@ -135,7 +142,7 @@ describe('SnakeSetupProofClient', () => {
     client.cancelPending(currentKey);
     expect(workers[0].terminated).toBe(true);
     expect(workers[1].terminated).toBe(false);
-    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await staleRejected;
     await expect(current).resolves.toBe(READY_PROOF);
   });
@@ -143,15 +150,15 @@ describe('SnakeSetupProofClient', () => {
   it('bounds resolved reuse and evicts the least-recent proof', async () => {
     const { client, workers } = clientHarness(1);
     const first = client.run(proofInput('team-a'));
-    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await first;
     const second = client.run(proofInput('team-b'));
-    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await second;
 
     const retry = client.run(proofInput('team-a'));
     expect(workers).toHaveLength(3);
-    workers[2].emit({ key: workers[2].messages[0].key, ok: true, proof: READY_PROOF });
+    workers[2].emit({ key: workers[2].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
     await retry;
   });
 
@@ -171,6 +178,7 @@ describe('SnakeSetupProofClient', () => {
       key: workers[0].messages[0].key,
       ok: true,
       proof: { ...READY_PROOF, message: undefined } as unknown as SnakeSeatingProof,
+      identitySupportCertificate: null,
     });
     await expect(pending).rejects.toThrow('invalid result');
   });
