@@ -122,6 +122,17 @@ export interface TrustedSnakeSeatingCertificate {
   readonly proof: SnakeSeatingProof;
 }
 
+export type SnakePickFinishStatus = 'DRAFTABLE' | 'OPEN' | 'BLOCKED';
+
+export interface SnakePickFinishSafetyRow {
+  playerId: string;
+  status: SnakePickFinishStatus;
+  message: string;
+  finalSalary: number | null;
+  finalTax: number | null;
+  moneyLeft: number | null;
+}
+
 const TRUSTED_SNAKE_CERTIFICATES = new WeakSet<TrustedSnakeSeatingCertificate>();
 
 interface TrustedSnakeAssignmentOwner {
@@ -313,6 +324,26 @@ export function validateConstructiveSnakeSeatingProof(
   input: SimultaneousSnakeSeatingInput,
   proof: SnakeSeatingProof,
 ): boolean {
+  return validateConstructiveSnakeSeatingProofCore(input, proof, true);
+}
+
+/**
+ * Live-draft certificate validation. Identity was certified when the pool was locked; after that,
+ * pick safety is exact roster law, version disjointness, salary, tax and budget truth. Re-running
+ * the setup identity optimizer here would add seconds without changing whether clubs can finish.
+ */
+export function validateConstructiveSnakeFinishProof(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+): boolean {
+  return validateConstructiveSnakeSeatingProofCore(input, proof, false);
+}
+
+function validateConstructiveSnakeSeatingProofCore(
+  input: SimultaneousSnakeSeatingInput,
+  proof: SnakeSeatingProof,
+  verifySetupIdentity: boolean,
+): boolean {
   try {
     if (!proof || proof.feasible !== true || proof.shortfall !== null
       || proof.assignments.length !== input.clubs.length) return false;
@@ -377,6 +408,7 @@ export function validateConstructiveSnakeSeatingProof(
         || Math.abs(assignment.allInCost - allInCost) > 1e-6
         || !snakeMoneyAffordable(allInCost, club.budgetRemaining)) return false;
     }
+    if (!verifySetupIdentity) return true;
     const identityAvailable = availableCards(input);
     return input.clubs.every((club, clubIndex) => identityRosterMeetsCanonicalFloor({
       seatingInput: input,
@@ -924,6 +956,134 @@ export function advanceTrustedSnakeSeatingCertificate(input: {
     committedGroupId: groupId,
   }));
   return certificate;
+}
+
+/**
+ * Classify a set of visible draft choices against one immutable room certificate.
+ *
+ * The root certificate is validated once. Each candidate first uses the constructive reservation
+ * rewrite; only candidates that cannot reuse that proof enter the canonical solver. This function
+ * is intentionally pure and worker-safe so hundreds of cards can be classified without blocking
+ * the draft-room render thread.
+ */
+export function createSnakePickFinishSafetyClassifier(input: {
+  current: SimultaneousSnakeSeatingInput;
+  proof: SnakeSeatingProof;
+  teamId: string;
+}): (candidatePlayerIds: readonly string[]) => SnakePickFinishSafetyRow[] {
+  const certificate = validateConstructiveSnakeFinishProof(input.current, input.proof)
+    ? mintTrustedSnakeSeatingCertificate(input.current, input.proof, true)
+    : null;
+  if (certificate) {
+    TRUSTED_SNAKE_CERTIFICATE_INDEX.set(certificate, buildRootTrustedIndex(certificate));
+  }
+  const current = certificate?.input ?? input.current;
+  const clubIndex = current.clubs.findIndex((club) => club.teamId === input.teamId);
+  if (!certificate || clubIndex < 0) {
+    return (candidatePlayerIds) => [...new Set(candidatePlayerIds)].map((playerId) => ({
+      playerId, status: 'OPEN', message: 'FINISH PROOF UNAVAILABLE.',
+      finalSalary: null, finalTax: null, moneyLeft: null,
+    }));
+  }
+  const availableById = new Map(availableCards(current).map((player) => [player.playerId, player]));
+  const normalizedCaps = snakeLuxuryCaps([...current.baseCaps]);
+  const draftableRow = (
+    playerId: string,
+    postPick: SimultaneousSnakeSeatingInput,
+    proof: SnakeSeatingProof,
+  ): SnakePickFinishSafetyRow => {
+    const club = postPick.clubs[clubIndex];
+    const assignment = proof.assignments.find((row) => row.teamId === input.teamId);
+    const future = assignment?.playerIds.map((id) => availableById.get(id));
+    if (!assignment || !future || future.some((player) => !player)) {
+      return {
+        playerId, status: 'OPEN', message: 'FINISH PROOF UNAVAILABLE.',
+        finalSalary: null, finalTax: null, moneyLeft: null,
+      };
+    }
+    const finalRoster = [...club.roster, ...(future as SnakeSeatingPlayer[])];
+    const shiftedCaps = club.capIdentity
+      ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
+      : [...normalizedCaps];
+    const beforeClub = current.clubs[clubIndex];
+    const beforeConstruction = beforeClub.committedConstruction
+      ? [...beforeClub.committedConstruction]
+      : beforeClub.roster.map((row) => row.construction);
+    const beforeTax = luxuryTax(beforeConstruction, shiftedCaps, 'taxed').charged;
+    const finalTax = luxuryTax(finalRoster.map((row) => row.construction), shiftedCaps, 'taxed').charged;
+    const beforeSalary = beforeClub.roster.reduce((sum, row) => sum + row.price, 0);
+    const finalSalary = finalRoster.reduce((sum, row) => sum + row.price, 0);
+    return {
+      playerId,
+      status: 'DRAFTABLE',
+      message: proof.message,
+      finalSalary,
+      finalTax,
+      moneyLeft: beforeClub.budgetRemaining - (finalSalary - beforeSalary) - (finalTax - beforeTax),
+    };
+  };
+  return (candidatePlayerIds) => [...new Set(candidatePlayerIds)].map((playerId): SnakePickFinishSafetyRow => {
+    const player = availableById.get(playerId);
+    if (!player) {
+      return {
+        playerId, status: 'BLOCKED', message: 'THIS CARD IS NO LONGER AVAILABLE.',
+        finalSalary: null, finalTax: null, moneyLeft: null,
+      };
+    }
+    const allInCost = exactTrustedPickCost({
+      seatingInput: current,
+      clubIndex,
+      player,
+      normalizedCaps,
+    });
+    const direct = directTrustedAdvance({
+      certificate,
+      teamId: input.teamId,
+      playerId,
+      allInCost,
+    });
+    if (direct) {
+      return draftableRow(playerId, direct.input, direct.proof);
+    }
+
+    const groupId = deriveVersionGroupId(player);
+    const postPick: SimultaneousSnakeSeatingInput = {
+      ...current,
+      clubs: current.clubs.map((club, index) => index === clubIndex ? {
+        ...club,
+        roster: [...club.roster, player],
+        budgetRemaining: snakeMoneyRemaining(club.budgetRemaining, allInCost),
+        committedConstruction: [
+          ...(club.committedConstruction ?? club.roster.map((row) => row.construction)),
+          player.construction,
+        ],
+      } : club),
+      pool: current.pool.filter((candidate) => deriveVersionGroupId(candidate) !== groupId),
+    };
+    const proof = proveSimultaneousSnakeSeating(postPick);
+    if (proof.feasible) {
+      return draftableRow(playerId, postPick, proof);
+    }
+    if (!proof.shortfall || proof.shortfall.reason === 'identity-proof-unknown') {
+      return {
+        playerId, status: 'OPEN', message: proof.message || 'FINISH PROOF UNAVAILABLE.',
+        finalSalary: null, finalTax: null, moneyLeft: null,
+      };
+    }
+    return {
+      playerId, status: 'BLOCKED', message: proof.message,
+      finalSalary: null, finalTax: null, moneyLeft: null,
+    };
+  });
+}
+
+export function classifySnakePickFinishSafety(input: {
+  current: SimultaneousSnakeSeatingInput;
+  proof: SnakeSeatingProof;
+  teamId: string;
+  candidatePlayerIds: readonly string[];
+}): SnakePickFinishSafetyRow[] {
+  return createSnakePickFinishSafetyClassifier(input)(input.candidatePlayerIds);
 }
 
 function advanceSnakeSeatingCertificate(input: {

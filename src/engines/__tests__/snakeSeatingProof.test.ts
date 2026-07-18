@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import {
   advanceTrustedSnakeSeatingCertificate,
+  classifySnakePickFinishSafety,
   countSnakeSupplyByPosition,
   createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
@@ -78,6 +79,38 @@ const clubs = ['a', 'b'].map((teamId) => ({
 }));
 
 describe('simultaneous snake seating proof', () => {
+  test('classifies every visible late-draft choice instead of treating invalid picks as open', () => {
+    const rosterA = oneClubPool('finish-a').filter((player) => player.playerId !== 'finish-a-CP');
+    const rosterB = oneClubPool('finish-b').filter((player) => player.playerId !== 'finish-b-CP');
+    const cpA = card('finish-a-CP', { isPitcher: true, position: 'CP', role: 'CP' });
+    const cpB = card('finish-b-CP', { isPitcher: true, position: 'CP', role: 'CP' });
+    const wrongShape = card('finish-wrong-CF', { isPitcher: false, position: 'CF' });
+    const input = {
+      clubs: [
+        { teamId: 'a', roster: rosterA, budgetRemaining: 1_000 },
+        { teamId: 'b', roster: rosterB, budgetRemaining: 1_000 },
+      ],
+      pool: [cpA, cpB, wrongShape],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    expect(proof.feasible).toBe(true);
+
+    const rows = classifySnakePickFinishSafety({
+      current: input,
+      proof,
+      teamId: 'a',
+      candidatePlayerIds: [wrongShape.playerId, cpB.playerId, cpA.playerId],
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ playerId: wrongShape.playerId, status: 'BLOCKED' }),
+      expect.objectContaining({ playerId: cpB.playerId, status: 'DRAFTABLE' }),
+      expect.objectContaining({ playerId: cpA.playerId, status: 'DRAFTABLE' }),
+    ]);
+  });
+
   test('mints setup SUCCESS only for disjoint legal money-safe rosters that meet each chosen identity', () => {
     const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
     const identityPool = [

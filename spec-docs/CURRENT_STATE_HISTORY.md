@@ -1342,3 +1342,13 @@ intent. The initial 248-test builder matrix and TypeScript passed before the off
 the repaired 249-test matrix passed before the current-cloud intent edge. The 250-test repair adds
 that exact check. Final TypeScript, changed-file lint, production build/PWA, diff integrity, and the
 separate re-audit are green; JK's same-room recovery click remains.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 audit repair
+
+The prior live header recorded initial FINDING-237 implementation with 88/88 and 176/176 completion,
+the first eight-team browser latency pass, and separate audit still pending. That auditor then found
+three concrete proof/behavior gaps: zero-interest could suppress legality, row status was not an exact
+per-player classification, and the completion test did not independently join Assistant advice to
+final legal and financial truth. The live header now records the repaired worker-backed classifier,
+Assistant/certificate overlap law, cumulative 614-test proof, and re-audit as the remaining engineering
+gate before JK's eight-team browser acceptance.

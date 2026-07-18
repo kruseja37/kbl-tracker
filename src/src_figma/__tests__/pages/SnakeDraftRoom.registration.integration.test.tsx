@@ -31,6 +31,37 @@ vi.mock('../../utils/snakeSounds', () => ({
   createSnakeSoundPlayer: () => ({ play: vi.fn() }),
 }));
 
+// JSDOM has no Worker. Exercise the same production engines synchronously at
+// the worker seam so this end-to-end storage ritual can still reach the gavel.
+vi.mock('../../app/components/snake/desk/useSnakeSelectedConsequences', async () => {
+  const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
+  return {
+    useSnakeSelectedConsequences: (request: import('../../app/workers/snakeSelectedConsequences.worker').SnakeSelectedConsequencesWorkerRequest | null) => {
+      if (!request) return { status: 'idle', consequenceByPlayerId: new Map() };
+      const results = request.selectedPlayerIds.map((selectedPlayerId) => model.buildSelectedPlayerConsequence({
+        ...request.input,
+        selectedPlayerId,
+      }));
+      return {
+        status: 'ready',
+        consequenceByPlayerId: new Map(results.map((result) => [result.selectedPlayerId, result])),
+      };
+    },
+  };
+});
+vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/desk/useSnakePickFinishSafety')>();
+  const seating = await import('../../../engines/snakeSeatingProof');
+  return {
+    ...actual,
+    useSnakePickFinishSafety: (request: import('../../app/workers/snakePickFinish.worker').SnakePickFinishWorkerRequest | null) => {
+      if (!request) return { status: 'idle', rows: new Map() };
+      const rows = seating.createSnakePickFinishSafetyClassifier(request)(request.candidatePlayerIds);
+      return { status: 'ready', rows: new Map(rows.map((row) => [row.playerId, row])) };
+    },
+  };
+});
+
 vi.mock('../../app/components/snake/snakeRoomFreshness', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app/components/snake/snakeRoomFreshness')>();
   return { ...actual, startSnakeRoomFreshness: () => () => undefined };

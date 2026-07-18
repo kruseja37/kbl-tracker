@@ -558,6 +558,23 @@ describe('shared snake assistant board core', () => {
     expect(committed.playerIds).toContain('bench-0');
   });
 
+  it('lets exact legality override zero interest when that card is required to finish the 22', () => {
+    const activePool = legalPool();
+    const result = buildSnakeAssistantBoard(engineInput({
+      activePool,
+      zeroInterestPlayerIds: ['bench-0'],
+      certifiedCompletionPlayerIds: activePool
+        .filter((player) => player.playerId !== 'c')
+        .map((player) => player.playerId),
+    }));
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.playerIds).toHaveLength(22);
+    expect(result.playerIds).toContain('bench-0');
+    expect(isLegalRoster(result.playerIds.map((id) => activePool.find((player) => player.playerId === id)!.seating.shape))).toBe(true);
+  });
+
   it('falls back to an exact solvent legal 22 when only the secondary preference start exhausts its cycle cap', () => {
     const fixedBoard = paddedCyclePool(new Set());
     const hitterPositions = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH'] as const;

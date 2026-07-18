@@ -725,8 +725,8 @@ retirement, rollback on queue-persistence failure, and the Hotseat control. JK's
 remains the product gate.
 
 ### FINDING-237
-**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** BUILT — SEPARATE AUDIT PENDING
-**Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeEconomics.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/components/snake/desk/*`
+**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** REPAIRED AFTER AUDIT BLOCK — RE-AUDIT PENDING
+**Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeSeatingProof.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`, Snake desk hooks/workers and focused tests
 **Evidence:** In JK's first complete four-team room walk, two seats lost their Assistant GM several
 rounds before the end and one club reached 19/22 with no discoverable legal pick despite a positive
 current-roster money balance. Code trace proves the Assistant is local and independent of Auth or
@@ -758,12 +758,26 @@ the selected card quotes the exact projected final salary, tax, all-in cost, and
 can filter to guaranteed `DRAFTABLE` choices. The same desk adds private zero-interest, CSS rating
 bars, chemistry trait counts, a clickable full draft log, and on-clock companion colors. The
 Assistant worker is storage/Auth-free and 98.07 kB, and 20-row paging prevents a 506-card render.
-**Builder verification:** Exact production-shape simulations completed 88/88 four-team and 176/176
-eight-team picks with every final roster legal and solvent and the Assistant available at every
-turn. The final eight-team browser run used 506 players and a 176-pick order: room 862 ms, private
-desk 346 ms, Player Pool 581 ms, IV sort 300 ms, FIT filter 31 ms, finish filter 28 ms, player
-selection 342 ms, gavel/write 1.278 s, and a second page reopened the persisted room on pick 2 in
-922 ms with no console error. Companion recurring-pull proof advances to pick 2, adds the public
-pick log, and removes the drafted player. Final focused matrix: 17 files / 274 tests; TypeScript,
-changed-file ESLint, 2,732-module production build/PWA, worker-auth scan, and diff integrity green.
-JK's browser walk and the required separate non-builder audit remain open. No push, merge, or deploy.
+**Audit correction:** The first separate auditor returned **BLOCK — Major 2 / Minor 1**. Zero-interest
+was filtered before the legal fallback, visible finish status only distinguished certificate IDs
+from generic `OPEN`, and the completion journey selected directly from the certificate without
+independently requiring a current Assistant recommendation or rechecking final people, roster,
+salary, tax, and money truth. The repair makes zero-interest preference-only; an exact legal fallback
+may restore the sole legal card. A valid preferred Assistant plan that does not intersect the club's
+current simultaneous completion yields to that exact completion, so the live Assistant always names
+at least one room-safe choice. A storage/Auth-free worker now validates the current proof once and
+progressively classifies every candidate by constructive reservation rewrite, with canonical solver
+fallback. Selected-player and scarcity replacement consequences run in a separate cancellable,
+fingerprinted worker instead of React's render path.
+**Repaired builder verification:** Exact production-shape simulations completed 88/88 four-team and
+176/176 eight-team picks. Every turn selected from the intersection of the current Assistant and the
+current club certificate; every final roster was independently rechecked for unique people, legal
+22-player shape, salary, tax, all-in cost, and certificate money left. Slowest Assistant calculation
+was 1.611 s in the engine journey. The full 506-player eight-team finish classifier took 185 ms total
+and 18 ms for the first 24 rows. The real browser used 506 players / 176 picks: room 860 ms, desk
+283 ms, Player Pool 423 ms, sort 247 ms, FIT filter 223 ms, finish filter 850 ms, selection 304 ms,
+pick persistence 1.274 s, and reload on pick 2 in 928 ms with no console errors. The two long exact
+production suites pass 12/12 and the controlled-concurrency surrounding Snake matrix passes 602/602,
+for 614/614 cumulative. TypeScript, changed-file ESLint, the 2,734-module production build/PWA,
+emitted-worker Auth/storage scan, and diff integrity are green. Re-audit and JK's browser walk remain
+open. No push, merge, or deploy.

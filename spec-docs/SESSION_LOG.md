@@ -7804,3 +7804,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   separate re-audit are green. The auditor returned **APPROVE — Major 0 / Minor 0**.
 - Fresh `origin/main`: `ba7f97d6`. JK's same-room recovery click remains. No new
   draft, repeated trade, push, merge, deploy, or product acceptance.
+
+## 2026-07-17 — FINDING-237 eight-team late-draft audit repair
+
+- Treated eight teams, 176 picks, and eight independent private Assistant inputs as the acceptance
+  scale; the four-team room remains a regression case only.
+- The first non-builder audit blocked the initial build because zero-interest could erase the only
+  legal fallback, visible status did not classify non-certificate players, and the completion test
+  did not independently bind Assistant advice to final certified legality and money.
+- Repaired zero-interest as preference-only and made a valid but certificate-disjoint preferred plan
+  yield to the current club's exact shared-room completion. This preserves a useful Assistant board
+  and at least one provably safe recommendation on every turn.
+- Added one fingerprinted, stale-cancellable worker for progressive exact finish classification and
+  another for selected/scarcity plan consequences. Main and companion now consume the same results;
+  row render, sorting, filtering, and selection do not run those solvers on React's main thread.
+- Exact real-player proof completed 88/88 and 176/176 picks. Every selection came from Assistant /
+  certificate overlap, and every final club passed independent person uniqueness, legal roster,
+  salary, tax, all-in, and money-left checks. Full 506-player finish classification was 185 ms total,
+  with the first 24 rows in 18 ms.
+- Real eight-team browser proof: room 860 ms, desk 283 ms, pool 423 ms, sort 247 ms, FIT 223 ms,
+  finish filter 850 ms, selection 304 ms, saved pick 1 in 1.274 s, reload on pick 2 in 928 ms, and no
+  console errors.
+- Final builder gates before re-audit: 614/614 cumulative Snake tests, TypeScript, changed-file
+  ESLint, 2,734-module production build/PWA, emitted-worker Auth/storage scan, and diff integrity.
+  No push, merge, deploy, or product acceptance. The same non-builder auditor must re-audit the frozen
+  repair; JK's eight-team browser walk remains the final gate.

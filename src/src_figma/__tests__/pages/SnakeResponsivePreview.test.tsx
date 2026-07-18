@@ -64,6 +64,7 @@ describe('SnakeResponsivePreview', () => {
     fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
     const firstEpoch = screen.getByTestId('companion-private-epoch').getAttribute('data-private-epoch');
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'taylor utility' } });
     fireEvent.click(screen.getByRole('button', { name: /^SELECT TAYLOR UTILITY/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));
@@ -281,6 +282,7 @@ describe('SnakeResponsivePreview', () => {
     render(<SnakeResponsivePreview />);
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL BEEWOLVES SEAT' }));
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'taylor utility' } });
     fireEvent.click(screen.getByRole('button', { name: /^SELECT TAYLOR UTILITY/ }));
     fireEvent.click(screen.getByRole('button', { name: 'KEEP ON MY BOARD' }));
     expect(screen.getByRole('button', { name: 'REVERT' })).toBeInTheDocument();
@@ -297,6 +299,7 @@ describe('SnakeResponsivePreview', () => {
     render(<SnakeResponsivePreview />);
     fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'FIND PLAYER' }), { target: { value: 'taylor utility' } });
     fireEvent.click(screen.getByRole('button', { name: /^SELECT TAYLOR UTILITY/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }));
     fireEvent.click(screen.getByRole('button', { name: 'OPTIMIZE AROUND' }));

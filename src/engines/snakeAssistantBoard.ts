@@ -414,11 +414,14 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   const selectedPin = input.selectedPinPlayerId ?? null;
   const zeroInterestIds = new Set(input.zeroInterestPlayerIds ?? []);
   const ownsCloser = ownPicks.some((pick) => byId.get(pick.playerId)?.seating.shape.role === 'CP');
-  const available = versionValidPool.filter((player) => !picksById.has(player.playerId)
+  const legallyAvailable = versionValidPool.filter((player) => !picksById.has(player.playerId)
     && !retiredIds.has(player.playerId)
-    && !zeroInterestIds.has(player.playerId)
     && !draftedGroups.has(deriveVersionGroupId(identityOf(player)))
     && (!ownsCloser || player.seating.shape.role !== 'CP' || player.playerId === selectedPin));
+  // Zero interest is a GM preference, never a legality rule. Keep those cards out of the
+  // optimized recommendation universe, but retain them for the exact legal-finish fallback so a
+  // preference cannot strand a club or make the Assistant disappear late in the draft.
+  const available = legallyAvailable.filter((player) => !zeroInterestIds.has(player.playerId));
   const universe = [...ownPicks.map((pick) => byId.get(pick.playerId)!), ...available];
 
   if (universe.some((player) => rivalIds.has(player.playerId))) {
@@ -507,7 +510,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
         : player.frozenIv,
     }));
     const committedSpent = currentRoster.reduce((sum, player) => sum + player.price, 0);
-    const completionPool = available
+    const completionPool = legallyAvailable
       .filter((player) => !requiredGroups.has(deriveVersionGroupId(identityOf(player))))
       .map((player): SnakeSeatingPlayer => ({
         ...player.seating,
@@ -572,8 +575,7 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
     // The shared certificate has already proved all clubs simultaneously. It is still treated as
     // untrusted input here: recheck current ownership, version law, roster law and exact money
     // before using it as the Assistant's fail-safe board.
-    if (input.certifiedCompletionPlayerIds
-      && !input.certifiedCompletionPlayerIds.some((playerId) => zeroInterestIds.has(playerId))) {
+    if (input.certifiedCompletionPlayerIds) {
       const certified = buildReady(input.certifiedCompletionPlayerIds);
       if (certified) return certified;
     }
@@ -653,6 +655,13 @@ export function buildSnakeAssistantBoard(input: SnakeAssistantBoardInput): Snake
   if (!allNumbersFinite(plan)) return unavailable('INVALID_NUMERIC_INPUT');
   if (!target.feasible || !snakeMoneyNonnegative(plan.planCushion)) {
     return legalFallback() ?? unavailable('INSOLVENT_BOARD');
+  }
+  if (input.certifiedCompletionPlayerIds?.length
+    && !input.certifiedCompletionPlayerIds.some((playerId) => playerIds.includes(playerId))) {
+    // A locally excellent board is not useful if every displayed future card conflicts with the
+    // room's simultaneous finish. Preserve the optimizer whenever it contains a certified choice;
+    // otherwise show the exact shared-room completion so the GM always has an actionable safe pick.
+    return legalFallback() ?? unavailable('INCOMPLETE_BOARD');
   }
 
   return {

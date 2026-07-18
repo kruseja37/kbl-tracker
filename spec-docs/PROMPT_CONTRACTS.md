@@ -32504,3 +32504,13 @@ engine/UI/browser tests; required finding/session/status records.
 **Gates:** focused red/green suites, four/eight-team completion journey, TypeScript, changed-file
 ESLint, production build/PWA, diff integrity, frozen diff for separate non-builder audit, then JK's
 real browser walk. No push, merge, or deploy.
+
+**First audit and repair:** The auditor blocked `df64b450` because zero-interest preceded legality,
+visible status did not classify every candidate, and the completion journey did not independently
+prove Assistant/certificate overlap plus final roster and money truth. The repaired contract treats
+zero-interest only as preference; a certified legal completion may override it. Every visible card is
+progressively classified off-thread from one stable room fingerprint, and selected/scarcity plan
+consequences use a separate worker. The 88/176 journey must pick from current Assistant/certificate
+intersection and independently recompute final person uniqueness, roster legality, salary, tax,
+all-in, and money left. Repaired builder gates are cumulative 614/614 plus the eight-team production
+browser latency pass; the same non-builder re-audit and JK's browser walk remain mandatory.

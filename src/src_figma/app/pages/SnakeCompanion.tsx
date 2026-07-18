@@ -82,12 +82,12 @@ import {
   resolveLockedSeat,
 } from '../components/snake/desk/deskRoomModel';
 import {
-  buildSelectedPlayerConsequence,
   buildSnakeAssistantBoardRequest,
   buildSnakeAssistantLivePlayer,
-  type SelectedPlayerConsequence,
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
+import { useSnakeSelectedConsequences } from '../components/snake/desk/useSnakeSelectedConsequences';
+import type { SnakeSelectedConsequencesWorkerRequest } from '../workers/snakeSelectedConsequences.worker';
 import { snakeBoardOverBudgetReason } from '../components/snake/desk/snakeDeskMoneyCopy';
 import {
   buildSnakeDecisionCandidateFacts,
@@ -101,6 +101,10 @@ import {
   buildSnakeRationalRiskRequest,
   useSnakeRationalRisks,
 } from '../components/snake/desk/useSnakeRationalRisks';
+import {
+  buildSnakePickFinishWorkerRequest,
+  useSnakePickFinishSafety,
+} from '../components/snake/desk/useSnakePickFinishSafety';
 import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import {
@@ -636,6 +640,41 @@ export default function SnakeCompanion() {
     [...unavailable].filter((playerId) => !ownCommittedPlayerIds.has(playerId)),
   ), [ownCommittedPlayerIds, unavailable]);
   const board = team ? session?.seatBoards?.[team.id] ?? null : null;
+  const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
+    if (!session || !pool) return null;
+    return {
+      clubs: leagueTeams.map((entry) => {
+        const completed = session.completedPicks.filter((pick) => pick.teamId === entry.id);
+        const roster = completed.flatMap((pick) => seatingById.get(pick.playerId) ?? []);
+        return {
+          teamId: entry.id, roster,
+          budgetRemaining: pool.tierCap - completed.reduce((sum, pick) => sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0) + (pick.marginalTax ?? 0), 0),
+          committedConstruction: roster.map((row) => row.construction),
+          capIdentity: resolveLockedSeat({ team: entry, session }).capIdentity,
+        };
+      }),
+      pool: seatingPlayers.filter((entry) => !unavailable.has(entry.playerId)),
+      baseCaps: pool.luxuryCaps, realTeamCount: leagueTeams.length, versionState: session.versionState,
+    };
+  }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+  const finishSafetyRequest = useMemo(() => {
+    const proof = session?.snakeSetup?.seatingCertificate;
+    if (deviceCovered || !team || !seatingProofInput || !proof?.feasible) return null;
+    const availableIds = new Set(deskPlayers
+      .filter((player) => !unavailable.has(player.playerId))
+      .map((player) => player.playerId));
+    return buildSnakePickFinishWorkerRequest({
+      current: seatingProofInput,
+      proof,
+      teamId: team.id,
+      candidatePlayerIds: [...new Set([
+        ...Object.values(board?.slots ?? {}),
+        ...(board?.rankings.global ?? []),
+        ...deskPlayers.map((player) => player.playerId),
+      ].filter((playerId): playerId is string => Boolean(playerId) && availableIds.has(playerId)))],
+    });
+  }, [board, deskPlayers, deviceCovered, seatingProofInput, session?.snakeSetup?.seatingCertificate, team, unavailable]);
+  const finishSafety = useSnakePickFinishSafety(finishSafetyRequest);
 
   const rationalRiskRequest = useMemo(() => {
     if (deviceCovered || !session || !pool || !team || !board) return null;
@@ -707,10 +746,6 @@ export default function SnakeCompanion() {
       need,
     });
     const advisorWorthById = new Map(assembled.map((row) => [row.playerId, row.worth]));
-    const certifiedFinishIds = new Set(
-      session.snakeSetup?.seatingCertificate?.assignments
-        .find((assignment) => assignment.teamId === team.id)?.playerIds ?? [],
-    );
     const completedPickByPlayerId = new Map(session.completedPicks.map((pick) => [pick.playerId, pick]));
     const teamNameById = new Map(leagueTeams.map((entry) => [entry.id, entry.name]));
     const candidates: DeskCandidate[] = deskPlayers.flatMap((entry) => {
@@ -731,6 +766,7 @@ export default function SnakeCompanion() {
         ? completedPick?.settledSalary ?? entry.price
         : entry.price;
       const risk = riskById.get(entry.playerId);
+      const finish = finishSafety.rows.get(entry.playerId);
       return [{
         id: entry.playerId,
         name: fullName(entry.stored.firstName, entry.stored.lastName).toUpperCase(),
@@ -764,8 +800,9 @@ export default function SnakeCompanion() {
           : rationalRiskState.status === 'unavailable'
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
-        legalFinishLine: '',
-        finishStatus: completedPick ? undefined : certifiedFinishIds.has(entry.playerId) ? 'DRAFTABLE' : 'OPEN',
+        legalFinishLine: completedPick ? '' : finish?.message
+          ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'),
+        finishStatus: completedPick ? undefined : finish?.status ?? 'OPEN',
         construction: entry.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -851,7 +888,7 @@ export default function SnakeCompanion() {
       taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }),
       advisorLog: brokenSlots.map((slotId) => ({ key: `broken:${slotId}`, text: `YOUR ${slotId} PLAN IS BROKEN — YOUR RANKING HAS NO AVAILABLE NAME.`, actionable: true })),
     };
-  }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, boardUnavailable, deskById, deskPlayers, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
+  }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, boardUnavailable, deskById, deskPlayers, finishSafety, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
 
   const defaultSelectedPlayerId = useMemo(() => {
     if (!board || !deskState) return null;
@@ -865,6 +902,7 @@ export default function SnakeCompanion() {
       ? selectedPlayerId
       : defaultSelectedPlayerId;
   const selectedCandidate = deskState?.candidates.find((candidate) => candidate.id === selectedCandidateId) ?? null;
+  const selectedFinishSafety = selectedCandidateId ? finishSafety.rows.get(selectedCandidateId) ?? null : null;
   const selectedStoredPlayer = selectedCandidateId ? playerById.get(selectedCandidateId) ?? null : null;
   const assistantIdentity = useMemo(() => session && team && board && !deviceCovered ? {
     sessionId: session.id,
@@ -924,35 +962,48 @@ export default function SnakeCompanion() {
       }] : [];
     });
   }, [assistantLivePlayers, deskState?.candidates]);
-  const selectedConsequence = useMemo<SelectedPlayerConsequence | null>(() => {
-    if (!assistantIdentity || !session || !pool || !team || !board || !deskState) return null;
-    return buildSelectedPlayerConsequence({
-      identity: assistantIdentity,
-      selectedPlayerId: selectedCandidateId,
-      teamId: team.id,
-      board,
-      designSlots: team.rosterDesign?.slots,
-      players: consequencePlayers,
-      completedPicks: session.completedPicks.map((pick) => ({
-        teamId: pick.teamId,
-        playerId: pick.playerId,
-        settledSalary: pick.settledSalary,
-      })),
-      versionState: session.versionState,
-      versionSelections: session.snakeSetup?.versionSelections,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: resolveLockedSeat({ team, session }).capIdentity,
-    });
-  }, [assistantIdentity, board, consequencePlayers, deskState, leagueTeams.length, pool, selectedCandidateId, session, team]);
-
   const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && selectedCandidateId
     ? rationalRiskState.risks?.find((row) => row.playerId === selectedCandidateId) ?? null
     : null, [rationalRiskState.risks, rationalRiskState.status, selectedCandidateId]);
   const selectedScarcity = useMemo(() => rationalRiskState.status === 'ready' && selectedCandidateId
     ? rationalRiskState.scarcity?.filter((row) => row.playerId === selectedCandidateId) ?? null
     : null, [rationalRiskState.scarcity, rationalRiskState.status, selectedCandidateId]);
+  const replacementConsequencePlayerIds = useMemo(() => [...new Set((selectedScarcity ?? []).flatMap((row) => (
+    row.replacementState === 'AVAILABLE'
+    && row.replacementPlayerId
+    && row.replacementPlayerId !== selectedCandidateId
+    && !unavailable.has(row.replacementPlayerId)
+      ? [row.replacementPlayerId]
+      : []
+  )))], [selectedCandidateId, selectedScarcity, unavailable]);
+  const consequenceRequest = useMemo<SnakeSelectedConsequencesWorkerRequest | null>(() => {
+    if (!assistantIdentity || !session || !pool || !team || !board || !deskState || !selectedCandidateId) return null;
+    const selectedPlayerIds = [selectedCandidateId, ...replacementConsequencePlayerIds];
+    return {
+      key: `snake-consequence:${assistantIdentity.sessionId}:${assistantIdentity.sessionRevision}:${assistantIdentity.teamId}:${assistantIdentity.boardRevision}:${selectedPlayerIds.join(',')}`,
+      selectedPlayerIds,
+      input: {
+        identity: assistantIdentity,
+        teamId: team.id,
+        board,
+        designSlots: team.rosterDesign?.slots,
+        players: consequencePlayers,
+        completedPicks: session.completedPicks.map((pick) => ({
+          teamId: pick.teamId, playerId: pick.playerId, settledSalary: pick.settledSalary,
+        })),
+        versionState: session.versionState,
+        versionSelections: session.snakeSetup?.versionSelections,
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: resolveLockedSeat({ team, session }).capIdentity,
+      },
+    };
+  }, [assistantIdentity, board, consequencePlayers, deskState, leagueTeams.length, pool, replacementConsequencePlayerIds, selectedCandidateId, session, team]);
+  const consequenceState = useSnakeSelectedConsequences(consequenceRequest);
+  const selectedConsequence = selectedCandidateId
+    ? consequenceState.consequenceByPlayerId.get(selectedCandidateId) ?? null
+    : null;
   const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
     playerId: selectedCandidateId ?? '',
     candidate: selectedCandidate,
@@ -962,41 +1013,15 @@ export default function SnakeCompanion() {
     if (!assistantIdentity || !session || !pool || !team || !board || !deskState
       || !selectedCandidateId || !selectedScarcity || deviceCovered) return null;
     const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
-    const replacementIds = [...new Set(selectedScarcity.flatMap((row) => (
-      row.replacementState === 'AVAILABLE'
-      && row.replacementPlayerId
-      && row.replacementPlayerId !== selectedCandidateId
-      && !unavailable.has(row.replacementPlayerId)
-        ? [row.replacementPlayerId]
-        : []
-    )))];
-    return replacementIds.flatMap((replacementId) => {
-      const consequence = buildSelectedPlayerConsequence({
-        identity: assistantIdentity,
-        selectedPlayerId: replacementId,
-        teamId: team.id,
-        board,
-        designSlots: team.rosterDesign?.slots,
-        players: consequencePlayers,
-        completedPicks: session.completedPicks.map((pick) => ({
-          teamId: pick.teamId,
-          playerId: pick.playerId,
-          settledSalary: pick.settledSalary,
-        })),
-        versionState: session.versionState,
-        versionSelections: session.snakeSetup?.versionSelections,
-        budget: pool.tierCap,
-        baseCaps: pool.luxuryCaps,
-        realTeamCount: leagueTeams.length,
-        capIdentity: resolveLockedSeat({ team, session }).capIdentity,
-      });
+    return replacementConsequencePlayerIds.flatMap((replacementId) => {
+      const consequence = consequenceState.consequenceByPlayerId.get(replacementId) ?? null;
       return buildSnakeDecisionCandidateFacts({
         playerId: replacementId,
         candidate: candidatesById.get(replacementId) ?? null,
         consequence,
       }) ?? [];
     });
-  }, [assistantIdentity, board, consequencePlayers, deskState, deviceCovered, leagueTeams.length, pool, selectedCandidateId, selectedScarcity, session, team, unavailable]);
+  }, [assistantIdentity, board, consequenceState.consequenceByPlayerId, deskState, deviceCovered, pool, replacementConsequencePlayerIds, selectedCandidateId, selectedScarcity, session, team]);
   const assistantPriorityPlayerIds = assistantBoardState.status === 'ready'
     ? assistantBoardState.board?.playerIds ?? null
     : null;
@@ -1208,23 +1233,6 @@ export default function SnakeCompanion() {
     session?.pickOrder.length ?? 0,
     Math.max(1, leagueTeams.length),
   ), [activePoolRows, leagueTeams.length, session?.pickOrder.length]);
-  const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
-    if (!session || !pool) return null;
-    return {
-      clubs: leagueTeams.map((entry) => {
-        const completed = session.completedPicks.filter((pick) => pick.teamId === entry.id);
-        const roster = completed.flatMap((pick) => seatingById.get(pick.playerId) ?? []);
-        return {
-          teamId: entry.id, roster,
-          budgetRemaining: pool.tierCap - completed.reduce((sum, pick) => sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0) + (pick.marginalTax ?? 0), 0),
-          committedConstruction: roster.map((row) => row.construction),
-          capIdentity: resolveLockedSeat({ team: entry, session }).capIdentity,
-        };
-      }),
-      pool: seatingPlayers.filter((entry) => !unavailable.has(entry.playerId)),
-      baseCaps: pool.luxuryCaps, realTeamCount: leagueTeams.length, versionState: session.versionState,
-    };
-  }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
   const guideRecommendationRequest = useMemo(() => {
     if (!session || !team || !seatingProofInput || guideThreatPick === null || deviceCovered) return null;
     return buildSnakeGuideRecommendationRequest({
@@ -1438,21 +1446,17 @@ export default function SnakeCompanion() {
       onKeep={() => { void keepSelectedConsequence(); }}
       zeroInterest={board.rankings.zeroInterestPlayerIds?.includes(selectedCandidateId ?? '') ?? false}
       onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
-      actionConsequence={selectedConsequence?.status === 'ready'
-        ? selectedConsequence.after.legalFinish.affordability === 'OPEN'
-          ? 'FINISH COST CHECK OPEN.'
-          : selectedConsequence.after.legalFinish.feasible
-            ? `LEGAL 22 · $${Math.round(selectedConsequence.after.legalFinish.projectedSalary ?? 0).toLocaleString()} SALARY · $${Math.round(selectedConsequence.after.legalFinish.projectedTax ?? 0).toLocaleString()} TAX · $${Math.round(selectedConsequence.after.legalFinish.moneyLeft ?? 0).toLocaleString()} LEFT.`
-            : 'THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.'
+      actionConsequence={selectedFinishSafety?.status === 'DRAFTABLE'
+        ? `LEGAL 22 · $${Math.round(selectedFinishSafety.finalSalary ?? 0).toLocaleString()} SALARY · $${Math.round(selectedFinishSafety.finalTax ?? 0).toLocaleString()} TAX · $${Math.round(selectedFinishSafety.moneyLeft ?? 0).toLocaleString()} LEFT.`
         : null}
-      blockReason={selectedConsequence?.status === 'ready' && !selectedConsequence.after.legalFinish.feasible
-        ? 'THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.'
-        : null}
+      blockReason={selectedFinishSafety?.status === 'DRAFTABLE'
+        ? null
+        : selectedFinishSafety?.message ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.')}
       draftAction={liveSlot?.teamId === team.id ? (
         pickRequest ? (
           <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{pickRequest.pick} WAITING FOR HOTSEAT</span>
         ) : (
-          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || (selectedConsequence?.status === 'ready' && !selectedConsequence.after.legalFinish.feasible)} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || selectedFinishSafety?.status !== 'DRAFTABLE'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
         )
       ) : undefined}
       decision={draftDecision}

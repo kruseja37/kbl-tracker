@@ -1538,6 +1538,20 @@ click remains the product gate; no merge, push, or deploy is authorized.
 | FINDING-234 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | CompanionClaimScreen.tsx / SnakeDraftRoomView.tsx / SnakeDraftRoom.tsx | Pending devices can resend room claims; Hotseat shows an exact pending count without auto-opening private details. |
 | FINDING-235 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | leagueBuilderStorage.ts / companionFreshness.ts / SnakeDraftRoom.tsx | Private boards no longer publish stale room copies; open devices adopt board revisions and authoritative picks/trades/corrections force-publish. |
 
+### 2026-07-17 — FINDING-237 first audit block and builder repair
+
+The separate read-only auditor rejected initial commit `df64b450` with **BLOCK — Major 2 / Minor 1**:
+zero-interest could remove the only legal completion card, production did not compute exact finish
+status for every visible candidate, and the 88/176 journey did not independently prove Assistant
+overlap or final legal/financial truth. The builder repaired all three without changing FIT, tax,
+archetype, roster, pick, trade, correction, privacy, or companion-sync law. Heavy classification and
+selected-player consequence work now runs only in fingerprinted workers with cache and stale-job
+cancellation. Repaired builder evidence is 12/12 long exact production tests plus 602/602 surrounding
+Snake tests, TypeScript, changed-file ESLint, 2,734-module build/PWA, no Auth/storage strings in the
+emitted Snake workers, clean diff integrity, and a no-console-error eight-team browser pass. The
+frozen repair still requires the same non-builder re-audit; JK's browser walk remains product
+acceptance.
+
 ### 2026-07-17 — Companion live-room propagation independent close
 
 The separate non-builder auditor returned **APPROVE — Major 0 / Minor 0**. It confirmed that an

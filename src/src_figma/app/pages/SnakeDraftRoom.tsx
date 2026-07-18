@@ -21,7 +21,6 @@ import {
   evaluateSnakeLegalFinish,
   evaluateSnakePlan,
   snakeMoneyNonnegative,
-  type SnakeLegalFinishBill,
 } from '../../../engines/snakeEconomics';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../../engines/snakeSession';
 import { primeSnakeGuideSeatingProof, seedSnakeGuideSeatingProof } from '../../../engines/snakeGuideTrade';
@@ -76,12 +75,12 @@ import {
   updateSessionSeatBoard,
 } from '../components/snake/desk/deskRoomModel';
 import {
-  buildSelectedPlayerConsequence,
   buildSnakeAssistantBoardRequest,
   buildSnakeAssistantLivePlayer,
-  type SelectedPlayerConsequence,
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
+import { useSnakeSelectedConsequences } from '../components/snake/desk/useSnakeSelectedConsequences';
+import type { SnakeSelectedConsequencesWorkerRequest } from '../workers/snakeSelectedConsequences.worker';
 import { snakeBoardOverBudgetReason } from '../components/snake/desk/snakeDeskMoneyCopy';
 import {
   buildSnakeDecisionCandidateFacts,
@@ -95,6 +94,10 @@ import {
   buildSnakeRationalRiskRequest,
   useSnakeRationalRisks,
 } from '../components/snake/desk/useSnakeRationalRisks';
+import {
+  buildSnakePickFinishWorkerRequest,
+  useSnakePickFinishSafety,
+} from '../components/snake/desk/useSnakePickFinishSafety';
 import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId, type SnakeCompanionPickRequest, type SnakeOpenTradeOffer, type SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
@@ -783,7 +786,6 @@ function MlbSnakeDraftRoom() {
   const [committingRecap, setCommittingRecap] = useState(false);
   const [practiceFastForward, setPracticeFastForward] = useState(false);
   const recapCommitInFlight = useRef(false);
-  const legalFinishCacheRef = useRef(new Map<string, SnakeLegalFinishBill>());
   const seatingPickProofCacheRef = useRef(new Map<string, SnakeSeatingProof>());
   const privateEpochRef = useRef(0);
   const privateRevealedRef = useRef(false);
@@ -1098,6 +1100,23 @@ function MlbSnakeDraftRoom() {
     return deskPlayer ? [deskPlayer] : [];
   }), [activePoolRows, playerById, seatingById]);
   const deskRoomById = useMemo(() => new Map(deskRoomPlayers.map((player) => [player.playerId, player])), [deskRoomPlayers]);
+  const finishSafetyRequest = useMemo(() => {
+    if (!privateDeskActive || !deskTeam || !seatingProofInput || !seatingProofResult?.feasible) return null;
+    const availableIds = new Set(deskRoomPlayers
+      .filter((player) => !unavailable.has(player.playerId))
+      .map((player) => player.playerId));
+    return buildSnakePickFinishWorkerRequest({
+      current: seatingProofInput,
+      proof: seatingProofResult,
+      teamId: deskTeam.id,
+      candidatePlayerIds: [...new Set([
+        ...Object.values(currentBoard?.slots ?? {}),
+        ...(currentBoard?.rankings.global ?? []),
+        ...deskRoomPlayers.map((player) => player.playerId),
+      ].filter((playerId): playerId is string => Boolean(playerId) && availableIds.has(playerId)))],
+    });
+  }, [currentBoard, deskRoomPlayers, deskTeam, privateDeskActive, seatingProofInput, seatingProofResult, unavailable]);
+  const finishSafety = useSnakePickFinishSafety(finishSafetyRequest);
   const assistantLivePlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -1158,50 +1177,13 @@ function MlbSnakeDraftRoom() {
         blockReason: 'DRAFTED ROSTER DATA IS INCOMPLETE.',
       };
     }
-    const spent = teamPicks.reduce((sum, pick) => sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0), 0);
-    const remaining = seatingPlayers.filter((row) => row.playerId !== candidateId && !unavailable.has(row.playerId));
-    const marginalTax = auctionMarginalTaxWithCaps(
-      roster.map((entry) => entry.construction),
-      model.construction,
-      currentLocked?.capIdentity,
-      snakeLuxuryCaps(pool.luxuryCaps),
-    );
-    const cacheKey = `${deskTeam.id}:${session.revision ?? 0}:${candidateId}`;
-    let bill = legalFinishCacheRef.current.get(cacheKey);
-    if (!bill) {
-      bill = evaluateSnakeLegalFinish({
-        currentRoster: [...roster, model],
-        committedSpent: spent + priced.iv,
-        availablePool: remaining,
-        budget: pool.tierCap,
-        baseCaps: pool.luxuryCaps,
-        realTeamCount: leagueTeams.length,
-        capIdentity: currentLocked?.capIdentity,
-      });
-      legalFinishCacheRef.current.set(cacheKey, bill);
-    }
-    const pickProofKey = `${deskTeam.id}:${session.revision ?? 0}:${candidateId}`;
-    let simultaneous = seatingPickProofCacheRef.current.get(pickProofKey) ?? null;
-    if (!simultaneous && seatingProofInput && seatingProofResult?.feasible) {
-      simultaneous = proveSnakePickKeepsAllClubsSeated({
-        current: seatingProofInput,
-        teamId: deskTeam.id,
-        player: model,
-        allInCost: priced.iv + marginalTax,
-        currentProof: seatingProofResult,
-      });
-      seatingPickProofCacheRef.current.set(pickProofKey, simultaneous);
-    }
-    const blockReason = !bill.feasible
-      ? 'THIS PICK LEAVES NO LEGAL 22.'
-      : !snakeMoneyNonnegative(bill.legalFinishCushion) && bill.affordability === 'BLOCKED'
-        ? `YOU NEED $${Math.abs(Math.round(bill.legalFinishCushion)).toLocaleString()} MORE TO FINISH A LEGAL 22.`
-        : !simultaneous?.feasible
-          ? simultaneous?.message ?? 'THIS PICK BREAKS THE SHARED DRAFT PLAN.'
-        : null;
-    const line = blockReason ?? (bill.affordability === 'OPEN'
-      ? 'FINISH COST CHECK OPEN.'
-      : `LEGAL 22 · $${Math.round(bill.finalSalary).toLocaleString()} SALARY · $${Math.round(bill.finalTax).toLocaleString()} TAX · $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`);
+    const finish = finishSafety.rows.get(candidateId);
+    const blockReason = !finish
+      ? finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'
+      : finish.status === 'DRAFTABLE'
+        ? null
+        : finish.message;
+    const line = blockReason ?? `LEGAL 22 · $${Math.round(finish!.finalSalary!).toLocaleString()} SALARY · $${Math.round(finish!.finalTax!).toLocaleString()} TAX · $${Math.round(finish!.moneyLeft!).toLocaleString()} LEFT.`;
     return {
       id: player.id,
       name: fullName(player.firstName, player.lastName),
@@ -1209,7 +1191,7 @@ function MlbSnakeDraftRoom() {
       consequence: line,
       blockReason,
     };
-  }, [candidateId, completedPickByPlayerId, currentLocked, deskTeam, draftedTeamNameByPlayerId, leagueTeams.length, playerById, pool, poolById, seatingById, seatingPlayers, seatingProofInput, seatingProofResult, session, unavailable]);
+  }, [candidateId, completedPickByPlayerId, deskTeam, draftedTeamNameByPlayerId, finishSafety, playerById, pool, poolById, seatingById, session]);
 
   const activePlanBroken = useMemo(() => {
     if (!session || !draftingTeam || !currentSlot || !seatingProofResult) return false;
@@ -1432,11 +1414,6 @@ function MlbSnakeDraftRoom() {
       need,
     });
     const advisorWorthById = new Map(assembled.map((row) => [row.playerId, row.worth]));
-    const certifiedFinishIds = new Set(
-      seatingProofResult?.feasible
-        ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds ?? []
-        : [],
-    );
     const candidates: DeskCandidate[] = deskRoomPlayers.flatMap((player) => {
       const advisorWorth = advisorWorthById.get(player.playerId);
       if (!contextualWorthComplete || !Number.isFinite(advisorWorth)) return [];
@@ -1455,6 +1432,7 @@ function MlbSnakeDraftRoom() {
         ? completedPick.settledSalary ?? player.price
         : player.price;
       const risk = riskById.get(player.playerId);
+      const finish = finishSafety.rows.get(player.playerId);
       return [{
         id: player.playerId,
         name: fullName(player.stored.firstName, player.stored.lastName).toUpperCase(),
@@ -1488,8 +1466,9 @@ function MlbSnakeDraftRoom() {
           : rationalRiskState.status === 'unavailable'
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
-        legalFinishLine: '',
-        finishStatus: completedPick ? undefined : certifiedFinishIds.has(player.playerId) ? 'DRAFTABLE' : 'OPEN',
+        legalFinishLine: completedPick ? '' : finish?.message
+          ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'),
+        finishStatus: completedPick ? undefined : finish?.status ?? 'OPEN',
         construction: player.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -1625,7 +1604,7 @@ function MlbSnakeDraftRoom() {
       slotDepth,
       taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }) : [],
     };
-  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, seatingProofResult, session, unavailable]);
+  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, finishSafety, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, session, unavailable]);
 
   const assistantIdentity = useMemo(() => session && deskTeam && deskState?.board && privateDeskActive ? {
     sessionId: session.id,
@@ -1684,35 +1663,48 @@ function MlbSnakeDraftRoom() {
       }] : [];
     });
   }, [assistantLivePlayers, deskState?.candidates]);
-  const selectedConsequence = useMemo<SelectedPlayerConsequence | null>(() => {
-    if (!privateDeskActive || !assistantIdentity || !session || !pool || !deskTeam || !deskState?.board) return null;
-    return buildSelectedPlayerConsequence({
-      identity: assistantIdentity,
-      selectedPlayerId: candidateId,
-      teamId: deskTeam.id,
-      board: deskState.board,
-      designSlots: deskTeam.rosterDesign?.slots,
-      players: consequencePlayers,
-      completedPicks: session.completedPicks.map((pick) => ({
-        teamId: pick.teamId,
-        playerId: pick.playerId,
-        settledSalary: pick.settledSalary,
-      })),
-      versionState: session.versionState,
-      versionSelections: session.snakeSetup?.versionSelections,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: deskState.locked.capIdentity,
-    });
-  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskActive, session]);
-
   const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && candidateId
     ? rationalRiskState.risks?.find((row) => row.playerId === candidateId) ?? null
     : null, [candidateId, rationalRiskState.risks, rationalRiskState.status]);
   const selectedScarcity = useMemo(() => rationalRiskState.status === 'ready' && candidateId
     ? rationalRiskState.scarcity?.filter((row) => row.playerId === candidateId) ?? null
     : null, [candidateId, rationalRiskState.scarcity, rationalRiskState.status]);
+  const replacementConsequencePlayerIds = useMemo(() => [...new Set((selectedScarcity ?? []).flatMap((row) => (
+    row.replacementState === 'AVAILABLE'
+    && row.replacementPlayerId
+    && row.replacementPlayerId !== candidateId
+    && !unavailable.has(row.replacementPlayerId)
+      ? [row.replacementPlayerId]
+      : []
+  )))], [candidateId, selectedScarcity, unavailable]);
+  const consequenceRequest = useMemo<SnakeSelectedConsequencesWorkerRequest | null>(() => {
+    if (!privateDeskActive || !assistantIdentity || !session || !pool || !deskTeam || !deskState?.board || !candidateId) return null;
+    const selectedPlayerIds = [candidateId, ...replacementConsequencePlayerIds];
+    return {
+      key: `snake-consequence:${assistantIdentity.sessionId}:${assistantIdentity.sessionRevision}:${assistantIdentity.teamId}:${assistantIdentity.boardRevision}:${selectedPlayerIds.join(',')}`,
+      selectedPlayerIds,
+      input: {
+        identity: assistantIdentity,
+        teamId: deskTeam.id,
+        board: deskState.board,
+        designSlots: deskTeam.rosterDesign?.slots,
+        players: consequencePlayers,
+        completedPicks: session.completedPicks.map((pick) => ({
+          teamId: pick.teamId, playerId: pick.playerId, settledSalary: pick.settledSalary,
+        })),
+        versionState: session.versionState,
+        versionSelections: session.snakeSetup?.versionSelections,
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: deskState.locked.capIdentity,
+      },
+    };
+  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskActive, replacementConsequencePlayerIds, session]);
+  const consequenceState = useSnakeSelectedConsequences(consequenceRequest);
+  const selectedConsequence = candidateId
+    ? consequenceState.consequenceByPlayerId.get(candidateId) ?? null
+    : null;
   const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
     playerId: candidateId ?? '',
     candidate: deskState?.selectedCandidate ?? null,
@@ -1722,41 +1714,15 @@ function MlbSnakeDraftRoom() {
     if (!privateDeskActive || !assistantIdentity || !session || !pool
       || !deskTeam || !deskState?.board || !candidateId || !selectedScarcity) return null;
     const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
-    const replacementIds = [...new Set(selectedScarcity.flatMap((row) => (
-      row.replacementState === 'AVAILABLE'
-      && row.replacementPlayerId
-      && row.replacementPlayerId !== candidateId
-      && !unavailable.has(row.replacementPlayerId)
-        ? [row.replacementPlayerId]
-        : []
-    )))];
-    return replacementIds.flatMap((replacementId) => {
-      const consequence = buildSelectedPlayerConsequence({
-        identity: assistantIdentity,
-        selectedPlayerId: replacementId,
-        teamId: deskTeam.id,
-        board: deskState.board!,
-        designSlots: deskTeam.rosterDesign?.slots,
-        players: consequencePlayers,
-        completedPicks: session.completedPicks.map((pick) => ({
-          teamId: pick.teamId,
-          playerId: pick.playerId,
-          settledSalary: pick.settledSalary,
-        })),
-        versionState: session.versionState,
-        versionSelections: session.snakeSetup?.versionSelections,
-        budget: pool.tierCap,
-        baseCaps: pool.luxuryCaps,
-        realTeamCount: leagueTeams.length,
-        capIdentity: deskState.locked.capIdentity,
-      });
+    return replacementConsequencePlayerIds.flatMap((replacementId) => {
+      const consequence = consequenceState.consequenceByPlayerId.get(replacementId) ?? null;
       return buildSnakeDecisionCandidateFacts({
         playerId: replacementId,
         candidate: candidatesById.get(replacementId) ?? null,
         consequence,
       }) ?? [];
     });
-  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskActive, selectedScarcity, session, unavailable]);
+  }, [assistantIdentity, candidateId, consequenceState.consequenceByPlayerId, deskState, deskTeam, pool, privateDeskActive, replacementConsequencePlayerIds, selectedScarcity, session]);
   const assistantPriorityPlayerIds = assistantBoardState.status === 'ready'
     ? assistantBoardState.board?.playerIds ?? null
     : null;

@@ -264,7 +264,7 @@ describe('PERFROOM production-scale call profile', () => {
     };
     console.info('PERFROOM_PROFILE render', JSON.stringify(profile));
     expect(profile.initialRationalRoomCalls).toBe(0);
-    expect(profile.initialLegalFinishCalls).toBe(1);
+    expect(profile.initialLegalFinishCalls).toBe(0);
     expect(profile.initialSeatingProofCalls).toBe(1);
     expect(profile.pureRerenderRationalRoomCalls).toBe(0);
     expect(profile.pureRerenderLegalFinishCalls).toBe(0);
