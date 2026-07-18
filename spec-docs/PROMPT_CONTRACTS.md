@@ -30858,6 +30858,7 @@ Close FINDING-166 through FINDING-169 and FINDING-173 without changing MLB trade
 - `src/utils/leagueBuilderStorage.ts`
 - `src/utils/syncConfig.ts`
 - `src/utils/syncEngine.ts`
+- `src/utils/leagueBuilderStorage.ts` (additive recovery-publication marker only)
 - `src/src_figma/app/pages/SnakeDraftRoom.tsx`
 - `src/src_figma/app/pages/SnakeCompanion.tsx`
 - `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`
@@ -32409,3 +32410,46 @@ publish an older whole-room snapshot that can block that progress.
 **Gates:** focused persistence/room/sync suites, TypeScript, changed-file ESLint, production build,
 diff integrity, separate non-builder audit, then JK's one-trade/one-pick companion browser walk. No
 push, merge, or deploy.
+
+## SNAKE-COMPANION-HOTSEAT-REPUBLISH-43
+
+**Role:** Existing-room companion recovery builder.
+
+**Goal:** A completed Hotseat room action that predates Contract 42 must be recoverable in place.
+The commissioner can republish the exact current room without starting a new draft or repeating a
+pick/trade.
+
+**Allowed implementation files:**
+
+- `src/utils/syncEngine.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
+- focused existing sync and companion tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Preserve normal stale-write rejection, the existing room row/schema, five-second companion pull,
+  and explicit Hotseat authority.
+- The recovery may rebase only the exact current `mlbDraftSessions` record against that record's
+  current server-received base. It must not rebase, discard, upload, or replace any unrelated row.
+- Preserve picks, trades, corrections, claims, boards, privacy, legality, money, FIT, tax,
+  archetypes, salary/IV, and FARM no-trade law.
+- Never tell the commissioner to repeat an already-saved action.
+
+**Required red-first proof:**
+
+- An old locally saved trade trapped behind a stale cloud room is republished and independently
+  verified from the exact cloud row.
+- An unrelated stale queued write remains queued and its cloud row remains unchanged.
+- A rejected atomic publish leaves the room write retryable.
+- A second companion device carrying the retired embedded-board whole-room write adopts the
+  commissioner publication, preserves its independent board, and leaves unrelated queued work.
+- An unpublished companion pick request is never retired by recovery.
+- An unpublished companion withdrawal or decline is never erased by a still-open published offer.
+- The Hotseat publish refuses to overwrite companion activity present in the exact current cloud row.
+- Hotseat exposes one `SYNC COMPANIONS` action with success, working, and retryable failure states.
+
+**Gates:** focused 250-test companion/room/sync matrix, TypeScript, changed-file ESLint, production
+build, diff integrity, separate non-builder audit, then JK's same-room recovery click. No push,
+merge, or deploy.

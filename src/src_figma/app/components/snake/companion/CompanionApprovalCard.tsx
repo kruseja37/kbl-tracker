@@ -28,11 +28,14 @@ export interface CompanionApprovalCardProps {
   createRoomCode?: () => string;
   playerName?: (playerId: string) => string;
   onApprovePick?: (request: SnakeCompanionPickRequest) => void | Promise<void>;
+  onPublishCurrentRoom?: () => void | Promise<void>;
 }
 
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   const [error, setError] = useState<string | null>(null);
   const [pickWorking, setPickWorking] = useState(false);
+  const [publishWorking, setPublishWorking] = useState(false);
+  const [publishStatus, setPublishStatus] = useState<string | null>(null);
   const configuredOrigin = import.meta.env.VITE_COMPANION_ORIGIN as string | undefined;
   const currentIsLoopback = (() => {
     try { return isLoopbackCompanionHost(new URL(window.location.origin).hostname); } catch { return true; }
@@ -132,11 +135,33 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
       setPickWorking(false);
     }
   };
+  const publishCurrentRoom = async () => {
+    if (!props.onPublishCurrentRoom || publishWorking) return;
+    setError(null);
+    setPublishStatus(null);
+    setPublishWorking(true);
+    try {
+      await props.onPublishCurrentRoom();
+      setPublishStatus('ROOM PUBLISHED — COMPANIONS UPDATE WITHIN 5 SECONDS.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPublishWorking(false);
+    }
+  };
 
   return (
     <section className="ballpark-panel" aria-label="Companion approvals">
       <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
       <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
+      {props.onPublishCurrentRoom ? (
+        <button
+          type="button"
+          className="ballpark-press-button ballpark-press-sm ballpark-press-gold mt-3 min-h-11"
+          disabled={publishWorking}
+          onClick={() => void publishCurrentRoom()}
+        >{publishWorking ? 'SYNCING…' : 'SYNC COMPANIONS'}</button>
+      ) : null}
       <CompanionHelp>
         {joinUrl
           ? <p>ON YOUR PHONE, GO TO: <strong data-testid="companion-join-url">{joinUrl}</strong> — SAME WI-FI.</p>
@@ -146,6 +171,7 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
         <p>USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
       </CompanionHelp>
       {error ? <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{error}</p> : null}
+      {publishStatus ? <p className="mt-3 font-bold text-[var(--ballpark-status-good)]" role="status">{publishStatus}</p> : null}
       <div className="mt-4 grid gap-3">
         {companions.pickRequest ? (
           <div className="border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="companion-pick-request">

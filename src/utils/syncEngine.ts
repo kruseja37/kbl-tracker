@@ -27,7 +27,11 @@ import {
   serializeKey,
 } from './syncConfig';
 import { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } from './backupRestore';
-import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
+import type {
+  LeagueBuilderMlbDraftSession,
+  SnakeOpenTradeOffer,
+  SnakeSeatBoardStoreRecord,
+} from './leagueBuilderStorage';
 import {
   assertCanonicalFarmSyncBootstrap,
   FARM_SNAKE_SESSION_NUMBER,
@@ -791,6 +795,133 @@ class SyncEngine {
         if (options.throwOnError) {
           throw err;
         }
+      }
+    });
+  }
+
+  /**
+   * Explicit Hotseat recovery for one already-saved snake room.
+   *
+   * This is intentionally not a general conflict override. The commissioner
+   * supplies the exact current room snapshot, and the write is rebased only on
+   * that room's current server row. Every other queued record keeps the normal
+   * stale-write protection.
+   */
+  async publishCommissionerSnakeRoom(room: LeagueBuilderMlbDraftSession): Promise<void> {
+    if (!supabase) throw new Error('CLOUD SYNC IS NOT CONFIGURED.');
+    if (!this._enabled) throw new Error('CLOUD SYNC IS DISABLED.');
+    if (!room.id || !room.leagueId || !Number.isInteger(room.seasonNumber)) {
+      throw new Error('THE CURRENT SNAKE ROOM SNAPSHOT IS INVALID.');
+    }
+    const publication = room.companionRoomPublication;
+    if (
+      publication?.formatVersion !== 'snake-companion-room-publication-v1'
+      || !publication.publicationId
+      || publication.publishedRevision !== (room.revision ?? 0)
+      || publication.publishedRevision !== publication.supersedesRevision + 1
+      || !Number.isFinite(Date.parse(publication.publishedAt))
+    ) {
+      throw new Error('THE CURRENT ROOM HAS NO VALID COMMISSIONER PUBLICATION.');
+    }
+
+    const client = supabase;
+    await this.runSyncOperation(true, async () => {
+      this.queueDrainsBlocked = true;
+      try {
+        await this.waitForQueueDrains();
+        const { data: { session } } = await client.auth.getSession();
+        if (!session) throw new Error('SIGN IN BEFORE SYNCING COMPANION DEVICES.');
+
+        const dbName = 'kbl-league-builder';
+        const storeName = 'mlbDraftSessions';
+        const recordKey = serializeKey(room.id);
+        const queueKey = `${dbName}|${storeName}|${recordKey}`;
+        const identity = this.storeIdentityKey(dbName, storeName, recordKey);
+        const queuedBeforePublish = this.pushQueue.get(queueKey);
+        const wasRestoredQueueEntry = this.restoredPushQueueKeys.has(queueKey);
+        const currentCloud = await this.fetchExactStoreWriteBaseRow(
+          session.user.id,
+          dbName,
+          storeName,
+          recordKey,
+        );
+        if (currentCloud && (!currentCloud.received_at || !currentCloud.id)) {
+          throw new Error('THE CURRENT CLOUD ROOM HAS NO SAFE WRITE BASE.');
+        }
+        if (currentCloud?.deleted) {
+          throw new Error('THE CURRENT CLOUD ROOM WAS REMOVED. RELOAD BEFORE SYNCING COMPANIONS.');
+        }
+        if (currentCloud) {
+          const currentCloudRoom = this.asSnakeDraftSession(currentCloud.data);
+          if (
+            !currentCloudRoom
+            || currentCloudRoom.id !== room.id
+            || currentCloudRoom.leagueId !== room.leagueId
+            || currentCloudRoom.seasonNumber !== room.seasonNumber
+            || !this.publishedRoomCoversQueuedCompanionIntent(currentCloudRoom, room)
+          ) {
+            throw new Error('THE CLOUD ROOM HAS NEW COMPANION ACTIVITY. RELOAD BEFORE SYNCING AGAIN.');
+          }
+        }
+
+        const changedAt = this.nextChangedAt(Math.max(
+          this.cursor.changedAt + 1,
+          (currentCloud?.changed_at ?? 0) + 1,
+          (queuedBeforePublish?.changedAt ?? 0) + 1,
+        ));
+        const row: CloudStoreWriteRow = {
+          user_id: session.user.id,
+          db_name: dbName,
+          store_name: storeName,
+          record_key: recordKey,
+          data: room,
+          changed_at: changedAt,
+          deleted: false,
+          op_id: this.createQueueOpId('store'),
+          base_received_at: currentCloud?.received_at ?? null,
+          base_id: currentCloud?.id ?? null,
+        };
+        await this.atomicUpsertStoreRows([row], 'Commissioner room publish failed', {
+          throwOnSkipped: true,
+        });
+
+        const verified = await this.fetchExactStoreWriteBaseRow(
+          session.user.id,
+          dbName,
+          storeName,
+          recordKey,
+        );
+        const expectedFingerprint = this.fingerprintStoreWriteState(room, false);
+        if (
+          !verified ||
+          !verified.received_at ||
+          verified.deleted ||
+          this.fingerprintStoreWriteState(verified.data, verified.deleted) !== expectedFingerprint
+        ) {
+          throw new Error('THE CURRENT ROOM COULD NOT BE VERIFIED AFTER PUBLISH.');
+        }
+
+        this.storeWriteBaseOverrides.set(identity, {
+          receivedAt: verified.received_at,
+          id: verified.id,
+        });
+        if (this.pushQueue.get(queueKey) === queuedBeforePublish) {
+          this.pushQueue.delete(queueKey);
+          this.restoredPushQueueKeys.delete(queueKey);
+        } else if (wasRestoredQueueEntry && !this.pushQueue.has(queueKey)) {
+          this.restoredPushQueueKeys.delete(queueKey);
+        }
+        this.rebaseQueuedOpsFromWriteBaseOverrides(new Set([identity]));
+        if (!this.persistWriteBaseOverrides()) {
+          throw new Error(this.writeBasePersistenceError ?? 'THE ROOM PUBLISHED, BUT ITS SYNC BASE COULD NOT BE SAVED.');
+        }
+        if (!this.persistQueues()) {
+          throw new Error(this.queuePersistenceError ?? 'THE ROOM PUBLISHED, BUT THE LOCAL SYNC QUEUE COULD NOT BE SAVED.');
+        }
+        if (this.getPendingOperationCount() === 0) this._error = null;
+        this.emitEvent('sync-complete');
+      } finally {
+        this.queueDrainsBlocked = false;
       }
     });
   }
@@ -1733,10 +1864,236 @@ class SyncEngine {
     return data ?? [];
   }
 
+  private asSnakeDraftSession(value: unknown): LeagueBuilderMlbDraftSession | null {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as Partial<LeagueBuilderMlbDraftSession>;
+    if (
+      typeof candidate.id !== 'string'
+      || typeof candidate.leagueId !== 'string'
+      || !Number.isInteger(candidate.seasonNumber)
+      || !Array.isArray(candidate.pickOrder)
+      || !Array.isArray(candidate.completedPicks)
+    ) return null;
+    return candidate as LeagueBuilderMlbDraftSession;
+  }
+
+  private publishedRoomCoversQueuedCompanionIntent(
+    queued: LeagueBuilderMlbDraftSession,
+    published: LeagueBuilderMlbDraftSession,
+  ): boolean {
+    if ((queued.currentPickIndex ?? 0) > (published.currentPickIndex ?? 0)) return false;
+
+    const publishedPickFingerprints = new Set(
+      published.completedPicks.map((pick) => this.fingerprintValue(pick)),
+    );
+    if (queued.completedPicks.some((pick) => !publishedPickFingerprints.has(this.fingerprintValue(pick)))) {
+      return false;
+    }
+
+    const publishedTradeFingerprints = new Set(
+      (published.trades ?? []).map((trade) => this.fingerprintValue(trade)),
+    );
+    if ((queued.trades ?? []).some((trade) => !publishedTradeFingerprints.has(this.fingerprintValue(trade)))) {
+      return false;
+    }
+
+    if (queued.draftManifest
+      && this.fingerprintValue(queued.draftManifest) !== this.fingerprintValue(published.draftManifest)) {
+      return false;
+    }
+    if (queued.rosterHandoff
+      && this.fingerprintValue(queued.rosterHandoff) !== this.fingerprintValue(published.rosterHandoff)) {
+      return false;
+    }
+
+    const queuedCompanions = queued.snakeCompanions;
+    const publishedCompanions = published.snakeCompanions;
+    if (queuedCompanions) {
+      if (!publishedCompanions || queuedCompanions.roomCode !== publishedCompanions.roomCode) return false;
+      for (const queuedClaim of queuedCompanions.claims ?? []) {
+        const publishedClaim = publishedCompanions.claims.find((claim) => (
+          queuedClaim.claimId
+            ? claim.claimId === queuedClaim.claimId
+            : claim.deviceId === queuedClaim.deviceId && claim.teamId === queuedClaim.teamId
+        ));
+        if (!publishedClaim) return false;
+        const queuedVersion = queuedClaim.claimVersion ?? 0;
+        const publishedVersion = publishedClaim.claimVersion ?? 0;
+        if (publishedVersion < queuedVersion) return false;
+        if (publishedVersion === queuedVersion
+          && this.fingerprintValue(publishedClaim) !== this.fingerprintValue(queuedClaim)) {
+          return false;
+        }
+      }
+
+      const queuedRequest = queuedCompanions.pickRequest;
+      if (queuedRequest) {
+        const requestStillPublished = publishedCompanions.pickRequest
+          && this.fingerprintValue(publishedCompanions.pickRequest) === this.fingerprintValue(queuedRequest);
+        const requestWasCommitted = published.completedPicks.some((pick) => (
+          pick.pick === queuedRequest.pick
+          && pick.teamId === queuedRequest.teamId
+          && pick.playerId === queuedRequest.playerId
+        ));
+        if (!requestStillPublished && !requestWasCommitted) return false;
+      }
+    }
+
+    const queuedOffers = queued.openTradeOffers ?? [];
+    if (!queuedOffers.every((offer) => this.publishedRoomCoversQueuedTradeOffer(offer, published))) {
+      return false;
+    }
+
+    // Absence can itself be companion intent: WITHDRAW and DECLINE remove an
+    // offer from the queued room. A published offer may be absent safely only
+    // when it was posted at or after the queued snapshot's revision.
+    const queuedOfferIds = new Set(queuedOffers.map((offer) => offer.id));
+    return (published.openTradeOffers ?? []).every((offer) => (
+      queuedOfferIds.has(offer.id)
+      || (Number.isInteger(offer.postedSessionRevision)
+        && offer.postedSessionRevision >= (queued.revision ?? 0))
+    ));
+  }
+
+  private publishedRoomCoversQueuedTradeOffer(
+    queuedOffer: SnakeOpenTradeOffer,
+    published: LeagueBuilderMlbDraftSession,
+  ): boolean {
+    const live = published.openTradeOffers?.find((offer) => offer.id === queuedOffer.id);
+    if (live) {
+      const immutableQueued = {
+        ...queuedOffer,
+        buyerNod: false,
+        sellerNod: false,
+      };
+      const immutableLive = {
+        ...live,
+        buyerNod: false,
+        sellerNod: false,
+      };
+      return this.fingerprintValue(immutableQueued) === this.fingerprintValue(immutableLive)
+        && (!queuedOffer.buyerNod || live.buyerNod)
+        && (!queuedOffer.sellerNod || live.sellerNod);
+    }
+
+    const queuedTeams = [queuedOffer.buyerTeamId, queuedOffer.sellerTeamId].sort().join('::');
+    const offered = [...queuedOffer.offerPickNumbers].sort((left, right) => left - right).join(',');
+    const received = [...queuedOffer.receivePickNumbers].sort((left, right) => left - right).join(',');
+    return (published.trades ?? []).some((trade) => {
+      const tradeTeams = [trade.humanTeamId, trade.cpuTeamId].sort().join('::');
+      if (tradeTeams !== queuedTeams) return false;
+      const human = [...trade.humanPickNumbers].sort((left, right) => left - right).join(',');
+      const cpu = [...trade.cpuPickNumbers].sort((left, right) => left - right).join(',');
+      return (human === offered && cpu === received) || (human === received && cpu === offered);
+    });
+  }
+
+  private async readStandaloneSnakeBoards(sessionId: string): Promise<SnakeSeatBoardStoreRecord[]> {
+    const db = await this.openDatabase('kbl-league-builder');
+    try {
+      if (!db.objectStoreNames.contains('snakeSeatBoards')) return [];
+      const tx = db.transaction('snakeSeatBoards', 'readonly');
+      const store = tx.objectStore('snakeSeatBoards');
+      if (!store.indexNames.contains('sessionId')) return [];
+      const request = store.index('sessionId').getAll(sessionId);
+      const rows = await new Promise<SnakeSeatBoardStoreRecord[]>((resolve, reject) => {
+        let result: SnakeSeatBoardStoreRecord[] = [];
+        request.onsuccess = () => {
+          result = request.result as SnakeSeatBoardStoreRecord[];
+        };
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+      return rows;
+    } finally {
+      db.close();
+    }
+  }
+
+  private async retireSupersededLegacySnakeBoardRoomWrite(
+    record: CloudStoreRow,
+    mutationBaseline: number,
+  ): Promise<boolean> {
+    if (
+      record.db_name !== 'kbl-league-builder'
+      || record.store_name !== 'mlbDraftSessions'
+      || record.deleted
+    ) return false;
+
+    const published = this.asSnakeDraftSession(record.data);
+    const marker = published?.companionRoomPublication;
+    if (
+      !published
+      || marker?.formatVersion !== 'snake-companion-room-publication-v1'
+      || !marker.publicationId
+      || marker.publishedRevision !== (published.revision ?? 0)
+      || marker.publishedRevision !== marker.supersedesRevision + 1
+      || !Number.isFinite(Date.parse(marker.publishedAt))
+    ) return false;
+
+    const queueKey = `${record.db_name}|${record.store_name}|${record.record_key}`;
+    if ((this.storeMutationGenerations.get(queueKey) ?? 0) > mutationBaseline) return false;
+    const queuedOp = this.pushQueue.get(queueKey);
+    if (!queuedOp || queuedOp.deleted) return false;
+    const queued = this.asSnakeDraftSession(queuedOp.data);
+    if (
+      !queued
+      || queued.id !== published.id
+      || queued.leagueId !== published.leagueId
+      || queued.seasonNumber !== published.seasonNumber
+      || (queued.revision ?? 0) > marker.supersedesRevision
+      || !this.publishedRoomCoversQueuedCompanionIntent(queued, published)
+    ) return false;
+
+    let boardRows: SnakeSeatBoardStoreRecord[];
+    try {
+      boardRows = await this.readStandaloneSnakeBoards(queued.id);
+    } catch {
+      return false;
+    }
+    if (this.pushQueue.get(queueKey) !== queuedOp) return false;
+    const queuedModifiedAt = Date.parse(queued.lastModified);
+    const hasLegacyBoardEvidence = Number.isFinite(queuedModifiedAt) && boardRows.some((row) => {
+      if (row.sessionId !== queued.id || row.leagueId !== queued.leagueId) return false;
+      const embedded = row.phase === 'MLB'
+        ? queued.seatBoards?.[row.teamId]
+        : queued.farmSeatBoards?.[row.teamId];
+      const rowModifiedAt = Date.parse(row.lastModified);
+      return Boolean(embedded)
+        && Number.isFinite(rowModifiedAt)
+        && queuedModifiedAt <= rowModifiedAt
+        && Number.isInteger(embedded?.revision)
+        && embedded!.revision <= row.revision;
+    });
+    if (!hasLegacyBoardEvidence) return false;
+
+    const wasRestored = this.restoredPushQueueKeys.has(queueKey);
+    this.pushQueue.delete(queueKey);
+    this.restoredPushQueueKeys.delete(queueKey);
+    if (!this.persistQueues()) {
+      this.pushQueue.set(queueKey, queuedOp);
+      if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      // The first attempt may have removed the durable room entry before a
+      // later localStorage write failed. Re-persist the restored in-memory op
+      // before refusing the cloud adoption.
+      this.persistQueues();
+      return false;
+    }
+    return true;
+  }
+
   private async applyPage(
     page: CloudStoreRow[],
     mutationBaseline: number,
   ): Promise<PullApplyResult> {
+    // Contract 43 recovery is deliberately evaluated before the normal queue
+    // conflict barrier. Only an explicit Hotseat publication can retire the
+    // retired board writer's exact whole-room op; every other conflict remains.
+    for (const record of page) {
+      await this.retireSupersededLegacySnakeBoardRoomWrite(record, mutationBaseline);
+    }
     const pageIndexes = new Map(page.map((record, index) => [record, index]));
     let firstSkippedIndex = -1;
     const markSkippedConflict = (record: CloudStoreRow) => {
@@ -2977,6 +3334,26 @@ class SyncEngine {
     }
 
     return rows;
+  }
+
+  private async fetchExactStoreWriteBaseRow(
+    userId: string,
+    dbName: string,
+    storeName: string,
+    recordKey: string,
+  ): Promise<CloudStoreWriteBaseRow | null> {
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from('kbl_stores')
+      .select('id, db_name, store_name, record_key, data, changed_at, received_at, deleted')
+      .eq('user_id', userId)
+      .eq('db_name', dbName)
+      .eq('store_name', storeName)
+      .eq('record_key', recordKey)
+      .maybeSingle();
+    this.assertNoSupabaseError(error, 'Cloud room write-base fetch failed');
+    return (data ?? null) as CloudStoreWriteBaseRow | null;
   }
 
   private async fetchLocalStorageWriteBaseRows(userId: string): Promise<CloudLocalStorageWriteBaseRow[]> {

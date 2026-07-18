@@ -74,6 +74,34 @@ describe('S5 companion surfaces', () => {
     expect(fetchMock).toHaveBeenCalledWith('/__kbl/companion-address', expect.objectContaining({ cache: 'no-store' }));
   });
 
+  it('lets the commissioner republish the current room without replaying a draft action', async () => {
+    const onPublishCurrentRoom = vi.fn().mockResolvedValue(undefined);
+    render(<CompanionApprovalCard
+      session={session}
+      teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
+      onChange={vi.fn()}
+      onPublishCurrentRoom={onPublishCurrentRoom}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SYNC COMPANIONS' }));
+    await waitFor(() => expect(onPublishCurrentRoom).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('status')).toHaveTextContent('ROOM PUBLISHED');
+  });
+
+  it('keeps commissioner room recovery retryable when publication fails', async () => {
+    const onPublishCurrentRoom = vi.fn().mockRejectedValue(new Error('CLOUD WRITE REJECTED'));
+    render(<CompanionApprovalCard
+      session={session}
+      teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
+      onChange={vi.fn()}
+      onPublishCurrentRoom={onPublishCurrentRoom}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'SYNC COMPANIONS' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('CLOUD WRITE REJECTED');
+    expect(screen.getByRole('button', { name: 'SYNC COMPANIONS' })).not.toBeDisabled();
+  });
+
   it('groups one device request as a clear multi-team package while keeping per-team decisions', async () => {
     const packageSession = {
       ...session,

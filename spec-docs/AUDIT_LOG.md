@@ -25,6 +25,26 @@ again in bullpen-secondary rows. All 24 identities stay inside the +/-10% parity
 audit returned VERIFIED with no Major or Minor findings. Next action: JK's hands-on League Builder
 and Snake-room walk remains the sole product gate.
 
+### 2026-07-17 — Existing-room companion republication audit block and repair
+
+JK's Hotseat retained the completed trade while every companion retained the old room after loading
+FINDING-235. This is a pre-repair conflict, not a failure of the repaired five-second freshness loop:
+the old authoritative write had already stale-rejected, and refresh correctly did not overwrite a
+newer cloud base. Contract `SNAKE-COMPANION-HOTSEAT-REPUBLISH-43` adds one explicit commissioner
+recovery. It writes only the current room record against that record's exact cloud base and verifies
+the accepted content. The first separate auditor returned **BLOCK — Major 1 / Minor 0** because an
+affected companion's own pre-Contract-42 whole-room queue would continue rejecting that publication.
+The repair adds a room-scoped commissioner publication marker and retires only a superseded legacy
+room op proven by its independent board row and by the absence of unpublished companion intent.
+The two-device regression adopts the trade/pick order, preserves the private board, and retains an
+unrelated pending write; negative regressions preserve an unpublished pick request and trade decline.
+The next audit pass found that publish also needed to compare against the exact current cloud room;
+otherwise unseen cloud-side companion activity could be overwritten. That check and regression are
+now built. Final builder and independent gates are green: 250/250 affected tests, TypeScript,
+changed-file ESLint, 2,730-module production build/PWA, diff integrity, and auditor **APPROVE — Major
+0 / Minor 0**. JK's same-room click remains the product gate. No new draft or repeated action is
+permitted.
+
 ---
 
 ## PHASE STATUS TRACKER

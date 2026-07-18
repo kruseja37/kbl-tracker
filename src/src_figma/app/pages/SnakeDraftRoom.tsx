@@ -1314,6 +1314,46 @@ function MlbSnakeDraftRoom() {
     setSession(saved);
   }, []);
 
+  const publishCurrentCompanionRoom = useCallback(async () => {
+    if (!session) throw new Error('THE CURRENT ROOM IS NOT READY.');
+    const expectedRevision = session.revision ?? 0;
+    const expectedSessionId = session.id;
+    const publishedRevision = expectedRevision + 1;
+    const publishedAt = new Date().toISOString();
+    const publicationId = globalThis.crypto?.randomUUID?.()
+      ?? `snake-room-publication-${expectedSessionId}-${publishedRevision}-${Date.now()}`;
+    const saved = await updateMlbDraftSessionAtomically(
+      session.leagueId,
+      session.seasonNumber,
+      (fresh) => {
+        if (fresh.id !== expectedSessionId || (fresh.revision ?? 0) !== expectedRevision) {
+          throw new Error('THE DRAFT MOVED. RELOAD THE ROOM, THEN SYNC COMPANIONS AGAIN.');
+        }
+        return {
+          ...fresh,
+          revision: publishedRevision,
+          companionRoomPublication: {
+            formatVersion: 'snake-companion-room-publication-v1',
+            publicationId,
+            supersedesRevision: expectedRevision,
+            publishedRevision,
+            publishedAt,
+          },
+        };
+      },
+    );
+    setSession(saved);
+    try {
+      await syncEngine.publishCommissionerSnakeRoom(saved);
+      setSyncError(null);
+      setWriteNotice(null);
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      setWriteNotice(`THE ROOM IS STILL SAVED HERE. COMPANION SYNC FAILED — ${detail}`);
+      throw cause;
+    }
+  }, [session]);
+
   const rationalRiskRequest = useMemo(() => {
     if (!privateDeskActive || !session || !pool || !deskTeam) return null;
     const available = deskRoomPlayers.filter((player) => !unavailable.has(player.playerId));
@@ -2564,6 +2604,7 @@ function MlbSnakeDraftRoom() {
           return player ? fullName(player.firstName, player.lastName) : 'UNKNOWN PLAYER';
         }}
         onApprovePick={(request) => recordPick(request.playerId, request)}
+        onPublishCurrentRoom={publishCurrentCompanionRoom}
         onChange={acceptCompanionSession}
       />}
       pendingCompanionCount={practiceMode ? 0 : (session.snakeCompanions?.claims.filter((claim) => claim.status === 'pending').length ?? 0)}

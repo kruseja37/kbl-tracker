@@ -2938,6 +2938,648 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     );
   });
 
+  test("commissioner room recovery republishes only the current snake room over its exact stale cloud base", async () => {
+    const roomId = "league-recovery::startup-mlb-draft::1";
+    const cloudRoom = {
+      id: roomId,
+      leagueId: "league-recovery",
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-a" },
+        { round: 1, pick: 2, teamId: "team-b" },
+      ],
+      completedPicks: [],
+      currentPickIndex: 0,
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:00:00.000Z",
+      revision: 2,
+    };
+    const localRoom = {
+      ...cloudRoom,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-b" },
+        { round: 1, pick: 2, teamId: "team-a" },
+      ],
+      trades: [{ id: "trade-1", status: "executed" }],
+      lastModified: "2026-07-17T12:05:00.000Z",
+      revision: 4,
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-hotseat-recovery",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    mockState.cloudRows = [
+      {
+        id: "cloud-room-row",
+        user_id: "user-1",
+        db_name: "kbl-league-builder",
+        store_name: "mlbDraftSessions",
+        record_key: JSON.stringify(roomId),
+        data: cloudRoom,
+        changed_at: 200,
+        received_at: "2026-07-17T12:00:00.000Z",
+        deleted: false,
+      },
+      {
+        id: "cloud-unrelated-row",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("unrelated-stale-write"),
+        data: { eventId: "unrelated-stale-write", result: "TRIPLE" },
+        changed_at: 201,
+        received_at: "2026-07-17T12:00:01.000Z",
+        deleted: false,
+      },
+    ];
+    const syncEngine = await loadFreshSyncEngine();
+
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(300);
+    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, localRoom);
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "unrelated-stale-write", {
+      eventId: "unrelated-stale-write",
+      result: "SINGLE",
+    });
+    nowSpy.mockRestore();
+    await syncEngine.flush();
+    expect(syncEngine.getStatus().pendingCount).toBe(2);
+
+    await syncEngine.publishCommissionerSnakeRoom(localRoom);
+
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(mockState.cloudRows.find((row) => row.id === "cloud-room-row")?.data).toEqual(localRoom);
+    expect(mockState.cloudRows.find((row) => row.id === "cloud-unrelated-row")?.data).toEqual({
+      eventId: "unrelated-stale-write",
+      result: "TRIPLE",
+    });
+  });
+
+  test("commissioner publication releases a second device from only its legacy embedded-board room write", async () => {
+    const leagueId = "league-second-device-recovery";
+    const roomId = `${leagueId}::startup-mlb-draft::1`;
+    const initialBoard = {
+      slots: {},
+      rankings: { global: ["player-old"] },
+      revision: 1,
+    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
+    const cloudRoom = {
+      id: roomId,
+      leagueId,
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-a" },
+        { round: 1, pick: 2, teamId: "team-b" },
+      ],
+      completedPicks: [],
+      currentPickIndex: 0,
+      seatBoards: { "team-a": initialBoard },
+      snakeSetup: {
+        poolPlayerIds: ["player-old", "player-new"],
+        versionSelections: {},
+        clubs: [
+          { teamId: "team-a", hotseat: false },
+          { teamId: "team-b", hotseat: true },
+        ],
+        orderSeed: "order",
+      },
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [{
+          claimId: "claim-phone",
+          claimVersion: 1,
+          deviceId: "phone-device",
+          gmName: "Alex",
+          teamId: "team-a",
+          status: "approved" as const,
+        }],
+      },
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:00:00.000Z",
+      revision: 2,
+    };
+    mockState.cloudRows = [
+      {
+        id: "cloud-second-device-room",
+        user_id: "user-1",
+        db_name: "kbl-league-builder",
+        store_name: "mlbDraftSessions",
+        record_key: JSON.stringify(roomId),
+        data: cloudRoom,
+        changed_at: 200,
+        received_at: "2026-07-17T12:00:00.000Z",
+        deleted: false,
+      },
+      {
+        id: "cloud-second-device-unrelated",
+        user_id: "user-1",
+        db_name: "kbl-event-log",
+        store_name: "atBatEvents",
+        record_key: JSON.stringify("unrelated-second-device"),
+        data: { eventId: "unrelated-second-device", result: "TRIPLE" },
+        changed_at: 201,
+        received_at: "2026-07-17T12:00:01.000Z",
+        deleted: false,
+      },
+    ];
+
+    // Companion device: pull the room, edit its private board, then reproduce
+    // the retired pre-Contract-42 whole-room board queue entry.
+    let syncEngine = await loadFreshSyncEngine();
+    let storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const companionRoom = await storage.patchMlbDraftSessionSeatBoard({
+      leagueId,
+      seasonNumber: 1,
+      teamId: "team-a",
+      expectedBoardRevision: 1,
+      board: {
+        ...initialBoard,
+        rankings: { global: ["player-new"] },
+        revision: 2,
+      },
+    });
+    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, companionRoom);
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "unrelated-second-device", {
+      eventId: "unrelated-second-device",
+      result: "SINGLE",
+    });
+    expect(syncEngine.getStatus().pendingCount).toBe(3);
+    syncEngine.destroy();
+    storage.__resetLeagueBuilderDatabaseForTests();
+    const companionLocalStorage = new Map<string, string>();
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (key !== null) companionLocalStorage.set(key, localStorage.getItem(key) ?? "");
+    }
+
+    // Hotseat device: it has the already-completed trade and publishes that
+    // exact room over the cloud row without seeing the companion's local queue.
+    localStorage.clear();
+    syncEngine = await loadFreshSyncEngine();
+    const publishedRoom = {
+      ...cloudRoom,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-b" },
+        { round: 1, pick: 2, teamId: "team-a" },
+      ],
+      trades: [{
+        id: "trade-second-device",
+        atPickIndex: 0,
+        humanTeamId: "team-a",
+        cpuTeamId: "team-b",
+        humanPickNumbers: [1],
+        cpuPickNumbers: [2],
+        humanValue: 100,
+        cpuValue: 100,
+        greedMargin: 0,
+      }],
+      lastModified: "2026-07-17T12:05:00.000Z",
+      revision: 4,
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-second-device",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    await syncEngine.publishCommissionerSnakeRoom(publishedRoom);
+    syncEngine.destroy();
+
+    // The unrelated cloud row also advances. Recovery must not clear that
+    // companion-side pending write while adopting the published room.
+    const unrelatedCloud = mockState.cloudRows.find((row) => row.id === "cloud-second-device-unrelated")!;
+    unrelatedCloud.data = { eventId: "unrelated-second-device", result: "DOUBLE" };
+    unrelatedCloud.changed_at = 999_999;
+    unrelatedCloud.received_at = "2099-07-17T12:06:00.000Z";
+
+    // Return to the companion device with its original durable queue and local
+    // private board. Its normal poll must retire only the legacy room op.
+    localStorage.clear();
+    for (const [key, value] of companionLocalStorage) localStorage.setItem(key, value);
+    syncEngine = await loadFreshSyncEngine();
+    storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    await syncEngine.pull({ throwOnError: true });
+
+    const recovered = await storage.getMlbDraftSession(leagueId, 1);
+    expect(recovered?.pickOrder).toEqual(publishedRoom.pickOrder);
+    expect(recovered?.trades).toEqual(publishedRoom.trades);
+    expect(recovered?.seatBoards?.["team-a"].rankings.global).toEqual(["player-new"]);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(mockState.cloudRows.find((row) => row.id === "cloud-second-device-unrelated")?.data).toEqual({
+      eventId: "unrelated-second-device",
+      result: "DOUBLE",
+    });
+    syncEngine.destroy();
+    storage.__resetLeagueBuilderDatabaseForTests();
+  });
+
+  test("commissioner publication does not discard an unpublished companion pick request", async () => {
+    const leagueId = "league-recovery-unpublished-request";
+    const roomId = `${leagueId}::startup-mlb-draft::1`;
+    const initialBoard = {
+      slots: {},
+      rankings: { global: ["player-old"] },
+      revision: 1,
+    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
+    const baseRoom = {
+      id: roomId,
+      leagueId,
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [],
+      currentPickIndex: 0,
+      seatBoards: { "team-a": initialBoard },
+      snakeSetup: {
+        poolPlayerIds: ["player-old", "player-new"],
+        versionSelections: {},
+        clubs: [{ teamId: "team-a", hotseat: false }],
+        orderSeed: "order",
+      },
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [{
+          claimId: "claim-phone",
+          claimVersion: 1,
+          deviceId: "phone-device",
+          gmName: "Alex",
+          teamId: "team-a",
+          status: "approved" as const,
+        }],
+      },
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:00:00.000Z",
+      revision: 2,
+    };
+    mockState.cloudRows = [{
+      id: "cloud-unpublished-request-room",
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(roomId),
+      data: baseRoom,
+      changed_at: 200,
+      received_at: "2026-07-17T12:00:00.000Z",
+      deleted: false,
+    }];
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+    const companionRoom = await storage.patchMlbDraftSessionSeatBoard({
+      leagueId,
+      seasonNumber: 1,
+      teamId: "team-a",
+      expectedBoardRevision: 1,
+      board: {
+        ...initialBoard,
+        rankings: { global: ["player-new"] },
+        revision: 2,
+      },
+    });
+    const queuedWithRequest = {
+      ...companionRoom,
+      snakeCompanions: {
+        ...companionRoom.snakeCompanions!,
+        pickRequest: {
+          id: "unpublished-request",
+          teamId: "team-a",
+          playerId: "player-new",
+          pick: 1,
+          submittedAt: companionRoom.lastModified,
+          deviceId: "phone-device",
+          claimId: "claim-phone",
+          sessionRevision: 2,
+        },
+      },
+      revision: 3,
+    };
+    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, queuedWithRequest);
+
+    const publishedRoom = {
+      ...baseRoom,
+      revision: 4,
+      lastModified: "2026-07-17T12:05:00.000Z",
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-without-request",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    mockState.cloudRows[0] = {
+      ...mockState.cloudRows[0],
+      data: publishedRoom,
+      changed_at: 500,
+      received_at: "2026-07-17T12:05:00.000Z",
+    };
+
+    await syncEngine.pull({ throwOnError: true });
+    await syncEngine.pull({ throwOnError: true });
+
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect((await storage.getMlbDraftSession(leagueId, 1))?.companionRoomPublication).toBeUndefined();
+    syncEngine.destroy();
+    storage.__resetLeagueBuilderDatabaseForTests();
+  });
+
+  test("commissioner publication does not resurrect an offer after an unpublished companion decline", async () => {
+    const leagueId = "league-recovery-unpublished-decline";
+    const roomId = `${leagueId}::startup-mlb-draft::1`;
+    const initialBoard = {
+      slots: {},
+      rankings: { global: ["player-old"] },
+      revision: 1,
+    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
+    const openOffer = {
+      id: "offer-unpublished-decline",
+      phase: "MLB" as const,
+      buyerTeamId: "team-a",
+      sellerTeamId: "team-b",
+      targetPick: 2,
+      offerPickNumbers: [1],
+      receivePickNumbers: [2],
+      offerValue: 100,
+      receiveValue: 100,
+      sellerPremium: 0,
+      postedSessionRevision: 1,
+      buyerNod: true,
+      sellerNod: false,
+      postedAt: "2026-07-17T12:00:00.000Z",
+    };
+    const baseRoom = {
+      id: roomId,
+      leagueId,
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [
+        { round: 1, pick: 1, teamId: "team-a" },
+        { round: 1, pick: 2, teamId: "team-b" },
+      ],
+      completedPicks: [],
+      currentPickIndex: 0,
+      seatBoards: { "team-a": initialBoard },
+      snakeSetup: {
+        poolPlayerIds: ["player-old", "player-new"],
+        versionSelections: {},
+        clubs: [
+          { teamId: "team-a", hotseat: false },
+          { teamId: "team-b", hotseat: true },
+        ],
+        orderSeed: "order",
+      },
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [{
+          claimId: "claim-phone",
+          claimVersion: 1,
+          deviceId: "phone-device",
+          gmName: "Alex",
+          teamId: "team-a",
+          status: "approved" as const,
+        }],
+      },
+      openTradeOffers: [openOffer],
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:00:00.000Z",
+      revision: 2,
+    };
+    mockState.cloudRows = [{
+      id: "cloud-unpublished-decline-room",
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(roomId),
+      data: baseRoom,
+      changed_at: 200,
+      received_at: "2026-07-17T12:00:00.000Z",
+      deleted: false,
+    }];
+    const syncEngine = await loadFreshSyncEngine();
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    await syncEngine.pull({ throwOnError: true });
+
+    const declineClock = vi.spyOn(Date, "now").mockReturnValue(300);
+    const declined = await storage.respondApprovedCompanionTradeOffer({
+      leagueId,
+      seasonNumber: 1,
+      deviceId: "phone-device",
+      teamId: "team-a",
+      offerId: openOffer.id,
+      action: "DECLINE",
+    });
+    declineClock.mockRestore();
+    expect(declined.openTradeOffers).toEqual([]);
+    expect(declined.revision).toBe(3);
+
+    // A later ordinary board edit creates the same newer standalone-board
+    // evidence that exposed the false-positive retirement in audit.
+    const boardClock = vi.spyOn(Date, "now").mockReturnValue(400);
+    await storage.patchMlbDraftSessionSeatBoard({
+      leagueId,
+      seasonNumber: 1,
+      teamId: "team-a",
+      expectedBoardRevision: 1,
+      board: {
+        ...initialBoard,
+        rankings: { global: ["player-new"] },
+        revision: 2,
+      },
+    });
+    boardClock.mockRestore();
+
+    const publishedRoom = {
+      ...baseRoom,
+      revision: 4,
+      lastModified: "2026-07-17T12:05:00.000Z",
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-with-still-open-offer",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    mockState.cloudRows[0] = {
+      ...mockState.cloudRows[0],
+      data: publishedRoom,
+      changed_at: 500,
+      received_at: "2026-07-17T12:05:00.000Z",
+    };
+
+    await syncEngine.pull({ throwOnError: true });
+    await syncEngine.pull({ throwOnError: true });
+
+    const stillDeclined = await storage.getMlbDraftSession(leagueId, 1);
+    expect(stillDeclined?.openTradeOffers).toEqual([]);
+    expect(stillDeclined?.companionRoomPublication).toBeUndefined();
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    syncEngine.destroy();
+    storage.__resetLeagueBuilderDatabaseForTests();
+  });
+
+  test("commissioner room recovery fails closed and retains the pending room write when the atomic publish is rejected", async () => {
+    const room = {
+      id: "league-recovery-fail::startup-mlb-draft::1",
+      leagueId: "league-recovery-fail",
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [],
+      currentPickIndex: 0,
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:05:00.000Z",
+      revision: 4,
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-hotseat-recovery-fail",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    mockState.cloudRows = [{
+      id: "cloud-room-fail-row",
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(room.id),
+      data: { ...room, revision: 2 },
+      changed_at: 200,
+      received_at: "2026-07-17T12:00:00.000Z",
+      deleted: false,
+    }];
+    const syncEngine = await loadFreshSyncEngine();
+    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", room.id, room);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    mockState.nextRpcResponse = {
+      table: "kbl_stores",
+      data: [{ row_index: 0, status: "skipped" }],
+    };
+
+    await expect(syncEngine.publishCommissionerSnakeRoom(room)).rejects.toThrow(/rejected|stale/i);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(mockState.cloudRows[0].data).toEqual(expect.objectContaining({ revision: 2 }));
+  });
+
+  test("commissioner room recovery refuses to overwrite unseen cloud companion activity", async () => {
+    const roomId = "league-recovery-cloud-intent::startup-mlb-draft::1";
+    const approvedClaim = {
+      claimId: "claim-cloud-intent",
+      claimVersion: 1,
+      deviceId: "phone-device",
+      gmName: "Alex",
+      teamId: "team-a",
+      status: "approved" as const,
+    };
+    const cloudRoom = {
+      id: roomId,
+      leagueId: "league-recovery-cloud-intent",
+      seasonNumber: 1,
+      seed: "seed",
+      workflowVersion: "snake-v2",
+      engineMethodVersion: "snake-v2",
+      tier: "standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [],
+      currentPickIndex: 0,
+      snakeSetup: {
+        poolPlayerIds: ["player-requested"],
+        versionSelections: {},
+        clubs: [{ teamId: "team-a", hotseat: false }],
+        orderSeed: "order",
+      },
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [approvedClaim],
+        pickRequest: {
+          id: "cloud-only-request",
+          teamId: "team-a",
+          playerId: "player-requested",
+          pick: 1,
+          submittedAt: "2026-07-17T12:04:00.000Z",
+          deviceId: "phone-device",
+          claimId: "claim-cloud-intent",
+          sessionRevision: 2,
+        },
+      },
+      createdDate: "2026-07-17T12:00:00.000Z",
+      lastModified: "2026-07-17T12:04:00.000Z",
+      revision: 3,
+    };
+    const localRoom = {
+      ...cloudRoom,
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [approvedClaim],
+      },
+      lastModified: "2026-07-17T12:05:00.000Z",
+      revision: 4,
+      companionRoomPublication: {
+        formatVersion: "snake-companion-room-publication-v1" as const,
+        publicationId: "publication-missing-cloud-intent",
+        supersedesRevision: 3,
+        publishedRevision: 4,
+        publishedAt: "2026-07-17T12:05:00.000Z",
+      },
+    };
+    mockState.cloudRows = [{
+      id: "cloud-room-with-unseen-intent",
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(roomId),
+      data: cloudRoom,
+      changed_at: 300,
+      received_at: "2026-07-17T12:04:00.000Z",
+      deleted: false,
+    }];
+    const syncEngine = await loadFreshSyncEngine();
+
+    await expect(syncEngine.publishCommissionerSnakeRoom(localRoom)).rejects.toThrow(
+      /new companion activity/i,
+    );
+    expect(mockState.cloudRows[0].data).toEqual(cloudRoom);
+  });
+
   test("equal-millisecond writes advance with a monotonic timestamp instead of skipping forever", async () => {
     localStorage.setItem("kbl-sync-device-id", "device-equal-ms");
     mockState.cloudRows = [

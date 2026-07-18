@@ -7760,3 +7760,25 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   **APPROVE — Major 0 / Minor 0**. JK's one-trade/one-pick/one-board-move companion retest remains.
   Implementation commit: `960bac2f`. Fresh `origin/main`: `ba7f97d6`; no push, merge, deploy, or
   product acceptance.
+
+## 2026-07-17 — FINDING-236: recover the already-stuck companion room
+
+- JK hard-refreshed the existing Hotseat and companions after FINDING-235, but companions stayed on
+  their old pick order while Hotseat visibly retained the completed trade.
+- Proved this is the pre-repair stale room row: new actions now publish correctly, but refresh cannot
+  safely reinterpret an already-rejected queued write as authority.
+- Added explicit Hotseat `SYNC COMPANIONS`. It revision-guards and marks the exact current room,
+  atomically republishes only that room against its exact current cloud base, verifies the cloud
+  payload, and retires only the matching stale queue entry. Unrelated pending data is untouched.
+- The first separate audit blocked the Hotseat-only draft: an affected companion's own legacy
+  whole-room queue would still reject the publication forever. The repaired path carries explicit
+  commissioner authority and retires only a legacy embedded-board write proven by the independent
+  board row and absence of unpublished companion intent.
+- The next audit pass found that Hotseat publication could overwrite companion intent already in the
+  exact current cloud row. Publish now fails closed unless that cloud-side intent is represented.
+- Combined affected proof is 9 files / 250 tests. The two-device regression preserves the private
+  board and unrelated pending write while adopting the trade; negative regressions preserve an
+  unpublished pick request/decline and cloud-side request. Final TypeScript/lint/build/diff and the
+  separate re-audit are green. The auditor returned **APPROVE — Major 0 / Minor 0**.
+- Fresh `origin/main`: `ba7f97d6`. JK's same-room recovery click remains. No new
+  draft, repeated trade, push, merge, deploy, or product acceptance.

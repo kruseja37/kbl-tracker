@@ -452,6 +452,19 @@ export interface SnakeRoomLogRecord {
   expired?: boolean;
 }
 
+/**
+ * Explicit Hotseat authority for recovering companions from the retired
+ * whole-room board writer. This marker is additive and room-scoped; ordinary
+ * cloud pulls never receive permission to discard a pending room write.
+ */
+export interface SnakeCompanionRoomPublication {
+  formatVersion: 'snake-companion-room-publication-v1';
+  publicationId: string;
+  supersedesRevision: number;
+  publishedRevision: number;
+  publishedAt: string;
+}
+
 export interface SnakeDraftCorrectionSnapshot {
   action: 'pick' | 'trade';
   /** Full pre-action value, excluding an older correction window by construction. */
@@ -648,6 +661,8 @@ export interface LeagueBuilderMlbDraftSession {
       sessionRevision: number;
     };
   };
+  /** Hotseat-issued recovery authority for legacy companion room queues. */
+  companionRoomPublication?: SnakeCompanionRoomPublication;
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
   /** Monotonic session revision used to reject stale guide packages at execution. */

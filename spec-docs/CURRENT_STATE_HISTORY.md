@@ -1324,3 +1324,21 @@ walk advanced through a legal trade, where Hotseat changed pick ownership but co
 FINDING-235 separates private-board sync from shared room authority and forces completed Hotseat
 picks, trades, and corrections to publish immediately. The separate audit approved the repaired
 frozen diff with Major 0 / Minor 0; JK's same-room retest remains and no new draft is required.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 existing-room companion recovery build
+
+The prior live header recorded independently approved FINDING-235 and asked JK to refresh the same
+room. That refresh loaded the new code but could not retroactively publish the already-rejected
+pre-repair Hotseat trade. FINDING-236 adds a one-record, explicit Hotseat republication path; the
+existing draft remains authoritative and no action should be repeated.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion-side legacy queue repair
+
+The prior live header recorded a Hotseat-only one-room republication path. The separate auditor
+blocked it because companions with the retired embedded-board whole-room queue would reject the
+publication forever. FINDING-236 now includes explicit room-scoped commissioner authority and a
+narrow companion adoption path that preserves independent boards, unrelated queues, and unpublished
+intent. The initial 248-test builder matrix and TypeScript passed before the offer-absence audit edge;
+the repaired 249-test matrix passed before the current-cloud intent edge. The 250-test repair adds
+that exact check. Final TypeScript, changed-file lint, production build/PWA, diff integrity, and the
+separate re-audit are green; JK's same-room recovery click remains.

@@ -693,3 +693,33 @@ trade, privacy, financial, and board laws.
 live-open board-revision repair. Independent gates passed 8 focused files / 230 tests, TypeScript,
 changed-file ESLint, the 2,730-module production build/PWA, and diff integrity. JK's same-room
 one-trade, one-pick, and one-companion-board-move walk remains the product gate.
+
+### FINDING-236
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / existing-room companion recovery | **Status:** FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING
+**Files:** `src/utils/syncEngine.ts`, `src/utils/leagueBuilderStorage.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`, focused sync/companion tests
+**Evidence:** JK refreshed every open device after FINDING-235, but companions still showed the old
+pick order. The Hotseat visibly retained the completed trade. Contract 42 prevents new stale room
+writes; it cannot retroactively publish a Hotseat room whose older queued write was already rejected
+against the cloud row. An ordinary refresh correctly preserves that local room instead of silently
+overwriting either side.
+**Impact:** Starting a new draft would discard valid progress, while repeating the trade could create
+a duplicate or contradictory room. Full-cloud upload is much broader than the failed record and is
+not an acceptable recovery.
+**Action:** Add explicit Hotseat `SYNC COMPANIONS`. It revision-guards and marks only the current
+room, then atomically republishes that exact `mlbDraftSessions` record using its current cloud
+`received_at/id` as the one-record write base. The result is re-read and content-verified before
+success. On affected companions, only a superseded legacy whole-room write with matching independent
+board evidence and no unpublished claim, pick request, offer, pick, or trade is retired. Normal
+conflicts and unrelated queues remain intact.
+**Audit correction:** The first non-builder audit blocked the Hotseat-only implementation because a
+companion's own pre-Contract-42 whole-room queue would still reject the republished row on every
+poll. The repair adds explicit room-scoped publication authority plus a second-device regression.
+**Builder verification:** The combined affected matrix passes 9 files / 250 tests. The exact
+second-device reproduction adopts the trade and pick order, preserves the private board, and retains
+an unrelated pending write; negative tests preserve an unpublished pick request and trade decline,
+and refuse to overwrite a newer cloud-side companion request.
+TypeScript, changed-file ESLint, the 2,730-module production build/PWA, and diff integrity are green.
+The separate non-builder auditor returned **APPROVE — Major 0 / Minor 0** after independently checking
+the exact-cloud intent guard, atomic write base, post-write verification, marker-backed queue
+retirement, rollback on queue-persistence failure, and the Hotseat control. JK's same-room click
+remains the product gate.
