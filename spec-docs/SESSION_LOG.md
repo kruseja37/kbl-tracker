@@ -2,6 +2,21 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — non-destructive recovery built; audit pending
+
+JK opened Cloud Sync on the exact Snake preview and exposed a new operational blocker: 1,398
+pending writes plus quota failures for queue and write-base persistence. The queue is product truth
+and cannot be cleared. The per-row write-base store is rebuildable receipt cache and had never been
+pruned after the pull cursor covered it.
+
+FINDING-240 / contract `SNAKE-SYNC-QUOTA-RECOVERY-47` adds one quota-only `FREE SPACE + SYNC`
+path. It removes only the persisted derived bases, preserves every queued/IndexedDB/cloud record,
+drains via existing atomic writes, pulls current cloud truth, and prunes cursor-covered overrides.
+Upload and Download replacement are untouched. Builder gates: 122/122 focused tests, TypeScript,
+changed-file ESLint, 2,735-module production/PWA build, and diff integrity. Next: freeze for a
+separate read-only audit, then JK signs in if necessary and clicks the recovery once. No push,
+merge, or deploy.
+
 ## 2026-07-18 (Codex, Snake rating room) — independently approved; JK walk remains
 
 Frozen commit `a036b839` received **APPROVE — Major 0 / Minor 0** from the separate read-only

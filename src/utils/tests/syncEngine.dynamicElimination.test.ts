@@ -3671,6 +3671,48 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     );
   });
 
+  test("quota recovery evicts only rebuildable bases and drains every queued record", async () => {
+    const syncEngine = await loadFreshSyncEngine();
+    localStorage.setItem("kbl-sync-store-write-bases", JSON.stringify([
+      ["derived-base", { receivedAt: "2026-07-18T00:00:00.000Z", id: "derived-row" }],
+    ]));
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && this.getItem("kbl-sync-store-write-bases")) {
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "quota-recovery-1", {
+      eventId: "quota-recovery-1",
+      result: "SINGLE",
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "quota-recovery-2", {
+      eventId: "quota-recovery-2",
+      result: "DOUBLE",
+    });
+
+    expect(syncEngine.getStatus()).toEqual(expect.objectContaining({
+      state: "error",
+      pendingCount: 2,
+      error: expect.stringContaining("exceeded the quota"),
+    }));
+
+    await syncEngine.recoverQuotaBlockedQueue();
+
+    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(mockState.cloudRows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ record_key: JSON.stringify("quota-recovery-1"), deleted: false }),
+      expect.objectContaining({ record_key: JSON.stringify("quota-recovery-2"), deleted: false }),
+    ]));
+    expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+  });
+
   test("strict incremental store flush rejects when accepted write bases cannot be persisted", async () => {
     const syncEngine = await loadFreshSyncEngine();
     const originalSetItem = Storage.prototype.setItem;

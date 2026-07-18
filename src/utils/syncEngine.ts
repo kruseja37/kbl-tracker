@@ -1246,6 +1246,36 @@ class SyncEngine {
     }
   }
 
+  /**
+   * Recover an otherwise-valid queue when rebuildable write-base caches and
+   * the durable queue together exceed the browser's localStorage quota.
+   *
+   * The queued operations remain in memory and in their source IndexedDB
+   * stores. Only the derived conflict-base cache is evicted; a successful
+   * drain and pull rebuild the current bases from cloud receipt truth.
+   */
+  async recoverQuotaBlockedQueue(): Promise<void> {
+    const persistenceError = this.writeBasePersistenceError ?? this.queuePersistenceError;
+    if (!persistenceError || !this.isStorageQuotaError(persistenceError)) {
+      await this.flush({ throwOnPending: true });
+      return;
+    }
+
+    const previousWriteBaseError = this.writeBasePersistenceError;
+    try {
+      localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
+      localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+    } catch (error) {
+      throw new Error(
+        `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
+    this.writeBasePersistenceError = null;
+    if (this._error === previousWriteBaseError) this._error = null;
+    await this.flush({ throwOnPending: true });
+  }
+
   // ============================================================
   // Public API — Status
   // ============================================================
@@ -1816,6 +1846,12 @@ class SyncEngine {
     // Save only the safe cursor. Queued local conflicts act as a cursor barrier
     // so future-dated stale cloud rows cannot hide later normal rows.
     await this.saveCursor();
+
+    // Once the pull cursor reaches an accepted write, its per-row override is
+    // redundant. Keeping every historical override indefinitely can crowd the
+    // same browser quota needed by the offline queue during large imports.
+    this.pruneWriteBaseOverridesAtOrBeforeCursor();
+    this.persistWriteBaseOverrides();
 
     if (!this.queuePersistenceError && !this.writeBasePersistenceError) {
       this._error = null;
@@ -4341,6 +4377,26 @@ class SyncEngine {
       this._error = message;
       return false;
     }
+  }
+
+  private pruneWriteBaseOverridesAtOrBeforeCursor(): void {
+    for (const [identity, override] of this.storeWriteBaseOverrides) {
+      if (!this.isStoreOverrideAfterCursor(override, this.cursor)) {
+        this.storeWriteBaseOverrides.delete(identity);
+      }
+    }
+    for (const [key, override] of this.localWriteBaseOverrides) {
+      if (!this.isLocalOverrideAfterCursor(override, this.cursor)) {
+        this.localWriteBaseOverrides.delete(key);
+      }
+    }
+  }
+
+  private isStorageQuotaError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('quota') || (
+      normalized.includes('storage') && normalized.includes('exceed')
+    );
   }
 
   private rememberStoreWriteBaseOverrides(bases: Map<string, { receivedAt: string; id: string }>): void {

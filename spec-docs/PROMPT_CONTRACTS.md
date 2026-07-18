@@ -32626,3 +32626,28 @@ archetype-adjusted rating limit before or after tax begins.
 archetype-shifted caps; My/Assistant rendering; accumulated over-limit points and contributor truth;
 Mac/iPad no-overflow; full Snake regression, TypeScript, lint, production build, and a separate
 non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or deploy.
+
+## SNAKE-SYNC-QUOTA-RECOVERY-47
+
+**Goal:** Recover a legitimate large pending sync queue from browser quota pressure without choosing
+local or cloud as a whole-side winner and without deleting product truth.
+
+**Frozen law:**
+
+- `kbl-sync-queue` and its in-memory operations are authoritative pending mutations and must never
+  be cleared as quota recovery.
+- Per-row write-base overrides are rebuildable cloud-receipt metadata. Quota recovery may remove
+  only their persisted cache while retaining in-memory bases for the current drain.
+- Recovery drains the exact queue through the existing atomic incremental write path, then pulls
+  cloud receipt truth. It never invokes full Upload or Download replacement.
+- Overrides at or before the safe pull cursor are redundant and must be pruned so the cache cannot
+  grow without bound.
+- The special action is exposed only for a quota-class persistence failure. Every other sync error
+  retains existing fail-closed behavior.
+- No league, player, draft, auth, IndexedDB, localStorage product key, cloud row, conflict law,
+  queue coalescing, or Supabase schema/RLS behavior changes.
+
+**Required proof:** direct quota reproduction and complete queue drain; no Upload/Download call;
+ordinary sync regression; stale-write/conflict suite; TypeScript; changed-file lint; production/PWA
+build; separate non-builder audit; JK's live recovery remains the product gate. No push, merge, or
+deploy.

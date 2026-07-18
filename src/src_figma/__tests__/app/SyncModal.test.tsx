@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   pull: vi.fn(),
   init: vi.fn(),
   flush: vi.fn(),
+  recoverQuotaBlockedQueue: vi.fn(),
   auth: {
     user: { email: "scorekeeper@example.com" } as { email: string } | null,
     isAuthenticated: true,
@@ -48,6 +49,7 @@ vi.mock("../../../utils/syncEngine", () => ({
     getDiagnostics: mocks.getDiagnostics,
     init: mocks.init,
     flush: mocks.flush,
+    recoverQuotaBlockedQueue: mocks.recoverQuotaBlockedQueue,
   },
 }));
 
@@ -83,9 +85,11 @@ describe("SyncModal diagnostics status", () => {
     mocks.signIn.mockReset();
     mocks.init.mockReset();
     mocks.flush.mockReset();
+    mocks.recoverQuotaBlockedQueue.mockReset();
     mocks.pull.mockReset();
     mocks.init.mockResolvedValue(undefined);
     mocks.flush.mockResolvedValue(undefined);
+    mocks.recoverQuotaBlockedQueue.mockResolvedValue(undefined);
     mocks.pull.mockResolvedValue(undefined);
     mocks.auth.user = { email: "scorekeeper@example.com" };
     mocks.auth.isAuthenticated = true;
@@ -150,6 +154,23 @@ describe("SyncModal diagnostics status", () => {
       expect(mocks.flush).toHaveBeenCalled();
       expect(mocks.pull).toHaveBeenCalled();
     });
+  });
+
+  test("recovers a quota-blocked queue without invoking destructive upload or download", async () => {
+    mocks.syncStatus.pendingCount = 1398;
+    mocks.syncStatus.error = "Sync queue persistence failed: Setting the value exceeded the quota.";
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "FREE SPACE + SYNC" }));
+
+    await waitFor(() => {
+      expect(mocks.recoverQuotaBlockedQueue).toHaveBeenCalledTimes(1);
+      expect(mocks.pull).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.flush).not.toHaveBeenCalled();
+    expect(mocks.replaceCloudWithLocal).not.toHaveBeenCalled();
+    expect(mocks.replaceLocalWithCloud).not.toHaveBeenCalled();
   });
 
   test("confirmed upload replaces the existing cloud snapshot", async () => {

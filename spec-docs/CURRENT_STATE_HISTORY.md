@@ -1429,3 +1429,11 @@ and Asst GM Board; broad Snake proof was 628/628 and browser proof was 23/23. It
 non-builder audit and JK's clean browser walk remained. The auditor has now returned APPROVE with
 Major 0 / Minor 0; only JK's product-acceptance walk remains. No push, merge, or deploy was
 authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
+
+The prior live header recorded independent approval of the exact 2,001-card eight-team setup and
+Rating Room, with only JK's browser walk remaining. JK's first return to the exact preview exposed
+1,398 pending sync writes plus browser quota failures for both the durable queue and conflict-base
+cache. The new live header records the narrow, non-destructive recovery and its separate audit as
+the next engineering gate. No push, merge, or deploy was authorized.

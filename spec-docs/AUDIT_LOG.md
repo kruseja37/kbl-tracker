@@ -4,6 +4,18 @@
 
 ---
 
+### 2026-07-18 — FINDING-240 sync-quota recovery builder close
+
+JK's exact preview showed 1,398 pending writes and quota failures persisting both `kbl-sync-queue`
+and `kbl-sync-store-write-bases`. The queue holds legitimate local mutations; the write-base map is
+derived cloud-receipt cache. The builder repair exposes `FREE SPACE + SYNC` only for quota-class
+persistence failures. It evicts only the persisted derived bases, retains every queued operation and
+source IndexedDB row, drains through the unchanged atomic path, then pulls and prunes bases already
+covered by the safe cursor. It never invokes full Upload/Download or clears product/auth/cloud data.
+Focused sync/UI proof is 122/122; TypeScript, changed-file ESLint, 2,735-module production/PWA
+build, and diff integrity are green. Separate non-builder audit and JK's one-click recovery remain.
+No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-239 exact rating room independently approved
 
 The separate non-builder auditor approved frozen rating-room commit `a036b839` with **Major 0 /

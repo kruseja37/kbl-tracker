@@ -921,3 +921,24 @@ compliance, responsive layout, and no new heavy data path. Independent proof pas
 tests, 17/17 responsive/privacy browser journeys, changed-file lint, TypeScript plus production/PWA
 build, diff integrity, and clean worktree. Engineering verification is closed; JK's browser walk
 remains the sole product gate. No push, merge, or deploy.
+
+### FINDING-240
+**Date:** 2026-07-18 | **Phase:** Cloud sync / large-import durability | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/utils/syncEngine.ts`, `src/src_figma/app/components/SyncModal.tsx`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`
+**Evidence:** JK's exact local preview reported 1,398 pending operations and browser quota failures
+for both `kbl-sync-queue` and `kbl-sync-store-write-bases`. The queue contains legitimate local
+mutations. The base map is derived conflict metadata, and accepted row overrides remained persisted
+even after the safe pull cursor made them redundant.
+**Impact:** Chrome could no longer durably update the queue or write bases. Generic Upload/Download
+would force an unnecessary and potentially destructive whole-side winner instead of preserving the
+exact pending mutations.
+**Action:** For quota-class persistence errors only, relabel the ordinary action `FREE SPACE +
+SYNC`. Remove only the persisted derived base caches, keep their in-memory values and every queued
+operation/source row, drain through the unchanged atomic incremental path, pull cloud receipt truth,
+and prune overrides at or before the safe cursor. Never clear the queue, product storage, auth, or
+cloud; never call full replacement from this recovery.
+**Builder result:** The direct recovery regression proves two queued records survive the quota
+failure, reach cloud, and leave no queue residue. The modal regression proves the quota-only action
+calls recovery and never Upload/Download. Focused sync/UI proof is 122/122; TypeScript,
+changed-file ESLint, the 2,735-module production/PWA build, and diff integrity are green. Separate
+audit and JK's live one-click recovery remain. No push, merge, or deploy.
