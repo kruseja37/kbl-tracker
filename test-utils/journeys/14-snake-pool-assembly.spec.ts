@@ -86,6 +86,35 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   expect(size.scrollWidth, JSON.stringify(size.offenders)).toBeLessThanOrEqual(size.clientWidth);
 }
 
+async function startMainThreadLatencyProbe(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const target = window as typeof window & {
+      __snakeLatencyProbe?: { last: number; maxGap: number; timer: number };
+    };
+    if (target.__snakeLatencyProbe) window.clearInterval(target.__snakeLatencyProbe.timer);
+    const startedAt = performance.now();
+    const probe = { last: startedAt, maxGap: 0, timer: 0 };
+    probe.timer = window.setInterval(() => {
+      const now = performance.now();
+      probe.maxGap = Math.max(probe.maxGap, now - probe.last);
+      probe.last = now;
+    }, 50);
+    target.__snakeLatencyProbe = probe;
+  });
+}
+
+async function readMainThreadMaxGap(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const target = window as typeof window & {
+      __snakeLatencyProbe?: { maxGap: number; timer: number };
+    };
+    const probe = target.__snakeLatencyProbe;
+    if (!probe) return Number.POSITIVE_INFINITY;
+    window.clearInterval(probe.timer);
+    return probe.maxGap;
+  });
+}
+
 for (const viewport of [
   { name: 'Mac', width: 1440, height: 1000 },
   { name: 'iPad landscape', width: 1024, height: 768 },
@@ -119,3 +148,101 @@ for (const viewport of [
     await expectNoHorizontalOverflow(page);
   });
 }
+
+test('Mac: combined SML, MLB, and Legends sources certify an eight-club Snake room', async ({ page }) => {
+  test.setTimeout(300_000);
+  const journeyStartedAt = Date.now();
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await page.evaluate(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const databases = await indexedDB.databases();
+    await Promise.all(databases.map((database) => new Promise<void>((resolve) => {
+      if (!database.name) return resolve();
+      const request = indexedDB.deleteDatabase(database.name);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    })));
+  });
+  await page.evaluate(async ({ leagueId, archetypes }) => {
+    const storage = await import('/src/utils/leagueBuilderStorage.ts');
+    const legends = await import('/src/utils/historicalLegendsImport.ts');
+    const tiers = await import('/src/data/tierParams.ts');
+    await storage.seedFromSMB4Database(true);
+    await storage.seedFromMLBDatabase(false);
+    await legends.seedHistoricalLegendsDatabase();
+    const source = await storage.getLeagueTemplate('sml');
+    if (!source) throw new Error('SMB4 source league did not seed.');
+    const teamIds = source.teamIds.slice(0, archetypes.length);
+    const teams = await storage.getAllTeams();
+    for (const [index, teamId] of teamIds.entries()) {
+      const team = teams.find((candidate) => candidate.id === teamId);
+      if (!team) throw new Error(`Seeded team ${teamId} is missing.`);
+      await storage.saveTeam({
+        ...team,
+        leagueIds: [...new Set([...(team.leagueIds ?? []), leagueId])],
+        mlbArchetypeKey: archetypes[index],
+        farmArchetypeKey: archetypes[(index + 1) % archetypes.length],
+      });
+    }
+    await storage.saveLeagueTemplate({
+      id: leagueId,
+      name: 'Large Source Snake Journey',
+      teamIds,
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+      draftPoolMode: 'pool-first',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      salaryCap: tiers.TIER_CAPS.standard.tierCap,
+      sourceLeagueIds: [
+        'sml',
+        'mlb',
+        'legends-library-draft',
+        'legends-library-career',
+        'legends-library-peak',
+      ],
+      snakeIncludeUnassignedSourcePlayers: true,
+      poolAssemblyMode: 'full-sources',
+      snakePoolSizeMultiplier: 1.35,
+    });
+  }, {
+    leagueId: 'e2e-snake-large-source',
+    archetypes: [...ARCHETYPES],
+  });
+  const seededAt = Date.now();
+
+  await page.goto('/league-builder/draft-setup?leagueId=e2e-snake-large-source');
+  const workerUrls: string[] = [];
+  page.on('worker', (worker) => workerUrls.push(worker.url()));
+  const assembly = page.getByTestId('snake-pool-assembly');
+  await expect(assembly).toBeVisible();
+  await expect(assembly.getByRole('button', { name: /FULL SOURCES.*2001/s })).toBeVisible();
+  await startMainThreadLatencyProbe(page);
+  await page.getByRole('button', { name: 'BUILD FULL SOURCES' }).click();
+  await expect(assembly).toContainText('2001 IN POOL', { timeout: 120_000 });
+  const fullSourcesMainThreadMaxGapMs = await readMainThreadMaxGap(page);
+  const fullBuiltAt = Date.now();
+
+  await assembly.getByRole('button', { name: /TIGHT.*212/s }).click();
+  await startMainThreadLatencyProbe(page);
+  await page.getByRole('button', { name: 'BUILD TIGHT POOL' }).click();
+  await expect(assembly).toContainText('212 IN POOL', { timeout: 120_000 });
+  const tightMainThreadMaxGapMs = await readMainThreadMaxGap(page);
+  expect(fullSourcesMainThreadMaxGapMs).toBeLessThan(1_000);
+  expect(tightMainThreadMaxGapMs).toBeLessThan(1_000);
+  await expectNoHorizontalOverflow(page);
+  console.info('SNAKE_LARGE_SOURCE_BROWSER', JSON.stringify({
+    seedMs: seededAt - journeyStartedAt,
+    fullSourcesMs: fullBuiltAt - seededAt,
+    tightMs: Date.now() - fullBuiltAt,
+    totalMs: Date.now() - journeyStartedAt,
+    fullSourcesMainThreadMaxGapMs,
+    tightMainThreadMaxGapMs,
+    workers: workerUrls,
+  }));
+});

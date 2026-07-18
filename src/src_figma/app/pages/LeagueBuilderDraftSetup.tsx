@@ -66,6 +66,7 @@ import { buildSnakeOrder, registerPool, shiftLuxuryCaps, type RegisteredPool } f
 import { archetypeToCapIdentity } from "../../../engines/archetypeIdentity";
 import { seededSnakeShuffle } from "../../../engines/snakeShuffle";
 import {
+  type SnakeSeatingAssignment,
   type SnakeSeatingProof,
 } from "../../../engines/snakeSeatingProof";
 import { buildBest22Target, type Best22Target } from "../../../engines/best22Target";
@@ -196,6 +197,7 @@ import {
   fingerprintSnakeSetupProofInput,
   useSnakeSetupProofClient,
 } from "../components/snake/setup/snakeSetupProofClient";
+import { runSnakePoolShape } from "../components/snake/setup/snakePoolShapeClient";
 import {
   BOARD_POSITION_DEPTH,
   BOARD_RANK_SAVE_DEBOUNCE_MS,
@@ -2852,25 +2854,25 @@ export function LeagueBuilderDraftSetup() {
     );
   }, [designFirstIdentityCriticalIds, humanTeams, isSnakeFormat, league, leagueTeams, lockedDesignPinPlayerIds, poolSizingMultiplier, universePlayers, poolQualityCenter, shills, tierBudget]);
 
-  const buildPoolFirstShapeResult = useCallback((
+  const buildPoolFirstShapeResult = useCallback(async (
     provenance: PoolProvenanceState,
     sizeMultiplier: number = poolGenerationMultiplier,
     identitySupportIds: readonly string[] = [],
-  ): PoolFromDemandResult => {
+  ): Promise<PoolFromDemandResult> => {
     if (!league) throw new Error("League not found.");
     const selectedArchetypes = leagueTeams
       .map((team) => HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === team.mlbArchetypeKey))
       .filter((archetype): archetype is (typeof HISTORICAL_ARCHETYPES)[number] => Boolean(archetype));
     const hardKeepSet = setUnion(provenance.seedProtectedIds, provenance.userAddedIds, new Set(rosterDesignPinPlayerIds));
     const hardKeepIds = sortedIds([...hardKeepSet]);
-    return extractPoolFromDemand(
+    const input = {
       // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2) — same filtered
       // input as buildModeAResult above; both extraction paths converge on this one seam.
-      demandUniverseFromPlayers(universePlayers),
-      [],
+      universe: demandUniverseFromPlayers(universePlayers),
+      designs: [],
       selectedArchetypes,
-      league.tier ?? "juiced",
-      {
+      tier: league.tier ?? "juiced",
+      options: {
         teams: league.teamIds.length,
         // Production pool-first shaping targets displayed league roster demand;
         // draft shills affect auction routing, not this source pool size.
@@ -2887,7 +2889,16 @@ export function LeagueBuilderDraftSetup() {
         preserveSelectedIdentityClaims: isSnakeFormat && identitySupportIds.length === 0,
         identitySupportIds: sortedIds(identitySupportIds),
       },
-    );
+    };
+    return isSnakeFormat
+      ? runSnakePoolShape(input)
+      : extractPoolFromDemand(
+          input.universe,
+          input.designs,
+          input.selectedArchetypes,
+          input.tier,
+          input.options,
+        );
   }, [isSnakeFormat, league, leagueTeams, poolGenerationMultiplier, universePlayers, poolBalancePreset, poolQualityCenter, poolSourceMode, rosterDesignPinPlayerIds, selectedTeamRosterIds, tierBudget]);
 
   useEffect(() => {
@@ -3466,7 +3477,7 @@ export function LeagueBuilderDraftSetup() {
       seedProtectedIds,
       generationNonce: Math.max(0, Math.floor(baseProvenance.generationNonce)),
     };
-    const result = preparedResult ?? buildPoolFirstShapeResult(normalizedProvenance);
+    const result = preparedResult ?? await buildPoolFirstShapeResult(normalizedProvenance);
     const resultIds = new Set(result.players.map((player) => player.id));
     const hardKeepIds = setUnion(normalizedProvenance.seedProtectedIds, normalizedProvenance.userAddedIds, pinnedHardKeepIds);
     const engineGeneratedIds = setDifference(resultIds, hardKeepIds);
@@ -3564,7 +3575,12 @@ export function LeagueBuilderDraftSetup() {
   const buildSelectedSnakePool = useCallback(async (buildProvenance: PoolProvenanceState) => {
       if (!league) return;
       const playerById = new Map(players.map((player) => [player.id, player]));
-      const proveCandidate = (candidateIds: readonly string[], candidateIvById: ReadonlyMap<string, number>) => {
+      const proveCandidate = (
+        candidateIds: readonly string[],
+        candidateIvById: ReadonlyMap<string, number>,
+        identityReferenceIds?: readonly string[],
+        identitySupportAssignments?: readonly SnakeSeatingAssignment[],
+      ) => {
         const candidatePool = registerPool({
           leagueId: league.id,
           tier: league.tier ?? "juiced",
@@ -3582,6 +3598,26 @@ export function LeagueBuilderDraftSetup() {
           teams: leagueTeams,
           players,
           pool: candidatePool,
+          ...(identityReferenceIds
+            ? {
+                identityReferencePool: registerPool({
+                  leagueId: league.id,
+                  tier: league.tier ?? "juiced",
+                  balanceMode: league.balanceMode ?? "taxed",
+                  totalSlots: league.teamIds.length * LEGAL_ROSTER.size,
+                  teamCount: league.teamIds.length,
+                  salaryCap: tierBudget,
+                  players: identityReferenceIds.map((id) => ({
+                    id,
+                    iv: ivById.get(id) ?? computePlayerIv(playerById.get(id)!),
+                    salary: playerById.get(id)?.salary ?? 0,
+                  })),
+                }),
+              }
+            : {}),
+          ...(identitySupportAssignments
+            ? { identitySupportAssignments }
+            : {}),
         });
         // A BUILD supersedes a different pre-lock proof, but joins an already-running identical
         // certificate rather than killing and repeating it.
@@ -3636,7 +3672,7 @@ export function LeagueBuilderDraftSetup() {
 
       const selectedIndex = SNAKE_POOL_COMPETITION_ORDER.indexOf(snakeCompetitionPreset);
       for (const preset of SNAKE_POOL_COMPETITION_ORDER.slice(Math.max(0, selectedIndex))) {
-        const result = buildPoolFirstShapeResult(
+        const result = await buildPoolFirstShapeResult(
           buildProvenance,
           SNAKE_POOL_COMPETITION_PRESETS[preset].multiplier,
           identitySupportIds,
@@ -3651,7 +3687,12 @@ export function LeagueBuilderDraftSetup() {
           ...hardKeepIds,
         ])]);
         const candidateIvById = new Map(result.players.map((player) => [player.id, player.iv]));
-        const proof = await proveCandidate(candidateIds, candidateIvById);
+        const proof = await proveCandidate(
+          candidateIds,
+          candidateIvById,
+          fullIds,
+          fullProof.assignments,
+        );
         const withinPresetBound = result.sizing == null
           || candidateIds.length <= result.sizing.effectiveTarget;
         if (proof.feasible && withinPresetBound) {
@@ -4911,7 +4952,7 @@ export function LeagueBuilderDraftSetup() {
               {snakeAdapter.proof?.shortfall?.reason === 'identity-proof-unknown' ? (
                 <div className="mt-2 text-xs font-bold text-[var(--ballpark-warn-text)]" role="status">
                   {poolAssemblyMode === 'full-sources'
-                    ? 'FULL SELECTED SOURCES COULD NOT CERTIFY EVERY CHOSEN IDENTITY TOGETHER. ADD OR CHANGE A DRAFT POOL SOURCE ABOVE.'
+                    ? 'FULL SOURCES IDENTITY CERTIFICATE UNRESOLVED. CHANGE ONE CLUB IDENTITY OR SOURCE.'
                     : 'THIS SHAPED POOL COULD NOT CERTIFY EVERY CHOSEN IDENTITY TOGETHER. BUILD AGAIN TO TRY THE NEXT WIDER POOL AND THEN THE FULL SELECTED SOURCES.'}
                 </div>
               ) : null}
@@ -4931,7 +4972,9 @@ export function LeagueBuilderDraftSetup() {
                 variant="affirm"
                 size="md"
               >
-                {poolAssemblyMode === "full-sources"
+                {busy
+                  ? "BUILDING…"
+                  : poolAssemblyMode === "full-sources"
                   ? "BUILD FULL SOURCES"
                   : `BUILD ${SNAKE_POOL_COMPETITION_PRESETS[snakeCompetitionPreset].label} POOL`}
               </PressButton>

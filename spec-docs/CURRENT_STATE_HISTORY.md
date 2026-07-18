@@ -1383,3 +1383,16 @@ The prior live header recorded the exact final-round version matcher, the semant
 repair, full 176-pick production proof, and final non-builder audit as the last engineering gate.
 That auditor has now returned APPROVE with Major 0 / Minor 0 at frozen commit `12efdbdf`; only JK's
 real eight-team browser walk remains.
+## 2026-07-18 — Large-source eight-team Snake setup repair built
+
+- Reproduced JK's setup failure with 2,001 exact SML/MLB/Legends cards and eight mixed identities;
+  confirmed more than 1,500 unique people for 176 picks, so raw scarcity was false.
+- Added bounded large-source identity construction while preserving immutable Full Sources as the
+  source-relative IV and embodiment reference and the existing independent SUCCESS validator.
+- Named 212/238/264 builds retain the exact 176-card Full Sources support, validate against the same
+  source, and skip only the now-redundant identity extraction.
+- Numeric shaping moved to a module worker. Mac Full/Tight main-thread gaps are 415/327 ms.
+- Large-source proof covers all 24 selectable identities in three eight-club rooms; the primary
+  certificate completes 176/176 picks. Snake UI/storage is 619/619, responsive browser 17/17, full
+  production lifecycle 1/1, pool assembly 3/3, latency 2/2, and the 2,735-module build is green.
+  Separate audit and JK's browser walk remain. No push, merge, or deploy.

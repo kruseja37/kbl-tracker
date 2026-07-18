@@ -97,6 +97,11 @@ async function seedSnakeLeague(page: Page): Promise<void> {
         const pitcher = ['SP', 'RP', 'CP'].includes(primaryPosition);
         const salary = 10_000;
         const iv = 18_000 + (poolIndex * 137) % 7_000;
+        const hitterRatings = setIndex === 0
+          ? { power: 82, contact: 76, speed: 32, fielding: 52 }
+          : setIndex === 1
+            ? { power: 28, contact: 58, speed: 82, fielding: 80 }
+            : { power: 55, contact: 55, speed: 55, fielding: 55 };
         const playerSeed: Parameters<typeof storage.savePlayer>[0] = {
           id,
           firstName: `Journey${setIndex + 1}`,
@@ -107,10 +112,10 @@ async function seedSnakeLeague(page: Page): Promise<void> {
           throws: 'R',
           primaryPosition,
           secondaryPosition: positionIndex === 8 ? 'C' : undefined,
-          power: pitcher ? 20 : 55,
-          contact: pitcher ? 20 : 55,
-          speed: 55,
-          fielding: 55,
+          power: pitcher ? 20 : hitterRatings.power,
+          contact: pitcher ? 20 : hitterRatings.contact,
+          speed: pitcher ? 55 : hitterRatings.speed,
+          fielding: pitcher ? 55 : hitterRatings.fielding,
           arm: 55,
           velocity: pitcher ? 55 : 0,
           junk: pitcher ? 55 : 0,

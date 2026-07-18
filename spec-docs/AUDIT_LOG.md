@@ -4,6 +4,17 @@
 
 ---
 
+### 2026-07-18 — FINDING-238 large-source Snake setup builder close
+
+Exact 2,001-card production sources reproduced a false `identity-proof-unknown` and a synchronous
+duplicate identity extraction. The bounded certificate now keeps Full Sources as immutable identity
+truth, named shaped pools retain its exact 176-card support, and numeric shaping runs off-thread.
+Builder proof is 176/176 picks, all 24 selectable identities on 2,001-card eight-club rooms, exact
+212/238/264 presets, 619/619 focused Snake UI/storage tests, complete production lifecycle, and
+responsive Mac/iPad browser builds. TypeScript, changed-file ESLint, 2,735-module production/PWA
+build, and diff integrity are green. Independent audit and JK's browser walk remain; no push, merge,
+or deploy.
+
 ## HOW TO READ THIS FILE
 
 - Findings are numbered sequentially: FINDING-001, FINDING-002, etc.

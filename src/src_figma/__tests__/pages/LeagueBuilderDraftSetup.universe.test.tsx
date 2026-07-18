@@ -536,7 +536,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    const fullSourceUnknown = /FULL SELECTED SOURCES COULD NOT CERTIFY.*ADD OR CHANGE A DRAFT POOL SOURCE/i;
+    const fullSourceUnknown = /FULL SOURCES IDENTITY CERTIFICATE UNRESOLVED.*CHANGE ONE CLUB IDENTITY OR SOURCE/i;
     expect(await screen.findByText(fullSourceUnknown)).toBeInTheDocument();
     expect(screen.queryByText(/THIS SHAPED POOL COULD NOT CERTIFY/i)).not.toBeInTheDocument();
 

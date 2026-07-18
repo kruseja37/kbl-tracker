@@ -2,6 +2,28 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, Snake large-source setup) — builder repair verified; audit pending
+
+JK's eight-team browser walk exposed a false setup blocker with nearly 2,000 source cards. The exact
+repro is 2,001 SML/MLB/Legends cards and more than 1,500 distinct people. It returned
+`identity-proof-unknown`; seven clubs already had valid identity rosters and the eighth missed only
+the strict source-relative embodiment construction. The same action redundantly ran all selected
+identity optimizers again inside synchronous pool shaping.
+
+FINDING-238 / contract `SNAKE-LARGE-SOURCE-CERTIFICATE-45` adds a deterministic large-source
+candidate union without changing small-source behavior or the final validator. Full Sources remains
+the immutable identity reference. Its exact disjoint assignments are retained by named shaped pools,
+whose membership and tax/identity truth are still independently checked. Duplicate identity
+extraction is skipped only with that receipt; numeric shaping now runs in a module worker.
+
+Builder proof: exact Full plus 212/238/264 presets, all 24 selectable identities across three
+2,001-card eight-club rooms, 176/176 trusted picks, eight distinct legal and solvent final rosters,
+and 619/619 focused Snake setup/room/companion/storage tests. Playwright is 17/17 responsive, 1/1
+complete production lifecycle, 3/3 pool assembly, and 2/2 Mac/iPad latency; worst large-build
+main-thread gaps are 415/327 ms. TypeScript, changed-file ESLint, 2,735-module production/PWA build,
+and diff integrity are green. Remaining: separate non-builder audit and JK's sole product-acceptance
+walk. No push, merge, or deploy.
+
 ## 2026-07-17 (Codex, Snake late-draft decision truth) — third audit repaired; final re-audit pending
 
 JK's first four-team full draft exposed a product-scale failure, not a four-team special case: the

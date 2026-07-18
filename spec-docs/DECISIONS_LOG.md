@@ -7,6 +7,17 @@
 
 ## July 2026
 
+### 2026-07-18 (Snake large-source law): source size cannot manufacture scarcity
+
+**The ruling:** Full Sources is immutable source truth, not the proof search space. A deterministic
+bounded candidate union may make large-source identity construction tractable, but final SUCCESS
+must still be rechecked against Full Sources for distinct people, legal 22s, exact tax, affordability,
+the existing IV floor, and strict positive chosen-identity embodiment. Named shaped pools retain the
+validated disjoint Full Sources support and remain bound by their existing counts and position floor.
+Once that support has been certified, the shaper must not rebuild the same identity claims; numeric
+shaping belongs off the UI thread. UNKNOWN stays honest, but visible copy may not call a 2,001-card
+source scarce without an actual source shortfall.
+
 ### 2026-07-17 (Snake late-draft law): exact legal completion outranks preference optimization at every room size
 
 **The ruling:** four-team testing is a repro size, not the product standard. A Snake room must preserve

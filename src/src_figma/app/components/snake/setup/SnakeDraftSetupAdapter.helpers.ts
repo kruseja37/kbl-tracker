@@ -16,6 +16,7 @@ import { snakeMoneyAffordable } from '../../../../../engines/snakeMoney';
 import {
   proveSimultaneousSnakeSeating,
   type SimultaneousSnakeSeatingInput,
+  type SnakeSeatingAssignment,
   type SnakeSeatingPlayer,
   type SnakeSeatingProof,
 } from '../../../../../engines/snakeSeatingProof';
@@ -155,6 +156,8 @@ export function buildSnakeSetupProofInput(input: {
   teams: readonly Team[];
   players: readonly Player[];
   pool: RegisteredPool;
+  identityReferencePool?: RegisteredPool;
+  identitySupportAssignments?: readonly SnakeSeatingAssignment[];
 }): SimultaneousSnakeSeatingInput {
   return {
     clubs: input.teams.map((team) => ({
@@ -165,6 +168,17 @@ export function buildSnakeSetupProofInput(input: {
       identityArchetype: identityArchetypeForTeam(team),
     })),
     pool: buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }),
+    ...(input.identityReferencePool
+      ? {
+          identityReferencePool: buildLockedSnakeSeatingPlayers({
+            players: input.players,
+            pool: input.identityReferencePool,
+          }),
+        }
+      : {}),
+    ...(input.identitySupportAssignments
+      ? { identitySupportAssignments: input.identitySupportAssignments }
+      : {}),
     baseCaps: input.pool.luxuryCaps,
     realTeamCount: input.teams.length,
     tier: input.pool.tier,

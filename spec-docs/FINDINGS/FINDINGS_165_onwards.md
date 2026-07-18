@@ -829,3 +829,36 @@ An 80-sample / 800 ms live trace kept all 20 safe rows continuously. Clean brows
 1.267 s, and pick-two reload 922 ms, with no console errors and the Assistant available. The full
 real-player oracle passes 8/8 including 176/176 picks; the non-production Snake matrix passes 609/609.
 Final non-builder audit and JK's walk remain open. No push, merge, or deploy.
+
+### FINDING-238
+**Date:** 2026-07-18 | **Phase:** Eight-team Snake Draft Setup / large selected sources | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/engines/snakeSeatingProof.ts`, `src/engines/poolFromDemand.ts`, `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`, `src/src_figma/app/components/snake/setup/snakePoolShapeClient.ts`, `src/src_figma/app/workers/snakePoolShape.worker.ts`, `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+**Evidence:** JK selected nearly 2,000 cards for an eight-team Snake room and Draft Setup still could
+not certify a pool. The exact production repro combines 506 SML cards, 660 MLB cards, and 835
+Draft/Career/Peak Legends cards: 2,001 cards and more than 1,500 distinct people for 176 picks. The
+old bounded proof returned `identity-proof-unknown` after roughly three minutes. Seven clubs were
+legal, solvent, and identity-positive; the final chosen identity missed only the source-relative
+strict-positive embodiment gate. The source was not scarce. Adding the large source also made the
+pool shaper synchronously rerun every club's identity optimizer after Full Sources had already been
+certified, which held the browser main thread.
+**Impact:** More source cards could make an otherwise valid room slower and eventually look
+impossible. Full Sources and named Tight/Competitive/Loose builds could leave the user waiting with
+misleading source advice even though 176 legal, affordable, identity-valid people existed.
+**Action:** For sources above the bounded small-source path, derive a deterministic room-scaled union
+of high-IV, high-fit, and affordable role candidates while retaining the immutable Full Sources
+population as the identity reference. Construct each chosen identity from whole-person version
+groups, permit a bounded strict-embodiment rescue, and allow SUCCESS only through the unchanged
+independent whole-room validator. Carry the exact disjoint Full Sources assignments into shaped
+builds; shaped membership must retain those 176 cards and remains independently validated against
+Full Sources. Skip the duplicate identity extraction only when that authoritative support receipt is
+present. Run numeric shaping in a module worker, never on the UI thread. Keep FIT thresholds, tax,
+caps, roster law, named counts, and honest UNKNOWN unchanged.
+**Builder result:** The real 2,001-card room now certifies Full Sources and completes all 176 trusted
+picks with eight distinct legal, solvent 22s. Tight/Competitive/Loose build exact 212/238/264 pools,
+retain all 176 support cards, and independently pass source-relative identity validation. Isolated
+large-source proof passes 3/3 in 101 seconds and covers all 24 selectable identities across three
+eight-club rooms. The Snake setup/room/companion/storage matrix passes 619/619. Playwright passes
+17/17 responsive, 1/1 complete production lifecycle, 3/3 pool assembly, and 2/2 Mac/iPad latency.
+Worst large-build main-thread gaps are 415/327 ms instead of an unresponsive page. TypeScript,
+changed-file ESLint, 2,735-module production/PWA build, and diff integrity are green. Separate audit
+and JK's real browser walk remain open. No push, merge, or deploy.

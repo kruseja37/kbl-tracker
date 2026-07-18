@@ -32550,3 +32550,36 @@ failure even if the eventual pick succeeds.
 received **APPROVE — Major 0 / Minor 0** from the separate non-builder auditor. The engineering gate
 is closed. JK's real eight-team browser walk remains the sole product-acceptance gate; no push,
 merge, or deploy is authorized.
+
+## SNAKE-LARGE-SOURCE-CERTIFICATE-45
+
+**Goal:** An eight-team Snake room with a large selected source union must be certified or rejected
+for its actual legal, money, version, and chosen-identity truth. Card count alone may not turn a
+feasible room into UNKNOWN or freeze Draft Setup.
+
+**Frozen product law:**
+
+- Full Sources remains the exact selected source union after hand adds/removes and hard keeps.
+- One historical person can supply at most one drafted version, but construction may choose the
+  version whose real role and ratings satisfy the roster and identity.
+- Chosen-identity FIT and its existing `>=1.04` / `<=0.96` labels remain unchanged and separate from
+  tax. Strict positive source-relative embodiment remains required for setup SUCCESS.
+- A large-source search may use a deterministic room-scaled candidate union, but the immutable Full
+  Sources population remains the IV-floor and identity-embodiment reference.
+- SUCCESS requires 176 distinct people for eight clubs, eight legal 22s, exact shifted-cap tax,
+  salary-plus-tax affordability, the 90% IV floor, and positive chosen-identity embodiment through
+  the existing independent validator. Bounded failure remains honest UNKNOWN.
+- Named Tight/Competitive/Loose membership must retain the exact disjoint Full Sources support,
+  satisfy the existing anti-hoarding position floor, stay inside 212/238/264 respectively, and pass
+  validation against immutable Full Sources. Auto-widen and persisted actual-mode law are unchanged.
+- Once Full Sources assignments have been validated, pool shaping may carry that exact support
+  receipt and must not rerun the same identity extraction. Numeric shaping runs off the UI thread.
+- Help-button law remains canon. Visible failure copy may name an unresolved identity certificate;
+  it may not call a 2,001-card source scarce without a proved source shortage.
+
+**Required proof:** Exact production SML + MLB + all three Legends libraries; Full plus all three
+named presets; all 176 picks advanced through the trusted certificate; independent final person,
+roster, salary, tax, money, and identity checks; Mac/iPad setup; main-thread latency; complete Snake
+setup/room/companion/storage regression; TypeScript, lint, production build, diff integrity; then a
+separate non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or
+deploy is authorized.

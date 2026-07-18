@@ -2098,10 +2098,28 @@ export function extractPoolFromDemand(
   }
 
   // 4. The archetype-feasibility floors + balance, from the SAME universe (C1B, audited).
-  const floors = extractDraftPool(universe, selectedArchetypes, tier, {
-    teams: options.teams,
-    budgetPerTeam: options.budgetPerTeam,
-  });
+  // A Snake shaped build can arrive with the exact disjoint ids from an already-validated
+  // Full Sources certificate. Re-running all selected identity optimizers here would merely
+  // reconstruct the same claim set before the final shaped pool is validated against that
+  // certificate. On large multi-source universes that duplicate work can hold the browser main
+  // thread for minutes, so carry the certified support as the floor receipt instead.
+  const certifiedIdentitySupport = requestedIdentitySupportIds.size > 0;
+  const floors: ExtractedPool = certifiedIdentitySupport
+    ? {
+        players: universe.filter((player) => requestedIdentitySupportIds.has(player.id)),
+        size: requestedIdentitySupportIds.size,
+        targetSize: requestedIdentitySupportIds.size,
+        claimedIds: [...requestedIdentitySupportIds].sort((a, b) => a.localeCompare(b)),
+        floorIds: [],
+        verdicts: [],
+        balanced: true,
+        repairRounds: 0,
+        notes: ['Full Sources identity certificate support retained; duplicate identity extraction skipped.'],
+      }
+    : extractDraftPool(universe, selectedArchetypes, tier, {
+        teams: options.teams,
+        budgetPerTeam: options.budgetPerTeam,
+      });
 
   // 5. Build the candidate seed. In legacy no-sizing mode this stays the historical
   // reservations + C1B floors union. In sizing mode the numeric shaper owns source selection
