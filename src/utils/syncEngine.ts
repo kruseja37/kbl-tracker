@@ -1257,6 +1257,11 @@ class SyncEngine {
     }
   }
 
+  private async flushForExpectedUser(expectedUserId: string): Promise<void> {
+    await this.drainQueue(expectedUserId, true);
+    await this.drainLocalQueue(expectedUserId, true);
+  }
+
   /**
    * Recover an otherwise-valid queue when rebuildable write-base caches and
    * the durable queue together exceed the browser's localStorage quota.
@@ -1270,95 +1275,97 @@ class SyncEngine {
       await this.flush({ throwOnPending: true });
       return;
     }
-    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
-    const { data: { session: recoverySession } } = await supabase.auth.getSession();
-    if (!recoverySession) throw new Error('Sync recovery failed: signed out during sync');
-    const recoveryUserId = recoverySession.user.id;
+    this.queueDrainsBlocked = true;
+    try {
+      await this.waitForQueueDrains();
+      if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+      const { data: { session: recoverySession } } = await supabase.auth.getSession();
+      if (!recoverySession) throw new Error('Sync recovery failed: signed out during sync');
+      const recoveryUserId = recoverySession.user.id;
 
-    const releasePersistedBases = () => {
-      const previousWriteBaseError = this.writeBasePersistenceError;
-      try {
-        localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
-        localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
-      } catch (error) {
-        throw new Error(
-          `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-      this.writeBasePersistenceError = null;
-      if (this._error === previousWriteBaseError) this._error = null;
-    };
+      const releasePersistedBases = () => {
+        const previousWriteBaseError = this.writeBasePersistenceError;
+        try {
+          localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
+          localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+        } catch (error) {
+          throw new Error(
+            `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        this.writeBasePersistenceError = null;
+        if (this._error === previousWriteBaseError) this._error = null;
+      };
 
-    releasePersistedBases();
-    this.quotaRecoveryContinuationRequired = true;
-    this.protectedConflictSummaries = [];
-
-    // A large restored queue can be concurrently draining when recovery
-    // begins, or a transient batch can fail while later batches succeed. Keep
-    // making bounded progress, evicting only the rebuildable persisted bases
-    // between passes. Two consecutive no-progress passes stop safely instead
-    // of looping on a genuine stale-write conflict.
-    let pendingCount = this.getPendingOperationCount();
-    let stagnantPasses = 0;
-    for (let pass = 0; pass < 20 && pendingCount > 0; pass += 1) {
-      const before = pendingCount;
-      await this.flush();
-      pendingCount = this.getPendingOperationCount();
-      if (!this.persistQueues()) {
-        throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the remaining queue.');
-      }
-      if (pendingCount === 0) break;
       releasePersistedBases();
-      stagnantPasses = pendingCount < before ? 0 : stagnantPasses + 1;
-      if (stagnantPasses >= 2) break;
-    }
-
-    if (pendingCount > 0) {
-      this.queueDrainsBlocked = true;
-      let reconciliation: Awaited<ReturnType<SyncEngine['retireQueuedOpsAlreadyInCloud']>>;
-      try {
-        await this.waitForQueueDrains();
-        reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
-      } finally {
-        this.queueDrainsBlocked = false;
+      this.quotaRecoveryContinuationRequired = true;
+      this.protectedConflictSummaries = [];
+      if (!this.persistQueues()) {
+        throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the protected queue.');
       }
-      pendingCount = this.getPendingOperationCount();
-      this.protectedConflictSummaries = reconciliation.protectedConflicts;
+
+      // A large restored queue can be concurrently draining when recovery
+      // begins, or a transient batch can fail while later batches succeed. Keep
+      // making bounded progress, evicting only the rebuildable persisted bases
+      // between passes. Two consecutive no-progress passes stop safely instead
+      // of looping on a genuine stale-write conflict.
+      let pendingCount = this.getPendingOperationCount();
+      let stagnantPasses = 0;
+      for (let pass = 0; pass < 20 && pendingCount > 0; pass += 1) {
+        const before = pendingCount;
+        await this.flushForExpectedUser(recoveryUserId);
+        pendingCount = this.getPendingOperationCount();
+        if (!this.persistQueues()) {
+          throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the remaining queue.');
+        }
+        if (pendingCount === 0) break;
+        releasePersistedBases();
+        stagnantPasses = pendingCount < before ? 0 : stagnantPasses + 1;
+        if (stagnantPasses >= 2) break;
+      }
 
       if (pendingCount > 0) {
-        const detail = reconciliation.protectedConflicts.length > 0
-          ? `${reconciliation.protectedConflicts.length} operation(s) are not exact matches across this device and cloud and remain protected`
-          : this._error ?? 'no exact cloud matches were found';
-        this._error = `Sync recovery paused safely with ${pendingCount} pending operation(s): ${detail}`;
-        this.emitStatusChange();
-        throw new Error(this._error);
+        const reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
+        pendingCount = this.getPendingOperationCount();
+        this.protectedConflictSummaries = reconciliation.protectedConflicts;
+
+        if (pendingCount > 0) {
+          const detail = reconciliation.protectedConflicts.length > 0
+            ? `${reconciliation.protectedConflicts.length} operation(s) are not exact matches across this device and cloud and remain protected`
+            : this._error ?? 'no exact cloud matches were found';
+          this._error = `Sync recovery paused safely with ${pendingCount} pending operation(s): ${detail}`;
+          this.emitStatusChange();
+          throw new Error(this._error);
+        }
       }
-    }
 
-    // Do not force the full rebuilt base cache back into localStorage before
-    // the receipt pull can advance the durable cursor and prune it. The queue
-    // is already durably empty; pull now rebuilds, cursor-saves, prunes, and
-    // persists only the still-required bases.
-    releasePersistedBases();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) throw new Error('Sync recovery failed: signed out during sync');
-    if (session.user.id !== recoveryUserId) {
-      throw new Error('Sync recovery failed: signed-in account changed during sync');
-    }
-    await this.pullForUser(recoveryUserId, { emitComplete: false });
+      // Do not force the full rebuilt base cache back into localStorage before
+      // the receipt pull can advance the durable cursor and prune it. The queue
+      // is already durably empty; pull now rebuilds, cursor-saves, prunes, and
+      // persists only the still-required bases.
+      releasePersistedBases();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sync recovery failed: signed out during sync');
+      if (session.user.id !== recoveryUserId) {
+        throw new Error('Sync recovery failed: signed-in account changed during sync');
+      }
+      await this.pullForUser(recoveryUserId, { emitComplete: false });
 
-    const queuePersisted = this.persistQueues();
-    const basesPersisted = this.persistWriteBaseOverrides();
-    const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
-    if (!queuePersisted || !basesPersisted || durabilityError) {
-      throw new Error(
-        `Sync recovery incomplete with 0 pending operation(s): ${durabilityError ?? 'browser persistence failed'}`,
-      );
+      const queuePersisted = this.persistQueues();
+      const basesPersisted = this.persistWriteBaseOverrides();
+      const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
+      if (!queuePersisted || !basesPersisted || durabilityError) {
+        throw new Error(
+          `Sync recovery incomplete with 0 pending operation(s): ${durabilityError ?? 'browser persistence failed'}`,
+        );
+      }
+      this.quotaRecoveryContinuationRequired = false;
+      this.protectedConflictSummaries = [];
+      this._error = null;
+      this.emitEvent('sync-complete');
+    } finally {
+      this.queueDrainsBlocked = false;
     }
-    this.quotaRecoveryContinuationRequired = false;
-    this.protectedConflictSummaries = [];
-    this._error = null;
-    this.emitEvent('sync-complete');
   }
 
   // ============================================================
@@ -1588,10 +1595,10 @@ class SyncEngine {
   // Private — Push Queue
   // ============================================================
 
-  private async drainQueue(): Promise<void> {
+  private async drainQueue(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
     if (this.drainQueuePromise) return this.drainQueuePromise;
 
-    const promise = this.drainQueueOnce().finally(() => {
+    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked).finally(() => {
       if (this.drainQueuePromise === promise) {
         this.drainQueuePromise = null;
       }
@@ -1600,12 +1607,18 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainQueueOnce(): Promise<void> {
-    if (this.queueDrainsBlocked) return;
+  private async drainQueueOnce(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+    if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.pushQueue.size === 0) return;
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      if (expectedUserId) throw new Error('Sync recovery failed: signed out during sync');
+      return;
+    }
+    if (expectedUserId && session.user.id !== expectedUserId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
 
     const ops = Array.from(this.pushQueue.values());
     const inFlightOps = new Map(ops.map((op) => [this.pushQueueKey(op), op]));
@@ -1690,10 +1703,10 @@ class SyncEngine {
     this.emitStatusChange();
   }
 
-  private async drainLocalQueue(): Promise<void> {
+  private async drainLocalQueue(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
     if (this.drainLocalQueuePromise) return this.drainLocalQueuePromise;
 
-    const promise = this.drainLocalQueueOnce().finally(() => {
+    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked).finally(() => {
       if (this.drainLocalQueuePromise === promise) {
         this.drainLocalQueuePromise = null;
       }
@@ -1702,12 +1715,18 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainLocalQueueOnce(): Promise<void> {
-    if (this.queueDrainsBlocked) return;
+  private async drainLocalQueueOnce(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+    if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.localQueue.size === 0) return;
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) {
+      if (expectedUserId) throw new Error('Sync recovery failed: signed out during sync');
+      return;
+    }
+    if (expectedUserId && session.user.id !== expectedUserId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
 
     const ops = Array.from(this.localQueue.values());
     const inFlightOps = new Map(ops.map((op) => [op.key, op]));

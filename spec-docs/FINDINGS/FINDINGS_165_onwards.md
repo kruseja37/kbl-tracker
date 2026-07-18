@@ -1018,6 +1018,20 @@ progress. Any difference, missing/unreadable source, concurrent replacement, acc
 checkpoint failure leaves the operation protected. Never invoke Upload/Download or relax atomic
 stale-write protection.
 **Builder result:** Exact localStorage duplicate, mixed exact/different store rows, and local-source
-drift and account-switch regressions pass with all previous sync/UI cases: 132/132. TypeScript, changed-file ESLint,
-the fresh production/PWA build, and diff integrity are green. Frozen commit, separate audit, and
-JK's live retry remain. No push, merge, or deploy.
+drift and account-switch regressions pass with all previous sync/UI cases. The first frozen candidate
+`04d35826` passed 132/132 plus TypeScript, lint, build, and diff checks.
+
+**First audit:** **BLOCK — Major 1 / Minor 0.** The exact comparison, tombstone handling,
+concurrent replacement protection, checkpoint rollback, pagination, wire normalization, and UI
+boundary were sound. However, bounded pre-reconciliation drains re-read the current session after
+the recovery owner was captured, so an account switch in that window could stamp the old account's
+queue onto the new account before the later mismatch check.
+
+**Repair:** Recovery now blocks ordinary drains for its complete lifetime, waits for pre-existing
+drains before capturing the owner, durably checkpoints the queue after releasing rebuildable bases,
+and passes the captured user id through both guarded drain paths. Sign-out or account change is
+rejected before either queue is moved in-flight or cleared. The direct pre-drain account-switch
+regression proves no cloud row is written and the queued operation stays durable. Focused sync/UI
+proof is now 133/133; TypeScript, changed-file ESLint, the fresh 2,735-module production/PWA build,
+and diff integrity are green. Frozen repair commit, same-auditor re-audit, and JK's live retry remain.
+No push, merge, or deploy.

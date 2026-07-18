@@ -4233,3 +4233,9 @@ cloud row agree exactly on target, normalized content, and deletion state. Times
 insufficient. Any difference, unreadable source, concurrent mutation, account switch, or durability
 failure preserves the write behind the existing stale guard. Full Upload/Download remains an
 explicit destructive choice and is not part of this recovery.
+
+The recovery account binding starts before any bounded retry drain, not only before exact
+reconciliation or the final pull. Recovery blocks ordinary drains, waits for any already-active
+drain to finish, captures one account, then revalidates that account before moving either an
+IndexedDB or localStorage queue entry in-flight. This prevents a mid-recovery sign-in change from
+stamping one account's protected queue onto another account.

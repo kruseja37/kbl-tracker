@@ -1455,6 +1455,14 @@ so the atomic stale guard returned the last store/local batch counts instead of 
 new live header records exact queue/current-local/current-cloud duplicate retirement and preservation
 of every actual difference as the narrow next recovery. No push, merge, or deploy was authorized.
 
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content first-audit repair
+
+The prior live header recorded the exact-content recovery candidate with 132/132 focused proof and
+separate audit pending. The first auditor returned BLOCK with one Major: bounded retry drains were
+not yet bound to the account captured for recovery. The new live header records the narrow
+account-pinned drain repair, 133/133 focused proof, and the same-auditor re-audit as the next gate.
+JK's one-click retry remains held; no push, merge, or deploy was authorized.
+
 ## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
 
 The prior live header recorded independent approval of the exact 2,001-card eight-team setup and

@@ -1773,3 +1773,16 @@ Post-repair builder gates: 114/114 targeted tests including fresh 88/176 complet
 changed-file ESLint, 2,734-module build/PWA, diff integrity, and a green eight-team 506-card browser
 pass. A final audit of the new frozen commit remains mandatory; JK's browser walk is still the only
 product-acceptance gate.
+
+### 2026-07-18 — FINDING-242 first audit blocked; account-bound drain repair built
+
+Frozen exact-content candidate `04d35826` received **BLOCK — Major 1 / Minor 0**. The auditor
+approved exact queue/local/cloud equality, tombstone handling, source-drift and concurrent-mutation
+protection, durable reconciliation rollback, pagination, localStorage normalization, and the
+non-destructive UI boundary. The blocker was a pre-reconciliation account-switch window: bounded
+retry drains independently read the current session and could stamp the captured account's queued
+data onto a newly signed-in account. The repair blocks ordinary drains for the full recovery, waits
+for existing drains, pins one account through both recovery drain paths, validates before moving
+queue state, and checkpoints the protected queue before the first attempt. Direct regression plus
+all focused sync/UI proof is 133/133; TypeScript, changed-file ESLint, the 2,735-module production/PWA
+build, and diff integrity are green. Same-auditor re-audit remains; no JK click, push, merge, or deploy.

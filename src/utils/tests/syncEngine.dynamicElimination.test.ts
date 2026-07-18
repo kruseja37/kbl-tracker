@@ -78,6 +78,7 @@ const mockState = vi.hoisted(() => ({
   releaseBlockedSelect: null as (() => void) | null,
   afterSelect: null as ((table: string, rows: Array<Record<string, unknown>>) => void) | null,
   sessionUserId: "user-1" as string | null,
+  afterGetSession: null as ((userId: string | null) => void) | null,
   reset() {
     this.cloudRows = [];
     this.localRows = [];
@@ -108,6 +109,7 @@ const mockState = vi.hoisted(() => ({
     this.releaseBlockedSelect = null;
     this.afterSelect = null;
     this.sessionUserId = "user-1";
+    this.afterGetSession = null;
   },
   blockNextUpsert(table: string) {
     this.blockNextUpsertTable = table;
@@ -658,13 +660,17 @@ function upsertMetaRows(rows: Array<{
 vi.mock("../../supabase", () => ({
   supabase: {
     auth: {
-      getSession: vi.fn(async () => ({
-        data: {
-          session: mockState.sessionUserId
-            ? { user: { id: mockState.sessionUserId } }
-            : null,
-        },
-      })),
+      getSession: vi.fn(async () => {
+        const userId = mockState.sessionUserId;
+        mockState.afterGetSession?.(userId);
+        return {
+          data: {
+            session: userId
+              ? { user: { id: userId } }
+              : null,
+          },
+        };
+      }),
     },
     rpc(functionName: string, args: { p_rows?: unknown[] }) {
       const table = functionName === "kbl_atomic_upsert_store_rows"
@@ -3996,6 +4002,46 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(syncEngine.getStatus().pendingCount).toBe(1);
     expect(localStorage.getItem("kbl-sync-queue")).toContain("account-switch-recovery");
     expect(mockState.cloudRows[0]).toEqual(expect.objectContaining({ data: exactData }));
+  });
+
+  test("quota recovery never drains a captured account queue after the signed-in account changes", async () => {
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "account-switch-before-drain", {
+      eventId: "account-switch-before-drain",
+      result: "DOUBLE",
+    });
+    expect(syncEngine.getStatus().quotaRecoveryAvailable).toBe(true);
+
+    let sessionReads = 0;
+    mockState.afterGetSession = (userId) => {
+      sessionReads += 1;
+      if (sessionReads === 1 && userId === "user-1") {
+        mockState.sessionUserId = "user-2";
+      }
+    };
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "signed-in account changed during sync",
+    );
+
+    expect(sessionReads).toBeGreaterThanOrEqual(2);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(localStorage.getItem("kbl-sync-queue")).toContain("account-switch-before-drain");
+    expect(mockState.cloudRows).toEqual([]);
   });
 
   test("a reloaded large restored queue without bases still exposes safe recovery", async () => {

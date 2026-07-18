@@ -8049,3 +8049,18 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   132/132, including account-switch preservation; TypeScript, changed-file ESLint, the fresh production/PWA build, and diff integrity are
   green. Freeze/separate audit/preview retry remain.
 - No push, merge, deploy, destructive recovery, or product acceptance.
+
+## 2026-07-18 — FINDING-242 first-audit account-binding repair
+
+- Froze exact-content candidate `04d35826`; the separate auditor returned **BLOCK — Major 1 /
+  Minor 0** despite independently green 132/132, TypeScript, lint, production build, and diff gates.
+- Confirmed the blocker: bounded recovery drains could re-read a newly signed-in account after the
+  recovery owner was captured, before exact reconciliation's existing account check.
+- Blocked ordinary drains for the entire recovery, waited for prior drains, pinned one account into
+  both store/localStorage recovery drains, and required the match before queue removal or cloud
+  write. Added a durable checkpoint immediately after rebuildable bases are released.
+- Added a direct account-switch-before-first-drain regression. It proves zero cloud writes and a
+  durable pending operation. Focused sync/UI proof is 133/133; changed-file ESLint, TypeScript, the
+  fresh 2,735-module production/PWA build, and diff integrity are green.
+- Repair freeze and same-auditor re-audit remain. JK must not click Upload/Download; his one-click
+  retry remains the product gate. No push, merge, or deploy.

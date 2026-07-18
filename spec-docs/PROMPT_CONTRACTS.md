@@ -32706,14 +32706,17 @@ were lost, without discarding or overwriting any genuine device/cloud difference
   or a missing cloud row remains queued behind the unchanged atomic stale-write guard.
 - The smaller queue must be durably checkpointed before recovery reports progress. A checkpoint
   failure restores retired in-memory entries and fails closed.
-- One expected account owns the complete recovery. Sign-out or account change before reconciliation,
-  pull, or cursor save fails closed.
+- One expected account owns the complete recovery. Ordinary drains are blocked before that account
+  is captured; every recovery drain revalidates the same account before moving an operation
+  in-flight. Sign-out or account change before a drain, reconciliation, pull, or cursor save fails
+  closed.
 - Recovery may fetch current rows and current local fingerprints once after bounded no-progress
   passes. It never invokes full Upload/Download, rebases a conflict, changes Supabase schema/RLS, or
   changes product data outside the ordinary receipt pull after pending reaches zero.
 
 **Required proof:** exact localStorage and IndexedDB duplicates retire; mixed exact/different rows
-shrink only the exact subset; current-local drift preserves the queue and cloud; prior quota,
+shrink only the exact subset; current-local drift preserves the queue and cloud; an account switch
+between recovery capture and the first drain writes nothing and leaves the queue durable; prior quota,
 stale-write, account, cursor, ordinary sync, and destructive-path regressions; TypeScript;
 changed-file lint; production/PWA build; separate non-builder audit; JK's live click remains the
 product gate. No push, merge, or deploy.
