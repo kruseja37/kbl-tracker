@@ -32531,3 +32531,17 @@ proof-receipt fields. The heuristic hard blocker is removed; before 22 committed
 failure is `OPEN`, while an already-full illegal roster remains exact `BLOCKED`. The complete proof
 object is now part of the stable fingerprint. Final non-builder re-audit and JK's browser walk remain
 mandatory.
+
+**Approved-minor regression and final-round repair:** The next audit approved `f06c6884` with one
+minor missing boundary test. That exact red test proved that the certificate itself still collapsed
+a cheaper SP sibling over the necessary CP version at the last seat. The final-round path must keep
+all version roles, allocate each person once across up to eight clubs, settle exact tax and money,
+and pass the existing independent validator before SUCCESS. One-club success is insufficient: the
+permanent regression requires eight simultaneous clubs and eight distinct assigned people.
+
+**No-blink proof lifecycle:** A room-log, advisor-log, board-copy, or other metadata-only session
+revision must not clear or restart an identical legal-finish proof. Main keys proof lifecycle to the
+complete canonical seating input. A genuinely changed roster, pool, version state, identity, cap, or
+budget still changes that key and requires fresh proof. Browser acceptance requires a stable
+DRAFTABLE-filter row set as well as latency; a row that appears, disappears, and reappears is a
+failure even if the eventual pick succeeds.

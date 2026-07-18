@@ -106,7 +106,10 @@ import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
 import {
   rebuildPracticeSnakeSeatBoards,
 } from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
-import { useSnakeSetupProofClient } from '../components/snake/setup/snakeSetupProofClient';
+import {
+  fingerprintSnakeSetupProofInput,
+  useSnakeSetupProofClient,
+} from '../components/snake/setup/snakeSetupProofClient';
 import {
   executeAskedPickTrade,
   guideForAskedPick,
@@ -1062,8 +1065,14 @@ function MlbSnakeDraftRoom() {
       versionState: session.versionState,
     };
   }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+  const seatingProofInputKey = useMemo(() => (
+    seatingProofInput ? fingerprintSnakeSetupProofInput(seatingProofInput) : null
+  ), [seatingProofInput]);
+  const seatingProofInputRef = useRef(seatingProofInput);
+  seatingProofInputRef.current = seatingProofInput;
   const [seatingProofResult, setSeatingProofResult] = useState<SnakeSeatingProof | null>(null);
   useEffect(() => {
+    const seatingProofInput = seatingProofInputRef.current;
     if (!seatingProofInput) {
       setSeatingProofResult(null);
       return;
@@ -1091,7 +1100,7 @@ function MlbSnakeDraftRoom() {
       cancelled = true;
       globalThis.clearTimeout(id);
     };
-  }, [seatingProofInput, session?.snakeSetup?.seatingCertificate]);
+  }, [seatingProofInputKey, session?.snakeSetup?.seatingCertificate]);
   const deskRoomPlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);

@@ -111,6 +111,81 @@ describe('simultaneous snake seating proof', () => {
     ]);
   });
 
+  test('keeps the only legal CP version when the same person has a cheaper SP card', () => {
+    const roster = oneClubPool('mixed-role-roster')
+      .filter((player) => player.playerId !== 'mixed-role-roster-CP');
+    const sourceId = 'lahman:lowede01';
+    const starter = {
+      ...card('mixed-role-cheap-SP', { isPitcher: true, position: 'SP', role: 'SP' }, sourceId),
+      price: 1,
+    };
+    const closer = {
+      ...card('mixed-role-legal-CP', { isPitcher: true, position: 'CP', role: 'CP' }, sourceId),
+      price: 10,
+    };
+    const input = {
+      clubs: [{ teamId: 'mixed-role', roster, budgetRemaining: 1_000 }],
+      pool: [starter, closer],
+      baseCaps: [],
+      realTeamCount: 1,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    expect(proof.feasible, proof.message).toBe(true);
+    expect(proof.assignments[0].playerIds).toEqual([closer.playerId]);
+
+    const rows = classifySnakePickFinishSafety({
+      current: input,
+      proof,
+      teamId: 'mixed-role',
+      candidatePlayerIds: [starter.playerId, closer.playerId],
+    });
+    expect(rows).toEqual([
+      expect.objectContaining({ playerId: starter.playerId, status: 'BLOCKED' }),
+      expect.objectContaining({ playerId: closer.playerId, status: 'DRAFTABLE' }),
+    ]);
+  });
+
+  test('matches eight clubs to eight legal final-round versions without reusing a person', () => {
+    const finalRoundPeople = Array.from({ length: 8 }, (_, index) => {
+      const sourceId = `lahman:mixedfinal${index}`;
+      return {
+        starter: {
+          ...card(`eight-cheap-SP-${index}`, { isPitcher: true, position: 'SP', role: 'SP' }, sourceId),
+          price: 1,
+        },
+        closer: {
+          ...card(`eight-legal-CP-${index}`, { isPitcher: true, position: 'CP', role: 'CP' }, sourceId),
+          price: 10 + index,
+        },
+      };
+    });
+    const input = {
+      clubs: Array.from({ length: 8 }, (_, index) => ({
+        teamId: `eight-${index}`,
+        roster: oneClubPool(`eight-roster-${index}`)
+          .filter((player) => player.playerId !== `eight-roster-${index}-CP`),
+        budgetRemaining: 1_000,
+      })),
+      pool: finalRoundPeople.flatMap(({ starter, closer }) => [starter, closer]),
+      baseCaps: [],
+      realTeamCount: 8,
+    };
+
+    const proof = proveSimultaneousSnakeSeating(input);
+
+    expect(proof.feasible, proof.message).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
+    expect(proof.assignments).toHaveLength(8);
+    const selectedIds = proof.assignments.flatMap((assignment) => assignment.playerIds);
+    expect(selectedIds).toHaveLength(8);
+    expect(new Set(selectedIds)).toHaveLength(8);
+    expect(selectedIds.every((playerId) => playerId.startsWith('eight-legal-CP-'))).toBe(true);
+    const selectedPeople = selectedIds.map((playerId) => (
+      input.pool.find((player) => player.playerId === playerId)!.sourceId
+    ));
+    expect(new Set(selectedPeople)).toHaveLength(8);
+  });
+
   test('mints setup SUCCESS only for disjoint legal money-safe rosters that meet each chosen identity', () => {
     const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
     const identityPool = [

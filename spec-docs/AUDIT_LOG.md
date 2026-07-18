@@ -1316,6 +1316,28 @@ Contract: `contracts/CONTRACT_DRAFT_SETUP_BROWSER_FIXES_2026-07-16.md`. Builder 
 different agents. No commit, merge, or deploy is authorized; JK's browser re-walk remains the sole
 product-acceptance gate.
 
+### 2026-07-17 — FINDING-237 approved-minor regression exposed a deeper final-round defect
+
+The next frozen audit returned **APPROVE — Major 0 / Minor 1** at `f06c6884`: implementation no
+longer minted a mixed-version hard block, but an exact cheaper-SP / necessary-CP sibling regression
+was missing. The builder added that test instead of waiving the minor. It failed red because the
+underlying final-round seating certificate still reduced one person's versions before roster-role
+matching. The repaired bounded matcher activates only when every club has zero or one open seat,
+keeps every card's actual role, assigns each person once across the room, calculates exact shifted-cap
+tax and money, and can return SUCCESS only through `validateConstructiveSnakeSeatingProof`.
+
+The exact one-club and eight-club mixed-version tests are green. The complete real-player oracle is
+also green: 88/88 and 176/176 picks, all eight Standard/Nerfed pool presets, a 506-card classifier in
+186 ms, and eight independent private Assistant boards. The 60-file broader Snake suite passes
+609/609, for 617 cumulative tests with the separate production oracle.
+
+The final browser pass initially revealed a proof/log feedback loop rather than a solver failure:
+metadata-only room-log writes recreated an equivalent input by reference, briefly cleared the proof,
+changed advisor copy, and repeated. Proof lifecycle is now keyed by the complete canonical seating
+input. An 80-sample / 800 ms live trace retained all 20 safe rows continuously; the clean gate
+measured DRAFTABLE filtering at 26 ms and player selection at 185 ms. Final independent audit remains
+mandatory; JK's real browser walk remains the product gate.
+
 ### 2026-07-17 — FINDING-237 third audit block and narrow repair
 
 The next read-only pass rejected `4242ca69` with **BLOCK — Major 2 / Minor 0**. One cheapest version

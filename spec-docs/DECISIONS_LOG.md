@@ -4170,3 +4170,16 @@ candidate, `identity-proof-unknown` remains the honest result.
 This ruling changes no FIT threshold, archetype multiplier, named pool size, auto-widen law,
 readiness meaning, proof scheduling, worker, caching, refresh, cancellation, or latency behavior.
 Performance re-integration and JK's browser walk remain separate downstream gates.
+
+## 2026-07-17 — Snake final-round law preserves card roles while consuming unique people
+
+Historical versions share one draftable person but may have different roster roles. At the final
+seat, the engine must evaluate every available version's actual role, tax, and salary; it may not
+choose one cheapest representative before determining legality. When all clubs have at most one open
+seat, a bounded room-wide match assigns unique people to legal roles and the unchanged constructive
+validator remains the only authority allowed to certify SUCCESS.
+
+Proof lifecycle is semantic, not referential. A metadata-only session revision that leaves clubs,
+rosters, pool cards, version state, caps, identities, and budgets unchanged must retain the current
+proof and visible safe rows. A real change to any of those inputs requires a fresh proof. This avoids
+an advisor-log feedback loop without weakening stale-result cancellation or mutation-time legality.

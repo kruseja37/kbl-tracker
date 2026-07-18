@@ -2238,6 +2238,103 @@ function identityProofUnknown(clubCount: number): SnakeSeatingProof {
 }
 
 /**
+ * Exact final-round matcher. When every club is complete or missing one card, keep every version's
+ * real roster shape while matching on unique people. This avoids collapsing a person with SP and
+ * CP cards to whichever version happens to be cheaper.
+ */
+function proveSingleOpenSeatClubs(
+  input: SimultaneousSnakeSeatingInput,
+  players: readonly SnakeSeatingPlayer[],
+): SnakeSeatingProof | null {
+  const openByClub = input.clubs.map((club) => LEGAL_ROSTER.size - club.roster.length);
+  if (openByClub.some((open) => open < 0 || open > 1)) return null;
+  const normalizedCaps = snakeLuxuryCaps([...input.baseCaps]);
+  type Edge = {
+    groupId: string;
+    player: SnakeSeatingPlayer;
+    salaryCost: number;
+    addedTax: number;
+    allInCost: number;
+  };
+  const edgesByClub = input.clubs.map((club, clubIndex): Edge[] => {
+    if (openByClub[clubIndex] === 0) return [];
+    const shiftedCaps = club.capIdentity
+      ? shiftLuxuryCaps([...normalizedCaps], club.capIdentity)
+      : [...normalizedCaps];
+    const committed = club.committedConstruction
+      ? [...club.committedConstruction]
+      : club.roster.map((player) => player.construction);
+    const currentTax = luxuryTax(committed, shiftedCaps, 'taxed').charged;
+    const bestByGroup = new Map<string, Edge>();
+    for (const player of players) {
+      if (!isLegalRoster([...club.roster, player].map((row) => row.shape))) continue;
+      const finalTax = luxuryTax([...committed, player.construction], shiftedCaps, 'taxed').charged;
+      const addedTax = finalTax - currentTax;
+      const edge = {
+        groupId: deriveVersionGroupId(player),
+        player,
+        salaryCost: player.price,
+        addedTax,
+        allInCost: player.price + addedTax,
+      };
+      if (!snakeMoneyAffordable(edge.allInCost, club.budgetRemaining)) continue;
+      const prior = bestByGroup.get(edge.groupId);
+      if (!prior || edge.allInCost < prior.allInCost
+        || (edge.allInCost === prior.allInCost && edge.player.playerId.localeCompare(prior.player.playerId) < 0)) {
+        bestByGroup.set(edge.groupId, edge);
+      }
+    }
+    return [...bestByGroup.values()].sort((left, right) => (
+      left.allInCost - right.allInCost || left.player.playerId.localeCompare(right.player.playerId)
+    ));
+  });
+  const incompleteClubIndices = input.clubs
+    .map((_, clubIndex) => clubIndex)
+    .filter((clubIndex) => openByClub[clubIndex] === 1)
+    .sort((left, right) => edgesByClub[left].length - edgesByClub[right].length || left - right);
+  if (incompleteClubIndices.some((clubIndex) => edgesByClub[clubIndex].length === 0)) return null;
+
+  const ownerByGroup = new Map<string, number>();
+  const selectedByClub = new Map<number, Edge>();
+  const assign = (clubIndex: number, seenGroups: Set<string>): boolean => {
+    for (const edge of edgesByClub[clubIndex]) {
+      if (seenGroups.has(edge.groupId)) continue;
+      seenGroups.add(edge.groupId);
+      const owner = ownerByGroup.get(edge.groupId);
+      if (owner !== undefined && !assign(owner, seenGroups)) continue;
+      ownerByGroup.set(edge.groupId, clubIndex);
+      selectedByClub.set(clubIndex, edge);
+      return true;
+    }
+    return false;
+  };
+  if (incompleteClubIndices.some((clubIndex) => !assign(clubIndex, new Set()))) return null;
+
+  const proof: SnakeSeatingProof = {
+    feasible: true,
+    assignments: input.clubs.map((club, clubIndex) => {
+      const edge = selectedByClub.get(clubIndex);
+      return edge ? {
+        teamId: club.teamId,
+        playerIds: [edge.player.playerId],
+        salaryCost: edge.salaryCost,
+        addedTax: edge.addedTax,
+        allInCost: edge.allInCost,
+      } : {
+        teamId: club.teamId,
+        playerIds: [],
+        salaryCost: 0,
+        addedTax: 0,
+        allInCost: 0,
+      };
+    }),
+    shortfall: null,
+    message: 'EVERY CLUB CAN FINISH A LEGAL 22.',
+  };
+  return validateConstructiveSnakeSeatingProof(input, proof) ? proof : null;
+}
+
+/**
  * Constructive simultaneous proof. Success is a certificate: every returned roster is verified by
  * the canonical law, every reserved human is disjoint, and each completion fits salary plus the
  * same normalized settlement tax. Clubs with the scarcest hard path reserve first; this can reject
@@ -2249,6 +2346,9 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
   const necessary = setupFloorShortfall(input.clubs, remaining)
     ?? namedNecessaryShortfall(input.clubs, remaining);
   if (necessary) return { feasible: false, assignments: [], shortfall: necessary, message: copyLawMessage(necessary) };
+
+  const finalRoundProof = proveSingleOpenSeatClubs(input, remaining);
+  if (finalRoundProof) return finalRoundProof;
 
   if (input.clubs.every((club) => club.roster.length === 0)
     && input.clubs.some((club) => club.identityArchetype)) {

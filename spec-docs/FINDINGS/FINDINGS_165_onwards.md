@@ -807,3 +807,19 @@ already-full illegal 22 is blocked there, while earlier bounded uncertainty stay
 hashes the complete proof receipt. Fresh focused proof is 20/20, exact 506-card classification is
 184 ms, TypeScript/lint/build pass, and the eight-team browser again advances and reloads cleanly
 with the Assistant available and no console errors. Final re-audit remains open.
+**Approved-minor regression and deeper repair:** The subsequent frozen audit returned **APPROVE —
+Major 0 / Minor 1**: the code no longer false-blocked mixed-version people, but no exact regression
+locked that boundary. Adding the auditor's cheaper-SP / only-legal-CP case failed red because the
+final-round certificate still chose one representative card per person before role matching. A new
+bounded zero-or-one-open-seat matcher keeps every version's actual role, matches unique people across
+all eight clubs, computes exact salary and shifted-cap tax, and cannot mint SUCCESS without the
+unchanged constructive validator. Exact one-club and eight-club sibling tests pass.
+**Live-loop correction:** The final browser gate then caught DRAFTABLE rows blinking out for 20–40 ms
+at a time. Trace proved that advisor-log-only session revisions recreated an identical seating input;
+the effect cleared its valid proof, changed advisor state, wrote another log revision, and repeated.
+Main now keys proof lifecycle to the complete canonical seating input rather than object identity.
+An 80-sample / 800 ms live trace kept all 20 safe rows continuously. Clean browser timings are room
+863 ms, desk 234 ms, pool 377 ms, sort 44 ms, FIT 14 ms, DRAFTABLE 26 ms, selection 185 ms, pick save
+1.267 s, and pick-two reload 922 ms, with no console errors and the Assistant available. The full
+real-player oracle passes 8/8 including 176/176 picks; the non-production Snake matrix passes 609/609.
+Final non-builder audit and JK's walk remain open. No push, merge, or deploy.

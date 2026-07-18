@@ -1366,3 +1366,13 @@ read-only auditor then found three remaining major seams: conservative proof fai
 `BLOCKED`, an incomplete module-global finish fingerprint, and render-time legal-finish work in Main
 and Companion. The live header now records the narrow second repair, fresh 176-pick and browser
 proof, and final independent re-audit as the remaining engineering gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 final-round version repair
+
+The prior header recorded removal of the mixed-version heuristic hard block and complete proof-key
+receipt coverage. The non-builder auditor approved that frozen code with one minor: no exact
+cheaper-SP / only-legal-CP sibling regression. Adding the regression exposed that the certificate
+solver itself still collapsed those versions in the final round. The new header records an exact
+unique-person final-round matcher, an eight-club regression, the separately discovered and repaired
+semantic-proof/advisor-log blink loop, full 176-pick production proof, and final re-audit as the last
+engineering gate before JK's browser acceptance.

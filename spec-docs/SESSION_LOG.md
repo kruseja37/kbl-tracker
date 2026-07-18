@@ -7844,3 +7844,22 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   ESLint, 2,734-module production build/PWA, emitted-worker Auth/storage scan, and diff integrity.
   No push, merge, deploy, or product acceptance. The same non-builder auditor must re-audit the frozen
   repair; JK's eight-team browser walk remains the final gate.
+
+## 2026-07-17 — FINDING-237 final-round role matching and no-blink close build
+
+- The non-builder audit of `f06c6884` approved the implementation with one minor missing exact
+  mixed-position sibling regression. Adding that regression failed red: the final-round certificate
+  itself chose a cheaper SP version of one person instead of the necessary CP version.
+- Added a bounded final-round matcher that activates only when every club has zero or one seat open,
+  keeps actual version roles, matches unique people room-wide, settles exact salary/tax/all-in, and
+  returns only after the existing validator passes. Exact one-club and eight-club regressions pass.
+- Reran the full real-player oracle: 8/8, including 88/88 and 176/176 complete picks, all eight
+  Standard/Nerfed pool presets, a 506-card classifier in 186 ms, and distinct eight-seat Assistant
+  truth. The broader non-production Snake matrix is 60 files / 609 tests, for 617 cumulative.
+- A single-server browser trace caught a separate metadata feedback loop that briefly blanked the
+  DRAFTABLE filter. Semantic proof fingerprinting now ignores room-log-only object churn while real
+  roster/pool/cap/version changes still invalidate. All 80 samples over 800 ms retained 20 safe rows.
+- Clean browser result: room 863 ms, desk 234 ms, pool 377 ms, sort 44 ms, FIT 14 ms, DRAFTABLE 26 ms,
+  selection 185 ms, pick save 1.267 s, reload on pick 2 in 922 ms, Assistant available, no console
+  errors. TypeScript, changed-file ESLint, and the fresh 2,734-module production/PWA build are green. The independent audit remains;
+  no push, merge, deploy, or product acceptance.
