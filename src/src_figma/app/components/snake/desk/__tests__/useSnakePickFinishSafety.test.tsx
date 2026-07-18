@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   __snakePickFinishSafetyTestUtils,
+  buildSnakePickFinishWorkerRequest,
   useSnakePickFinishSafety,
 } from '../useSnakePickFinishSafety';
 import type {
@@ -71,7 +72,7 @@ describe('snake pick finish-safety worker hook', () => {
     act(() => FakeWorker.instances[0].onmessage?.({
       data: { key: 'state-a', phase: 'progress', rows: [response('state-a').rows[1]] },
     } as MessageEvent<unknown>));
-    expect(screen.getByText('PENDING:BLOCKED')).toBeInTheDocument();
+    expect(screen.getByText('PENDING:NONE')).toBeInTheDocument();
 
     view.rerender(<Harness request={{ ...first }} />);
     expect(FakeWorker.instances).toHaveLength(1);
@@ -81,6 +82,66 @@ describe('snake pick finish-safety worker hook', () => {
     view.rerender(<Harness request={{ ...first }} />);
     expect(FakeWorker.instances).toHaveLength(1);
     expect(screen.getByText('READY:BLOCKED')).toBeInTheDocument();
+  });
+
+  it('fingerprints every tax, roster-shape, and construction input used by the classifier', () => {
+    const player = {
+      playerId: 'p-a', sourceId: 'stock:p-a', price: 100,
+      shape: { isPitcher: false, position: 'C' as const },
+      construction: {
+        id: 'p-a', isPitcher: false,
+        bat: { POW: 10, CON: 20, SPD: 30, FLD: 40, ARM: 50 },
+      },
+    };
+    const base = {
+      current: {
+        clubs: [{
+          teamId: 'team', roster: [player], budgetRemaining: 1_000,
+          committedConstruction: [player.construction],
+        }],
+        pool: [{ ...player, playerId: 'p-b', construction: { ...player.construction, id: 'p-b' } }],
+        baseCaps: [{
+          group: 'hitters' as const, stat: 'POW' as const, topN: 8, cap: 100,
+          penaltyCurve: 1, penaltyPer100: 100, minAdder: 0,
+        }],
+        realTeamCount: 1,
+      },
+      proof: { feasible: true, assignments: [], shortfall: null, message: 'READY' },
+      teamId: 'team', candidatePlayerIds: ['p-b'],
+    };
+    const key = buildSnakePickFinishWorkerRequest(base).key;
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base, current: { ...base.current, baseCaps: [{ ...base.current.baseCaps[0], cap: 99 }] },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base,
+      current: {
+        ...base.current,
+        pool: base.current.pool.map((entry) => ({ ...entry, shape: { ...entry.shape, secondaryPosition: '1B' as const } })),
+      },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base,
+      current: {
+        ...base.current,
+        pool: base.current.pool.map((entry) => ({
+          ...entry,
+          construction: { ...entry.construction, bat: { ...entry.construction.bat, POW: 11 } },
+        })),
+      },
+    }).key).not.toBe(key);
+    expect(buildSnakePickFinishWorkerRequest({
+      ...base,
+      current: {
+        ...base.current,
+        clubs: base.current.clubs.map((club) => ({
+          ...club,
+          committedConstruction: club.committedConstruction.map((entry) => ({
+            ...entry, bat: { ...entry.bat, CON: 21 },
+          })),
+        })),
+      },
+    }).key).not.toBe(key);
   });
 
   it('cancels stale work and rejects incomplete or wrong-key worker truth', () => {

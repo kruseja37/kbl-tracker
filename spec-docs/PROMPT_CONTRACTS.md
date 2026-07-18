@@ -32514,3 +32514,13 @@ consequences use a separate worker. The 88/176 journey must pick from current As
 intersection and independently recompute final person uniqueness, roster legality, salary, tax,
 all-in, and money left. Repaired builder gates are cumulative 614/614 plus the eight-team production
 browser latency pass; the same non-builder re-audit and JK's browser walk remain mandatory.
+
+**Second audit and repair:** The re-auditor blocked `72f7246c` because a conservative canonical
+search failure could be mislabeled `BLOCKED`, the module cache omitted cap/shape/construction truth,
+and Main/Companion still called the heavy legal-finish engine from render. `BLOCKED` is now limited
+to unavailable cards and independently necessary roster/supply impossibility; bounded uncertainty is
+`OPEN` and may reach the unchanged Hotseat mutation validator. The semantic key includes every
+classifier input. Progress chunks do not publish React state, and scarcity depth comes from the
+current validated shared certificate. Fresh required proof is 114/114 plus the green eight-team
+browser latency pass. The same non-builder final re-audit and JK's real browser walk remain
+mandatory.

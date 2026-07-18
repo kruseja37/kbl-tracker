@@ -1352,3 +1352,11 @@ per-player classification, and the completion test did not independently join As
 final legal and financial truth. The live header now records the repaired worker-backed classifier,
 Assistant/certificate overlap law, cumulative 614-test proof, and re-audit as the remaining engineering
 gate before JK's eight-team browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 second audit repair
+
+The prior live header recorded the first audit's repaired 614-test builder snapshot. The same
+read-only auditor then found three remaining major seams: conservative proof failure shown as hard
+`BLOCKED`, an incomplete module-global finish fingerprint, and render-time legal-finish work in Main
+and Companion. The live header now records the narrow second repair, fresh 176-pick and browser
+proof, and final independent re-audit as the remaining engineering gate.

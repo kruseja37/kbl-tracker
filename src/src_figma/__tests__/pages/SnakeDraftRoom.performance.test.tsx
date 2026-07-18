@@ -285,7 +285,7 @@ describe('PERFROOM production-scale call profile', () => {
     // JSDOM has no Worker. The desk must stay interactive without ever running
     // the future-pick playout synchronously on React's UI thread.
     expect(engineProfile.rationalRoom).toBe(0);
-    expect(engineProfile.legalFinish).toBeLessThanOrEqual(22);
+    expect(engineProfile.legalFinish).toBe(0);
   }, 60_000);
 
   test('profiles one early-draft guide ask without precomputing any other pick', async () => {

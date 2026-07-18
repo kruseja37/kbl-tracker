@@ -725,7 +725,7 @@ retirement, rollback on queue-persistence failure, and the Hotseat control. JK's
 remains the product gate.
 
 ### FINDING-237
-**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** REPAIRED AFTER AUDIT BLOCK — RE-AUDIT PENDING
+**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** SECOND AUDIT REPAIRED — FINAL RE-AUDIT PENDING
 **Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeSeatingProof.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`, Snake desk hooks/workers and focused tests
 **Evidence:** In JK's first complete four-team room walk, two seats lost their Assistant GM several
 rounds before the end and one club reached 19/22 with no discoverable legal pick despite a positive
@@ -781,3 +781,21 @@ production suites pass 12/12 and the controlled-concurrency surrounding Snake ma
 for 614/614 cumulative. TypeScript, changed-file ESLint, the 2,734-module production build/PWA,
 emitted-worker Auth/storage scan, and diff integrity are green. Re-audit and JK's browser walk remain
 open. No push, merge, or deploy.
+**Second audit correction:** The re-auditor returned **BLOCK — Major 3 / Minor 0**. A bounded
+simultaneous solver rejection could be presented as authoritative `BLOCKED`; the module cache key
+omitted base caps and player/roster construction; and Main plus Companion still called the heavy
+single-club legal-finish engine from render while the row worker emitted 24-card progress updates.
+The repair reserves `BLOCKED` for unavailable cards or independently necessary roster/supply
+failure, keeps bounded uncertainty `OPEN`, and lets an `OPEN` companion request reach the unchanged
+Hotseat mutation validator. The cache now covers caps, tier, versions, identities, committed
+construction, and every roster/pool player's shape and construction. Worker progress no longer
+causes React state churn, and scarcity uses the current shared certificate rather than recomputing a
+finish on the UI thread.
+**Second-repair verification:** Fresh focused engine/worker/performance proof is 53/53; Main,
+Companion, and registration/gavel pages are 53/53; the exact production-scale suite is 8/8 and again
+completes 88/88 plus 176/176 picks. Full 506-card classification is 186 ms total / 18 ms first chunk.
+The fresh browser run uses eight teams / 506 cards / 176 picks and measures room 898 ms, desk 223 ms,
+pool 335 ms, sort 214 ms, FIT 37 ms, finish filter 553 ms, selection 237 ms, saved pick 1 in 1.278 s,
+and reload on pick 2 in 934 ms with the Assistant available and no console errors. TypeScript,
+changed-file ESLint, the 2,734-module production build/PWA, and diff integrity pass. Final re-audit
+and JK's browser walk remain open. No push, merge, or deploy.

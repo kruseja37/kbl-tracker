@@ -1562,3 +1562,16 @@ publication accurately says the action was saved locally and never invites a dup
 Independent gates passed 8 focused files / 230 tests, TypeScript, changed-file ESLint, the
 2,730-module production build/PWA, and diff integrity. JK's same-room browser walk remains the final
 product gate; no new draft is required and no push, merge, or deploy is authorized.
+
+### 2026-07-17 — FINDING-237 second audit block and narrow repair
+
+The same read-only auditor rejected commit `72f7246c` with **BLOCK — Major 3 / Minor 0**. Confirmed
+issues were false-authoritative `BLOCKED` from a conservative bounded solver, an incomplete
+module-global finish-cache fingerprint, and remaining render-time `evaluateSnakeLegalFinish` calls
+in both Main and Companion. The repair leaves bounded uncertainty `OPEN` and mutation-verifiable,
+adds all cap/identity/version/roster/pool shape and construction inputs to the key, suppresses
+progress-driven React publishes, and uses the current shared certificate for scarcity depth.
+Post-repair builder gates: 114/114 targeted tests including fresh 88/176 completion, TypeScript,
+changed-file ESLint, 2,734-module build/PWA, diff integrity, and a green eight-team 506-card browser
+pass. A final audit of the new frozen commit remains mandatory; JK's browser walk is still the only
+product-acceptance gate.

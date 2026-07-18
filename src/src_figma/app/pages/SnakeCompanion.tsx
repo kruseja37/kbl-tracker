@@ -7,7 +7,7 @@ import { computeOwnValue } from '../../../engines/auctionMarketModel';
 import { constructionArchetypeFitMultiplier } from '../../../engines/archetypeIdentity';
 import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
-import { evaluateSnakeLegalFinish, evaluateSnakePlan } from '../../../engines/snakeEconomics';
+import { evaluateSnakePlan } from '../../../engines/snakeEconomics';
 import { applyCanonicalSnakeRiskTriggers, canonicalSnakeRoleDepth } from '../../../engines/snakeRationalRoom';
 import { buildSnakeDraftAlignmentInputs, computeSnakeDraftAlignment, snakeDraftAlignmentRoomRank } from '../../../engines/snakeDraftAlignment';
 import type { SimultaneousSnakeSeatingInput, SnakeSeatingPlayer } from '../../../engines/snakeSeatingProof';
@@ -822,19 +822,10 @@ export default function SnakeCompanion() {
     const draftedStoredPlayers = teamPicks.flatMap((pick) => playerById.get(pick.playerId) ?? []);
     const draftedPlayersComplete = draftedStoredPlayers.length === teamPicks.length
       && ownSeat.roster.length === teamPicks.length;
-    const draftedMoneyComplete = draftedPlayersComplete && teamPicks.every((pick) => Number.isFinite(
-      pick.settledSalary ?? poolById.get(pick.playerId)?.iv,
-    ));
-    const cheapestFinish = draftedMoneyComplete ? evaluateSnakeLegalFinish({
-      currentRoster: ownSeat.roster,
-      committedSpent: ownSeat.committedSpent,
-      availablePool: available,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: locked.capIdentity,
-    }) : null;
-    const cheapestDepthByPlayerId = new Map((cheapestFinish?.completionPlayerIds ?? []).flatMap((playerId) => {
+    const certifiedCompletionPlayerIds = session.snakeSetup?.seatingCertificate?.feasible
+      ? session.snakeSetup.seatingCertificate.assignments.find((assignment) => assignment.teamId === team.id)?.playerIds ?? []
+      : [];
+    const cheapestDepthByPlayerId = new Map(certifiedCompletionPlayerIds.flatMap((playerId) => {
       const player = deskById.get(playerId);
       return player ? [[playerId, canonicalSnakeRoleDepth(player.shape, available.map((entry) => entry.shape))] as const] : [];
     }));
@@ -888,7 +879,7 @@ export default function SnakeCompanion() {
       taxCoreRows: buildTaxCoreRows({ candidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }),
       advisorLog: brokenSlots.map((slotId) => ({ key: `broken:${slotId}`, text: `YOUR ${slotId} PLAN IS BROKEN — YOUR RANKING HAS NO AVAILABLE NAME.`, actionable: true })),
     };
-  }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, boardUnavailable, deskById, deskPlayers, finishSafety, leagueTeams, playerById, pool, poolById, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
+  }, [activePoolRows, askedRiskIds, board, boardEligibilityCandidates, boardUnavailable, deskById, deskPlayers, finishSafety, leagueTeams, playerById, pool, rationalRiskState.risks, rationalRiskState.status, session, team, unavailable]);
 
   const defaultSelectedPlayerId = useMemo(() => {
     if (!board || !deskState) return null;
@@ -1448,15 +1439,15 @@ export default function SnakeCompanion() {
       onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
       actionConsequence={selectedFinishSafety?.status === 'DRAFTABLE'
         ? `LEGAL 22 · $${Math.round(selectedFinishSafety.finalSalary ?? 0).toLocaleString()} SALARY · $${Math.round(selectedFinishSafety.finalTax ?? 0).toLocaleString()} TAX · $${Math.round(selectedFinishSafety.moneyLeft ?? 0).toLocaleString()} LEFT.`
-        : null}
-      blockReason={selectedFinishSafety?.status === 'DRAFTABLE'
-        ? null
-        : selectedFinishSafety?.message ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.')}
+        : selectedFinishSafety?.status === 'OPEN' ? selectedFinishSafety.message : null}
+      blockReason={selectedFinishSafety?.status === 'BLOCKED'
+        ? selectedFinishSafety.message
+        : !selectedFinishSafety ? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.') : null}
       draftAction={liveSlot?.teamId === team.id ? (
         pickRequest ? (
           <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{pickRequest.pick} WAITING FOR HOTSEAT</span>
         ) : (
-          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || selectedFinishSafety?.status !== 'DRAFTABLE'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || !selectedFinishSafety || selectedFinishSafety.status === 'BLOCKED'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
         )
       ) : undefined}
       decision={draftDecision}

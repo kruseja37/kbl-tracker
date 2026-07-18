@@ -1060,18 +1060,44 @@ export function createSnakePickFinishSafetyClassifier(input: {
       } : club),
       pool: current.pool.filter((candidate) => deriveVersionGroupId(candidate) !== groupId),
     };
+    const necessary = setupFloorShortfall(postPick.clubs, availableCards(postPick))
+      ?? namedNecessaryShortfall(postPick.clubs, availableCards(postPick));
+    if (necessary) {
+      return {
+        playerId, status: 'BLOCKED', message: copyLawMessage(necessary),
+        finalSalary: null, finalTax: null, moneyLeft: null,
+      };
+    }
+    const activeClub = postPick.clubs[clubIndex];
+    const representatives = representativeCards(availableCards(postPick));
+    const openSlots = LEGAL_ROSTER.size - activeClub.roster.length;
+    const activeQuote = cheapestLegalCompletion(
+      activeClub.roster.map((row) => row.shape),
+      representatives.map((candidate) => ({
+        id: candidate.playerId,
+        price: candidate.price,
+        shape: candidate.shape,
+      })),
+      openSlots,
+    );
+    const activeFuture = activeQuote.pickIds
+      .map((id) => representatives.find((candidate) => candidate.playerId === id))
+      .filter((candidate): candidate is SnakeSeatingPlayer => Boolean(candidate));
+    if (!activeQuote.feasible || activeFuture.length !== openSlots || !isLegalRoster([
+      ...activeClub.roster.map((row) => row.shape),
+      ...activeFuture.map((row) => row.shape),
+    ])) {
+      return {
+        playerId, status: 'BLOCKED', message: 'THIS PICK LEAVES NO LEGAL 22 FOR THIS CLUB.',
+        finalSalary: null, finalTax: null, moneyLeft: null,
+      };
+    }
     const proof = proveSimultaneousSnakeSeating(postPick);
     if (proof.feasible) {
       return draftableRow(playerId, postPick, proof);
     }
-    if (!proof.shortfall || proof.shortfall.reason === 'identity-proof-unknown') {
-      return {
-        playerId, status: 'OPEN', message: proof.message || 'FINISH PROOF UNAVAILABLE.',
-        finalSalary: null, finalTax: null, moneyLeft: null,
-      };
-    }
     return {
-      playerId, status: 'BLOCKED', message: proof.message,
+      playerId, status: 'OPEN', message: proof.message || 'FINISH PROOF UNAVAILABLE.',
       finalSalary: null, finalTax: null, moneyLeft: null,
     };
   });

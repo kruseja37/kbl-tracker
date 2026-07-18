@@ -2,7 +2,7 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
-## 2026-07-17 (Codex, Snake late-draft decision truth) — eight-team builder complete; audit pending
+## 2026-07-17 (Codex, Snake late-draft decision truth) — second audit repaired; final re-audit pending
 
 JK's first four-team full draft exposed a product-scale failure, not a four-team special case: the
 preference optimizer could hide the Assistant while exact legal completion still existed, and rows
@@ -23,6 +23,15 @@ recurring pull now has a direct regression proving pick advancement, public log 
 player removal. Final builder gates are 17 focused files / 274 tests, TypeScript, changed-file ESLint,
 2,732-module build/PWA, worker-auth scan, and diff integrity. Separate audit and JK's browser walk
 remain; no push, merge, or deploy is authorized.
+
+The second non-builder audit then blocked three seams: conservative solver exhaustion could falsely
+disable a legal card, the row cache omitted tax/shape/construction inputs, and render still ran a
+heavy legal-finish calculation. The narrow repair keeps uncertainty `OPEN`, expands the semantic
+fingerprint to every classifier input, removes progress-driven React churn, and derives scarcity
+from the current shared certificate. Fresh proof is 114/114 targeted tests including the complete
+176-pick eight-team replay, TypeScript/lint/build green, and an eight-team 506-card browser pass with
+all interactions below one second except the intentional 1.278-second gavel/write ritual. The same
+non-builder must approve the frozen repair before JK's browser gate.
 
 ## 2026-07-17 (Codex, combined Snake correctness/performance close) — independently approved; JK walk pending
 

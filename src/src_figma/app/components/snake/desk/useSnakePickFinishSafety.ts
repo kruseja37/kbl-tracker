@@ -34,10 +34,26 @@ export function buildSnakePickFinishWorkerRequest(input: Omit<SnakePickFinishWor
     club.teamId,
     String(club.budgetRemaining),
     JSON.stringify(club.capIdentity ?? null),
-    club.roster.map((player) => `${player.playerId}:${player.price}`).join(','),
+    JSON.stringify(club.identityArchetype ?? null),
+    JSON.stringify(club.committedConstruction ?? null),
+    club.roster.map((player) => JSON.stringify([
+      player.playerId,
+      player.sourceId ?? null,
+      player.versionGroupId ?? null,
+      player.price,
+      player.shape,
+      player.construction,
+    ])).join(','),
   ].join('|'));
   const poolParts = input.current.pool.map((player) => (
-    `${player.playerId}:${player.sourceId ?? ''}:${player.versionGroupId ?? ''}:${player.price}`
+    JSON.stringify([
+      player.playerId,
+      player.sourceId ?? null,
+      player.versionGroupId ?? null,
+      player.price,
+      player.shape,
+      player.construction,
+    ])
   ));
   const proofParts = input.proof.assignments.map((assignment) => (
     `${assignment.teamId}:${assignment.playerIds.join(',')}:${assignment.allInCost}`
@@ -47,6 +63,10 @@ export function buildSnakePickFinishWorkerRequest(input: Omit<SnakePickFinishWor
     key: `snake-finish:${fnv1a([
       input.teamId,
       String(input.current.realTeamCount),
+      String(input.current.tier ?? ''),
+      JSON.stringify(input.current.baseCaps),
+      JSON.stringify(input.current.versionState ?? null),
+      JSON.stringify(input.proof.shortfall ?? null),
       ...clubParts,
       ...poolParts,
       ...proofParts,
@@ -132,12 +152,6 @@ export function useSnakePickFinishSafety(
         return;
       }
       if (response.phase === 'progress') {
-        setSnapshot((current) => {
-          const merged = new Map((current.key === request.key ? current.rows : [])
-            .map((row) => [row.playerId, row]));
-          response.rows.forEach((row) => merged.set(row.playerId, row));
-          return { key: request.key, status: 'pending', rows: [...merged.values()] };
-        });
         return;
       }
       remember(request.key, response.rows);

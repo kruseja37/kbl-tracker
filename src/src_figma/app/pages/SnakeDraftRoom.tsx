@@ -1180,10 +1180,10 @@ function MlbSnakeDraftRoom() {
     const finish = finishSafety.rows.get(candidateId);
     const blockReason = !finish
       ? finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'
-      : finish.status === 'DRAFTABLE'
-        ? null
-        : finish.message;
-    const line = blockReason ?? `LEGAL 22 · $${Math.round(finish!.finalSalary!).toLocaleString()} SALARY · $${Math.round(finish!.finalTax!).toLocaleString()} TAX · $${Math.round(finish!.moneyLeft!).toLocaleString()} LEFT.`;
+      : finish.status === 'BLOCKED' ? finish.message : null;
+    const line = blockReason ?? (finish?.status === 'DRAFTABLE'
+      ? `LEGAL 22 · $${Math.round(finish.finalSalary!).toLocaleString()} SALARY · $${Math.round(finish.finalTax!).toLocaleString()} TAX · $${Math.round(finish.moneyLeft!).toLocaleString()} LEFT.`
+      : finish?.message ?? 'FINISH PROOF UNAVAILABLE.');
     return {
       id: player.id,
       name: fullName(player.firstName, player.lastName),
@@ -1378,9 +1378,6 @@ function MlbSnakeDraftRoom() {
     const teamPicks = session.completedPicks.filter((pick) => pick.teamId === deskTeam.id);
     const draftedStoredPlayers = teamPicks.flatMap((pick) => playerById.get(pick.playerId) ?? []);
     const draftedPlayersComplete = draftedStoredPlayers.length === teamPicks.length && ownSeat.roster.length === teamPicks.length;
-    const draftedMoneyComplete = draftedPlayersComplete && teamPicks.every((pick) => Number.isFinite(
-      pick.settledSalary ?? poolById.get(pick.playerId)?.iv,
-    ));
     const draftedChemistry = buildChemistryStrip(draftedPlayersComplete ? draftedStoredPlayers : null);
     const openSlots = openRosterSlots(session, deskTeam.id);
     const available = deskRoomPlayers.filter((player) => !unavailable.has(player.playerId));
@@ -1501,17 +1498,11 @@ function MlbSnakeDraftRoom() {
           capIdentity: locked.capIdentity,
         })
       : null;
-    const cheapestFinish = draftedMoneyComplete ? evaluateSnakeLegalFinish({
-      currentRoster: ownSeat.roster,
-      committedSpent: ownSeat.committedSpent,
-      availablePool: available,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: locked.capIdentity,
-    }) : null;
+    const certifiedCompletionPlayerIds = seatingProofResult?.feasible
+      ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds ?? []
+      : [];
     const cheapestFinishDepthByPlayerId = new Map<string, number>();
-    for (const playerId of cheapestFinish?.completionPlayerIds ?? []) {
+    for (const playerId of certifiedCompletionPlayerIds) {
       const completionPlayer = deskRoomById.get(playerId);
       if (!completionPlayer) continue;
       cheapestFinishDepthByPlayerId.set(playerId, canonicalSnakeRoleDepth(
@@ -1604,7 +1595,7 @@ function MlbSnakeDraftRoom() {
       slotDepth,
       taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }) : [],
     };
-  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, finishSafety, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, session, unavailable]);
+  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, finishSafety, leagueTeams, playerById, pool, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, seatingProofResult, session, unavailable]);
 
   const assistantIdentity = useMemo(() => session && deskTeam && deskState?.board && privateDeskActive ? {
     sessionId: session.id,
