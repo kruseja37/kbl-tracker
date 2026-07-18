@@ -332,6 +332,63 @@ describe('simultaneous snake seating proof', () => {
     expect(tampered.shortfall?.reason).toBe('identity-proof-unknown');
   });
 
+  test('rejects altered identity assignments even when the Full Sources fingerprint still matches', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const highPower = oneClubPool('assignment-high').map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.shape.isPitcher ? 5 : 95,
+        },
+      },
+    }));
+    const lowPower = oneClubPool('assignment-low').map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: 5,
+        },
+      },
+    }));
+    const slack = floorSlackExtras('assignment-slack');
+    const fullSource = [...highPower, ...lowPower, ...slack];
+    const fullInput = {
+      clubs: [{ teamId: 'assignment-club', roster: [], budgetRemaining: 10_000, identityArchetype: powerIdentity }],
+      pool: fullSource,
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+    const fullProof = proveSimultaneousSnakeSeating(fullInput);
+    expect(fullProof.feasible, fullProof.message).toBe(true);
+    const certificate = createSnakeIdentitySupportCertificate(fullInput, fullProof);
+    expect(certificate).not.toBeNull();
+
+    const alteredCertificate = {
+      ...certificate!,
+      assignments: [{
+        ...certificate!.assignments[0],
+        playerIds: lowPower.map((player) => player.playerId),
+        salaryCost: lowPower.reduce((sum, player) => sum + player.price, 0),
+        addedTax: 0,
+        allInCost: lowPower.reduce((sum, player) => sum + player.price, 0),
+      }],
+    };
+    const tampered = proveSimultaneousSnakeSeating({
+      ...fullInput,
+      pool: [...lowPower, ...slack],
+      identityReferencePool: fullSource,
+      identitySupportCertificate: alteredCertificate,
+    });
+
+    expect(tampered.feasible).toBe(false);
+    expect(tampered.shortfall?.reason).toBe('identity-proof-unknown');
+  });
+
   test('reports bounded identity uncertainty separately from a proven legal impossibility', () => {
     const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
     const result = proveSimultaneousSnakeSeating({

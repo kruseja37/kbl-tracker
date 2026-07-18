@@ -874,3 +874,13 @@ cannot manufacture the 90% floor, changed Full Sources or IV invalidates the rec
 skip identity extraction, and unmount cancels the worker without writes. Exact large-source, named
 preset, 176-pick, 625-test Snake, build, and production-browser setup gates remain green. Final
 re-audit and JK's real browser walk remain open.
+
+**Second audit and repair:** First-audit repair `6d45f11f` received **BLOCK — Major 2 / Minor 0**.
+Its receipt bound Full Sources but not the separate assignment array, and abort during a pending add
+could still fall through into remove and setup persistence. The receipt now fingerprints its exact
+assignments together with source authority and rejects any payload change before reuse. Both shaped
+and Full Sources mutation paths recheck the owned signal between every awaited add/remove/save
+stage. Regressions alter only assignments and pause both paths inside add before unmount; altered
+support returns honest UNKNOWN and neither abandoned path begins a later remove or setup save.
+Focused proof is 58/58 and exact 2,001-source eight-team proof remains 3/3. Final re-audit and JK's
+real browser walk remain open.

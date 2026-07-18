@@ -2,6 +2,19 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, Snake large-source setup) — second audit repaired; final re-audit pending
+
+The re-auditor of `6d45f11f` returned **BLOCK — Major 2 / Minor 0**. Source truth was bound but the
+certificate's assignment payload was not, and the abort signal was not rechecked between add,
+remove, and setup persistence. The second repair fingerprints the exact assignments with their
+source authority and verifies both before reuse. The shaped and Full Sources mutation paths now
+cooperatively stop between every awaited stage; direct regressions pause inside add, unmount, then
+prove remove and setup save never begin. Altering only a certificate's assignments now returns
+honest identity UNKNOWN rather than reusing them. Focused proof is 58/58; the exact production
+2,001-source/eight-team suite is 3/3 in 140 seconds; TypeScript/lint/diff are green. Next: freeze for
+the same re-auditor, then build the approved exact rating-room/tax-ledger surface. No push, merge, or
+deploy.
+
 ## 2026-07-18 (Codex, Snake large-source setup) — first audit repaired; final re-audit pending
 
 The first non-builder audit of `17a3ec8b` returned **BLOCK — Major 3 / Minor 0**. It proved that the

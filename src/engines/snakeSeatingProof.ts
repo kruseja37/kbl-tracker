@@ -107,6 +107,7 @@ export interface SnakeSeatingProof {
 export interface SnakeIdentitySupportCertificate {
   readonly version: 1;
   readonly sourceFingerprint: string;
+  readonly assignmentFingerprint: string;
   readonly assignments: readonly SnakeSeatingAssignment[];
 }
 
@@ -172,6 +173,16 @@ function identityCertificateSourceFingerprint(input: SimultaneousSnakeSeatingInp
   })}`;
 }
 
+function identityCertificateAssignmentFingerprint(
+  sourceFingerprint: string,
+  assignments: readonly SnakeSeatingAssignment[],
+): string {
+  return `snake-identity-assignments-v1:${compactCertificateFingerprint({
+    sourceFingerprint,
+    assignments,
+  })}`;
+}
+
 /** Mint support only after the exact Full Sources proof passes the independent setup validator. */
 export function createSnakeIdentitySupportCertificate(
   input: SimultaneousSnakeSeatingInput,
@@ -179,13 +190,16 @@ export function createSnakeIdentitySupportCertificate(
 ): SnakeIdentitySupportCertificate | null {
   if (input.identityReferencePool || input.identitySupportCertificate) return null;
   if (!validateConstructiveSnakeSeatingProof(input, proof)) return null;
+  const sourceFingerprint = identityCertificateSourceFingerprint(input);
+  const assignments = proof.assignments.map((assignment) => ({
+    ...assignment,
+    playerIds: [...assignment.playerIds],
+  }));
   return {
     version: 1,
-    sourceFingerprint: identityCertificateSourceFingerprint(input),
-    assignments: proof.assignments.map((assignment) => ({
-      ...assignment,
-      playerIds: [...assignment.playerIds],
-    })),
+    sourceFingerprint,
+    assignmentFingerprint: identityCertificateAssignmentFingerprint(sourceFingerprint, assignments),
+    assignments,
   };
 }
 
@@ -2693,7 +2707,11 @@ export function proveSimultaneousSnakeSeating(input: SimultaneousSnakeSeatingInp
     const supportCertificate = input.identitySupportCertificate;
     const supportBoundToSource = supportCertificate?.version === 1
       && Boolean(input.identityReferencePool)
-      && supportCertificate.sourceFingerprint === identityCertificateSourceFingerprint(input);
+      && supportCertificate.sourceFingerprint === identityCertificateSourceFingerprint(input)
+      && supportCertificate.assignmentFingerprint === identityCertificateAssignmentFingerprint(
+        supportCertificate.sourceFingerprint,
+        supportCertificate.assignments,
+      );
     if (supportCertificate && supportBoundToSource && supportCertificate.assignments.length === input.clubs.length) {
       const retainedSupport: SnakeSeatingProof = {
         feasible: true,

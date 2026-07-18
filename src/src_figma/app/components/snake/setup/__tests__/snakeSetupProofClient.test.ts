@@ -81,7 +81,12 @@ describe('SnakeSetupProofClient', () => {
   it('shares one in-flight worker and reuses the resolved proof for the same fingerprint', async () => {
     const { client, workers } = clientHarness();
     const received: unknown[] = [];
-    const certificate = { version: 1 as const, sourceFingerprint: 'full-source', assignments: [] };
+    const certificate = {
+      version: 1 as const,
+      sourceFingerprint: 'full-source',
+      assignmentFingerprint: 'full-source-assignments',
+      assignments: [],
+    };
     const first = client.run(proofInput(), {
       onIdentitySupportCertificate: (value) => received.push(value),
     });

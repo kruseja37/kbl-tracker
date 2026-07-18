@@ -25,6 +25,11 @@ fingerprinted to exact Full Sources and a second receipt fingerprinted to the ex
 inputs. Navigating away or starting a replacement build cancels the prior proof/shape chain before
 it can persist stale membership.
 
+**Second-audit clarification:** Source authority and its assignments are one receipt. The assignment
+payload has its own fingerprint tied to the source fingerprint and must match before reuse. Build
+cancellation is cooperative across persistence: after every awaited membership step and before any
+later remove or setup save, the page must prove that the same mounted build still owns the action.
+
 ### 2026-07-17 (Snake late-draft law): exact legal completion outranks preference optimization at every room size
 
 **The ruling:** four-team testing is a repro size, not the product standard. A Snake room must preserve

@@ -1404,3 +1404,11 @@ completion with a separate audit still pending. That auditor blocked three real 
 relative IV-floor authority, unbound support reuse, and absent production cancellation. The live
 header now records their narrow repair, the preserved scale gates, and final re-audit as the last
 engineering gate before JK's eight-team browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-238 second-audit repair
+
+The prior header recorded Full Sources IV-floor authority, a source-bound support certificate, and
+worker cancellation. The re-auditor found that assignment payloads were not bound to the source and
+that cancellation was not rechecked between asynchronous membership/persistence stages. The live
+header now records exact assignment binding and stage-by-stage cancellation as the final audit
+candidate.

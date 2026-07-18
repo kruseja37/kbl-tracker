@@ -82,6 +82,7 @@ vi.mock("../../../engines/snakeSeatingProof", async () => {
     createSnakeIdentitySupportCertificate: vi.fn((input, proof) => proof.feasible ? ({
       version: 1 as const,
       sourceFingerprint: `test-source:${input.pool.map((player) => player.playerId).join("|")}`,
+      assignmentFingerprint: `test-assignments:${proof.assignments.map((assignment) => assignment.playerIds.join("|")).join("::")}`,
       assignments: proof.assignments,
     }) : null),
   };
@@ -219,6 +220,9 @@ describe("LeagueBuilderDraftSetup", () => {
     vi.mocked(getMlbDraftSession).mockResolvedValue(null);
     vi.mocked(leagueHasLinkedFranchise).mockResolvedValue(false);
     vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
+    vi.mocked(addPlayersToLeaguePool).mockResolvedValue([]);
+    vi.mocked(removePlayersFromLeaguePool).mockResolvedValue([]);
+    vi.mocked(saveLeagueTemplate).mockImplementation(async (league) => league);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
     vi.mocked(rankAllArchetypesForPool).mockReturnValue([]);
     window.sessionStorage.clear();
@@ -456,6 +460,64 @@ describe("LeagueBuilderDraftSetup", () => {
     await act(async () => undefined);
 
     expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
+    expect(removePlayersFromLeaguePool).not.toHaveBeenCalled();
+    expect(saveLeagueTemplate).not.toHaveBeenCalled();
+  }, 20_000);
+
+  test.each([
+    ["shape-to-teams", "BUILD COMPETITIVE POOL"],
+    ["full-sources", "BUILD FULL SOURCES"],
+  ] as const)("SNAKE POOL GUIDE: leaving during a pending %s membership add cannot continue with remove or setup save", async (
+    poolAssemblyMode,
+    buttonName,
+  ) => {
+    const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
+    const teams = teamIds.map((id, index) => makeTeam(id, {
+      name: `Club ${index + 1}`,
+      controlledBy: "ai",
+      gmSeatId: undefined,
+      gmSeatName: undefined,
+    }));
+    const players = makePositionDiversePlayers(300, 8, `snake-persist-${poolAssemblyMode}`)
+      .map((player, index, all) => ({
+        ...player,
+        leagueAssignments: index === all.length - 1
+          ? [{ leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const }]
+          : [],
+      }));
+    const removedCurrentId = players[players.length - 1].id;
+    const supportIds = players.slice(0, 176).map((player) => player.id);
+    mockLeagueData({
+      league: makeLeague({
+        teamIds,
+        draftFormat: "snake",
+        draftPoolMode: "pool-first",
+        poolAssemblyMode,
+        poolSizeMultiplier: 1.35,
+        poolFirstHandRemoves: [removedCurrentId],
+        salaryCap: 10_000_000,
+      }),
+      teams,
+      players,
+      pool: makePool({ locked: false, players: [], totalSlots: 176 }),
+    });
+    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(certifiedSnakeProof(teamIds, supportIds));
+
+    let resolveAdd!: (players: Awaited<ReturnType<typeof addPlayersToLeaguePool>>) => void;
+    vi.mocked(addPlayersToLeaguePool).mockImplementation(() => new Promise((resolve) => {
+      resolveAdd = resolve;
+    }));
+    vi.mocked(removePlayersFromLeaguePool).mockClear();
+    vi.mocked(saveLeagueTemplate).mockClear();
+
+    const view = render(<LeagueBuilderDraftSetup />);
+    await clickDraftSetupButton(buttonName);
+    await waitFor(() => expect(addPlayersToLeaguePool).toHaveBeenCalled(), { timeout: 12_000 });
+
+    view.unmount();
+    resolveAdd([]);
+    await act(async () => undefined);
+
     expect(removePlayersFromLeaguePool).not.toHaveBeenCalled();
     expect(saveLeagueTemplate).not.toHaveBeenCalled();
   }, 20_000);

@@ -2907,7 +2907,7 @@ export function LeagueBuilderDraftSetup() {
           teams: league.teamIds.length,
           budgetPerTeam: tierBudget,
           playerIds: identitySupportIds,
-          authorityFingerprint: identitySupportCertificate.sourceFingerprint,
+          authorityFingerprint: `${identitySupportCertificate.sourceFingerprint}:${identitySupportCertificate.assignmentFingerprint}`,
         })
       : undefined;
     const input = {
@@ -3552,10 +3552,11 @@ export function LeagueBuilderDraftSetup() {
     const nextIds = setUnion(hardKeepIds, engineGeneratedIds);
     const toAdd = [...nextIds].filter((id) => !currentIds.has(id));
     const toRemove = [...currentIds].filter((id) => !nextIds.has(id));
-    const changedPlayers = [
-      ...((toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? []),
-      ...((toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? []),
-    ];
+    const addedPlayers = (toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? [];
+    assertSnakeBuildActive(pageMountedRef.current, signal);
+    const removedPlayers = (toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? [];
+    assertSnakeBuildActive(pageMountedRef.current, signal);
+    const changedPlayers = [...addedPlayers, ...removedPlayers];
     if (pageMountedRef.current) replacePlayersLocal(changedPlayers);
     const actualManualExcludedIds = new Set([...normalizedProvenance.manualExcludedIds]
       .filter((id) => !nextIds.has(id)));
@@ -3570,6 +3571,7 @@ export function LeagueBuilderDraftSetup() {
     };
     if (pageMountedRef.current) setPoolProvenance(nextProvenance);
     if (isSnakeFormat) {
+      assertSnakeBuildActive(pageMountedRef.current, signal);
       await saveLeagueDraftSetup({
         poolAssemblyMode: "shape-to-teams",
         snakePoolSizeMultiplier: resolvedSnakePoolSizeMultiplier,
@@ -3577,6 +3579,7 @@ export function LeagueBuilderDraftSetup() {
         poolFirstHandRemoves: sortedIds([...nextProvenance.manualExcludedIds]),
         poolFirstGenerationNonce: nextProvenance.generationNonce,
       });
+      assertSnakeBuildActive(pageMountedRef.current, signal);
     }
     const report = modeAReportFromResult(result, 0);
     if (pageMountedRef.current) setPoolFirstShapeReport(report);
@@ -3608,10 +3611,11 @@ export function LeagueBuilderDraftSetup() {
     const toAdd = nextIds.filter((id) => !currentIds.has(id));
     const toRemove = [...currentIds].filter((id) => !nextIdSet.has(id));
     assertSnakeBuildActive(pageMountedRef.current, signal);
-    const changedPlayers = [
-      ...((toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? []),
-      ...((toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? []),
-    ];
+    const addedPlayers = (toAdd.length > 0 ? await addPlayersToLeaguePool(toAdd, activeLeagueId) : []) ?? [];
+    assertSnakeBuildActive(pageMountedRef.current, signal);
+    const removedPlayers = (toRemove.length > 0 ? await removePlayersFromLeaguePool(toRemove, activeLeagueId) : []) ?? [];
+    assertSnakeBuildActive(pageMountedRef.current, signal);
+    const changedPlayers = [...addedPlayers, ...removedPlayers];
     if (pageMountedRef.current) replacePlayersLocal(changedPlayers);
     const actualManualExcludedIds = new Set([...baseProvenance.manualExcludedIds]
       .filter((id) => !nextIdSet.has(id)));
@@ -3630,12 +3634,14 @@ export function LeagueBuilderDraftSetup() {
       setPoolProvenance(nextProvenance);
       setPoolFirstShapeReport(null);
     }
+    assertSnakeBuildActive(pageMountedRef.current, signal);
     await saveLeagueDraftSetup({
       ...(options.persistMode === false ? {} : { poolAssemblyMode: "full-sources" as const }),
       poolFirstHandAdds: sortedIds([...nextProvenance.userAddedIds]),
       poolFirstHandRemoves: sortedIds([...nextProvenance.manualExcludedIds]),
       poolFirstGenerationNonce: nextProvenance.generationNonce,
     });
+    assertSnakeBuildActive(pageMountedRef.current, signal);
     return { count: nextIds.length };
   }, [activeLeagueId, assertPoolCanMutate, league, players, replacePlayersLocal, rosterDesignPinPlayerIds, saveLeagueDraftSetup, universePlayerIdList]);
 

@@ -4,6 +4,22 @@
 
 ---
 
+### 2026-07-18 — FINDING-238 second audit block and narrow repair
+
+The re-auditor blocked first-audit repair `6d45f11f` with **Major 2 / Minor 0**. The source
+fingerprint did not include the assignment payload, so a copied valid source receipt plus altered
+legal/affordable assignments could bypass setup identity. Cancellation stopped the worker but had
+only one checkpoint before the combined add/remove/save chain, so abort during a pending add could
+still begin the old remove and setup save.
+
+The second repair adds an assignment fingerprint over the exact source authority and assignment
+payload and rejects any mismatch before support reuse. Draft Setup now checks its owned build signal
+after add, after remove, immediately before save, and after save in both shaped and Full Sources
+paths. Permanent tests alter only the assignment payload and pause both membership paths inside add,
+then unmount and prove no later remove or setup save occurs. Focused proof is 58/58; exact
+2,001-source/eight-team proof is 3/3 in 140 seconds; TypeScript, changed-file lint, and diff integrity
+are green. Final re-audit and JK's browser walk remain; no push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-238 first audit block and narrow repair
 
 The separate auditor blocked frozen builder commit `17a3ec8b` with **Major 3 / Minor 0**. The proof

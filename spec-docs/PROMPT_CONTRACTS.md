@@ -32592,3 +32592,10 @@ team count, budget, support ids, and certificate authority. Raw assignments or i
 Draft Setup owns cancellation across proof, shaping, and post-worker persistence; replacement or
 unmount must abort without stale pool writes. Permanent red/green tests must cover all four failure
 classes before final re-audit.
+
+**Second audit repair:** A matching source fingerprint is insufficient if the certificate's
+assignments can change independently. Bind the exact assignment payload to that source authority and
+verify both before reuse. Cancellation must be rechecked between each awaited add/remove/save stage
+in shaped and Full Sources builds; if the owning build is replaced or unmounted while one stage is
+pending, no subsequent membership or setup-persistence stage may begin. Permanent tests must alter
+only assignments and must pause both production paths inside add before abort.
