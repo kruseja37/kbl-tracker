@@ -1376,3 +1376,10 @@ solver itself still collapsed those versions in the final round. The new header 
 unique-person final-round matcher, an eight-club regression, the separately discovered and repaired
 semantic-proof/advisor-log blink loop, full 176-pick production proof, and final re-audit as the last
 engineering gate before JK's browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 independent close
+
+The prior live header recorded the exact final-round version matcher, the semantic proof lifecycle
+repair, full 176-pick production proof, and final non-builder audit as the last engineering gate.
+That auditor has now returned APPROVE with Major 0 / Minor 0 at frozen commit `12efdbdf`; only JK's
+real eight-team browser walk remains.

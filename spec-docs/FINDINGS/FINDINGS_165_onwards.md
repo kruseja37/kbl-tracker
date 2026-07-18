@@ -725,7 +725,7 @@ retirement, rollback on queue-persistence failure, and the Hotseat control. JK's
 remains the product gate.
 
 ### FINDING-237
-**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** THIRD AUDIT REPAIRED — FINAL RE-AUDIT PENDING
+**Date:** 2026-07-17 | **Phase:** Snake full-draft browser gate / late-draft decision truth | **Status:** FIXED — INDEPENDENTLY APPROVED — JK EIGHT-TEAM WALK PENDING
 **Files:** `src/engines/snakeAssistantBoard.ts`, `src/engines/snakeSeatingProof.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`, Snake desk hooks/workers and focused tests
 **Evidence:** In JK's first complete four-team room walk, two seats lost their Assistant GM several
 rounds before the end and one club reached 19/22 with no discoverable legal pick despite a positive
@@ -814,6 +814,12 @@ final-round certificate still chose one representative card per person before ro
 bounded zero-or-one-open-seat matcher keeps every version's actual role, matches unique people across
 all eight clubs, computes exact salary and shifted-cap tax, and cannot mint SUCCESS without the
 unchanged constructive validator. Exact one-club and eight-club sibling tests pass.
+**Final audit:** A separate non-builder audited frozen commit `12efdbdf` and returned **APPROVE —
+Major 0 / Minor 0**. It independently inspected the bounded final-round matcher, unique-person
+augmenting paths, exact shifted-cap tax and affordability edges, unchanged final validator, complete
+semantic proof fingerprint, and retained OPEN/Assistant/zero-interest behavior. Its focused 8-file /
+113-test matrix, TypeScript, changed-file ESLint, production build, and diff checks are green. JK's
+real eight-team browser walk remains the sole product-acceptance gate.
 **Live-loop correction:** The final browser gate then caught DRAFTABLE rows blinking out for 20–40 ms
 at a time. Trace proved that advisor-log-only session revisions recreated an identical seating input;
 the effect cleared its valid proof, changed advisor state, wrote another log revision, and repeated.

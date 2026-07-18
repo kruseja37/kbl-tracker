@@ -1338,6 +1338,18 @@ input. An 80-sample / 800 ms live trace retained all 20 safe rows continuously; 
 measured DRAFTABLE filtering at 26 ms and player selection at 185 ms. Final independent audit remains
 mandatory; JK's real browser walk remains the product gate.
 
+### 2026-07-17 — FINDING-237 final independent close
+
+The separate non-builder audited frozen commit `12efdbdf758c7d9b3490b5b909082b1f22ad5bc8`
+and returned **APPROVE — Major 0 / Minor 0**. It found no correctness, data-integrity, UX-flow,
+persistence, performance, or regression finding. The audit independently verified the zero-or-one
+open-seat activation boundary, every actual card-version role, room-wide unique-person augmenting
+matching, exact shifted-cap tax and affordability edges, unchanged constructive final validation,
+complete semantic proof fingerprinting, OPEN actionability, mutation-time validation, Assistant
+certificate overlap, and zero-interest fallback. Independent gates passed 8 focused files / 113
+tests, TypeScript, changed-file ESLint, production build, and diff integrity. JK's real eight-team
+browser walk remains the only product-acceptance gate; no push, merge, or deploy is authorized.
+
 ### 2026-07-17 — FINDING-237 third audit block and narrow repair
 
 The next read-only pass rejected `4242ca69` with **BLOCK — Major 2 / Minor 0**. One cheapest version

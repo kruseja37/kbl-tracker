@@ -32545,3 +32545,8 @@ complete canonical seating input. A genuinely changed roster, pool, version stat
 budget still changes that key and requires fresh proof. Browser acceptance requires a stable
 DRAFTABLE-filter row set as well as latency; a row that appears, disappears, and reappears is a
 failure even if the eventual pick succeeds.
+
+**Final independent verdict:** Frozen commit `12efdbdf758c7d9b3490b5b909082b1f22ad5bc8`
+received **APPROVE — Major 0 / Minor 0** from the separate non-builder auditor. The engineering gate
+is closed. JK's real eight-team browser walk remains the sole product-acceptance gate; no push,
+merge, or deploy is authorized.

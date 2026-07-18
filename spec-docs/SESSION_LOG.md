@@ -7861,5 +7861,9 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   roster/pool/cap/version changes still invalidate. All 80 samples over 800 ms retained 20 safe rows.
 - Clean browser result: room 863 ms, desk 234 ms, pool 377 ms, sort 44 ms, FIT 14 ms, DRAFTABLE 26 ms,
   selection 185 ms, pick save 1.267 s, reload on pick 2 in 922 ms, Assistant available, no console
-  errors. TypeScript, changed-file ESLint, and the fresh 2,734-module production/PWA build are green. The independent audit remains;
-  no push, merge, deploy, or product acceptance.
+  errors. TypeScript, changed-file ESLint, and the fresh 2,734-module production/PWA build are green.
+- Frozen implementation commit `12efdbdf` received separate non-builder **APPROVE — Major 0 /
+  Minor 0** after independent source inspection plus 8 files / 113 tests, TypeScript, changed-file
+  ESLint, production build, and diff checks. Engineering verification is closed; JK's real
+  eight-team browser walk remains the sole product-acceptance gate. No push, merge, deploy, or
+  product acceptance.
