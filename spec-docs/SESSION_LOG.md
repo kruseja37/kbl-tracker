@@ -2,6 +2,17 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, sync quota) — independently approved; JK click remains
+
+Frozen implementation `aa123d76` passed the final separate hostile audit with **Major 0 / Minor
+0**. The auditor independently confirmed one-click queue preservation, post-drain base/queue
+durability, cursor-before-prune ordering, mandatory expected-account binding for incremental pull and
+destructive rollback, literal local-error prefix gating, and no Upload/Download route. Independent
+proof passed 126/126 focused tests, TypeScript, changed-file ESLint, 2,735-module production/PWA
+build, and diff integrity. Port 5188 serves the exact repaired checkout. Engineering is closed; JK
+must sign in if prompted, press `FREE SPACE + SYNC` once, and verify pending reaches zero. No push,
+merge, deploy, or product acceptance is authorized.
+
 ## 2026-07-18 (Codex, sync quota) — third audit repaired; final re-audit pending
 
 The third audit of `cb4e30ca` found one remaining account-binding hole in destructive-download

@@ -1464,3 +1464,12 @@ account and that the UI marker used containment rather than a literal prefix. Th
 records mandatory expected-account binding for every cursor save and literal prefix detection. Final
 verification, freeze, re-audit, and JK's one-click recovery remain. No push, merge, or deploy was
 authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota audit close
+
+The prior live header recorded the third-audit repair at `aa123d76`: mandatory expected-account
+binding for every cursor save, literal local persistence-prefix UI gating, 126/126 focused tests, and
+final re-audit pending. The separate auditor has now returned APPROVE with Major 0 / Minor 0 after
+independent tests, TypeScript, lint, production/PWA build, and diff integrity. Only JK's live
+`FREE SPACE + SYNC` click and pending-zero observation remain. No push, merge, or deploy was
+authorized.

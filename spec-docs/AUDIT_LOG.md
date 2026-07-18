@@ -4,6 +4,18 @@
 
 ---
 
+### 2026-07-18 — FINDING-240 independently approved
+
+The final separate read-only audit of frozen `aa123d76` returned **APPROVE — Major 0 / Minor 0**.
+It confirmed that recovery removes only persisted derived bases, retains every queue/in-memory base,
+drains once, and retries queue/base durability before success; pull saves the expected account's
+cursor before pruning; destructive-download rollback carries the starting account; and every cursor
+save rejects missing Supabase, sign-out, or account switch before metadata persistence. The modal
+requires a literal local persistence-error prefix plus quota semantics and never routes recovery to
+Upload/Download. Independent gates passed 126/126 focused tests, TypeScript, changed-file ESLint,
+2,735-module production/PWA build, and diff integrity. Only JK's live `FREE SPACE + SYNC` click and
+pending-zero observation remain. No push, merge, or deploy.
+
 ### 2026-07-18 — FINDING-240 third audit block and complete account binding
 
 The third audit of `cb4e30ca` returned **BLOCK — Major 1 / Minor 1**. Destructive-download rollback

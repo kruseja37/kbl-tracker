@@ -923,7 +923,7 @@ build, diff integrity, and clean worktree. Engineering verification is closed; J
 remains the sole product gate. No push, merge, or deploy.
 
 ### FINDING-240
-**Date:** 2026-07-18 | **Phase:** Cloud sync / large-import durability | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-18 | **Phase:** Cloud sync / large-import durability | **Status:** FIXED — INDEPENDENTLY APPROVED — JK LIVE CLICK PENDING
 **Files:** `src/utils/syncEngine.ts`, `src/src_figma/app/components/SyncModal.tsx`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`, `src/src_figma/__tests__/app/SyncModal.test.tsx`
 **Evidence:** JK's exact local preview reported 1,398 pending operations and browser quota failures
 for both `kbl-sync-queue` and `kbl-sync-store-write-bases`. The queue contains legitimate local
@@ -968,3 +968,8 @@ its starting user through rollback and fails before any cross-account metadata w
 now literally starts with the local persistence failure marker rather than merely containing it.
 Regressions prove account-switch rollback cannot write cursor metadata and embedded service text does
 not expose recovery. Focused proof is 126/126; final gates remain. No push, merge, or deploy.
+
+**Final audit:** Frozen `aa123d76` is **APPROVE — Major 0 / Minor 0**. The separate auditor
+independently passed 126/126 focused tests, TypeScript, changed-file ESLint, the 2,735-module
+production/PWA build, and diff integrity, and confirmed every no-loss/account/durability boundary.
+Only JK's live one-click recovery and pending-zero observation remain. No push, merge, or deploy.
