@@ -2,6 +2,18 @@
 # Previous sessions archived at: spec-docs/archive/SESSION_LOG_through_2026-02-11.md
 ---
 
+## 2026-07-18 (Codex, Snake rating room) — independently approved; JK walk remains
+
+Frozen commit `a036b839` received **APPROVE — Major 0 / Minor 0** from the separate read-only
+auditor. The audit confirmed that every displayed USED total remains uncapped above its shifted
+LIMIT, LEFT changes to exact OVER, row tax matches settlement, and every contributor retains the
+canonical usage-weighted point value. It also confirmed ordinary pitcher weighting, CP bullpen
+membership, single SP/RP grouping, Two Way no-duplication, selected-player top-N truth, and separate
+My/Assistant 22-player inputs on Main and Companion. Independent verification passed 85/85 focused
+tests, 17/17 responsive/privacy browser journeys, changed-file ESLint, TypeScript plus the
+production/PWA build, diff integrity, and clean worktree. Engineering verification is closed; JK's
+clean local browser walk remains the sole product-acceptance gate. No push, merge, or deploy.
+
 ## 2026-07-18 (Codex, Snake rating room) — builder verified; independent audit pending
 
 The frozen FINDING-238 second repair `1ae9c0a4` passed the separate re-audit **APPROVE — Major 0 /

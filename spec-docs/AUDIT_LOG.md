@@ -4,6 +4,18 @@
 
 ---
 
+### 2026-07-18 — FINDING-239 exact rating room independently approved
+
+The separate non-builder auditor approved frozen rating-room commit `a036b839` with **Major 0 /
+Minor 0**. It independently traced the 19 displayed rows to the same canonical ledger consumed by
+`luxuryTax`, including uncapped accumulated USED points, shifted limits, LEFT/OVER, exact row tax,
+ordered contributors, ordinary pitcher role weights, CP bullpen inclusion, one SP/RP group, and Two
+Way no-duplication. My Board and Asst GM Board use their own exact 22-player inputs under the active
+team's cap identity in Main and Companion. Independent gates passed 85/85 focused tests, 17/17
+responsive/privacy browser journeys, changed-file ESLint, TypeScript plus production/PWA build,
+diff integrity, and clean worktree. JK's browser walk remains the product gate; no push, merge, or
+deploy.
+
 ### 2026-07-18 — FINDING-238 approved; FINDING-239 rating-room builder close
 
 The independent re-auditor approved frozen large-source repair `1ae9c0a4` with **Major 0 / Minor

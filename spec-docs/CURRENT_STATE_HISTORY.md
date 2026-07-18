@@ -1419,3 +1419,13 @@ authority and adding cancellation checkpoints between every awaited add/remove/s
 2,001-source proof was 3/3, focused proof 58/58, and the final independent re-audit was still
 pending. Next was that re-audit, then the newly approved rating-room/tax-ledger UI and one clean JK
 browser preview. No push, merge, deploy, or product acceptance was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-239 audit close
+
+The prior live header recorded the independently approved exact 2,001-card eight-team setup repair
+and builder-verified exact Rating Room. The Rating Room showed all 19 canonical tax rows with
+uncapped accumulated points, shifted limits, LEFT/OVER, row tax, and exact contributors on My Board
+and Asst GM Board; broad Snake proof was 628/628 and browser proof was 23/23. Its separate
+non-builder audit and JK's clean browser walk remained. The auditor has now returned APPROVE with
+Major 0 / Minor 0; only JK's product-acceptance walk remains. No push, merge, or deploy was
+authorized.

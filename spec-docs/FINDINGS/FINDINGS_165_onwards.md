@@ -893,7 +893,7 @@ and clean worktree. Engineering verification is closed; JK's browser walk remain
 gate. No push, merge, or deploy.
 
 ### FINDING-239
-**Date:** 2026-07-18 | **Phase:** Snake draft decision truth / archetype tax visibility | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-18 | **Phase:** Snake draft decision truth / archetype tax visibility | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
 **Files:** `src/engines/leagueConstruction.ts`, `src/src_figma/app/components/snake/desk/deskModel.ts`, `src/src_figma/app/components/snake/desk/BoardView.tsx`, `src/src_figma/app/components/snake/desk/PrivateDesk.tsx`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`
 **Evidence:** The engine already settled 19 exact luxury rows with archetype-shifted caps, top-N
 cohorts, pitcher role-use weights, single SP/RP group assignment, and Two Way exceptions. The draft
@@ -912,5 +912,12 @@ behind Help. Add no pool scan, worker, persistence, or network work.
 eight-team oracle completes 176/176 picks with every Assistant available. Playwright is 23/23 across
 responsive desks, companion privacy/sync, complete franchise launch, exact 2,001-source setup, and
 Mac/iPad latency. TypeScript, changed-file ESLint, the 2,735-module production/PWA build, and diff
-integrity are green. A separate non-builder audit and JK's browser walk remain. No push, merge, or
-deploy.
+integrity are green.
+**Final audit:** Frozen commit `a036b839` received **APPROVE — Major 0 / Minor 0**. The auditor
+independently confirmed exact ledger/settlement parity, uncapped USED and exact LEFT/OVER/tax,
+canonical contributors and role weights, CP bullpen inclusion, SP/RP and Two Way behavior, shifted
+team limits, selected-player truth, separate My/Assistant inputs on Main and Companion, help-law
+compliance, responsive layout, and no new heavy data path. Independent proof passed 85/85 focused
+tests, 17/17 responsive/privacy browser journeys, changed-file lint, TypeScript plus production/PWA
+build, diff integrity, and clean worktree. Engineering verification is closed; JK's browser walk
+remains the sole product gate. No push, merge, or deploy.
