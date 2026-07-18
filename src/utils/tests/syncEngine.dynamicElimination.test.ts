@@ -1449,7 +1449,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test.each([
     ["session-first", 2, 1],
     ["standalone-board-first", 1, 2],
-  ])("session and standalone seat-board sync groups converge and remain writable when %s", async (
+  ])("standalone seat-board sync stays authoritative without rewriting room progress when %s", async (
     order,
     sessionBoardRevision,
     standaloneBoardRevision,
@@ -1503,12 +1503,25 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       row.store_name === "snakeSeatBoards"
       && row.record_key === JSON.stringify(`${storage.createMlbDraftSessionId(leagueId, 1)}::mlb-seat::team-a`)
     ));
-    if (!cloudSession || !cloudBoard) throw new Error("Both converged seat-board sync groups must reach cloud storage.");
+    if (!cloudSession || !cloudBoard) throw new Error("The room and independent seat-board rows must both remain in cloud storage.");
     expect((cloudSession.data as import("../leagueBuilderStorage").LeagueBuilderMlbDraftSession)
-      .seatBoards?.["team-a"]?.revision).toBe(3);
+      .seatBoards?.["team-a"]?.revision).toBe(sessionBoardRevision);
     expect((cloudBoard.data as import("../leagueBuilderStorage").SnakeSeatBoardStoreRecord)
       .board.revision).toBe(3);
     syncEngine.destroy();
+
+    await storage.__resetLeagueBuilderDatabaseForTests();
+    await Promise.all([
+      deleteDatabase("kbl-app-meta"),
+      deleteDatabase("kbl-league-builder"),
+    ]);
+    localStorage.clear();
+    const freshEngine = await loadFreshSyncEngine();
+    const freshStorage = await import("../leagueBuilderStorage");
+    await freshStorage.initLeagueBuilderDatabase();
+    await freshEngine.pull({ throwOnError: true });
+    expect((await freshStorage.getMlbDraftSession(leagueId, 1))?.seatBoards?.["team-a"]?.revision).toBe(3);
+    freshEngine.destroy();
   });
 
   test("does not trust a noncanonical season-2 FARM authority on a cold device", async () => {

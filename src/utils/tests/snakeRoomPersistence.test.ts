@@ -489,6 +489,40 @@ describe('PERFROOM room-session persistence', () => {
     })).rejects.toThrow('invalid next revision');
   });
 
+  test('an independent seat-board patch queues only its board row and never an older whole-room snapshot', async () => {
+    await saveMlbDraftSession({
+      ...sessionWithFrozenClubs('team-a'),
+      seatBoards: { 'team-a': board(1, 'embedded-board-1') },
+    });
+    syncMockState.upsert.mockClear();
+    syncMockState.suppressed = false;
+
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: 'perfroom-league',
+      teamId: 'team-a',
+      board: board(2, 'companion-board-2'),
+      expectedBoardRevision: 1,
+    });
+
+    expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'companion-board-2'));
+    expect(syncMockState.upsert).toHaveBeenCalledWith(
+      'kbl-league-builder',
+      'snakeSeatBoards',
+      expect.stringContaining('::mlb-seat::team-a'),
+      expect.objectContaining({
+        teamId: 'team-a',
+        revision: 2,
+        board: board(2, 'companion-board-2'),
+      }),
+    );
+    expect(syncMockState.upsert).not.toHaveBeenCalledWith(
+      'kbl-league-builder',
+      'mlbDraftSessions',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   test('embedded rev2 beats standalone rev1 and the successful rev3 write converges both copies', async () => {
     const stored = await saveMlbDraftSession({
       ...session(),

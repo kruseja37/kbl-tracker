@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   saveRoom: vi.fn(async (session: unknown) => session),
   markHandoff: vi.fn(),
   pull: vi.fn(async () => undefined),
+  flush: vi.fn(async () => undefined),
   refresh: vi.fn(async () => undefined),
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
@@ -20,7 +21,7 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
 });
 
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
-vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
+vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull, flush: mocks.flush } }));
 vi.mock('../../utils/snakeSounds', () => ({
   loadSnakeSoundsEnabled: () => false,
   saveSnakeSoundsEnabled: vi.fn(),

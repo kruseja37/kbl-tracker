@@ -349,6 +349,34 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body).toHaveTextContent('dual Player');
   });
 
+  test('an already-open companion adopts a standalone board revision even when room metadata is unchanged', async () => {
+    const source = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const freshBoard = {
+      ...structuredClone(source.seatBoards!.a),
+      rankings: {
+        ...structuredClone(source.seatBoards!.a.rankings),
+        global: ['catcher', ...source.seatBoards!.a.rankings.global.filter((id) => id !== 'catcher')],
+      },
+      revision: 2,
+    };
+    mocks.currentSession = {
+      ...source,
+      seatBoards: { ...source.seatBoards, a: freshBoard },
+    };
+
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({
+      teamId: 'a',
+      expectedBoardRevision: 2,
+    });
+  });
+
   test('an unrequested player-pool row never inherits another player risk calculation', async () => {
     mocks.riskMode = 'SAFE';
     render(<SnakeCompanion />);

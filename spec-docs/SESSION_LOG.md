@@ -7738,3 +7738,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   — Major 0 / Minor 0.
 - Fresh `origin/main` at close: `ba7f97d6`. No push, merge, deploy, or product acceptance. JK refreshes
   the companion page, resends the current room code, then opens the gold Hotseat control and approves.
+
+## 2026-07-17 — FINDING-235: companion pick/trade propagation
+
+- JK executed a legal pick trade on Hotseat, but companion rooms retained the old pick order,
+  including the club that traded back. Companion freshness itself remained healthy.
+- Traced the conflict to independent private-board persistence queueing both `snakeSeatBoards` and an
+  embedded whole `mlbDraftSessions` snapshot. That older room copy could reach cloud first and make
+  the later Hotseat pick/trade write stale even though it had already succeeded locally.
+- Private-board writes now keep their embedded local copy for same-device coherence but queue only
+  the independently versioned board row. A clean third-device regression proves the newest board
+  still hydrates in both room-first and board-first arrival orders.
+- The shared live-snapshot comparator now includes sorted MLB and FARM board-revision signatures, so
+  already-open Hotseat and companion pages adopt a newer independent board without requiring an
+  unrelated room mutation or manual reload.
+- Completed Hotseat MLB picks, trades, and corrections now force a strict final sync flush. A
+  publication failure says the action was saved locally but companions did not update; it never
+  tells the commissioner to repeat a completed action.
+- Builder and independent gates: 8 focused files / 230 tests, TypeScript, changed-file ESLint,
+  2,730-module production build/PWA, and diff integrity green. The separate auditor returned
+  **APPROVE — Major 0 / Minor 0**. JK's one-trade/one-pick/one-board-move companion retest remains.
+  Fresh `origin/main`: `ba7f97d6`; no push, merge, deploy, or product acceptance.

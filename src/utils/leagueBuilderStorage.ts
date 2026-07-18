@@ -3152,7 +3152,6 @@ async function patchIndependentSeatBoard(input: {
   if (!syncedRecord) throw new Error(`Seat board ${input.teamId} was not saved.`);
   if (!syncedSession) throw new Error(`MLB draft session ${sessionId} was not updated.`);
   if (!syncEngine.isSuppressed()) {
-    syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', syncedSession.id, syncedSession);
     syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', syncedRecord.id, syncedRecord);
   }
   const hydrated = await getMlbDraftSession(input.leagueId, input.seasonNumber);

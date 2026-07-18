@@ -15,6 +15,7 @@ const directStorage = vi.hoisted(() => ({
   teams: [] as Team[],
   players: [] as Player[],
   pull: vi.fn(async () => undefined),
+  flush: vi.fn(async () => undefined),
   getAllLeagueTemplates: vi.fn(async () => directStorage.leagues),
   getAllTeams: vi.fn(async () => directStorage.teams),
   getAllPlayers: vi.fn(async () => directStorage.players),
@@ -78,7 +79,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
 });
 
 vi.mock('../../../utils/syncEngine', () => ({
-  syncEngine: { pull: directStorage.pull },
+  syncEngine: { pull: directStorage.pull, flush: directStorage.flush },
 }));
 
 vi.mock('../../../utils/franchisePhase2Flags', async (importOriginal) => {

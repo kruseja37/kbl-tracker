@@ -32367,3 +32367,45 @@ Hotseat must see that current claims await action without opening the approval p
 **Gates:** focused CompanionSurfaces/AuthFlow/SnakeDraftRoomView suites, TypeScript, changed-file
 ESLint, production build, diff integrity, separate non-builder audit, then JK's same-device admission
 retry. No push, merge, or deploy.
+
+## SNAKE-COMPANION-LIVE-ROOM-PROPAGATION-42
+
+**Role:** Snake companion live-state builder.
+
+**Goal:** Every completed Hotseat MLB pick, trade, and correction must publish the authoritative room
+row before the UI reports the live action complete. A companion's private-board edit must never
+publish an older whole-room snapshot that can block that progress.
+
+**Allowed implementation files:**
+
+- `src/utils/leagueBuilderStorage.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/companion/companionFreshness.ts`
+- focused existing storage, room, and sync tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Preserve the existing five-second room/companion freshness loop, Supabase project/schema, room
+  row, independent board row, and explicit Hotseat authority.
+- Do not add a second Realtime transport, reduce the polling interval, or auto-flush ordinary board
+  reorder traffic.
+- Preserve trade guide/value law, pick legality, correction law, board revisions, privacy, companion
+  identity/admission, FIT, tax, archetypes, salary/IV, and FARM no-trade law.
+- If an authoritative action is saved locally but cannot be published, say exactly that; never invite
+  a duplicate pick or trade by falsely saying it was not saved.
+
+**Required red-first proof:**
+
+- A companion MLB board patch updates the local embedded copy and independent board row but queues
+  only the independent `snakeSeatBoards` cloud row, never `mlbDraftSessions`.
+- A completed live pick requests an immediate final sync flush after its authoritative atomic save.
+- A completed trade requests the same flush and returns the saved authoritative session.
+- An already-open Hotseat or companion adopts a newer standalone MLB/FARM board revision even when
+  the shared room id, revision, timestamp, and companion claims are unchanged.
+- Existing private-board persistence, pick advancement, trade execution, and correction behavior
+  remain green.
+
+**Gates:** focused persistence/room/sync suites, TypeScript, changed-file ESLint, production build,
+diff integrity, separate non-builder audit, then JK's one-trade/one-pick companion browser walk. No
+push, merge, or deploy.

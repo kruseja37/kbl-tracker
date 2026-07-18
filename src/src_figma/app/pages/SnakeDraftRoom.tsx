@@ -175,6 +175,13 @@ import {
 const SEASON_NUMBER = 1;
 const PRACTICE_SEASON_NUMBER = 99;
 
+function liveRoomPublicationFailure(action: 'PICK' | 'TRADE' | 'CORRECTION', cause: unknown): Error {
+  const detail = cause instanceof Error ? cause.message : String(cause);
+  return new Error(
+    `${action} WAS SAVED HERE, BUT COMPANION DEVICES DID NOT UPDATE. RELOAD THE ROOM AND CHECK SYNC. ${detail}`,
+  );
+}
+
 interface MainPrivateIdentity {
   sessionId: string;
   leagueId: string;
@@ -2098,6 +2105,11 @@ function MlbSnakeDraftRoom() {
     rememberBackfillEvents(backfillEvents);
     setSeatingProofResult(seatingCertificate);
     setSession(saved);
+    try {
+      await syncEngine.flush({ throwOnPending: true });
+    } catch (cause) {
+      throw liveRoomPublicationFailure('PICK', cause);
+    }
   }, [deskTeam, draftingTeam, leagueTeams.length, pool, poolById, reconcileAllExistingBoards, rememberBackfillEvents, seatingById, seatingPlayers, seatingProofInput, seatingProofResult, session, unavailable]);
 
   useEffect(() => {
@@ -2244,6 +2256,13 @@ function MlbSnakeDraftRoom() {
       setWriteNotice(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     }
+    try {
+      await syncEngine.flush({ throwOnPending: true });
+    } catch (cause) {
+      const failure = liveRoomPublicationFailure('CORRECTION', cause);
+      setWriteNotice(failure.message);
+      throw failure;
+    }
     if (correctedTradeId) {
       setTradeReceiptsBySeat((current) => Object.fromEntries(Object.entries(current).map(([teamId, entries]) => [
         teamId,
@@ -2301,14 +2320,15 @@ function MlbSnakeDraftRoom() {
         entry: { id: `${offer.id}:executed:${receipt.teamId}`, kind: 'TRADE', text: receipt.text, createdAt: new Date().toISOString(), actionable: true },
       });
     }
+    let saved: LeagueBuilderMlbDraftSession;
     try {
-      await persist(logged);
+      saved = await persist(logged);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setWriteNotice(message);
       return { valid: false, message: 'THE TRADE WAS NOT SAVED. TRY AGAIN.', session: null, livePickMoved: false, receipts: [] };
     }
-    const tradeId = logged.trades?.at(-1)?.id ?? `revision-${logged.revision ?? 0}`;
+    const tradeId = saved.trades?.at(-1)?.id ?? `revision-${saved.revision ?? 0}`;
     setTradeReceiptsBySeat((current) => {
       const next = { ...current };
       for (const receipt of result.receipts) {
@@ -2320,7 +2340,14 @@ function MlbSnakeDraftRoom() {
       return next;
     });
     if (result.livePickMoved) setLivePickMoveRevision((revision) => revision + 1);
-    return { ...result, session: logged };
+    try {
+      await syncEngine.flush({ throwOnPending: true });
+    } catch (cause) {
+      const failure = liveRoomPublicationFailure('TRADE', cause);
+      setWriteNotice(failure.message);
+      return { ...result, message: failure.message, session: saved };
+    }
+    return { ...result, session: saved };
   }, [persist, pickValueChart, seatingProofInput, session]);
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;

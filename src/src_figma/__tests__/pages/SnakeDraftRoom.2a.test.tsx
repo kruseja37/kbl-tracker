@@ -9,8 +9,16 @@ const mocks = vi.hoisted(() => ({
   patchBoard: vi.fn(),
   guideAsk: vi.fn(),
   pull: vi.fn(async () => undefined),
+  flush: vi.fn(async () => undefined),
   refresh: vi.fn(async () => undefined),
   freshData: null as null | Record<string, unknown>,
+  executeTradeResult: null as null | {
+    valid: boolean;
+    message: string;
+    session: unknown;
+    livePickMoved: boolean;
+    receipts: Array<{ teamId: string; text: string }>;
+  },
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -18,7 +26,7 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   return { ...actual, useLeagueBuilderData: () => mocks.data };
 });
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
-vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
+vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull, flush: mocks.flush } }));
 vi.mock('../../utils/snakeSounds', () => ({
   loadSnakeSoundsEnabled: () => false,
   saveSnakeSoundsEnabled: vi.fn(),
@@ -41,6 +49,11 @@ vi.mock('../../app/components/snake/trade/tradeGuideModel', async (importOrigina
       mocks.guideAsk(input);
       return actual.guideForAskedPick(input);
     },
+    executeAskedPickTrade: (input: Parameters<typeof actual.executeAskedPickTrade>[0]) => (
+      mocks.executeTradeResult
+        ? mocks.executeTradeResult as ReturnType<typeof actual.executeAskedPickTrade>
+        : actual.executeAskedPickTrade(input)
+    ),
   };
 });
 vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
@@ -214,6 +227,40 @@ function session(withCompletedPick: boolean): LeagueBuilderMlbDraftSession {
   };
 }
 
+function sessionWithReadyTrade(): {
+  source: LeagueBuilderMlbDraftSession;
+  traded: LeagueBuilderMlbDraftSession;
+} {
+  const source = session(false);
+  source.openTradeOffers = [{
+    id: 'offer-a-b',
+    phase: 'MLB',
+    buyerTeamId: 'b',
+    sellerTeamId: 'a',
+    targetPick: 1,
+    offerPickNumbers: [2],
+    receivePickNumbers: [1],
+    offerValue: 100,
+    receiveValue: 100,
+    sellerPremium: 0,
+    postedSessionRevision: source.revision ?? 0,
+    buyerNod: true,
+    sellerNod: true,
+    postedAt: '2026-07-17T00:00:00.000Z',
+  }];
+  return {
+    source,
+    traded: {
+      ...source,
+      pickOrder: source.pickOrder.map((slot) => slot.pick === 1
+        ? { ...slot, teamId: 'b' }
+        : slot.pick === 2 ? { ...slot, teamId: 'a' } : slot),
+      openTradeOffers: [],
+      revision: (source.revision ?? 0) + 1,
+    },
+  };
+}
+
 function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: Team[]; pool?: RegisteredPool; players?: Player[] } = {}) {
   mocks.roomState = source;
   mocks.data = {
@@ -306,6 +353,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     });
     mocks.guideAsk.mockReset();
     mocks.pull.mockClear();
+    mocks.flush.mockClear();
+    mocks.executeTradeResult = null;
     mocks.freshData = null;
     mocks.refresh.mockReset().mockImplementation(async () => {
       if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
@@ -775,8 +824,60 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).completedPicks).toHaveLength(1);
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledWith({ throwOnPending: true }));
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
+  });
+
+  test('an executed live trade publishes the saved pick ownership before reporting success', async () => {
+    const { source, traded } = sessionWithReadyTrade();
+    mocks.executeTradeResult = {
+      valid: true,
+      message: 'GUIDE-MATCHED AND LEGAL NOW.',
+      session: traded,
+      livePickMoved: true,
+      receipts: [
+        { teamId: 'b', text: 'YOU TRADED PICK 2 FOR PICK 1 — YOUR NEXT PICK: #1.' },
+        { teamId: 'a', text: 'YOU TRADED PICK 1 FOR PICK 2 — YOUR NEXT PICK: #2.' },
+      ],
+    };
+
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'EXECUTE TRADE' }));
+
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
+      .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledWith({ throwOnPending: true }));
+  });
+
+  test('a trade publication failure keeps the saved trade and never asks the commissioner to execute it twice', async () => {
+    const { source, traded } = sessionWithReadyTrade();
+    mocks.executeTradeResult = {
+      valid: true,
+      message: 'GUIDE-MATCHED AND LEGAL NOW.',
+      session: traded,
+      livePickMoved: true,
+      receipts: [
+        { teamId: 'b', text: 'YOU TRADED PICK 2 FOR PICK 1 — YOUR NEXT PICK: #1.' },
+        { teamId: 'a', text: 'YOU TRADED PICK 1 FOR PICK 2 — YOUR NEXT PICK: #2.' },
+      ],
+    };
+    mocks.flush.mockRejectedValueOnce(new Error('network unavailable'));
+
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'EXECUTE TRADE' }));
+
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
+      .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
+    expect(await screen.findAllByText(/TRADE WAS SAVED HERE, BUT COMPANION DEVICES DID NOT UPDATE/))
+      .not.toHaveLength(0);
+    expect(document.body).not.toHaveTextContent('THE TRADE WAS NOT SAVED. TRY AGAIN.');
   });
 
   test('public drafted money and chemistry update after a persisted pick and its correction while the private plan stays distinct', async () => {

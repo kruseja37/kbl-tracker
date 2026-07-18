@@ -14,6 +14,7 @@ vi.mock('../../../utils/syncEngine', () => ({
   syncEngine: {
     isSuppressed: () => true,
     pull: vi.fn(async () => undefined),
+    flush: vi.fn(async () => undefined),
     upsert: vi.fn(),
     remove: vi.fn(),
   },

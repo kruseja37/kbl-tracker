@@ -1315,3 +1315,12 @@ a waiting-only admission dead end with no Hotseat notice. FINDING-233 now preser
 persistence with a quota-only tab fallback and JK verified Chrome sign-in. FINDING-234 retains room
 re-entry/resend on pending devices and adds an explicit pending count to Hotseat; its browser retry
 remains the sole product gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion live-room propagation build
+
+The prior live header recorded JK-verified Chrome sign-in and independently approved companion
+admission feedback, with JK's claim/approval retry as the product gate. That retry passed and the
+walk advanced through a legal trade, where Hotseat changed pick ownership but companions never did.
+FINDING-235 separates private-board sync from shared room authority and forces completed Hotseat
+picks, trades, and corrections to publish immediately. The separate audit approved the repaired
+frozen diff with Major 0 / Minor 0; JK's same-room retest remains and no new draft is required.

@@ -9,11 +9,21 @@ describe('S5 companion freshness', () => {
     const current = {
       id: 'draft-1', lastModified: '2026-07-14T00:00:00.000Z', revision: 4,
       snakeCompanions: { claims: [{ claimId: 'claim-1', status: 'approved' }] },
+      seatBoards: { 'team-a': { revision: 2 } },
+      farmSeatBoards: { 'team-a': { revision: 3 } },
     };
     expect(sameDraftSessionSnapshot(current, structuredClone(current))).toBe(true);
     expect(sameDraftSessionSnapshot(current, {
       ...structuredClone(current),
       snakeCompanions: { claims: [{ claimId: 'claim-1', status: 'revoked' }] },
+    })).toBe(false);
+    expect(sameDraftSessionSnapshot(current, {
+      ...structuredClone(current),
+      seatBoards: { 'team-a': { revision: 3 } },
+    })).toBe(false);
+    expect(sameDraftSessionSnapshot(current, {
+      ...structuredClone(current),
+      farmSeatBoards: { 'team-a': { revision: 4 } },
     })).toBe(false);
   });
 

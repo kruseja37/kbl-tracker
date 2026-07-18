@@ -1516,3 +1516,15 @@ click remains the product gate; no merge, push, or deploy is authorized.
 | FINDING-232 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED | deskModel.ts / deskRoomModel.ts / SnakeDraftSetupAdapter.helpers.ts | Exact certified legal staffs now materialize without a stricter display-row law or outside substitution. |
 | FINDING-233 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK BROWSER VERIFIED | LoginForm.tsx / supabase.ts / focused tests | Chrome quota now falls back only the Supabase token to tab storage; rejected/stalled sign-in has actionable status. |
 | FINDING-234 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | CompanionClaimScreen.tsx / SnakeDraftRoomView.tsx / SnakeDraftRoom.tsx | Pending devices can resend room claims; Hotseat shows an exact pending count without auto-opening private details. |
+| FINDING-235 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | leagueBuilderStorage.ts / companionFreshness.ts / SnakeDraftRoom.tsx | Private boards no longer publish stale room copies; open devices adopt board revisions and authoritative picks/trades/corrections force-publish. |
+
+### 2026-07-17 — Companion live-room propagation independent close
+
+The separate non-builder auditor returned **APPROVE — Major 0 / Minor 0**. It confirmed that an
+independent board edit queues only its standalone row, both cloud arrival orders preserve the
+authoritative room and newest board, already-open Hotseat/companion pages detect MLB and FARM board
+revision changes, and completed picks, trades, and corrections strict-flush the saved room. A failed
+publication accurately says the action was saved locally and never invites a duplicate action.
+Independent gates passed 8 focused files / 230 tests, TypeScript, changed-file ESLint, the
+2,730-module production build/PWA, and diff integrity. JK's same-room browser walk remains the final
+product gate; no new draft is required and no push, merge, or deploy is authorized.

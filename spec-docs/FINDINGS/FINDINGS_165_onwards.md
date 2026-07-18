@@ -668,3 +668,28 @@ passed 10 files / 93 tests, TypeScript, delta ESLint, the 2,730-module productio
 integrity. The auditor confirmed the unchanged privacy gate, atomic claim patch, validation/version/
 capacity model, exact pending count, zero-count styling, and explicit-open-only approval details.
 JK's same-device admission retry remains the product gate.
+
+### FINDING-235
+**Date:** 2026-07-17 | **Phase:** Snake browser gate / companion live room | **Status:** FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING
+**Files:** `src/utils/leagueBuilderStorage.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`, focused storage/room/sync tests
+**Evidence:** JK completed a legal pick trade on Hotseat, but no companion room reflected the new
+pick ownership, including the club that traded back. Code trace found that an independent companion
+board patch writes its board row locally but also queues the companion's embedded whole-session copy
+to `mlbDraftSessions`. The authoritative Hotseat pick and trade writers then save locally and only
+queue their newer session row for the ordinary drain. The older companion whole-session write can
+therefore move cloud authority first and stale-reject the Hotseat row. Companion polling is healthy,
+but it has no newer accepted room row to download.
+**Impact:** Hotseat can show a successful pick or trade while every companion retains the old on-clock
+club, pick ownership, roster, activity, and private planning context. Retrying the same action would
+risk a duplicate or a contradictory room.
+**Action:** Keep companion boards independently synced: update the embedded copy only for local
+coherence, and queue only the standalone `snakeSeatBoards` row. After every completed Hotseat MLB
+pick, trade, or correction, immediately flush queued authority and expose a precise saved-here/
+not-published notice if cloud publication fails. Include authoritative MLB/FARM board revision
+signatures in live snapshot equality so already-open devices adopt standalone-board-only changes.
+Preserve the existing freshness loop and all draft,
+trade, privacy, financial, and board laws.
+**Verification:** A separate non-builder auditor returned **APPROVE — Major 0 / Minor 0** after the
+live-open board-revision repair. Independent gates passed 8 focused files / 230 tests, TypeScript,
+changed-file ESLint, the 2,730-module production build/PWA, and diff integrity. JK's same-room
+one-trade, one-pick, and one-companion-board-move walk remains the product gate.
