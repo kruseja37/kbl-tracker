@@ -14,6 +14,7 @@ import { readSnakeLivePublicSession } from '../../../../../utils/snakeLiveRoomSe
 import { createSnakeLiveRoomTransport } from '../../../../../utils/snakeLiveRoomTransport';
 import type {
   SnakeLiveClaim,
+  SnakeLiveCatalog,
   SnakeLiveDeviceAccess,
   SnakeLiveIntent,
   SnakeLiveIntentKind,
@@ -70,6 +71,7 @@ export interface SnakeLiveCompanionIntentInput {
 
 export interface UseSnakeLiveCompanionRoomResult {
   room: SnakeLiveRoom | null;
+  catalog: SnakeLiveCatalog | null;
   activeRoomId: string | null;
   publicSession: LeagueBuilderMlbDraftSession | null;
   deviceId: string | null;
@@ -82,6 +84,7 @@ export interface UseSnakeLiveCompanionRoomResult {
   error: string | null;
   working: boolean;
   accessReady: boolean;
+  resumedFromCapability: boolean;
   refresh(): Promise<void>;
   claimDesk(gmName: string, roomCode: string): Promise<SnakeLiveClaim[]>;
   writeBoard(input: SnakeLiveCompanionBoardWriteInput): Promise<SnakeLiveSeatBoard>;
@@ -142,6 +145,7 @@ export function useSnakeLiveCompanionRoom(
   const enabled = options.enabled ?? true;
 
   const [room, setRoom] = useState<SnakeLiveRoom | null>(null);
+  const [catalog, setCatalog] = useState<SnakeLiveCatalog | null>(null);
   const [publicSession, setPublicSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [claims, setClaims] = useState<SnakeLiveClaim[]>([]);
@@ -154,6 +158,7 @@ export function useSnakeLiveCompanionRoom(
   const [workingCount, setWorkingCount] = useState(0);
   const [access, setAccess] = useState<SnakeLiveDeviceAccess | null>(null);
   const [accessReady, setAccessReady] = useState(false);
+  const [resumedFromCapability, setResumedFromCapability] = useState(false);
   const [activeOwnerUserId, setActiveOwnerUserId] = useState<string | null>(null);
 
   const generationRef = useRef(0);
@@ -188,6 +193,7 @@ export function useSnakeLiveCompanionRoom(
     claimsRef.current = [];
     eventsRef.current = [];
     setRoom(null);
+    setCatalog(null);
     setPublicSession(null);
     setDeviceId(null);
     setClaims([]);
@@ -196,6 +202,7 @@ export function useSnakeLiveCompanionRoom(
     setEvents([]);
     setAccess(null);
     setAccessReady(false);
+    setResumedFromCapability(false);
     setActiveOwnerUserId(null);
     setSubscriptionStatus(null);
     setStatus('idle');
@@ -309,7 +316,10 @@ export function useSnakeLiveCompanionRoom(
       const resume = await capabilities.readResume(ownerUserId);
       if (generation !== generationRef.current || !resume) return;
       setStatus('connecting');
-      const receivedRoom = await transport.getRoom(resume.roomId);
+      const [receivedRoom, receivedCatalog] = await Promise.all([
+        transport.getRoom(resume.roomId),
+        transport.getCatalog(resume.roomId),
+      ]);
       if (!receivedRoom
         || receivedRoom.ownerUserId !== ownerUserId
         || receivedRoom.roomCode !== resume.roomCode) {
@@ -317,6 +327,7 @@ export function useSnakeLiveCompanionRoom(
         if (generation === generationRef.current) setStatus('idle');
         return;
       }
+      if (!receivedCatalog) throw new Error('THE LIVE PLAYER CATALOG IS NOT AVAILABLE.');
       const credentials = await capabilities.getRoomCredentials(receivedRoom.id, resume.deviceId);
       const nextAccess: SnakeLiveDeviceAccess = {
         roomId: receivedRoom.id,
@@ -328,8 +339,10 @@ export function useSnakeLiveCompanionRoom(
       await loadScopedState(nextAccess, generation, true);
       if (generation !== generationRef.current) return;
       setDeviceId(resume.deviceId);
+      setCatalog(receivedCatalog);
       setActiveOwnerUserId(ownerUserId);
       setAccessReady(true);
+      setResumedFromCapability(true);
     })().catch((cause) => {
       if (generation !== generationRef.current) return;
       accessRef.current = null;
@@ -406,6 +419,8 @@ export function useSnakeLiveCompanionRoom(
         if (receivedRoom.ownerUserId !== ownerUserId) {
           throw new Error('THIS LIVE ROOM BELONGS TO ANOTHER ACCOUNT.');
         }
+        const receivedCatalog = await transport.getCatalog(receivedRoom.id);
+        if (!receivedCatalog) throw new Error('THE LIVE PLAYER CATALOG IS NOT AVAILABLE.');
         const nextPublicSession = readSnakeLivePublicSession(receivedRoom);
         const teamIds = matchingTeamIds(nextPublicSession, cleanName);
         if (teamIds.length === 0) {
@@ -449,6 +464,7 @@ export function useSnakeLiveCompanionRoom(
         if (generation !== generationRef.current) return [];
         setDeviceId(nextDeviceId);
         setRoom(receivedRoom);
+        setCatalog(receivedCatalog);
         setPublicSession(nextPublicSession);
         setClaims(nextClaims);
         setIntents(nextIntents);
@@ -459,6 +475,7 @@ export function useSnakeLiveCompanionRoom(
         setAccess(nextAccess);
         setActiveOwnerUserId(ownerUserId);
         setAccessReady(true);
+        setResumedFromCapability(false);
         setStatus(roomStatus(receivedRoom, nextClaims));
         setError(null);
         return nextClaims;
@@ -535,6 +552,7 @@ export function useSnakeLiveCompanionRoom(
 
   return {
     room: ownerMatches ? room : null,
+    catalog: ownerMatches ? catalog : null,
     activeRoomId: ownerMatches ? room?.id ?? null : null,
     publicSession: ownerMatches ? publicSession : null,
     deviceId: ownerMatches ? deviceId : null,
@@ -547,6 +565,7 @@ export function useSnakeLiveCompanionRoom(
     error: staleOwnerState ? null : error,
     working: workingCount > 0,
     accessReady: ownerMatches && accessReady,
+    resumedFromCapability: ownerMatches && resumedFromCapability,
     refresh,
     claimDesk,
     writeBoard,

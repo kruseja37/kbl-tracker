@@ -16,7 +16,6 @@ import { unavailableVersionPlayerIds } from '../../../engines/snakeVersioning';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../engines/rosterNeed';
 import { assembleBoard } from '../../../engines/rosterIntelligencePayload';
 import * as phaseFlags from '../../../utils/franchisePhase2Flags';
-import { syncEngine } from '../../../utils/syncEngine';
 import {
   SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
@@ -24,7 +23,9 @@ import {
   type SnakeBoardSlotId,
   type SnakeSeatBoardRecord,
 } from '../../../utils/leagueBuilderStorage';
+import type { DesignSlot } from '../../../engines/rosterDesignFeasibility';
 import { legacySnakeCompanionState } from '../../../utils/snakeLiveRoomSession';
+import { readSnakeLiveCatalog } from '../../../utils/snakeLiveCatalog';
 import type { SnakeLiveJsonObject, SnakeLiveSeatBoard } from '../../../utils/snakeLiveRoomTypes';
 import {
   buildSnakeLiveTradeActionPayload,
@@ -32,7 +33,7 @@ import {
   projectSnakeLiveTradeOffers,
 } from '../../../utils/snakeLiveTradeIntents';
 import { useAuth } from '../../../hooks/useAuth';
-import { useLeagueBuilderData, toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
+import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { CompanionClaimScreen } from '../components/snake/companion/CompanionClaimScreen';
 import { CompanionSignInScreen } from '../components/snake/companion/CompanionSignInScreen';
 import {
@@ -177,7 +178,7 @@ function readDeviceCovered(): boolean {
   try {
     return localStorage.getItem(DEVICE_COVERED_KEY) === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -198,8 +199,17 @@ function privateBoardRecord(row: SnakeLiveSeatBoard | undefined): SnakeSeatBoard
   return { ...board, revision: row.boardRevision };
 }
 
-function jsonBoard(board: SnakeSeatBoardRecord): SnakeLiveJsonObject {
-  return JSON.parse(JSON.stringify(board)) as SnakeLiveJsonObject;
+function privateBoardDesignSlots(row: SnakeLiveSeatBoard | undefined): DesignSlot[] | undefined {
+  if (!row?.board || Array.isArray(row.board)) return undefined;
+  const slots = (row.board as { designSlots?: unknown }).designSlots;
+  return Array.isArray(slots) ? structuredClone(slots) as DesignSlot[] : undefined;
+}
+
+function jsonBoard(board: SnakeSeatBoardRecord, designSlots?: readonly DesignSlot[]): SnakeLiveJsonObject {
+  return JSON.parse(JSON.stringify({
+    ...board,
+    ...(designSlots ? { designSlots } : {}),
+  })) as SnakeLiveJsonObject;
 }
 
 /**
@@ -306,10 +316,6 @@ function pendingPickIntent(input: {
 
 export default function SnakeCompanion() {
   const auth = useAuth();
-  const {
-    leagues, teams, players, isLoading, error,
-    getRegisteredPool, refresh,
-  } = useLeagueBuilderData();
   const authenticatedUserId = auth.isAuthenticated ? auth.user?.id ?? null : null;
   const liveRoom = useSnakeLiveCompanionRoom({
     ownerUserId: authenticatedUserId,
@@ -320,10 +326,6 @@ export default function SnakeCompanion() {
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [deviceCovered, setDeviceCovered] = useState(readDeviceCovered);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
-  const [poolResult, setPoolResult] = useState<{
-    leagueId: string;
-    value: Awaited<ReturnType<typeof getRegisteredPool>>;
-  } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [assistantOptimizePlayerId, setAssistantOptimizePlayerId] = useState<string | null>(null);
   const [assistantOptimizeRevision, setAssistantOptimizeRevision] = useState(0);
@@ -338,15 +340,13 @@ export default function SnakeCompanion() {
     changedSlotCount: number;
   } | null>(null);
   const [undoWorking, setUndoWorking] = useState(false);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [catalogPullAttempt, setCatalogPullAttempt] = useState(0);
-  const catalogPullUserRef = useRef<string | null>(null);
   const privacyEpochRef = useRef(0);
   const deviceCoveredRef = useRef(deviceCovered);
   const privateIdentityRef = useRef<CompanionPrivateIdentity | null>(null);
   const privateIdentityKeyRef = useRef<string | null>(null);
   const returningToDeskRef = useRef(false);
   const returnAttemptRef = useRef<object | null>(null);
+  const autoResumeCoverRef = useRef<string | null>(null);
   const undoOperationRef = useRef<object | null>(null);
   deviceCoveredRef.current = deviceCovered;
   const invalidatePrivateContext = useCallback(() => {
@@ -391,8 +391,16 @@ export default function SnakeCompanion() {
       }),
     };
   }, [liveRoom.claims, liveRoom.intents, liveRoom.publicSession, liveRoom.room, privateBoards]);
-  const pool = session && poolResult?.leagueId === session.leagueId ? poolResult.value : null;
-  const sessionLeagueId = session?.leagueId ?? null;
+  const catalog = useMemo(
+    () => liveRoom.catalog ? readSnakeLiveCatalog(liveRoom.catalog.catalog) : null,
+    [liveRoom.catalog],
+  );
+  const { league, leagueTeams, players, pool } = useMemo(() => ({
+    league: catalog?.league ?? null,
+    leagueTeams: catalog?.teams ?? [],
+    players: catalog?.players ?? [],
+    pool: catalog?.registeredPool ?? null,
+  }), [catalog]);
 
   useEffect(() => {
     const syncCover = (covered: boolean) => {
@@ -414,29 +422,6 @@ export default function SnakeCompanion() {
     };
   }, [invalidatePrivateContext]);
 
-  useEffect(() => {
-    const userId = authenticatedUserId;
-    if (!userId) {
-      catalogPullUserRef.current = null;
-      setCatalogError(null);
-      return;
-    }
-    const pullIdentity = `${userId}:${catalogPullAttempt}`;
-    if (catalogPullUserRef.current === pullIdentity) return;
-    catalogPullUserRef.current = pullIdentity;
-    let cancelled = false;
-    void syncEngine.pull({ throwOnError: true })
-      .then(refresh)
-      .then(() => {
-        if (!cancelled) setCatalogError(null);
-      })
-      .catch((cause) => {
-        if (cancelled) return;
-        setCatalogError(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => { cancelled = true; };
-  }, [authenticatedUserId, catalogPullAttempt, refresh]);
-
   const refreshSession = useCallback(async () => {
     try {
       await liveRoom.refresh();
@@ -446,20 +431,6 @@ export default function SnakeCompanion() {
       }
     }
   }, [liveRoom]);
-
-  useEffect(() => {
-    if (!sessionLeagueId) return;
-    const requestEpoch = privacyEpochRef.current;
-    void getRegisteredPool(sessionLeagueId)
-      .then((value) => {
-        if (privacyEpochRef.current === requestEpoch) setPoolResult({ leagueId: sessionLeagueId, value });
-      })
-      .catch((cause) => {
-        if (privacyEpochRef.current === requestEpoch && !deviceCoveredRef.current) {
-          setMessage(cause instanceof Error ? cause.message : String(cause));
-        }
-      });
-  }, [getRegisteredPool, sessionLeagueId]);
 
   const claimDesk = useCallback(async (gmName: string, roomCode: string) => {
     invalidatePrivateContext();
@@ -476,13 +447,12 @@ export default function SnakeCompanion() {
   const authSignOut = auth.signOut;
   const signOut = useCallback(async () => {
     returnAttemptRef.current = null;
+    autoResumeCoverRef.current = null;
     deviceCoveredRef.current = true;
     invalidatePrivateContext();
     await liveRoom.disconnect();
     await authSignOut();
-    catalogPullUserRef.current = null;
     setActiveTeamId(null);
-    setPoolResult(null);
   }, [authSignOut, invalidatePrivateContext, liveRoom]);
 
   const coverDevice = useCallback(() => {
@@ -515,10 +485,11 @@ export default function SnakeCompanion() {
 
   const forgetCurrentRoom = useCallback(async () => {
     returnAttemptRef.current = null;
+    autoResumeCoverRef.current = null;
+    deviceCoveredRef.current = true;
     invalidatePrivateContext();
     await liveRoom.disconnect();
     setActiveTeamId(null);
-    setPoolResult(null);
   }, [invalidatePrivateContext, liveRoom]);
 
   const approvedClaims = useMemo(
@@ -531,11 +502,6 @@ export default function SnakeCompanion() {
       : approvedClaimForDeviceTeam(session, ownDeviceId, activeTeamId)
     : null;
   const activeClaim = session ? claimForDevice(session, ownDeviceId) : null;
-  const league = leagues.find((entry) => entry.id === session?.leagueId) ?? null;
-  const leagueTeams = useMemo(() => league?.teamIds.flatMap((id) => {
-    const team = teams.find((entry) => entry.id === id);
-    return team ? [team] : [];
-  }) ?? [], [league, teams]);
   const team = leagueTeams.find((entry) => entry.id === approved?.teamId) ?? null;
   const currentPrivateIdentity = team ? companionPrivateIdentity(session, ownDeviceId, team.id) : null;
   const currentPrivateIdentityKey = currentPrivateIdentity
@@ -550,6 +516,15 @@ export default function SnakeCompanion() {
     : null;
   privateIdentityRef.current = currentPrivateIdentity;
   const approvedTeamIdsKey = approvedClaims.map((claim) => claim.teamId).sort().join('|');
+  useLayoutEffect(() => {
+    if (!liveRoom.resumedFromCapability || !liveRoom.activeRoomId || approvedClaims.length === 0) return;
+    const key = `${liveRoom.activeRoomId}:${ownDeviceId}`;
+    if (autoResumeCoverRef.current === key) return;
+    autoResumeCoverRef.current = key;
+    deviceCoveredRef.current = true;
+    setDeviceCovered(true);
+    broadcastDeviceCover(true);
+  }, [approvedClaims.length, liveRoom.activeRoomId, liveRoom.resumedFromCapability, ownDeviceId]);
   useLayoutEffect(() => {
     if (!session) return;
     if (activeTeamId === null) {
@@ -664,6 +639,7 @@ export default function SnakeCompanion() {
   }) : null, [boardEligibilityCandidates, session, unavailable]);
   const storedBoard = team ? session?.seatBoards?.[team.id] ?? null : null;
   const board = team ? displaySession?.seatBoards?.[team.id] ?? null : null;
+  const designSlots = team ? privateBoardDesignSlots(liveRoom.boardsByTeamId[team.id]) : undefined;
   const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
     if (!session || !pool) return null;
     return {
@@ -998,9 +974,9 @@ export default function SnakeCompanion() {
         realTeamCount: leagueTeams.length,
         capIdentity: resolveLockedSeat({ team, session }).capIdentity,
       },
-      savedDesignSlots: team.rosterDesign?.slots,
+      savedDesignSlots: designSlots,
     });
-  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, board, deskState, deviceCovered, league, leagueTeams.length, pool, seatingProofResult, session, team]);
+  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, board, designSlots, deskState, deviceCovered, league, leagueTeams.length, pool, seatingProofResult, session, team]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
   const assistantTaxCoreRows = useMemo(() => {
     if (assistantBoardState.status !== 'ready' || !assistantBoardState.board || !deskState || !pool || !team || !session) return [];
@@ -1047,7 +1023,7 @@ export default function SnakeCompanion() {
         identity: assistantIdentity,
         teamId: team.id,
         board,
-        designSlots: team.rosterDesign?.slots,
+        designSlots,
         players: consequencePlayers,
         completedPicks: session.completedPicks.map((pick) => ({
           teamId: pick.teamId, playerId: pick.playerId, settledSalary: pick.settledSalary,
@@ -1060,7 +1036,7 @@ export default function SnakeCompanion() {
         capIdentity: resolveLockedSeat({ team, session }).capIdentity,
       },
     };
-  }, [assistantIdentity, board, consequencePlayers, deskState, leagueTeams.length, pool, replacementConsequencePlayerIds, selectedCandidateId, session, team]);
+  }, [assistantIdentity, board, consequencePlayers, designSlots, deskState, leagueTeams.length, pool, replacementConsequencePlayerIds, selectedCandidateId, session, team]);
   const consequenceState = useSnakeSelectedConsequences(consequenceRequest);
   const selectedConsequence = selectedCandidateId
     ? consequenceState.consequenceByPlayerId.get(selectedCandidateId) ?? null
@@ -1138,7 +1114,7 @@ export default function SnakeCompanion() {
       };
       const receipt = await liveRoom.writeBoard({
         teamId: team.id,
-        board: jsonBoard(submittedBoard),
+        board: jsonBoard(submittedBoard, privateBoardDesignSlots(authoritative)),
         expectedBoardRevision: authoritative.boardRevision,
         idempotencyKey: `board:${session.id}:${team.id}:${authoritative.boardRevision + 1}`,
       });
@@ -1433,10 +1409,6 @@ export default function SnakeCompanion() {
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
   if (!auth.isAuthenticated) return <CompanionSignInScreen error={auth.error} onSignIn={auth.signIn} />;
   if (liveRoom.status === 'connecting' && !session) return <main className="ballpark-page"><p>OPENING THE LIVE ROOM…</p></main>;
-  if (deviceCovered) {
-    const coveredTeam = leagueTeams.find((entry) => entry.id === activeTeamId);
-    return <CompanionCoveredScreen openTeamName={coveredTeam?.name} onReturn={returnToDesk} onSignOut={signOut} onForgetRoom={session ? forgetCurrentRoom : undefined} message={message ?? liveRoom.error} />;
-  }
   if (!approved || !session) {
     return <>
       <CompanionClaimScreen
@@ -1449,11 +1421,17 @@ export default function SnakeCompanion() {
       {activeClaim && session ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default fixed bottom-4 right-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button> : null}
     </>;
   }
-  if (!team || !league || isLoading || error) return <main className="ballpark-page"><section className="ballpark-panel">
+  if (liveRoom.room?.status === 'closed' && team) {
+    return <CompanionCompletedScreen teamName={team.name} onLeave={forgetCurrentRoom} onSignOut={signOut} />;
+  }
+  if (deviceCovered) {
+    const coveredTeam = leagueTeams.find((entry) => entry.id === activeTeamId);
+    return <CompanionCoveredScreen openTeamName={coveredTeam?.name} onReturn={returnToDesk} onSignOut={signOut} onForgetRoom={forgetCurrentRoom} message={message ?? liveRoom.error} />;
+  }
+  if (!team || !league || !catalog) return <main className="ballpark-page"><section className="ballpark-panel">
     <h1 className="ballpark-title">PLAYER DATA IS NOT READY</h1>
-    <p className="mt-3" role={catalogError || error ? 'alert' : undefined}>{catalogError ?? error ?? 'UPDATING THE PLAYER CATALOG.'}</p>
-    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => setCatalogPullAttempt((attempt) => attempt + 1)}>RETRY PLAYER DATA</button>
-    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
+    <p className="mt-3" role="alert">{liveRoom.error ?? 'THE LIVE PLAYER CATALOG IS INVALID.'}</p>
+    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
   </section></main>;
   if (isCompanionDraftComplete(session)) {
     return <CompanionCompletedScreen teamName={team.name} onLeave={forgetCurrentRoom} onSignOut={signOut} />;
@@ -1461,7 +1439,7 @@ export default function SnakeCompanion() {
   if (isCompanionPicksComplete(session)) {
     return <CompanionAwaitingCommissionerScreen teamName={team.name} onCover={coverDevice} onSignOut={signOut} />;
   }
-  if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">{!board ? 'WAIT FOR THE HOST TO OPEN THIS DESK.' : 'THE PLAYER CATALOG IS STILL UPDATING.'}</p>{catalogError ? <p className="mt-3" role="alert">{catalogError}</p> : null}<button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void refreshSession()}>REFRESH LIVE ROOM</button><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => setCatalogPullAttempt((attempt) => attempt + 1)}>RETRY PLAYER DATA</button><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button></section></main>;
+  if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">WAIT FOR THE HOST TO OPEN THIS DESK.</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void refreshSession()}>REFRESH LIVE ROOM</button><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button></section></main>;
 
   const ticker = session.completedPicks.slice(-6).reverse().map((pick) => {
     const pickTeam = leagueTeams.find((entry) => entry.id === pick.teamId);

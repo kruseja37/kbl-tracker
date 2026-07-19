@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   currentSession: null as unknown,
   patchBoard: vi.fn(),
   refresh: vi.fn(async () => undefined),
-  pull: vi.fn(async () => undefined),
   assistantRequests: [] as Array<{ key: string; input: Record<string, unknown> }>,
   assistantResults: [] as Array<Record<string, unknown>>,
   mainSave: vi.fn(),
@@ -24,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   freshData: null as null | Record<string, unknown>,
   liveIntents: [] as Array<Record<string, unknown>>,
   liveIntentSequence: 0,
+  liveAutoResumed: false,
+  liveBoardDesignSlots: null as Array<Record<string, unknown>> | null,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -45,9 +46,9 @@ vi.mock('../../../engines/rosterIntelligencePayload', async (importOriginal) => 
       .filter((row) => row.playerId !== mocks.omitContextPlayerId),
   };
 });
-vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
 vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async () => {
   const React = await import('react');
+  const { buildSnakeLiveCatalog } = await import('../../../utils/snakeLiveCatalog');
 
   function roomId(source: LeagueBuilderMlbDraftSession): string {
     return `live:${source.id}`;
@@ -75,7 +76,10 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
       roomId: id,
       teamId,
       boardRevision: record.revision,
-      board: structuredClone(record) as unknown as Record<string, unknown>,
+      board: {
+        ...structuredClone(record) as unknown as Record<string, unknown>,
+        ...(mocks.liveBoardDesignSlots ? { designSlots: structuredClone(mocks.liveBoardDesignSlots) } : {}),
+      },
       updatedByDeviceId: 'ipad-a',
       updatedAt: source.lastModified,
     }]));
@@ -95,6 +99,12 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
       const [snapshotSource, setSnapshotSource] = React.useState(
         () => mocks.currentSession as LeagueBuilderMlbDraftSession | null,
       );
+      const catalogRef = React.useRef<{
+        roomId: string;
+        catalogRevision: number;
+        catalog: Record<string, unknown>;
+        createdAt: string;
+      } | null>(null);
       const refresh = React.useCallback(async () => {
         await mocks.refresh();
         setSnapshotSource(mocks.currentSession as LeagueBuilderMlbDraftSession | null);
@@ -113,6 +123,25 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
       }, []);
 
       const source = disconnected ? null : snapshotSource;
+      if (source && !catalogRef.current) {
+        const selectedIds = new Set(source.snakeSetup?.poolPlayerIds ?? pool.players.map((row) => row.id));
+        catalogRef.current = {
+          roomId: roomId(source),
+          catalogRevision: 1,
+          catalog: buildSnakeLiveCatalog({
+            league,
+            teams,
+            players: mocks.data.players as Player[],
+            registeredPool: {
+              ...pool,
+              players: pool.players.filter((row) => selectedIds.has(row.id)),
+            },
+            activeTeamIds: source.snakeSetup?.clubs.map((club) => club.teamId) ?? league.teamIds,
+            activePoolPlayerIds: source.snakeSetup?.poolPlayerIds ?? [],
+          }),
+          createdAt: source.createdDate,
+        };
+      }
       const liveSnapshot = React.useMemo(() => {
         void version;
         if (!source) return null;
@@ -142,6 +171,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
       if (!source) {
         return {
           room: null,
+          catalog: null,
           activeRoomId: null,
           publicSession: null,
           deviceId: disconnected ? null : 'ipad-a',
@@ -154,6 +184,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
           error: null,
           working: false,
           accessReady: false,
+          resumedFromCapability: false,
           refresh,
           claimDesk: async () => [],
           writeBoard: async () => { throw new Error('THE LIVE ROOM IS NOT AVAILABLE.'); },
@@ -167,6 +198,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
 
       return {
         room,
+        catalog: catalogRef.current,
         activeRoomId: id,
         publicSession: liveSnapshot.publicSession,
         deviceId: 'ipad-a',
@@ -179,6 +211,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
         error: null,
         working: false,
         accessReady: true,
+        resumedFromCapability: mocks.liveAutoResumed,
         refresh,
         claimDesk: async (gmName: string, suppliedRoomCode: string) => {
           if (suppliedRoomCode !== room.roomCode) throw new Error('ROOM CODE DOES NOT MATCH.');
@@ -566,7 +599,6 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     localStorage.clear();
     localStorage.setItem('kbl-snake-companion-device-id', 'ipad-a');
     mocks.patchBoard.mockReset();
-    mocks.pull.mockClear();
     mocks.freshData = null;
     mocks.refresh.mockReset().mockImplementation(async () => {
       if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
@@ -585,10 +617,40 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.mainFreshnessRefresh = null;
     mocks.liveIntents.length = 0;
     mocks.liveIntentSequence = 0;
+    mocks.liveAutoResumed = false;
+    mocks.liveBoardDesignSlots = null;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
   afterEach(() => cleanup());
+
+  test('an auto-resumed approved desk stays covered until live refresh succeeds', async () => {
+    mocks.liveAutoResumed = true;
+    mocks.refresh.mockRejectedValueOnce(new Error('LIVE REFRESH FAILED.'));
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    await waitFor(() => expect(screen.getByTestId('snake-companion-covered')).toHaveTextContent('LIVE REFRESH FAILED.'));
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+  });
+
+  test('a privacy-cover storage read failure keeps an approved desk covered', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('STORAGE IS UNAVAILABLE.');
+    });
+    try {
+      render(<SnakeCompanion />);
+      expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+      expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    } finally {
+      getItem.mockRestore();
+    }
+  });
 
   test('recurring pulls leave the frozen player and pool authority in memory', async () => {
     render(<SnakeCompanion />);
@@ -825,6 +887,26 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
+  test('uses private design slots for advice and preserves them through board edits', async () => {
+    mocks.liveBoardDesignSlots = [{ slotId: '1B', kind: 'pos', position: '1B' }];
+    prepare();
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+
+    await waitFor(() => expect(mocks.assistantRequests.length).toBeGreaterThan(0));
+    const assistantInput = mocks.assistantRequests.at(-1)!.input;
+    expect(assistantInput.slots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotId: '1B', kind: 'pos', position: '1B' }),
+    ]));
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalled());
+    expect(mocks.patchBoard.mock.calls[0][0].board).toMatchObject({
+      designSlots: [{ slotId: '1B', kind: 'pos', position: '1B' }],
+    });
+  });
+
   test('fails money, chemistry, and persistence closed for a complete nine-hitter, thirteen-pitcher refit', async () => {
     const source = session();
     source.snakeSetup!.poolPlayerIds = Object.values(slots);
@@ -964,7 +1046,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await screen.findByTestId('private-draft-desk');
     await waitFor(() => expect(mocks.assistantRequests.some((request) => request.input.teamId === 'a')).toBe(true));
     const mainRequest = mocks.assistantRequests.filter((request) => request.input.teamId === 'a').at(-1)!;
-    expect(mainRequest.input).toEqual(companionRequest.input);
+    expect(mainRequest.input).toMatchObject(companionRequest.input);
+    expect(JSON.stringify(companionRequest.input)).not.toContain('hiddenPersonalityModifiers');
   }, 10_000);
 
   test.each([
@@ -1470,10 +1553,9 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
     expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'FORGET ROOM' }));
-    expect(screen.getByTestId('snake-companion-covered')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'FORGET ROOM' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
     expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-covered')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RETURN TO DESK' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
 
     const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };

@@ -79,6 +79,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', async () =>
   return { useSnakeLiveHostRoom: (options: {
     session: import('../../../utils/leagueBuilderStorage').LeagueBuilderMlbDraftSession | null;
     enabled?: boolean;
+    catalog?: Record<string, unknown> | null;
   }) => {
     const session = options.session;
     const [, rerenderClaims] = React.useReducer((revision: number) => revision + 1, 0);
@@ -104,6 +105,10 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', async () =>
     const room = roomRef.current;
     return {
       room,
+      catalog: room && options.catalog ? {
+        roomId: String(room.id), catalogRevision: 1, catalog: options.catalog,
+        createdAt: session?.createdDate ?? '2026-07-19T00:00:00.000Z',
+      } : null,
       publicSession: publicSessionRef.current,
       claims: liveRoomMocks.claims,
       intents: [],
@@ -127,6 +132,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', async () =>
         return claim;
       },
       resolveIntent: vi.fn(),
+      restorePreviousPublicState: vi.fn(),
       submitTradeIntent: vi.fn(),
       seedBoard: liveRoomMocks.seedBoard,
       closeRoom: vi.fn(),

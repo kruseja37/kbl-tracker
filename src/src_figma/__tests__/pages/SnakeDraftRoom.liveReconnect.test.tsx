@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   players: [] as import('../../../utils/leagueBuilderStorage').Player[],
   pool: null as import('../../../engines/leagueConstruction').RegisteredPool | null,
   atomicUpdate: vi.fn(),
+  correctionAvailable: false,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -46,7 +47,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
 });
 
 vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
-  useSnakeLiveHostRoom: (options: { enabled?: boolean }) => ({
+  useSnakeLiveHostRoom: (options: { enabled?: boolean; catalog?: Record<string, unknown> | null }) => ({
     room: options.enabled && state.remote ? {
       id: 'live-room-1',
       ownerUserId: 'owner-1',
@@ -56,11 +57,16 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       status: state.remote.currentPickIndex >= state.remote.pickOrder.length ? 'complete' : 'open',
       publicRevision: state.remote.currentPickIndex,
       publicState: {},
+      correctionAvailable: state.correctionAvailable,
       hostDeviceId: 'host-device',
       createdAt: state.remote.createdDate,
       updatedAt: state.remote.lastModified,
     } : null,
     publicSession: options.enabled ? state.remote : null,
+    catalog: options.enabled && options.catalog ? {
+      roomId: 'live-room-1', catalogRevision: 1, catalog: options.catalog,
+      createdAt: '2026-07-19T00:00:00.000Z',
+    } : null,
     claims: [], intents: [], events: [],
     status: options.enabled ? 'live' : 'idle',
     subscriptionStatus: options.enabled ? 'SUBSCRIBED' : null,
@@ -70,6 +76,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
     liveRoomReady: Boolean(options.enabled && state.remote),
     refresh: vi.fn(async () => undefined),
     publishSession: vi.fn(), resolveClaim: vi.fn(), resolveIntent: vi.fn(),
+    restorePreviousPublicState: vi.fn(),
     submitTradeIntent: vi.fn(), seedBoard: vi.fn(), closeRoom: vi.fn(),
   }),
 }));
@@ -223,6 +230,7 @@ function renderRoom(): void {
 
 describe('SnakeDraftRoom live reconnect mirror', () => {
   beforeEach(() => {
+    state.correctionAvailable = false;
     state.atomicUpdate.mockReset().mockImplementation(async (
       _leagueId: string,
       _seasonNumber: number,
@@ -247,6 +255,16 @@ describe('SnakeDraftRoom live reconnect mirror', () => {
     expect(state.local?.roomLogByTeamId?.[TEAM_IDS[0]]?.[0]?.text).toBe('PRIVATE');
   });
 
+  test('reload offers server correction when no local correction snapshot exists', async () => {
+    setFixture(10, 10);
+    state.correctionAvailable = true;
+    delete state.local!.correctionSnapshots;
+    delete state.remote!.correctionSnapshots;
+    renderRoom();
+
+    expect(await screen.findByRole('button', { name: 'CORRECT LAST ACTION' }, { timeout: 10_000 })).toBeEnabled();
+  });
+
   test('reload adopts the final 176th pick and opens the completed recap', async () => {
     const privateBefore = setFixture(175, 176);
     renderRoom();
@@ -256,4 +274,30 @@ describe('SnakeDraftRoom live reconnect mirror', () => {
     expect(state.local?.seatBoards?.[TEAM_IDS[0]]).toEqual(privateBefore);
     expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' }, { timeout: 10_000 })).toBeInTheDocument();
   });
+
+  test('adopts cloud truth in memory when the local IndexedDB mirror rejects', async () => {
+    setFixture(10, 11);
+    state.local!.paused = true;
+    state.remote!.paused = true;
+    state.atomicUpdate.mockRejectedValue(new Error('LOCAL QUOTA IS FULL.'));
+    renderRoom();
+
+    await waitFor(() => expect(state.atomicUpdate).toHaveBeenCalled(), { timeout: 10_000 });
+    await waitFor(() => {
+      const warning = screen.getByTestId('room-write-notice');
+      expect(warning).toHaveTextContent('THE LIVE ROOM IS CURRENT. THE LOCAL BACKUP FAILED');
+      expect(warning).toHaveTextContent('LOCAL QUOTA IS FULL');
+    }, { timeout: 10_000 });
+    expect(state.local?.currentPickIndex).toBe(10);
+    expect(screen.getByText('LIVE CLUB 4 IS REVIEWING THE BOARD')).toBeInTheDocument();
+  });
+
+  test('keeps the cloud catalog and opens final recap when the final local mirror rejects', async () => {
+    setFixture(175, 176);
+    state.atomicUpdate.mockRejectedValue(new Error('LOCAL QUOTA IS FULL.'));
+    renderRoom();
+
+    expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' }, { timeout: 10_000 })).toBeInTheDocument();
+    expect(state.local?.currentPickIndex).toBe(175);
+  }, 15_000);
 });

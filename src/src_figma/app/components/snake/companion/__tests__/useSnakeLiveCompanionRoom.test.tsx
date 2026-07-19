@@ -6,6 +6,7 @@ import type { SnakeLiveCompanionResume } from '../../../../../../utils/snakeLive
 import { buildSnakeLivePublicState } from '../../../../../../utils/snakeLiveRoomSession';
 import {
   SnakeLiveTransportError,
+  type SnakeLiveCatalog,
   type SnakeLiveClaim,
   type SnakeLiveIntent,
   type SnakeLiveJsonObject,
@@ -19,6 +20,21 @@ import {
   useSnakeLiveCompanionRoom,
   type SnakeLiveCompanionCapabilityApi,
 } from '../useSnakeLiveCompanionRoom';
+
+function liveCatalogReceipt(): SnakeLiveCatalog {
+  return {
+    roomId: 'room-1',
+    catalogRevision: 1,
+    catalog: {
+      formatVersion: 'snake-live-catalog-v1',
+      league: { id: 'league', name: 'Test League', teamIds: ['team-a', 'team-b', 'team-c'] },
+      teams: [{ id: 'team-a', name: 'Team A' }, { id: 'team-b', name: 'Team B' }],
+      players: [{ id: 'p1', firstName: 'Player', lastName: 'One' }],
+      registeredPool: { leagueId: 'league', players: [{ id: 'p1', iv: 1 }] },
+    },
+    createdAt: '2026-07-19T00:00:00.000Z',
+  };
+}
 
 function session(): LeagueBuilderMlbDraftSession {
   return {
@@ -116,6 +132,8 @@ function transportHarness(initialRoom: SnakeLiveRoom = room()) {
     findRoomBySession: vi.fn(),
     findRoomByCode: vi.fn(async (code: string) => code === '2468' ? currentRoom : null),
     getRoom: vi.fn(async () => currentRoom),
+    seedCatalog: vi.fn(),
+    getCatalog: vi.fn(async () => liveCatalogReceipt()),
     listEvents: vi.fn(async (_roomId: string, afterEventId = 0) => (
       serverEvents.filter((event) => event.id > afterEventId)
     )),
@@ -260,6 +278,8 @@ describe('useSnakeLiveCompanionRoom', () => {
     await waitFor(() => expect(result.current.accessReady).toBe(true));
     expect(result.current.status).toBe('live');
     expect(result.current.activeRoomId).toBe('room-1');
+    expect(result.current.catalog?.catalogRevision).toBe(1);
+    expect(harness.transport.getCatalog).toHaveBeenCalledOnce();
     expect(Object.keys(result.current.boardsByTeamId).sort()).toEqual(['team-a', 'team-b']);
     expect(harness.transport.submitClaim).not.toHaveBeenCalled();
   });
@@ -390,6 +410,7 @@ describe('useSnakeLiveCompanionRoom', () => {
     vi.mocked(harness.transport.listDeviceClaims).mockClear();
     vi.mocked(harness.transport.listDeviceIntents).mockClear();
     vi.mocked(harness.transport.getBoard).mockClear();
+    vi.mocked(harness.transport.getCatalog).mockClear();
 
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
 
@@ -398,6 +419,7 @@ describe('useSnakeLiveCompanionRoom', () => {
     expect(harness.transport.listDeviceClaims).toHaveBeenCalledOnce();
     expect(harness.transport.listDeviceIntents).toHaveBeenCalledOnce();
     expect(harness.transport.getBoard).toHaveBeenCalledTimes(2);
+    expect(harness.transport.getCatalog).not.toHaveBeenCalled();
     unmount();
   });
 

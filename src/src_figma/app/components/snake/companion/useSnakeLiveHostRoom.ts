@@ -10,10 +10,12 @@ import {
   readSnakeLivePublicSession,
   snakeLiveRoomRunKey,
 } from '../../../../../utils/snakeLiveRoomSession';
+import { readSnakeLiveCatalog } from '../../../../../utils/snakeLiveCatalog';
 import { createSnakeLiveRoomTransport } from '../../../../../utils/snakeLiveRoomTransport';
 import {
   SnakeLiveTransportError,
   type SnakeLiveBoardSeedReceipt,
+  type SnakeLiveCatalog,
   type SnakeLiveClaim,
   type SnakeLiveHostAccess,
   type SnakeLiveIntent,
@@ -41,6 +43,7 @@ const DEFAULT_CAPABILITIES: SnakeLiveHostCapabilityApi = {
 export interface UseSnakeLiveHostRoomOptions {
   session: LeagueBuilderMlbDraftSession | null;
   hostDeviceId: string | null;
+  catalog: SnakeLiveJsonObject | null;
   enabled?: boolean;
   transport?: SnakeLiveRoomTransport;
   capabilities?: SnakeLiveHostCapabilityApi;
@@ -68,6 +71,11 @@ export interface SnakeLiveHostTradeIntentInput {
   idempotencyKey?: string;
 }
 
+export interface SnakeLiveHostCorrectionInput {
+  expectedRoomRevision?: number;
+  idempotencyKey?: string;
+}
+
 export interface UseSnakeLiveHostRoomResult {
   room: SnakeLiveRoom | null;
   publicSession: LeagueBuilderMlbDraftSession | null;
@@ -80,6 +88,7 @@ export interface UseSnakeLiveHostRoomResult {
   working: boolean;
   hostAccessReady: boolean;
   liveRoomReady: boolean;
+  catalog: SnakeLiveCatalog | null;
   refresh(): Promise<void>;
   publishSession(input: SnakeLiveHostPublishInput): Promise<SnakeLiveRoom>;
   resolveClaim(
@@ -93,6 +102,7 @@ export interface UseSnakeLiveHostRoomResult {
     idempotencyKey?: string,
   ): Promise<SnakeLiveIntent>;
   submitTradeIntent(input: SnakeLiveHostTradeIntentInput): Promise<SnakeLiveIntent>;
+  restorePreviousPublicState(input?: SnakeLiveHostCorrectionInput): Promise<SnakeLiveRoom>;
   seedBoard(input: SnakeLiveHostBoardSeedInput): Promise<SnakeLiveBoardSeedReceipt>;
   closeRoom(idempotencyKey?: string): Promise<SnakeLiveRoom>;
 }
@@ -128,6 +138,9 @@ export function useSnakeLiveHostRoom(
   const phase = options.session?.draftPhase ?? 'MLB';
   const latestSessionRef = useRef(options.session);
   latestSessionRef.current = options.session;
+  const latestCatalogRef = useRef(options.catalog);
+  latestCatalogRef.current = options.catalog;
+  const catalogAvailable = Boolean(options.catalog);
 
   const [room, setRoom] = useState<SnakeLiveRoom | null>(null);
   const [publicSession, setPublicSession] = useState<LeagueBuilderMlbDraftSession | null>(null);
@@ -140,6 +153,7 @@ export function useSnakeLiveHostRoom(
   const [workingCount, setWorkingCount] = useState(0);
   const [access, setAccess] = useState<SnakeLiveHostAccess | null>(null);
   const [hostAccessReady, setHostAccessReady] = useState(false);
+  const [catalog, setCatalog] = useState<SnakeLiveCatalog | null>(null);
 
   const generationRef = useRef(0);
   const roomRef = useRef<SnakeLiveRoom | null>(null);
@@ -216,6 +230,7 @@ export function useSnakeLiveHostRoom(
     refreshRequestedRef.current = false;
     setAccess(null);
     setHostAccessReady(false);
+    setCatalog(null);
     setSubscriptionStatus(null);
     const sourceSession = latestSessionRef.current;
     if (!enabled || !sourceSession || !options.hostDeviceId) {
@@ -239,11 +254,17 @@ export function useSnakeLiveHostRoom(
     void (async () => {
       const credentials = await capabilities.get(sessionId, hostDeviceId);
       let receivedRoom = await transport.findRoomBySession(sessionId);
+      const existingRoom = Boolean(receivedRoom);
+      let catalogForNewRoom: SnakeLiveJsonObject | null = null;
       if (receivedRoom) {
         if (receivedRoom.hostDeviceId !== hostDeviceId) {
           throw new Error('THIS DRAFT IS OPEN ON ANOTHER HOST DEVICE. USE THE ORIGINAL HOST BROWSER.');
         }
       } else {
+        catalogForNewRoom = latestCatalogRef.current;
+        if (!catalogForNewRoom) {
+          throw new Error('THE LIVE ROOM PLAYER CATALOG COULD NOT BE BUILT. CHECK THE LOCKED DRAFT POOL.');
+        }
         receivedRoom = await transport.createRoom({
           sessionId,
           roomCode,
@@ -259,6 +280,21 @@ export function useSnakeLiveHostRoom(
         hostDeviceId,
         hostToken: credentials.hostToken,
       };
+      let receivedCatalog = existingRoom
+        ? await transport.getCatalog(receivedRoom.id)
+        : await transport.seedCatalog({
+            ...nextAccess,
+            catalog: catalogForNewRoom!,
+          });
+      if (existingRoom && !receivedCatalog && latestCatalogRef.current) {
+        receivedCatalog = await transport.seedCatalog({
+          ...nextAccess,
+          catalog: latestCatalogRef.current,
+        });
+      }
+      if (!receivedCatalog || !readSnakeLiveCatalog(receivedCatalog.catalog)) {
+        throw new Error('THE LIVE ROOM PLAYER CATALOG IS NOT AVAILABLE. START A NEW DRAFT ROOM.');
+      }
       let nextClaims: SnakeLiveClaim[];
       try {
         nextClaims = await transport.listClaims(nextAccess);
@@ -277,6 +313,7 @@ export function useSnakeLiveHostRoom(
       setIntents(nextIntents);
       setEvents(nextEvents);
       setAccess(nextAccess);
+      setCatalog(receivedCatalog);
       setHostAccessReady(true);
       setStatus(receivedRoom.status === 'closed' ? 'closed' : 'live');
       setError(null);
@@ -288,7 +325,7 @@ export function useSnakeLiveHostRoom(
     return () => {
       if (generationRef.current === generation) generationRef.current += 1;
     };
-  }, [capabilities, enabled, options.hostDeviceId, phase, roomCode, sessionId, transport]);
+  }, [capabilities, catalogAvailable, enabled, options.hostDeviceId, phase, roomCode, sessionId, transport]);
 
   useEffect(() => {
     if (!access || !hostAccessReady) return;
@@ -419,6 +456,21 @@ export function useSnakeLiveHostRoom(
     })
   ), [requireAccess, runMutation, transport]);
 
+  const restorePreviousPublicState = useCallback((
+    input: SnakeLiveHostCorrectionInput = {},
+  ): Promise<SnakeLiveRoom> => runMutation(async () => {
+    const active = requireAccess();
+    const receipt = await transport.restorePreviousPublicState({
+      ...active.access,
+      expectedRoomRevision: input.expectedRoomRevision ?? active.room.publicRevision,
+      idempotencyKey: actionKey('correct', input.idempotencyKey),
+    });
+    setRoom(receipt);
+    setPublicSession(readSnakeLivePublicSession(receipt));
+    setStatus(receipt.status === 'closed' ? 'closed' : 'live');
+    return receipt;
+  }), [requireAccess, runMutation, transport]);
+
   const closeRoom = useCallback((idempotencyKey?: string): Promise<SnakeLiveRoom> => (
     runMutation(async () => {
       const active = requireAccess();
@@ -446,11 +498,13 @@ export function useSnakeLiveHostRoom(
     working: workingCount > 0,
     hostAccessReady,
     liveRoomReady: hostAccessReady && Boolean(room) && status === 'live',
+    catalog,
     refresh,
     publishSession,
     resolveClaim,
     resolveIntent,
     submitTradeIntent,
+    restorePreviousPublicState,
     seedBoard,
     closeRoom,
   };

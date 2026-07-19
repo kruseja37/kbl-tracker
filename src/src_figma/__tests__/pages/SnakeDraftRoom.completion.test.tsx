@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   pull: vi.fn(async () => undefined),
   flush: vi.fn(async () => undefined),
   refresh: vi.fn(async () => undefined),
+  closeRoom: vi.fn(),
+  liveSession: null as LeagueBuilderMlbDraftSession | null,
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
@@ -60,6 +62,60 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
 });
 vi.mock('../../../utils/snakeRosterHandoff', () => ({
   assertSnakeRosterHandoffReady: vi.fn(async () => undefined),
+}));
+vi.mock('../../../utils/snakeLiveCapabilityStore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/snakeLiveCapabilityStore')>();
+  return { ...actual, getOrCreateSnakeLiveDeviceId: vi.fn(async () => 'completion-host-device') };
+});
+vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
+  useSnakeLiveHostRoom: (options: {
+    session: LeagueBuilderMlbDraftSession | null;
+    enabled?: boolean;
+    catalog?: Record<string, unknown> | null;
+  }) => {
+    const publicSession = options.enabled ? mocks.liveSession ?? options.session : null;
+    const room = publicSession ? {
+      id: `live:${publicSession.id}`,
+      ownerUserId: 'completion-owner',
+      sessionId: publicSession.id,
+      roomCode: publicSession.snakeCompanions?.roomCode ?? '2468',
+      phase: publicSession.draftPhase ?? 'MLB',
+      status: 'complete' as const,
+      publicRevision: publicSession.revision ?? 0,
+      publicState: {},
+      correctionAvailable: false,
+      hostDeviceId: 'completion-host-device',
+      createdAt: publicSession.createdDate,
+      updatedAt: publicSession.lastModified,
+    } : null;
+    return {
+      room,
+      publicSession,
+      catalog: room && options.catalog ? {
+        roomId: room.id,
+        catalogRevision: 1,
+        catalog: options.catalog,
+        createdAt: publicSession?.createdDate ?? '2026-07-19T00:00:00.000Z',
+      } : null,
+      claims: [],
+      intents: [],
+      events: [],
+      status: room ? 'live' : 'idle',
+      subscriptionStatus: room ? 'SUBSCRIBED' : null,
+      error: null,
+      working: false,
+      hostAccessReady: Boolean(room),
+      liveRoomReady: Boolean(room),
+      refresh: vi.fn(async () => undefined),
+      publishSession: vi.fn(),
+      resolveClaim: vi.fn(),
+      resolveIntent: vi.fn(),
+      restorePreviousPublicState: vi.fn(),
+      submitTradeIntent: vi.fn(),
+      seedBoard: vi.fn(),
+      closeRoom: mocks.closeRoom,
+    };
+  },
 }));
 
 import type { LeagueBuilderMlbDraftSession, LeagueTemplate, Player, RegisteredPool, Team } from '../../hooks/useLeagueBuilderData';
@@ -120,6 +176,7 @@ function completedSession(phase: 'MLB' | 'FARM'): LeagueBuilderMlbDraftSession {
       clubs: [{ teamId: 'a', hotseat: true }, { teamId: 'b', hotseat: true }],
       orderSeed: 'complete-seed',
     },
+    snakeCompanions: phase === 'MLB' ? { roomCode: '2468', claims: [] } : undefined,
     createdDate: '2026-01-01', lastModified: '2026-01-01',
   } as LeagueBuilderMlbDraftSession;
 }
@@ -179,6 +236,8 @@ describe('snake draft durable completion and recap', () => {
     mocks.refresh.mockReset().mockResolvedValue(undefined);
     mocks.commitMlb.mockReset().mockResolvedValue(undefined);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
+    mocks.liveSession = null;
+    mocks.closeRoom.mockReset().mockImplementation(async () => ({ status: 'closed' }));
     mocks.lastSaved = null;
     mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
       mocks.lastSaved = session;
@@ -217,12 +276,14 @@ describe('snake draft durable completion and recap', () => {
     expect(JSON.stringify(mlbMorale)).not.toMatch(/loyalty|ambition|resilience|charisma/i);
     expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitMlb.mock.invocationCallOrder[0]);
     expect(mocks.commitMlb).toHaveBeenCalledTimes(1);
+    expect(mocks.closeRoom).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/scout-hire?leagueId=${league.id}`);
   });
 
   test('the first recap confirmation freezes the latest stored revision', async () => {
     const rendered = completedSession('MLB');
     const fresh = { ...rendered, revision: 3 };
+    mocks.liveSession = fresh;
     let reads = 0;
     setMlbData(rendered);
     mocks.data.getMlbDraftSession = vi.fn(async () => {
@@ -267,6 +328,7 @@ describe('snake draft durable completion and recap', () => {
       salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
       frozenAt: '2026-07-12T12:00:00.000Z',
     });
+    mocks.liveSession = frozen;
     setMlbData({
       ...frozen,
       currentPickIndex: 0,

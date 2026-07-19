@@ -15,9 +15,10 @@ BEGIN
       v_key_norm := lower(regexp_replace(v_key, '[^a-z0-9]', '', 'g'));
       IF v_key_norm IN (
         'board','seatboard','seatboards','farmseatboard','farmseatboards',
-        'rankings','zerointerestplayerids','frozenplayerids','privatepayload','privateboard',
+        'rankings','designslots','zerointerestplayerids','frozenplayerids','privatepayload','privateboard',
         'roomlogbyteamid','opentradeoffers','snakecompanions','companionroompublication',
         'correctionsnapshots','farmprospectsnapshot','seatingcertificate',
+        'recoveryslot','recoveryslots','priorpublicstate',
         'hosttokenhash','creationhash','requesthash','eventkey'
       )
         OR v_key_norm LIKE 'private%'
@@ -29,6 +30,128 @@ BEGIN
       IF NOT public.kbl_snake_live_public_payload_safe(v_child) THEN RETURN FALSE; END IF;
     END LOOP;
   END IF;
+  RETURN TRUE;
+END;
+$fn$;
+
+-- The static player catalog has a narrower public-data contract than the
+-- changing room snapshot. Build it from explicit client allowlists, then
+-- enforce the same boundary again at the database.
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_payload_safe(p_value JSONB)
+RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE SET search_path = public, pg_temp
+AS $fn$
+DECLARE v_key TEXT; v_key_norm TEXT; v_child JSONB;
+BEGIN
+  IF p_value IS NULL OR NOT public.kbl_snake_live_public_payload_safe(p_value) THEN RETURN FALSE; END IF;
+  IF jsonb_typeof(p_value) = 'object' THEN
+    FOR v_key, v_child IN SELECT key, value FROM jsonb_each(p_value) LOOP
+      v_key_norm := lower(regexp_replace(v_key, '[^a-z0-9]', '', 'g'));
+      IF v_key_norm IN (
+        'hiddenpersonalitymodifiers','salaryfactors','prospectprofile','backstory',
+        'historicallegend','edithistory','rosterdesign','boardrankoverrides','rankoverrides'
+      )
+        OR v_key_norm LIKE '%lineup%'
+        OR v_key_norm LIKE '%rotation%'
+        OR NOT public.kbl_snake_live_catalog_payload_safe(v_child)
+      THEN RETURN FALSE; END IF;
+    END LOOP;
+  ELSIF jsonb_typeof(p_value) = 'array' THEN
+    FOR v_child IN SELECT value FROM jsonb_array_elements(p_value) LOOP
+      IF NOT public.kbl_snake_live_catalog_payload_safe(v_child) THEN RETURN FALSE; END IF;
+    END LOOP;
+  END IF;
+  RETURN TRUE;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_payload_complete(p_value JSONB)
+RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE SET search_path = public, pg_temp
+AS $fn$
+DECLARE league_team_count INTEGER; team_count INTEGER; player_count INTEGER; pool_player_count INTEGER;
+BEGIN
+  IF p_value IS NULL OR jsonb_typeof(p_value)<>'object'
+    OR p_value->>'formatVersion'<>'snake-live-catalog-v1'
+    OR jsonb_typeof(p_value->'league')<>'object'
+    OR jsonb_typeof(p_value#>'{league,teamIds}')<>'array'
+    OR jsonb_typeof(p_value->'teams')<>'array'
+    OR jsonb_typeof(p_value->'players')<>'array'
+    OR jsonb_typeof(p_value->'registeredPool')<>'object'
+    OR jsonb_typeof(p_value#>'{registeredPool,players}')<>'array'
+    OR jsonb_array_length(p_value->'teams')=0
+    OR jsonb_array_length(p_value->'players')=0
+    OR length(btrim(COALESCE(p_value#>>'{league,id}','')))=0
+    OR p_value#>>'{league,id}'<>p_value#>>'{registeredPool,leagueId}'
+  THEN RETURN FALSE; END IF;
+
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_value#>'{league,teamIds}') entry WHERE jsonb_typeof(entry)<>'string' OR length(btrim(entry#>>'{}'))=0)
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_value->'teams') entry WHERE jsonb_typeof(entry)<>'object' OR length(btrim(COALESCE(entry->>'id','')))=0)
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_value->'players') entry WHERE jsonb_typeof(entry)<>'object' OR length(btrim(COALESCE(entry->>'id','')))=0)
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_value#>'{registeredPool,players}') entry WHERE jsonb_typeof(entry)<>'object' OR length(btrim(COALESCE(entry->>'id','')))=0)
+  THEN RETURN FALSE; END IF;
+
+  SELECT count(*),count(DISTINCT entry#>>'{}') INTO league_team_count,team_count
+  FROM jsonb_array_elements(p_value#>'{league,teamIds}') entry;
+  IF league_team_count<>team_count THEN RETURN FALSE; END IF;
+  SELECT count(*),count(DISTINCT entry->>'id') INTO team_count,player_count FROM jsonb_array_elements(p_value->'teams') entry;
+  IF team_count<>player_count OR team_count<>league_team_count THEN RETURN FALSE; END IF;
+  IF EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_value#>'{league,teamIds}') wanted
+    WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_value->'teams') actual WHERE actual->>'id'=wanted#>>'{}')
+  ) THEN RETURN FALSE; END IF;
+
+  SELECT count(*),count(DISTINCT entry->>'id') INTO player_count,pool_player_count FROM jsonb_array_elements(p_value->'players') entry;
+  IF player_count<>pool_player_count THEN RETURN FALSE; END IF;
+  SELECT count(*),count(DISTINCT entry->>'id') INTO pool_player_count,team_count FROM jsonb_array_elements(p_value#>'{registeredPool,players}') entry;
+  IF pool_player_count<>team_count OR pool_player_count<>player_count THEN RETURN FALSE; END IF;
+  IF EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_value->'players') wanted
+    WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_value#>'{registeredPool,players}') actual WHERE actual->>'id'=wanted->>'id')
+  ) THEN RETURN FALSE; END IF;
+  RETURN TRUE;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_matches_active_pool(p_catalog JSONB,p_active_pool_ids JSONB)
+RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE SET search_path = public, pg_temp
+AS $fn$
+DECLARE expected_count INTEGER; expected_distinct INTEGER; catalog_count INTEGER;
+BEGIN
+  IF p_active_pool_ids IS NULL OR jsonb_typeof(p_active_pool_ids)<>'array' THEN RETURN FALSE; END IF;
+  IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_active_pool_ids) entry WHERE jsonb_typeof(entry)<>'string' OR length(btrim(entry#>>'{}'))=0) THEN RETURN FALSE; END IF;
+  SELECT count(*),count(DISTINCT entry#>>'{}') INTO expected_count,expected_distinct FROM jsonb_array_elements(p_active_pool_ids) entry;
+  IF expected_count=0 OR expected_count<>expected_distinct THEN RETURN FALSE; END IF;
+  SELECT count(*) INTO catalog_count FROM jsonb_array_elements(p_catalog->'players');
+  IF catalog_count<>expected_count THEN RETURN FALSE; END IF;
+  IF EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_active_pool_ids) wanted
+    WHERE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_catalog->'players') actual WHERE actual->>'id'=wanted#>>'{}')
+  ) THEN RETURN FALSE; END IF;
+  RETURN TRUE;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_matches_active_teams(p_catalog JSONB,p_active_clubs JSONB)
+RETURNS BOOLEAN LANGUAGE plpgsql IMMUTABLE SET search_path = public, pg_temp
+AS $fn$
+DECLARE expected_count INTEGER; expected_distinct INTEGER; catalog_count INTEGER;
+BEGIN
+  IF p_active_clubs IS NULL OR jsonb_typeof(p_active_clubs)<>'array' THEN RETURN FALSE; END IF;
+  IF EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_active_clubs) entry
+    WHERE jsonb_typeof(entry)<>'object' OR length(btrim(COALESCE(entry->>'teamId','')))=0
+  ) THEN RETURN FALSE; END IF;
+  SELECT count(*),count(DISTINCT entry->>'teamId') INTO expected_count,expected_distinct
+  FROM jsonb_array_elements(p_active_clubs) entry;
+  IF expected_count=0 OR expected_count<>expected_distinct THEN RETURN FALSE; END IF;
+  SELECT count(*) INTO catalog_count FROM jsonb_array_elements(p_catalog#>'{league,teamIds}');
+  IF catalog_count<>expected_count THEN RETURN FALSE; END IF;
+  IF EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_active_clubs) wanted
+    WHERE NOT EXISTS(
+      SELECT 1 FROM jsonb_array_elements(p_catalog#>'{league,teamIds}') actual
+      WHERE actual#>>'{}'=wanted->>'teamId'
+    )
+  ) THEN RETURN FALSE; END IF;
   RETURN TRUE;
 END;
 $fn$;
@@ -63,6 +186,15 @@ CREATE TABLE public.snake_live_rooms (
   UNIQUE (owner_user_id, session_id)
 );
 CREATE UNIQUE INDEX snake_live_rooms_open_code_unique ON public.snake_live_rooms(owner_user_id, room_code) WHERE status = 'open';
+
+CREATE TABLE public.snake_live_catalogs (
+  room_id UUID PRIMARY KEY REFERENCES public.snake_live_rooms(id) ON DELETE CASCADE,
+  owner_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  catalog_revision BIGINT NOT NULL DEFAULT 1 CHECK (catalog_revision = 1),
+  catalog JSONB NOT NULL CHECK (jsonb_typeof(catalog) = 'object') CHECK (public.kbl_snake_live_catalog_payload_safe(catalog)),
+  request_hash BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
 
 CREATE TABLE public.snake_live_devices (
   room_id UUID NOT NULL REFERENCES public.snake_live_rooms(id) ON DELETE CASCADE,
@@ -116,24 +248,39 @@ CREATE TABLE public.snake_live_event_receipts (
   event_id BIGINT NOT NULL UNIQUE REFERENCES public.snake_live_events(id) ON DELETE CASCADE,
   PRIMARY KEY (room_id, event_key)
 );
+CREATE TABLE public.snake_live_recovery_slots (
+  room_id UUID PRIMARY KEY REFERENCES public.snake_live_rooms(id) ON DELETE CASCADE,
+  prior_public_state JSONB NOT NULL CHECK (jsonb_typeof(prior_public_state) = 'object') CHECK (public.kbl_snake_live_public_payload_safe(prior_public_state)),
+  prior_status TEXT NOT NULL CHECK (prior_status IN ('open','complete','closed')),
+  source_room_revision BIGINT NOT NULL CHECK (source_room_revision > 0),
+  source_event_kind TEXT NOT NULL CHECK (source_event_kind IN ('PICK_RECORDED','TRADE_EXECUTED')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
 CREATE INDEX snake_live_events_room_id_order ON public.snake_live_events(room_id, id);
 
 ALTER TABLE public.snake_live_rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snake_live_catalogs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_seat_boards ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_intents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.snake_live_event_receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.snake_live_recovery_slots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY snake_live_events_owner_read ON public.snake_live_events FOR SELECT TO authenticated USING ((SELECT auth.uid()) = owner_user_id);
-REVOKE ALL ON public.snake_live_rooms, public.snake_live_devices, public.snake_live_claims, public.snake_live_seat_boards, public.snake_live_intents, public.snake_live_events, public.snake_live_event_receipts FROM anon, authenticated;
+REVOKE ALL ON public.snake_live_rooms, public.snake_live_catalogs, public.snake_live_devices, public.snake_live_claims, public.snake_live_seat_boards, public.snake_live_intents, public.snake_live_events, public.snake_live_event_receipts, public.snake_live_recovery_slots FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.snake_live_events TO authenticated;
 
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_room_json(p public.snake_live_rooms) RETURNS JSONB LANGUAGE sql STABLE SET search_path = public, pg_temp AS $fn$
 SELECT jsonb_build_object(
   'id',p.id,'owner_user_id',p.owner_user_id,'session_id',p.session_id,'room_code',p.room_code,
   'phase',p.phase,'status',p.status,'public_revision',p.public_revision,'public_state',p.public_state,
+  'correction_available',EXISTS(SELECT 1 FROM public.snake_live_recovery_slots slot WHERE slot.room_id=p.id),
   'host_device_id',p.host_device_id,'created_at',p.created_at,'updated_at',p.updated_at
+); $fn$;
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_json(p public.snake_live_catalogs) RETURNS JSONB LANGUAGE sql STABLE SET search_path = public, pg_temp AS $fn$
+SELECT jsonb_build_object(
+  'room_id',p.room_id,'catalog_revision',p.catalog_revision,'catalog',p.catalog,'created_at',p.created_at
 ); $fn$;
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_claim_json(p public.snake_live_claims) RETURNS JSONB LANGUAGE sql STABLE SET search_path = public, pg_temp AS $fn$ SELECT to_jsonb(p) - ARRAY['request_hash','resolution_key','resolution_hash']; $fn$;
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_board_json(p public.snake_live_seat_boards) RETURNS JSONB LANGUAGE sql STABLE SET search_path = public, pg_temp AS $fn$ SELECT to_jsonb(p) - ARRAY['last_write_key','last_write_hash']; $fn$;
@@ -189,6 +336,41 @@ BEGIN
   SELECT COALESCE(jsonb_agg(public.kbl_snake_live_event_json(e) ORDER BY e.id),'[]'::JSONB) INTO out
   FROM public.snake_live_events e WHERE e.room_id=p_room_id AND e.id>p_after_event_id;
   RETURN out;
+END; $fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_seed_catalog(p_room_id UUID,p_host_device_id TEXT,p_host_token TEXT,p_catalog JSONB)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $fn$
+DECLARE r public.snake_live_rooms; c public.snake_live_catalogs; h BYTEA;
+BEGIN
+  SELECT * INTO r FROM public.snake_live_rooms WHERE id=p_room_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'The live room was not found.'; END IF;
+  PERFORM public.kbl_snake_live_assert_owner(r.owner_user_id);
+  IF NOT public.kbl_snake_live_host_matches(r,p_host_device_id,p_host_token) THEN RAISE EXCEPTION 'Forbidden: the host token does not match.'; END IF;
+  IF NOT public.kbl_snake_live_catalog_payload_complete(p_catalog)
+    OR NOT public.kbl_snake_live_catalog_matches_active_teams(p_catalog,r.public_state#>'{session,snakeSetup,clubs}')
+    OR NOT public.kbl_snake_live_catalog_matches_active_pool(p_catalog,r.public_state#>'{session,snakeSetup,poolPlayerIds}')
+    OR NOT public.kbl_snake_live_catalog_payload_safe(p_catalog)
+  THEN RAISE EXCEPTION 'The live catalog is invalid or contains private data.'; END IF;
+  h:=public.kbl_snake_live_hash_json(p_catalog);
+  SELECT * INTO c FROM public.snake_live_catalogs WHERE room_id=p_room_id FOR UPDATE;
+  IF FOUND THEN
+    IF c.request_hash<>h THEN RAISE EXCEPTION 'Idempotency conflict: this room already has another catalog.'; END IF;
+    RETURN public.kbl_snake_live_catalog_json(c);
+  END IF;
+  IF r.status<>'open' THEN RAISE EXCEPTION 'The live room is not open.'; END IF;
+  INSERT INTO public.snake_live_catalogs(room_id,owner_user_id,catalog,request_hash)
+  VALUES(p_room_id,r.owner_user_id,p_catalog,h) RETURNING * INTO c;
+  RETURN public.kbl_snake_live_catalog_json(c);
+END; $fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_get_catalog(p_room_id UUID)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $fn$
+DECLARE u UUID:=auth.uid(); c public.snake_live_catalogs;
+BEGIN
+  IF u IS NULL THEN RAISE EXCEPTION 'Not authenticated.'; END IF;
+  SELECT * INTO c FROM public.snake_live_catalogs WHERE room_id=p_room_id AND owner_user_id=u;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  RETURN public.kbl_snake_live_catalog_json(c);
 END; $fn$;
 
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_emit_event(p_room UUID,p_revision BIGINT,p_key TEXT,p_hash BYTEA,p_kind TEXT,p_payload JSONB) RETURNS VOID LANGUAGE plpgsql SET search_path=public,pg_temp AS $fn$
@@ -261,7 +443,6 @@ IF FOUND AND b.last_write_key=p_key THEN IF b.last_write_hash<>h THEN RAISE EXCE
 IF NOT FOUND THEN RAISE EXCEPTION 'The private board has not been seeded.'; END IF;
 IF b.board_revision<>p_expected THEN RAISE EXCEPTION 'Stale expected revision for the board.'; END IF;
 UPDATE public.snake_live_seat_boards SET board_revision=board_revision+1,board=p_board,updated_by_device_id=p_device_id,last_write_key=p_key,last_write_hash=h,updated_at=clock_timestamp() WHERE room_id=p_room_id AND team_id=p_team_id RETURNING * INTO b;
-PERFORM public.kbl_snake_live_emit_event(p_room_id,r.public_revision,'board:'||p_team_id||':'||p_key,h,'BOARD_ACTIVITY',jsonb_build_object('teamId',p_team_id,'boardRevision',b.board_revision,'action','changed'));
 RETURN public.kbl_snake_live_board_json(b); END; $fn$;
 
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_write_board(p_room_id UUID,p_device_id TEXT,p_device_token TEXT,p_team_id TEXT,p_expected_board_revision BIGINT,p_idempotency_key TEXT,p_board JSONB)
@@ -341,19 +522,65 @@ RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extension
 DECLARE r public.snake_live_rooms; receipt public.snake_live_event_receipts; h BYTEA;
 BEGIN SELECT * INTO r FROM public.snake_live_rooms WHERE id=p_room_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'The live room was not found.'; END IF; PERFORM public.kbl_snake_live_assert_owner(r.owner_user_id); IF NOT public.kbl_snake_live_host_matches(r,p_host_device_id,p_host_token) THEN RAISE EXCEPTION 'Forbidden: the host token does not match.'; END IF;
 IF jsonb_typeof(p_public_state)<>'object' OR jsonb_typeof(p_public_event)<>'object' OR NOT public.kbl_snake_live_public_payload_safe(p_public_state) OR NOT public.kbl_snake_live_public_payload_safe(p_public_event) THEN RAISE EXCEPTION 'Public draft truth cannot contain private board data.'; END IF;
+IF p_event_kind NOT IN ('PICK_RECORDED','TRADE_EXECUTED','PAUSE_CHANGED') THEN RAISE EXCEPTION 'The public draft event kind is invalid.'; END IF;
 IF p_status IS NOT NULL AND p_status NOT IN ('open','complete','closed') THEN RAISE EXCEPTION 'The room status is invalid.'; END IF;
 h:=public.kbl_snake_live_hash_json(jsonb_build_object('expected',p_expected_room_revision,'state',p_public_state,'kind',p_event_kind,'event',p_public_event,'status',p_status));
 SELECT * INTO receipt FROM public.snake_live_event_receipts WHERE room_id=p_room_id AND event_key=p_idempotency_key FOR UPDATE; IF FOUND THEN IF receipt.request_hash<>h THEN RAISE EXCEPTION 'Idempotency conflict: the public operation differs.'; END IF; RETURN public.kbl_snake_live_room_json(r); END IF;
+IF r.status<>'open' THEN RAISE EXCEPTION 'The live room is not open.'; END IF;
 IF r.public_revision<>p_expected_room_revision THEN RAISE EXCEPTION 'Stale expected revision for the room.'; END IF;
+IF p_event_kind IN ('PICK_RECORDED','TRADE_EXECUTED') THEN
+  INSERT INTO public.snake_live_recovery_slots(room_id,prior_public_state,prior_status,source_room_revision,source_event_kind)
+  VALUES(p_room_id,r.public_state,r.status,r.public_revision+1,p_event_kind)
+  ON CONFLICT(room_id) DO UPDATE SET
+    prior_public_state=EXCLUDED.prior_public_state,
+    prior_status=EXCLUDED.prior_status,
+    source_room_revision=EXCLUDED.source_room_revision,
+    source_event_kind=EXCLUDED.source_event_kind,
+    created_at=clock_timestamp();
+END IF;
 UPDATE public.snake_live_rooms SET public_revision=public_revision+1,public_state=p_public_state,status=COALESCE(p_status,status),updated_at=clock_timestamp() WHERE id=p_room_id RETURNING * INTO r;
 PERFORM public.kbl_snake_live_emit_event(p_room_id,r.public_revision,p_idempotency_key,h,p_event_kind,p_public_event);
 RETURN public.kbl_snake_live_room_json(r); END; $fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_restore_previous_public_state(p_room_id UUID,p_host_device_id TEXT,p_host_token TEXT,p_expected_room_revision BIGINT,p_idempotency_key TEXT)
+RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $fn$
+DECLARE r public.snake_live_rooms; slot public.snake_live_recovery_slots; receipt public.snake_live_event_receipts; h BYTEA; action_name TEXT;
+BEGIN
+  SELECT * INTO r FROM public.snake_live_rooms WHERE id=p_room_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'The live room was not found.'; END IF;
+  PERFORM public.kbl_snake_live_assert_owner(r.owner_user_id);
+  IF NOT public.kbl_snake_live_host_matches(r,p_host_device_id,p_host_token) THEN RAISE EXCEPTION 'Forbidden: the host token does not match.'; END IF;
+  IF p_expected_room_revision IS NULL OR p_expected_room_revision<0 OR length(btrim(COALESCE(p_idempotency_key,'')))=0 THEN RAISE EXCEPTION 'The correction request is invalid.'; END IF;
+  h:=public.kbl_snake_live_hash_json(jsonb_build_object('expected',p_expected_room_revision,'action','restore-previous-public-state'));
+  SELECT * INTO receipt FROM public.snake_live_event_receipts WHERE room_id=p_room_id AND event_key=p_idempotency_key FOR UPDATE;
+  IF FOUND THEN
+    IF receipt.request_hash<>h THEN RAISE EXCEPTION 'Idempotency conflict: the correction operation differs.'; END IF;
+    RETURN public.kbl_snake_live_room_json(r);
+  END IF;
+  IF r.status='closed' THEN RAISE EXCEPTION 'The closed live room cannot be corrected.'; END IF;
+  IF r.public_revision<>p_expected_room_revision THEN RAISE EXCEPTION 'Stale expected revision for the room.'; END IF;
+  SELECT * INTO slot FROM public.snake_live_recovery_slots WHERE room_id=p_room_id FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'No completed pick or trade is available to correct.'; END IF;
+  action_name:=CASE slot.source_event_kind WHEN 'PICK_RECORDED' THEN 'pick' ELSE 'trade' END;
+  UPDATE public.snake_live_rooms SET
+    public_revision=public_revision+1,
+    public_state=slot.prior_public_state,
+    status=slot.prior_status,
+    updated_at=clock_timestamp()
+  WHERE id=p_room_id RETURNING * INTO r;
+  DELETE FROM public.snake_live_recovery_slots WHERE room_id=p_room_id;
+  PERFORM public.kbl_snake_live_emit_event(
+    p_room_id,r.public_revision,p_idempotency_key,h,'CORRECTION_APPLIED',
+    jsonb_build_object('roomRevision',r.public_revision,'correctedRevision',slot.source_room_revision,'action',action_name)
+  );
+  RETURN public.kbl_snake_live_room_json(r);
+END; $fn$;
 
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_close_room(p_room_id UUID,p_host_device_id TEXT,p_host_token TEXT,p_expected_room_revision BIGINT,p_idempotency_key TEXT)
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $fn$
 DECLARE r public.snake_live_rooms; receipt public.snake_live_event_receipts; h BYTEA; BEGIN SELECT * INTO r FROM public.snake_live_rooms WHERE id=p_room_id FOR UPDATE; IF NOT FOUND THEN RAISE EXCEPTION 'The live room was not found.'; END IF; PERFORM public.kbl_snake_live_assert_owner(r.owner_user_id); IF NOT public.kbl_snake_live_host_matches(r,p_host_device_id,p_host_token) THEN RAISE EXCEPTION 'Forbidden: the host token does not match.'; END IF;
 h:=public.kbl_snake_live_hash_json(jsonb_build_object('expected',p_expected_room_revision,'action','close')); SELECT * INTO receipt FROM public.snake_live_event_receipts WHERE room_id=p_room_id AND event_key=p_idempotency_key FOR UPDATE; IF FOUND THEN IF receipt.request_hash<>h THEN RAISE EXCEPTION 'Idempotency conflict: the close operation differs.'; END IF; RETURN public.kbl_snake_live_room_json(r); END IF;
-IF r.public_revision<>p_expected_room_revision THEN RAISE EXCEPTION 'Stale expected revision for the room.'; END IF; UPDATE public.snake_live_rooms SET public_revision=public_revision+1,status='closed',updated_at=clock_timestamp() WHERE id=p_room_id RETURNING * INTO r; PERFORM public.kbl_snake_live_emit_event(p_room_id,r.public_revision,p_idempotency_key,h,'ROOM_CLOSED',jsonb_build_object('roomRevision',r.public_revision)); RETURN public.kbl_snake_live_room_json(r); END; $fn$;
+IF r.public_revision<>p_expected_room_revision THEN RAISE EXCEPTION 'Stale expected revision for the room.'; END IF; DELETE FROM public.snake_live_recovery_slots WHERE room_id=p_room_id; UPDATE public.snake_live_rooms SET public_revision=public_revision+1,status='closed',updated_at=clock_timestamp() WHERE id=p_room_id RETURNING * INTO r; PERFORM public.kbl_snake_live_emit_event(p_room_id,r.public_revision,p_idempotency_key,h,'ROOM_CLOSED',jsonb_build_object('roomRevision',r.public_revision)); RETURN public.kbl_snake_live_room_json(r); END; $fn$;
 
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_list_intents(p_room_id UUID,p_host_device_id TEXT,p_host_token TEXT)
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions,pg_temp AS $fn$
@@ -409,6 +636,8 @@ BEGIN SELECT * INTO r FROM public.snake_live_rooms WHERE id=p_room_id FOR UPDATE
 DO $realtime$ BEGIN
   IF EXISTS(SELECT 1 FROM pg_publication WHERE pubname='supabase_realtime') THEN
     IF EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='snake_live_rooms') THEN ALTER PUBLICATION supabase_realtime DROP TABLE public.snake_live_rooms; END IF;
+    IF EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='snake_live_catalogs') THEN ALTER PUBLICATION supabase_realtime DROP TABLE public.snake_live_catalogs; END IF;
+    IF EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='snake_live_recovery_slots') THEN ALTER PUBLICATION supabase_realtime DROP TABLE public.snake_live_recovery_slots; END IF;
     IF NOT EXISTS(SELECT 1 FROM pg_publication_tables WHERE pubname='supabase_realtime' AND schemaname='public' AND tablename='snake_live_events') THEN ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_events; END IF;
   END IF;
 END; $realtime$;
@@ -419,6 +648,8 @@ DO $permissions$ DECLARE f RECORD; BEGIN
 END; $permissions$;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_create_room(TEXT,TEXT,TEXT,TEXT,TEXT,JSONB) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_get_room(UUID) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.kbl_snake_live_seed_catalog(UUID,TEXT,TEXT,JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.kbl_snake_live_get_catalog(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_get_room_by_session(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_find_open_room_by_code(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_list_events(UUID,BIGINT) TO authenticated;
@@ -435,4 +666,5 @@ GRANT EXECUTE ON FUNCTION public.kbl_snake_live_list_intents(UUID,TEXT,TEXT) TO 
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_list_device_intents(UUID,TEXT,TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_resolve_intent(UUID,TEXT,TEXT,UUID,BIGINT,TEXT,TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_publish_room(UUID,TEXT,TEXT,BIGINT,TEXT,JSONB,TEXT,JSONB,TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.kbl_snake_live_restore_previous_public_state(UUID,TEXT,TEXT,BIGINT,TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.kbl_snake_live_close_room(UUID,TEXT,TEXT,BIGINT,TEXT) TO authenticated;

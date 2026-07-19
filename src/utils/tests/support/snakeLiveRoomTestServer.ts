@@ -117,11 +117,13 @@ class TestChannel {
  */
 export class SnakeLiveRoomTestServer {
   private readonly rooms = new Map<string, Row>();
+  private readonly catalogs = new Map<string, Row>();
   private readonly hostTokens = new Map<string, string>();
   private readonly claims = new Map<string, Row>();
   private readonly deviceTokens = new Map<string, string>();
   private readonly boards = new Map<string, Row>();
   private readonly intents = new Map<string, Row>();
+  private readonly recoverySlots = new Map<string, Row>();
   private readonly events: Row[] = [];
   private readonly idempotent = new Map<string, { args: Row; result: Row }>();
   private readonly channels = new Set<TestChannel>();
@@ -163,6 +165,8 @@ export class SnakeLiveRoomTestServer {
         case 'kbl_snake_live_get_room_by_session': return this.getRoomBySession(args);
         case 'kbl_snake_live_find_open_room_by_code': return this.findOpenRoomByCode(args);
         case 'kbl_snake_live_list_events': return this.listEvents(args);
+        case 'kbl_snake_live_seed_catalog': return this.seedCatalog(args);
+        case 'kbl_snake_live_get_catalog': return this.getCatalog(args);
         case 'kbl_snake_live_submit_claim': return this.submitClaim(args);
         case 'kbl_snake_live_list_claims': return this.listClaims(args);
         case 'kbl_snake_live_list_device_claims': return this.listDeviceClaims(args);
@@ -176,6 +180,7 @@ export class SnakeLiveRoomTestServer {
         case 'kbl_snake_live_list_device_intents': return this.listDeviceIntents(args);
         case 'kbl_snake_live_resolve_intent': return this.resolveIntent(args);
         case 'kbl_snake_live_publish_room': return this.publishRoom(args);
+        case 'kbl_snake_live_restore_previous_public_state': return this.restorePreviousPublicState(args);
         case 'kbl_snake_live_close_room': return this.closeRoom(args);
         default: return error(`Unknown RPC ${functionName}.`);
       }
@@ -209,6 +214,7 @@ export class SnakeLiveRoomTestServer {
       status: 'open',
       public_revision: 0,
       public_state: clone(args.p_public_state),
+      correction_available: false,
       host_device_id: args.p_host_device_id,
       created_at: now,
       updated_at: now,
@@ -249,6 +255,39 @@ export class SnakeLiveRoomTestServer {
       row.room_id === roomId && Number(row.id) > afterEventId
     ));
     return Promise.resolve({ data: clone(events), error: null });
+  }
+
+  private seedCatalog(args: Row): RpcResponse {
+    this.requireHost(args);
+    const room = this.requireRoom(String(args.p_room_id));
+    const publicState = room.public_state;
+    const session = isRow(publicState) ? publicState.session : null;
+    const setup = isRow(session) ? session.snakeSetup : null;
+    const activePoolPlayerIds = isRow(setup) ? setup.poolPlayerIds : null;
+    const activeClubs = isRow(setup) ? setup.clubs : null;
+    if (!isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs)) {
+      return Promise.resolve(error('The live catalog is invalid or contains private data.'));
+    }
+    const identity = `catalog:${args.p_room_id}`;
+    const replay = this.idempotentResult(identity, args);
+    if (replay) return Promise.resolve({ data: replay, error: null });
+    this.requireOpenRoom(String(args.p_room_id));
+    const row: Row = {
+      room_id: args.p_room_id,
+      catalog_revision: 1,
+      catalog: clone(args.p_catalog),
+      created_at: '2026-07-19T00:00:30.000Z',
+    };
+    this.catalogs.set(String(args.p_room_id), row);
+    this.remember(identity, args, row);
+    return Promise.resolve({ data: clone(row), error: null });
+  }
+
+  private getCatalog(args: Row): RpcResponse {
+    return Promise.resolve({
+      data: clone(this.catalogs.get(String(args.p_room_id)) ?? null),
+      error: null,
+    });
   }
 
   private submitClaim(args: Row): RpcResponse {
@@ -399,11 +438,6 @@ export class SnakeLiveRoomTestServer {
     };
     this.boards.set(key, board);
     this.remember(identity, args, board);
-    this.emitPublicEvent(this.requireRoom(String(args.p_room_id)), 'BOARD_ACTIVITY', {
-      teamId: args.p_team_id,
-      boardRevision: board.board_revision,
-      action: 'changed',
-    });
     return Promise.resolve({ data: clone(board), error: null });
   }
 
@@ -602,6 +636,19 @@ export class SnakeLiveRoomTestServer {
     if (room.public_revision !== args.p_expected_room_revision) {
       return Promise.resolve(error('Stale expected room revision.'));
     }
+    if (!['PICK_RECORDED', 'TRADE_EXECUTED', 'PAUSE_CHANGED'].includes(String(args.p_event_kind))) {
+      return Promise.resolve(error('The public draft event kind is invalid.'));
+    }
+    if (args.p_event_kind === 'PICK_RECORDED' || args.p_event_kind === 'TRADE_EXECUTED') {
+      this.recoverySlots.set(String(args.p_room_id), {
+        room_id: args.p_room_id,
+        prior_public_state: clone(room.public_state),
+        prior_status: room.status,
+        source_room_revision: Number(room.public_revision) + 1,
+        source_event_kind: args.p_event_kind,
+      });
+      room.correction_available = true;
+    }
     room.public_revision = Number(room.public_revision) + 1;
     room.public_state = clone(args.p_public_state);
     if (args.p_status) room.status = args.p_status;
@@ -612,6 +659,35 @@ export class SnakeLiveRoomTestServer {
       clone(args.p_public_event) as Row,
       String(room.updated_at),
     );
+    this.remember(identity, args, room);
+    return Promise.resolve({ data: clone(room), error: null });
+  }
+
+  private restorePreviousPublicState(args: Row): RpcResponse {
+    this.requireHost(args);
+    const identity = `publish:${args.p_room_id}:${args.p_idempotency_key}`;
+    const replay = this.idempotentResult(identity, args);
+    if (replay) {
+      return Promise.resolve({ data: clone(this.requireRoom(String(args.p_room_id))), error: null });
+    }
+    const room = this.requireRoom(String(args.p_room_id));
+    if (room.status === 'closed') return Promise.resolve(error('The closed live room cannot be corrected.'));
+    if (room.public_revision !== args.p_expected_room_revision) {
+      return Promise.resolve(error('Stale expected room revision.'));
+    }
+    const slot = this.recoverySlots.get(String(args.p_room_id));
+    if (!slot) return Promise.resolve(error('No completed pick or trade is available to correct.'));
+    room.public_revision = Number(room.public_revision) + 1;
+    room.public_state = clone(slot.prior_public_state);
+    room.status = slot.prior_status;
+    room.updated_at = `2026-07-19T00:06:${String(room.public_revision).padStart(2, '0')}.000Z`;
+    this.recoverySlots.delete(String(args.p_room_id));
+    room.correction_available = false;
+    this.emitPublicEvent(room, 'CORRECTION_APPLIED', {
+      roomRevision: room.public_revision,
+      correctedRevision: slot.source_room_revision,
+      action: slot.source_event_kind === 'PICK_RECORDED' ? 'pick' : 'trade',
+    }, String(room.updated_at));
     this.remember(identity, args, room);
     return Promise.resolve({ data: clone(room), error: null });
   }
@@ -629,6 +705,8 @@ export class SnakeLiveRoomTestServer {
     }
     room.public_revision = Number(room.public_revision) + 1;
     room.status = 'closed';
+    this.recoverySlots.delete(String(args.p_room_id));
+    room.correction_available = false;
     room.updated_at = `2026-07-19T00:06:${String(room.public_revision).padStart(2, '0')}.000Z`;
     this.emitPublicEvent(room, 'ROOM_CLOSED', { roomRevision: room.public_revision }, String(room.updated_at));
     this.remember(identity, args, room);
@@ -754,4 +832,42 @@ function isValidTradePayload(payload: Row, teamId: string): boolean {
     && sellerTeamId.trim().length > 0
     && buyerTeamId !== sellerTeamId
     && (teamId === buyerTeamId || teamId === sellerTeamId);
+}
+
+function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs: unknown): value is Row {
+  if (!isRow(value) || value.formatVersion !== 'snake-live-catalog-v1'
+    || !isRow(value.league) || !Array.isArray(value.league.teamIds)
+    || !Array.isArray(value.teams) || !Array.isArray(value.players)
+    || !isRow(value.registeredPool) || !Array.isArray(value.registeredPool.players)
+    || value.teams.length === 0 || value.players.length === 0
+    || typeof value.league.id !== 'string' || !value.league.id
+    || value.registeredPool.leagueId !== value.league.id) return false;
+  const ids = (rows: unknown[]): string[] | null => {
+    const result: string[] = [];
+    for (const row of rows) {
+      if (!isRow(row) || !isNonEmptyString(row.id)) return null;
+      result.push(row.id);
+    }
+    return new Set(result).size === result.length ? result : null;
+  };
+  const teamIds = value.league.teamIds.every(isNonEmptyString) ? value.league.teamIds : null;
+  const expectedIds = Array.isArray(expectedPoolIds) && expectedPoolIds.every(isNonEmptyString)
+    && new Set(expectedPoolIds).size === expectedPoolIds.length
+    ? expectedPoolIds
+    : null;
+  const expectedTeamIds = Array.isArray(expectedClubs)
+    ? expectedClubs.map((club) => isRow(club) && isNonEmptyString(club.teamId) ? club.teamId : null)
+    : null;
+  const validExpectedTeamIds = expectedTeamIds?.every(isNonEmptyString)
+    && new Set(expectedTeamIds).size === expectedTeamIds.length
+    ? expectedTeamIds
+    : null;
+  const actualTeamIds = ids(value.teams);
+  const playerIds = ids(value.players);
+  const poolPlayerIds = ids(value.registeredPool.players);
+  return Boolean(teamIds && expectedIds && validExpectedTeamIds && actualTeamIds && playerIds && poolPlayerIds
+    && teamIds.length === actualTeamIds.length && teamIds.every((id) => actualTeamIds.includes(id))
+    && teamIds.length === validExpectedTeamIds.length && validExpectedTeamIds.every((id) => teamIds.includes(id))
+    && playerIds.length === poolPlayerIds.length && playerIds.every((id) => poolPlayerIds.includes(id))
+    && playerIds.length === expectedIds.length && expectedIds.every((id) => playerIds.includes(id)));
 }

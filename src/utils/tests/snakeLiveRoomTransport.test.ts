@@ -16,6 +16,7 @@ const roomRow = {
   status: 'open',
   public_revision: 7,
   public_state: { currentPickIndex: 4 },
+  correction_available: true,
   host_device_id: 'host-1',
   created_at: '2026-07-19T00:00:00.000Z',
   updated_at: '2026-07-19T00:01:00.000Z',
@@ -46,8 +47,21 @@ const intentRow = {
 
 const eventRow = {
   id: 12, room_id: 'room-1', room_revision: 7,
-  kind: 'BOARD_ACTIVITY', public_payload: { teamId: 'team-a', boardRevision: 3 },
+  kind: 'PICK_COMMITTED', public_payload: { teamId: 'team-a', playerId: 'player-1', pick: 8 },
   created_at: '2026-07-19T00:01:00.000Z',
+};
+
+const catalogPayload = {
+  formatVersion: 'snake-live-catalog-v1',
+  league: { id: 'league-1', teamIds: ['team-a'] },
+  teams: [{ id: 'team-a', name: 'Beewolves' }],
+  players: [{ id: 'player-1', firstName: 'Jovita', lastName: 'Pulo' }],
+  registeredPool: { leagueId: 'league-1', players: [{ id: 'player-1', iv: 42000, salary: 42000 }] },
+};
+
+const catalogRow = {
+  room_id: 'room-1', catalog_revision: 1, catalog: catalogPayload,
+  created_at: '2026-07-19T00:00:30.000Z',
 };
 
 interface MockState {
@@ -140,17 +154,21 @@ describe('Snake live-room transport', () => {
     for (const privateKey of [
       'roomlogbyteamid', 'opentradeoffers', 'snakecompanions', 'companionroompublication',
       'correctionsnapshots', 'farmprospectsnapshot', 'seatingcertificate', 'seatboards',
-      'rankings', 'zerointerestplayerids', 'hosttokenhash', 'creationhash', 'requesthash', 'eventkey',
+      'rankings', 'designslots', 'zerointerestplayerids', 'recoveryslot', 'recoveryslots', 'priorpublicstate',
+      'hosttokenhash', 'creationhash', 'requesthash', 'eventkey',
     ]) {
       expect(sql).toContain(`'${privateKey}'`);
     }
     expect(sql).toContain("v_key_norm LIKE '%hash'");
-    expect(sql).toContain('REVOKE ALL ON public.snake_live_rooms, public.snake_live_devices');
+    expect(sql).toContain('REVOKE ALL ON public.snake_live_rooms, public.snake_live_catalogs, public.snake_live_devices');
     expect(sql).not.toMatch(/GRANT SELECT ON public\.snake_live_rooms TO (?:anon|authenticated)/);
     expect(sql).toContain('ALTER PUBLICATION supabase_realtime DROP TABLE public.snake_live_rooms');
+    expect(sql).toContain('ALTER PUBLICATION supabase_realtime DROP TABLE public.snake_live_catalogs');
     expect(sql).not.toContain('ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_rooms');
     expect(sql).toContain('ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_events');
     expect(sql).not.toContain('ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_seat_boards');
+    expect(sql).not.toContain('ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_catalogs');
+    expect(sql).not.toContain('ALTER PUBLICATION supabase_realtime ADD TABLE public.snake_live_recovery_slots');
     expect(sql).not.toContain('kbl_snake_live_read_board_as_host');
     expect(sql).not.toContain('kbl_snake_live_write_board_as_host');
     expect(sql).not.toContain('kbl_snake_live_publish_room_with_boards');
@@ -159,6 +177,22 @@ describe('Snake live-room transport', () => {
     expect(sql).toContain('kbl_snake_live_get_room_by_session');
     expect(sql).toContain('kbl_snake_live_find_open_room_by_code');
     expect(sql).toContain('kbl_snake_live_list_events');
+    expect(sql).toContain('kbl_snake_live_seed_catalog');
+    expect(sql).toContain('kbl_snake_live_get_catalog');
+    expect(sql).toContain("kbl_snake_live_catalog_matches_active_pool(p_catalog,r.public_state#>'{session,snakeSetup,poolPlayerIds}')");
+    expect(sql).toContain("kbl_snake_live_catalog_matches_active_teams(p_catalog,r.public_state#>'{session,snakeSetup,clubs}')");
+    expect(sql).toContain('ALTER TABLE public.snake_live_catalogs ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('ALTER TABLE public.snake_live_recovery_slots ENABLE ROW LEVEL SECURITY');
+    expect(sql).toContain('REVOKE ALL ON public.snake_live_rooms, public.snake_live_catalogs');
+    expect(sql).not.toMatch(/GRANT SELECT ON public\.snake_live_catalogs/);
+    expect(sql).not.toMatch(/GRANT SELECT ON public\.snake_live_recovery_slots/);
+    expect(sql).toContain('kbl_snake_live_restore_previous_public_state');
+    for (const forbiddenCatalogKey of [
+      'hiddenpersonalitymodifiers', 'salaryfactors', 'prospectprofile', 'backstory',
+      'historicallegend', 'edithistory', 'rosterdesign', 'boardrankoverrides', 'rankoverrides',
+    ]) {
+      expect(sql).toContain(`'${forbiddenCatalogKey}'`);
+    }
 
     const eventTable = sql.slice(
       sql.indexOf('CREATE TABLE public.snake_live_events ('),
@@ -182,7 +216,11 @@ describe('Snake live-room transport', () => {
       sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_claim_json'),
     );
     expect(roomJson).toContain("'host_device_id',p.host_device_id");
-    for (const forbiddenRawColumn of ['host_token_hash', 'creation_hash', 'request_hash', 'event_key']) {
+    expect(roomJson).toContain("'correction_available',EXISTS");
+    for (const forbiddenRawColumn of [
+      'host_token_hash', 'creation_hash', 'request_hash', 'event_key',
+      'prior_public_state', 'prior_status', 'source_event_kind',
+    ]) {
       expect(roomJson).not.toContain(forbiddenRawColumn);
     }
     const eventJson = sql.slice(
@@ -199,7 +237,7 @@ describe('Snake live-room transport', () => {
     expect(boardWrite).not.toContain('WHERE id=p_room_id FOR UPDATE');
     expect(boardWrite).not.toContain('INSERT INTO public.snake_live_seat_boards');
     expect(boardWrite).toContain('The private board has not been seeded.');
-    expect(boardWrite).toContain("'BOARD_ACTIVITY',jsonb_build_object('teamId',p_team_id,'boardRevision',b.board_revision,'action','changed')");
+    expect(boardWrite).not.toContain('BOARD_ACTIVITY');
     const boardSeed = sql.slice(
       sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_seed_board_as_host'),
       sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_submit_intent'),
@@ -208,6 +246,19 @@ describe('Snake live-room transport', () => {
     expect(boardSeed).not.toContain('UPDATE public.snake_live_seat_boards');
     expect(boardSeed).toContain("'seeded',FALSE");
     expect(boardSeed).toContain("'seeded',TRUE");
+    const roomPublish = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_publish_room'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_restore_previous_public_state'),
+    );
+    expect(roomPublish).toContain("p_event_kind IN ('PICK_RECORDED','TRADE_EXECUTED')");
+    expect(roomPublish).toContain('INSERT INTO public.snake_live_recovery_slots');
+    const roomRestore = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_restore_previous_public_state'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.kbl_snake_live_close_room'),
+    );
+    expect(roomRestore).toContain('DELETE FROM public.snake_live_recovery_slots');
+    expect(roomRestore).toContain("'CORRECTION_APPLIED'");
+    expect(roomRestore).not.toContain("'priorPublicState'");
     expect(sql).toContain('Forbidden: the host device cannot claim a companion desk.');
     expect(sql).toContain('Forbidden: the host device cannot read a companion board.');
     expect(sql).toContain('Forbidden: the host device cannot write a companion board.');
@@ -240,7 +291,7 @@ describe('Snake live-room transport', () => {
     await expect(transport.findRoomByCode('4821')).resolves.toMatchObject({ id: 'room-1', publicRevision: 7 });
     await expect(transport.getRoom('room-1')).resolves.toMatchObject({ roomCode: '4821' });
     await expect(transport.listEvents('room-1', 0)).resolves.toEqual([
-      expect.objectContaining({ id: 12, publicPayload: { teamId: 'team-a', boardRevision: 3 } }),
+      expect.objectContaining({ id: 12, publicPayload: { teamId: 'team-a', playerId: 'player-1', pick: 8 } }),
     ]);
     expect(state.rpcCalls.map((call) => call.name)).toEqual([
       'kbl_snake_live_get_room_by_session',
@@ -271,6 +322,27 @@ describe('Snake live-room transport', () => {
     ]);
     expect(state.rpcCalls[0].args.p_device_token).toBe(device.deviceToken);
     expect(state.rpcCalls[3].args.p_idempotency_key).toBe('resolve-1');
+  });
+
+  test('seeds and reads one immutable public catalog through RPCs', async () => {
+    const { client, state } = mockClient({ rpcResults: {
+      kbl_snake_live_seed_catalog: catalogRow,
+      kbl_snake_live_get_catalog: catalogRow,
+    } });
+    const transport = createSnakeLiveRoomTransport(client);
+    await expect(transport.seedCatalog({ ...host, catalog: catalogPayload })).resolves.toEqual({
+      roomId: 'room-1', catalogRevision: 1, catalog: catalogPayload,
+      createdAt: '2026-07-19T00:00:30.000Z',
+    });
+    await expect(transport.getCatalog('room-1')).resolves.toEqual({
+      roomId: 'room-1', catalogRevision: 1, catalog: catalogPayload,
+      createdAt: '2026-07-19T00:00:30.000Z',
+    });
+    expect(state.rpcCalls).toEqual([
+      { name: 'kbl_snake_live_seed_catalog', args: expect.objectContaining({ p_catalog: catalogPayload }) },
+      { name: 'kbl_snake_live_get_catalog', args: { p_room_id: 'room-1' } },
+    ]);
+    expect(client.from).not.toHaveBeenCalled();
   });
 
   test('uses a token-scoped board RPC and an insert-only host seed RPC', async () => {
@@ -350,17 +422,24 @@ describe('Snake live-room transport', () => {
     expect(state.rpcCalls).toHaveLength(1);
   });
 
-  test('publishes and closes through the original host authority RPCs', async () => {
+  test('publishes, restores one prior public state, and closes through host authority RPCs', async () => {
     const { client, state } = mockClient({ rpcResults: {
       kbl_snake_live_publish_room: roomRow,
+      kbl_snake_live_restore_previous_public_state: { ...roomRow, public_revision: 8 },
       kbl_snake_live_close_room: { ...roomRow, status: 'closed', public_revision: 8 },
     } });
     const transport = createSnakeLiveRoomTransport(client);
-    await transport.publishRoom({ ...host, expectedRoomRevision: 7, idempotencyKey: 'public-1', publicState: {}, eventKind: 'TRADE', publicEvent: {} });
+    await transport.publishRoom({ ...host, expectedRoomRevision: 7, idempotencyKey: 'public-1', publicState: {}, eventKind: 'TRADE_EXECUTED', publicEvent: {} });
+    await transport.restorePreviousPublicState({ ...host, expectedRoomRevision: 8, idempotencyKey: 'correct-1' });
     await transport.closeRoom(host, 8, 'close-1');
     expect(state.rpcCalls.map((call) => call.name)).toEqual([
-      'kbl_snake_live_publish_room', 'kbl_snake_live_close_room',
+      'kbl_snake_live_publish_room', 'kbl_snake_live_restore_previous_public_state',
+      'kbl_snake_live_close_room',
     ]);
+    expect(state.rpcCalls[1].args).toEqual({
+      p_room_id: 'room-1', p_host_device_id: 'host-1', p_host_token: 'h'.repeat(64),
+      p_expected_room_revision: 8, p_idempotency_key: 'correct-1',
+    });
   });
 
   test('maps stale service errors to a stable transport error', async () => {

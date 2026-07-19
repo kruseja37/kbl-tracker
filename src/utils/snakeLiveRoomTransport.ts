@@ -5,9 +5,11 @@ import type {
   PublishSnakeLiveRoomInput,
   ResolveSnakeLiveClaimInput,
   ResolveSnakeLiveIntentInput,
+  RestoreSnakeLivePublicStateInput,
   SeedSnakeLiveBoardAsHostInput,
   SnakeLiveBoardSeedReceipt,
   SnakeLiveClaim,
+  SnakeLiveCatalog,
   SnakeLiveDeviceAccess,
   SnakeLiveHostAccess,
   SnakeLiveIntent,
@@ -86,6 +88,7 @@ function asRoom(value: unknown): SnakeLiveRoom {
     status,
     publicRevision: requiredNumber(value, 'public_revision'),
     publicState,
+    correctionAvailable: requiredBoolean(value, 'correction_available'),
     hostDeviceId: requiredString(value, 'host_device_id'),
     createdAt: requiredString(value, 'created_at'),
     updatedAt: requiredString(value, 'updated_at'),
@@ -122,6 +125,17 @@ function asBoard(value: unknown): SnakeLiveSeatBoard {
     board: value.board,
     updatedByDeviceId: requiredString(value, 'updated_by_device_id'),
     updatedAt: requiredString(value, 'updated_at'),
+  };
+}
+
+function asCatalog(value: unknown): SnakeLiveCatalog {
+  if (!isRecord(value)) throw invalidResponse('The live catalog response is malformed.', value);
+  if (!isJsonObject(value.catalog)) throw invalidResponse('The live catalog payload is malformed.', value);
+  return {
+    roomId: requiredString(value, 'room_id'),
+    catalogRevision: requiredNumber(value, 'catalog_revision'),
+    catalog: value.catalog,
+    createdAt: requiredString(value, 'created_at'),
   };
 }
 
@@ -277,6 +291,18 @@ export function createSnakeLiveRoomTransport(
       return value === null ? null : asRoom(value);
     },
 
+    async seedCatalog(input: SnakeLiveHostAccess & { catalog: SnakeLiveJsonObject }): Promise<SnakeLiveCatalog> {
+      return asCatalog(await rpc(client, 'kbl_snake_live_seed_catalog', {
+        ...hostArgs(input),
+        p_catalog: input.catalog,
+      }));
+    },
+
+    async getCatalog(roomId: string): Promise<SnakeLiveCatalog | null> {
+      const value = await rpc(client, 'kbl_snake_live_get_catalog', { p_room_id: roomId });
+      return value === null ? null : asCatalog(value);
+    },
+
     async listEvents(roomId: string, afterEventId = 0): Promise<SnakeLivePublicEvent[]> {
       return asArray(
         await rpc(client, 'kbl_snake_live_list_events', {
@@ -411,6 +437,14 @@ export function createSnakeLiveRoomTransport(
         p_event_kind: input.eventKind,
         p_public_event: input.publicEvent,
         p_status: input.status ?? null,
+      }));
+    },
+
+    async restorePreviousPublicState(input: RestoreSnakeLivePublicStateInput): Promise<SnakeLiveRoom> {
+      return asRoom(await rpc(client, 'kbl_snake_live_restore_previous_public_state', {
+        ...hostArgs(input),
+        p_expected_room_revision: input.expectedRoomRevision,
+        p_idempotency_key: input.idempotencyKey,
       }));
     },
 

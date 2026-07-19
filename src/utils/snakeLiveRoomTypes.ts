@@ -27,6 +27,7 @@ export interface SnakeLiveRoom {
   status: SnakeLiveRoomStatus;
   publicRevision: number;
   publicState: SnakeLiveJsonObject;
+  correctionAvailable: boolean;
   hostDeviceId: string;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +76,17 @@ export interface SnakeLivePublicEvent {
   roomRevision: number;
   kind: string;
   publicPayload: SnakeLiveJsonObject;
+  createdAt: string;
+}
+
+/**
+ * Immutable public data that a companion needs to render a live draft.
+ * The host creates revision 1 once. Picks and trades do not rewrite it.
+ */
+export interface SnakeLiveCatalog {
+  roomId: string;
+  catalogRevision: number;
+  catalog: SnakeLiveJsonObject;
   createdAt: string;
 }
 
@@ -209,11 +221,22 @@ export interface PublishSnakeLiveRoomInput extends SnakeLiveHostAccess {
   status?: SnakeLiveRoomStatus;
 }
 
+/**
+ * Host-only, one-action recovery for the last completed pick or trade.
+ * The prior public state stays on the server and never crosses this API.
+ */
+export interface RestoreSnakeLivePublicStateInput extends SnakeLiveHostAccess {
+  expectedRoomRevision: number;
+  idempotencyKey: string;
+}
+
 export interface SnakeLiveRoomTransport {
   createRoom(input: CreateSnakeLiveRoomInput): Promise<SnakeLiveRoom>;
   findRoomBySession(sessionId: string): Promise<SnakeLiveRoom | null>;
   findRoomByCode(roomCode: string): Promise<SnakeLiveRoom | null>;
   getRoom(roomId: string): Promise<SnakeLiveRoom | null>;
+  seedCatalog(input: SnakeLiveHostAccess & { catalog: SnakeLiveJsonObject }): Promise<SnakeLiveCatalog>;
+  getCatalog(roomId: string): Promise<SnakeLiveCatalog | null>;
   listEvents(roomId: string, afterEventId?: number): Promise<SnakeLivePublicEvent[]>;
   submitClaim(input: SubmitSnakeLiveClaimInput): Promise<SnakeLiveClaim>;
   listClaims(access: SnakeLiveHostAccess): Promise<SnakeLiveClaim[]>;
@@ -228,6 +251,7 @@ export interface SnakeLiveRoomTransport {
   listDeviceIntents(access: SnakeLiveDeviceAccess): Promise<SnakeLiveIntent[]>;
   resolveIntent(input: ResolveSnakeLiveIntentInput): Promise<SnakeLiveIntent>;
   publishRoom(input: PublishSnakeLiveRoomInput): Promise<SnakeLiveRoom>;
+  restorePreviousPublicState(input: RestoreSnakeLivePublicStateInput): Promise<SnakeLiveRoom>;
   closeRoom(access: SnakeLiveHostAccess, expectedRoomRevision: number, idempotencyKey: string): Promise<SnakeLiveRoom>;
   subscribe(roomId: string, handlers: SnakeLiveSubscriptionHandlers): SnakeLiveSubscription;
 }

@@ -43,6 +43,12 @@ async function roomFixture(server: SnakeLiveRoomTestServer, teamCount = 8): Prom
       teamIds,
       currentPickIndex: 0,
       completedPlayerIds: [],
+      session: {
+        snakeSetup: {
+          clubs: teamIds.map((teamId) => ({ teamId })),
+          poolPlayerIds: ['player-1', 'player-2'],
+        },
+      },
     },
   });
   return {
@@ -109,6 +115,231 @@ describe('Snake live-room multi-device contract', () => {
       sessionId: 'short-token-room',
       hostToken: 'too-short',
     })).rejects.toThrow('at least 32 characters');
+  });
+
+  test('shares one host-seeded catalog and rejects a changed replay', async () => {
+    const server = new SnakeLiveRoomTestServer();
+    const { host, hostAccess, room } = await roomFixture(server, 2);
+    const companion = device(server, 'companion-mac-1');
+    const catalog = {
+      formatVersion: 'snake-live-catalog-v1',
+      league: { id: 'league-1', teamIds: ['team-1', 'team-2'] },
+      teams: [{ id: 'team-1' }, { id: 'team-2' }],
+      players: [{ id: 'player-1' }, { id: 'player-2' }],
+      registeredPool: {
+        leagueId: 'league-1',
+        players: [
+          { id: 'player-1', iv: 100, salary: 100 },
+          { id: 'player-2', iv: 90, salary: 90 },
+        ],
+      },
+    };
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: {
+        ...catalog,
+        players: [catalog.players[0]],
+        registeredPool: { ...catalog.registeredPool, players: [catalog.registeredPool.players[0]] },
+      },
+    })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: {
+        ...catalog,
+        league: { id: 'league-1', teamIds: ['team-3', 'team-4'] },
+        teams: [{ id: 'team-3' }, { id: 'team-4' }],
+      },
+    })).rejects.toThrow('invalid or contains private data');
+    const seeded = await host.transport.seedCatalog({ ...hostAccess, catalog });
+    await expect(host.transport.seedCatalog({ ...hostAccess, catalog })).resolves.toEqual(seeded);
+    await expect(companion.transport.getCatalog(room.id)).resolves.toEqual(seeded);
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: { ...catalog, players: [{ id: 'player-1', firstName: 'Changed' }, catalog.players[1]] },
+    })).rejects.toMatchObject({ code: 'conflict' });
+
+    await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'pick-1',
+      publicState: { currentPickIndex: 1, completedPlayerIds: ['player-1'] },
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { playerId: 'player-1', pick: 1 },
+    });
+    await expect(companion.transport.getCatalog(room.id)).resolves.toEqual(seeded);
+  });
+
+  test.each([
+    { eventKind: 'PICK_RECORDED', action: 'pick', status: 'complete' as const },
+    { eventKind: 'TRADE_EXECUTED', action: 'trade', status: undefined },
+  ])('restores one private server snapshot after a $action publish and host reload', async ({
+    eventKind, action, status,
+  }) => {
+    const server = new SnakeLiveRoomTestServer();
+    const { host, hostAccess, room } = await roomFixture(server, 2);
+    const originalState = room.publicState;
+    const published = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: `publish-${action}`,
+      publicState: {
+        teamIds: ['team-1', 'team-2'],
+        currentPickIndex: action === 'pick' ? 1 : 0,
+        completedPlayerIds: action === 'pick' ? ['player-1'] : [],
+        tradeCount: action === 'trade' ? 1 : 0,
+      },
+      eventKind,
+      publicEvent: action === 'pick'
+        ? { pick: 1, teamId: 'team-1', playerId: 'player-1' }
+        : { offerId: 'offer-1', buyerTeamId: 'team-1', sellerTeamId: 'team-2' },
+      ...(status ? { status } : {}),
+    });
+    expect(published).toMatchObject({ publicRevision: 1, correctionAvailable: true });
+
+    // This new transport models a reload after the local mirror was lost.
+    const reloadedHost = createSnakeLiveRoomTransport(server.createClient(`reloaded-${action}`));
+    await expect(reloadedHost.getRoom(room.id)).resolves.toMatchObject({
+      publicRevision: 1,
+      correctionAvailable: true,
+    });
+    const unapprovedDevice = device(server, `unapproved-${action}`);
+    await expect(unapprovedDevice.transport.restorePreviousPublicState({
+      roomId: room.id,
+      hostDeviceId: unapprovedDevice.id,
+      hostToken: unapprovedDevice.token,
+      expectedRoomRevision: 1,
+      idempotencyKey: `forbidden-correct-${action}`,
+    })).rejects.toMatchObject({ code: 'forbidden' });
+
+    const correctionInput = {
+      ...hostAccess,
+      expectedRoomRevision: 1,
+      idempotencyKey: `correct-${action}`,
+    };
+    const restored = await reloadedHost.restorePreviousPublicState(correctionInput);
+    expect(restored).toMatchObject({
+      publicRevision: 2,
+      publicState: originalState,
+      status: 'open',
+      correctionAvailable: false,
+    });
+    await expect(reloadedHost.restorePreviousPublicState(correctionInput)).resolves.toEqual(restored);
+    await expect(reloadedHost.restorePreviousPublicState({
+      ...correctionInput,
+      idempotencyKey: `second-correct-${action}`,
+      expectedRoomRevision: restored.publicRevision,
+    })).rejects.toThrow('No completed pick or trade is available to correct.');
+
+    const correctionEvents = (await reloadedHost.listEvents(room.id)).filter((event) => (
+      event.kind === 'CORRECTION_APPLIED'
+    ));
+    expect(correctionEvents).toEqual([expect.objectContaining({
+      roomRevision: 2,
+      publicPayload: { roomRevision: 2, correctedRevision: 1, action },
+    })]);
+    expect(JSON.stringify(correctionEvents)).not.toContain('prior_public_state');
+    expect(server.rows('snake_live_recovery_slots')).toEqual([]);
+  });
+
+  test('keeps the latest pick recovery slot through a later pause update', async () => {
+    const server = new SnakeLiveRoomTestServer();
+    const { host, hostAccess, room } = await roomFixture(server, 2);
+    const originalState = room.publicState;
+    const afterPick = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'pick-before-pause',
+      publicState: { currentPickIndex: 1, completedPlayerIds: ['player-1'] },
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-1' },
+    });
+    const afterPause = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: afterPick.publicRevision,
+      idempotencyKey: 'pause-after-pick',
+      publicState: { ...afterPick.publicState, paused: true },
+      eventKind: 'PAUSE_CHANGED',
+      publicEvent: { paused: true },
+    });
+    expect(afterPause.correctionAvailable).toBe(true);
+
+    const restored = await host.transport.restorePreviousPublicState({
+      ...hostAccess,
+      expectedRoomRevision: afterPause.publicRevision,
+      idempotencyKey: 'correct-pick-after-pause',
+    });
+    expect(restored).toMatchObject({
+      publicRevision: 3,
+      publicState: originalState,
+      correctionAvailable: false,
+    });
+  });
+
+  test('clears the correction slot when the host closes the room', async () => {
+    const server = new SnakeLiveRoomTestServer();
+    const { host, hostAccess } = await roomFixture(server, 2);
+    const afterPick = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'pick-before-close',
+      publicState: { currentPickIndex: 1, completedPlayerIds: ['player-1'] },
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-1' },
+    });
+    expect(afterPick.correctionAvailable).toBe(true);
+    const closed = await host.transport.closeRoom(
+      hostAccess,
+      afterPick.publicRevision,
+      'close-after-pick',
+    );
+    expect(closed).toMatchObject({ status: 'closed', correctionAvailable: false });
+    await expect(host.transport.restorePreviousPublicState({
+      ...hostAccess,
+      expectedRoomRevision: closed.publicRevision,
+      idempotencyKey: 'correct-after-close',
+    })).rejects.toThrow('The closed live room cannot be corrected.');
+  });
+
+  test('allows the same pick to be made and corrected again as a new room revision', async () => {
+    const server = new SnakeLiveRoomTestServer();
+    const { host, hostAccess, room } = await roomFixture(server, 2);
+    const pickState = { currentPickIndex: 1, completedPlayerIds: ['player-1'] };
+    const firstPick = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'pick-room-revision-0',
+      publicState: pickState,
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-1' },
+    });
+    const firstCorrection = await host.transport.restorePreviousPublicState({
+      ...hostAccess,
+      expectedRoomRevision: firstPick.publicRevision,
+      idempotencyKey: 'correct-room-revision-1',
+    });
+    expect(firstCorrection.publicState).toEqual(room.publicState);
+
+    const secondPick = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: firstCorrection.publicRevision,
+      idempotencyKey: 'pick-room-revision-2',
+      publicState: pickState,
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-1' },
+    });
+    const secondCorrection = await host.transport.restorePreviousPublicState({
+      ...hostAccess,
+      expectedRoomRevision: secondPick.publicRevision,
+      idempotencyKey: 'correct-room-revision-3',
+    });
+    expect(secondCorrection).toMatchObject({
+      publicRevision: 4,
+      publicState: room.publicState,
+      correctionAvailable: false,
+    });
+    const events = await host.transport.listEvents(room.id);
+    expect(events.filter((event) => event.kind === 'PICK_RECORDED')).toHaveLength(2);
+    expect(events.filter((event) => event.kind === 'CORRECTION_APPLIED')).toHaveLength(2);
   });
 
   test('matches migration claim replay data, room-wide intent keys, and team reassignment', async () => {
@@ -255,7 +486,7 @@ describe('Snake live-room multi-device contract', () => {
           currentPickIndex: 1,
           completedPlayerIds: ['player-1'],
         },
-        eventKind: 'pick-recorded',
+        eventKind: 'PICK_RECORDED',
         publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-1' },
       }),
     ]);
@@ -264,7 +495,7 @@ describe('Snake live-room multi-device contract', () => {
     expect(pickedRoom.publicRevision).toBe(1);
     expect(companionEdit).toMatchObject({ boardRevision: 2, board: { rankedPlayerIds: ['player-19', 'player-1', 'player-8'] } });
     expect(await companion.transport.getBoard(teamAccess)).toEqual(companionEdit);
-    expect(observedEvents).toEqual(['BOARD_ACTIVITY', 'pick-recorded']);
+    expect(observedEvents).toEqual(['PICK_RECORDED']);
     await subscription.unsubscribe();
   });
 
@@ -298,7 +529,7 @@ describe('Snake live-room multi-device contract', () => {
         expectedRoomRevision: 0,
         idempotencyKey: 'public-pick-with-stale-private-board',
         publicState: { currentPickIndex: 1, completedPlayerIds: ['player-1'] },
-        eventKind: 'pick-recorded',
+        eventKind: 'PICK_RECORDED',
         publicEvent: { pick: 1, playerId: 'player-1' },
       }),
     ]);
@@ -310,16 +541,13 @@ describe('Snake live-room multi-device contract', () => {
       expectedRoomRevision: 1,
       idempotencyKey: 'public-trade-with-stale-private-board',
       publicState: { currentPickIndex: 1, completedPlayerIds: ['player-1'], tradeCount: 1 },
-      eventKind: 'trade-recorded',
+      eventKind: 'TRADE_EXECUTED',
       publicEvent: { offerId: 'offer-1' },
     });
-    const afterCorrection = await host.transport.publishRoom({
+    const afterCorrection = await host.transport.restorePreviousPublicState({
       ...hostAccess,
       expectedRoomRevision: afterTrade.publicRevision,
       idempotencyKey: 'public-correction-with-stale-private-board',
-      publicState: { currentPickIndex: 0, completedPlayerIds: [], tradeCount: 1 },
-      eventKind: 'pick-corrected',
-      publicEvent: { correctedPick: 1 },
     });
 
     expect(afterCorrection.publicRevision).toBe(3);
@@ -327,10 +555,9 @@ describe('Snake live-room multi-device contract', () => {
       'ROOM_CREATED',
       'CLAIM_ACTIVITY',
       'CLAIM_ACTIVITY',
-      'BOARD_ACTIVITY',
-      'pick-recorded',
-      'trade-recorded',
-      'pick-corrected',
+      'PICK_RECORDED',
+      'TRADE_EXECUTED',
+      'CORRECTION_APPLIED',
     ]);
     expect(await companion.transport.getBoard(teamAccess)).toEqual(board);
   });
@@ -342,7 +569,10 @@ describe('Snake live-room multi-device contract', () => {
       ...hostAccess,
       teamId: 'team-1',
       idempotencyKey: 'private-seed-team-1',
-      board: { rankedPlayerIds: ['private-player'] },
+      board: {
+        rankedPlayerIds: ['private-player'],
+        designSlots: [{ slotId: 'SP1', playerId: 'private-player' }],
+      },
     });
     expect(receipt).not.toHaveProperty('board');
     expect('getBoardAsHost' in host.transport).toBe(false);
@@ -376,7 +606,12 @@ describe('Snake live-room multi-device contract', () => {
 
     const companion = device(server, 'approved-mac');
     const teamAccess = await approve(room.id, host, hostAccess, companion, 'team-1');
-    expect((await companion.transport.getBoard(teamAccess))?.board).toEqual({ rankedPlayerIds: ['private-player'] });
+    expect((await companion.transport.getBoard(teamAccess))?.board).toEqual({
+      rankedPlayerIds: ['private-player'],
+      designSlots: [{ slotId: 'SP1', playerId: 'private-player' }],
+    });
+    expect(JSON.stringify(await host.transport.getRoom(room.id))).not.toContain('private-player');
+    expect(JSON.stringify(await host.transport.listEvents(room.id))).not.toContain('private-player');
   });
 
   test('does not let another device on the same account reclaim Hotseat authority', async () => {
@@ -441,7 +676,7 @@ describe('Snake live-room multi-device contract', () => {
       expectedRoomRevision: 0,
       idempotencyKey: 'complete-first-run',
       publicState: { localSessionId, currentPickIndex: 176 },
-      eventKind: 'draft-completed',
+      eventKind: 'PICK_RECORDED',
       publicEvent: { pickCount: 176 },
       status: 'complete',
     });
@@ -561,7 +796,7 @@ describe('Snake live-room multi-device contract', () => {
         expectedRoomRevision: 0,
         idempotencyKey: 'publish-pick-1',
         publicState: { currentPickIndex: 1, completedPlayerIds: ['player-7'] },
-        eventKind: 'pick-recorded',
+        eventKind: 'PICK_RECORDED',
         publicEvent: { pick: 1, teamId: 'team-1', playerId: 'player-7' },
       } as const;
       const afterPick = await host.transport.publishRoom(publishPickInput);
@@ -570,25 +805,22 @@ describe('Snake live-room multi-device contract', () => {
         expectedRoomRevision: afterPick.publicRevision,
         idempotencyKey: 'publish-trade-1',
         publicState: { currentPickIndex: 1, completedPlayerIds: ['player-7'], tradeCount: 1 },
-        eventKind: 'trade-recorded',
+        eventKind: 'TRADE_EXECUTED',
         publicEvent: { offerId: 'offer-1', buyerTeamId: 'team-1', sellerTeamId: 'team-2' },
       });
-      const afterCorrection = await host.transport.publishRoom({
+      const afterCorrection = await host.transport.restorePreviousPublicState({
         ...hostAccess,
         expectedRoomRevision: afterTrade.publicRevision,
         idempotencyKey: 'correct-pick-1',
-        publicState: { currentPickIndex: 0, completedPlayerIds: [], tradeCount: 1 },
-        eventKind: 'pick-corrected',
-        publicEvent: { correctedPick: 1 },
       });
 
       const replayAfterLaterWrites = await host.transport.publishRoom(publishPickInput);
       expect(replayAfterLaterWrites.publicRevision).toBe(afterCorrection.publicRevision);
       const eventsBeforeCompletion = await host.transport.listEvents(room.id);
-      expect(eventsBeforeCompletion).toHaveLength((2 * teamCount) + 11);
+      expect(eventsBeforeCompletion).toHaveLength((2 * teamCount) + 10);
       expect(eventsBeforeCompletion.filter((event) => event.kind === 'ROOM_CREATED')).toHaveLength(1);
       expect(eventsBeforeCompletion.filter((event) => event.kind === 'CLAIM_ACTIVITY')).toHaveLength(2 * teamCount);
-      expect(eventsBeforeCompletion.filter((event) => event.kind === 'BOARD_ACTIVITY')).toHaveLength(1);
+      expect(eventsBeforeCompletion.filter((event) => event.kind === 'BOARD_ACTIVITY')).toHaveLength(0);
       expect(eventsBeforeCompletion.filter((event) => event.kind === 'INTENT_ACTIVITY')).toHaveLength(6);
       const teamOneClaim = claims.find((claim) => claim.teamId === 'team-1');
       expect(teamOneClaim).toBeDefined();
@@ -601,11 +833,6 @@ describe('Snake live-room multi-device contract', () => {
           claimRevision: 1,
           action: 'submitted',
         },
-      }));
-      expect(eventsBeforeCompletion).toContainEqual(expect.objectContaining({
-        roomRevision: 0,
-        kind: 'BOARD_ACTIVITY',
-        publicPayload: { teamId: 'team-1', boardRevision: 2, action: 'changed' },
       }));
       expect(eventsBeforeCompletion).toContainEqual(expect.objectContaining({
         roomRevision: 0,
@@ -667,12 +894,12 @@ describe('Snake live-room multi-device contract', () => {
         expectedRoomRevision: afterCorrection.publicRevision,
         idempotencyKey: 'complete-room',
         publicState: { currentPickIndex: teamCount * 22, completedPlayerIds: ['player-7'], tradeCount: 1 },
-        eventKind: 'draft-completed',
+        eventKind: 'PICK_RECORDED',
         publicEvent: { pickCount: teamCount * 22 },
         status: 'complete',
       });
       expect(completed).toMatchObject({ publicRevision: 4, status: 'complete' });
-      expect(await host.transport.listEvents(room.id)).toHaveLength((2 * teamCount) + 12);
+      expect(await host.transport.listEvents(room.id)).toHaveLength((2 * teamCount) + 11);
     },
   );
 
@@ -699,7 +926,7 @@ describe('Snake live-room multi-device contract', () => {
           currentPickIndex: pickIndex + 1,
           completedPlayerIds: [...completedPlayerIds],
         },
-        eventKind: 'pick-recorded',
+        eventKind: 'PICK_RECORDED',
         publicEvent: { pick: pickIndex + 1, teamId, playerId },
         status: pickIndex === 175 ? 'complete' : undefined,
       });
@@ -712,7 +939,7 @@ describe('Snake live-room multi-device contract', () => {
     expect(events).toHaveLength(177);
     expect(new Set(events.map((event) => event.id)).size).toBe(177);
     expect(events[0]).toMatchObject({ roomRevision: 0, kind: 'ROOM_CREATED' });
-    expect(events.at(-1)).toMatchObject({ roomRevision: 176, kind: 'pick-recorded' });
+    expect(events.at(-1)).toMatchObject({ roomRevision: 176, kind: 'PICK_RECORDED' });
     expect(observed.map((entries) => entries.size)).toEqual([176, 176, 176]);
     await Promise.all(subscriptions.map((subscription) => subscription.unsubscribe()));
   });

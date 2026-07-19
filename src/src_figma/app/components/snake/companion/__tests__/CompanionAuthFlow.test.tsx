@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const harness = vi.hoisted(() => ({
@@ -6,9 +6,8 @@ const harness = vi.hoisted(() => ({
   authError: null as string | null,
   signIn: vi.fn(async () => undefined),
   signOut: vi.fn(async () => undefined),
-  pullCatalog: vi.fn(async () => undefined),
-  refreshCatalog: vi.fn(async () => undefined),
-  getRegisteredPool: vi.fn(async () => null),
+  forbiddenCatalogPull: vi.fn(() => { throw new Error('GENERIC SYNC MUST NOT RUN.'); }),
+  forbiddenLeagueBuilderHook: vi.fn(() => { throw new Error('LOCAL LEAGUE BUILDER DATA MUST NOT BE READ.'); }),
   runProof: vi.fn(),
   useLive: vi.fn(),
   live: {} as Record<string, unknown>,
@@ -27,20 +26,11 @@ vi.mock('../../../../../../hooks/useAuth', () => ({
 
 vi.mock('../../../../../hooks/useLeagueBuilderData', () => ({
   toConstructionPlayer: vi.fn(),
-  useLeagueBuilderData: () => ({
-    leagues: [],
-    teams: [],
-    players: [],
-    rulesPresets: [],
-    isLoading: false,
-    error: null,
-    getRegisteredPool: harness.getRegisteredPool,
-    refresh: harness.refreshCatalog,
-  }),
+  useLeagueBuilderData: harness.forbiddenLeagueBuilderHook,
 }));
 
 vi.mock('../../../../../../utils/syncEngine', () => ({
-  syncEngine: { pull: harness.pullCatalog },
+  syncEngine: { pull: harness.forbiddenCatalogPull },
 }));
 
 vi.mock('../../../../../../utils/franchisePhase2Flags', () => ({
@@ -61,6 +51,7 @@ import SnakeCompanion from '../../../../pages/SnakeCompanion';
 function setLiveRoom(overrides: Record<string, unknown> = {}) {
   harness.live = {
     room: null,
+    catalog: null,
     activeRoomId: null,
     publicSession: null,
     deviceId: null,
@@ -73,6 +64,7 @@ function setLiveRoom(overrides: Record<string, unknown> = {}) {
     error: null,
     working: false,
     accessReady: false,
+    resumedFromCapability: false,
     refresh: vi.fn(async () => undefined),
     claimDesk: vi.fn(async () => [{ status: 'pending' }]),
     writeBoard: vi.fn(),
@@ -80,12 +72,6 @@ function setLiveRoom(overrides: Record<string, unknown> = {}) {
     disconnect: vi.fn(async () => undefined),
     ...overrides,
   };
-}
-
-function deferredCatalogPull() {
-  let resolve = () => undefined;
-  const promise = new Promise<void>((done) => { resolve = done; });
-  return { promise, resolve };
 }
 
 describe('SnakeCompanion live-room entry', () => {
@@ -96,9 +82,8 @@ describe('SnakeCompanion live-room entry', () => {
     harness.authError = null;
     harness.signIn.mockClear();
     harness.signOut.mockClear();
-    harness.pullCatalog.mockReset().mockResolvedValue(undefined);
-    harness.refreshCatalog.mockClear();
-    harness.getRegisteredPool.mockClear();
+    harness.forbiddenCatalogPull.mockClear();
+    harness.forbiddenLeagueBuilderHook.mockClear();
     harness.runProof.mockClear();
     setLiveRoom();
     harness.useLive.mockReset().mockImplementation(() => harness.live);
@@ -111,10 +96,8 @@ describe('SnakeCompanion live-room entry', () => {
     expect(screen.queryByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).not.toBeInTheDocument();
   });
 
-  it('opens room claim at once and does not wait for the static catalog pull', async () => {
+  it('opens room claim without generic sync or local League Builder data', async () => {
     harness.authUser = { id: 'user-owner', email: 'owner@example.com' };
-    const pull = deferredCatalogPull();
-    harness.pullCatalog.mockImplementationOnce(async () => pull.promise);
 
     render(<SnakeCompanion />);
 
@@ -128,28 +111,26 @@ describe('SnakeCompanion live-room entry', () => {
       expect(harness.live.claimDesk).toHaveBeenCalledWith('Poke Foster', '1252');
     });
     expect(screen.getByRole('alert')).toHaveTextContent('ASK THE MAIN DEVICE TO APPROVE THIS DESK.');
-    expect(harness.refreshCatalog).not.toHaveBeenCalled();
-
-    pull.resolve();
-    await waitFor(() => expect(harness.refreshCatalog).toHaveBeenCalledOnce());
+    expect(harness.forbiddenCatalogPull).not.toHaveBeenCalled();
+    expect(harness.forbiddenLeagueBuilderHook).not.toHaveBeenCalled();
   });
 
-  it('keeps live room claim usable when the static catalog pull fails', async () => {
+  it('keeps live room claim usable with an empty local League Builder database', async () => {
     harness.authUser = { id: 'user-owner', email: 'owner@example.com' };
-    harness.pullCatalog.mockRejectedValueOnce(new Error('STATIC CATALOG IS OFFLINE.'));
 
     render(<SnakeCompanion />);
 
-    await waitFor(() => expect(harness.pullCatalog).toHaveBeenCalledOnce());
     expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('GM NAME'), { target: { value: 'Poke Foster' } });
     fireEvent.change(screen.getByLabelText('ROOM CODE'), { target: { value: '1252' } });
     fireEvent.click(screen.getByRole('button', { name: 'ASK TO SEE MY DESK' }));
 
     await waitFor(() => expect(harness.live.claimDesk).toHaveBeenCalledOnce());
+    expect(harness.forbiddenCatalogPull).not.toHaveBeenCalled();
+    expect(harness.forbiddenLeagueBuilderHook).not.toHaveBeenCalled();
   });
 
-  it('keeps the privacy cover until live refresh succeeds', async () => {
+  it('lets an unclaimed device reach room claim even when the prior desk was covered', async () => {
     harness.authUser = { id: 'user-owner', email: 'owner@example.com' };
     localStorage.setItem('kbl-snake-companion-device-covered', 'true');
     const refresh = vi.fn(async () => undefined);
@@ -157,13 +138,7 @@ describe('SnakeCompanion live-room entry', () => {
 
     render(<SnakeCompanion />);
 
-    expect(screen.getByRole('heading', { name: 'DEVICE COVERED' })).toBeInTheDocument();
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
-    });
-
-    expect(refresh).toHaveBeenCalledOnce();
-    expect(localStorage.getItem('kbl-snake-companion-device-covered')).toBeNull();
     expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });

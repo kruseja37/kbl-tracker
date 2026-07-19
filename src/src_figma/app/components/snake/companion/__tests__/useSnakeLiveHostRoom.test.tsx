@@ -8,6 +8,7 @@ import {
 } from '../../../../../../utils/snakeLiveRoomSession';
 import {
   SnakeLiveTransportError,
+  type SnakeLiveCatalog,
   type SnakeLiveClaim,
   type SnakeLiveJsonObject,
   type SnakeLivePublicEvent,
@@ -19,6 +20,25 @@ import {
   useSnakeLiveHostRoom,
   type SnakeLiveHostCapabilityApi,
 } from '../useSnakeLiveHostRoom';
+
+function liveCatalogPayload(): SnakeLiveJsonObject {
+  return {
+    formatVersion: 'snake-live-catalog-v1',
+    league: { id: 'league', name: 'Test League', teamIds: ['team-a'] },
+    teams: [{ id: 'team-a', name: 'Team A' }],
+    players: [{ id: 'p1', firstName: 'Player', lastName: 'One' }],
+    registeredPool: { leagueId: 'league', players: [{ id: 'p1', iv: 1 }] },
+  };
+}
+
+function liveCatalogReceipt(): SnakeLiveCatalog {
+  return {
+    roomId: 'room-1',
+    catalogRevision: 1,
+    catalog: liveCatalogPayload(),
+    createdAt: '2026-07-19T00:00:00.000Z',
+  };
+}
 
 function session(): LeagueBuilderMlbDraftSession {
   return {
@@ -55,6 +75,7 @@ function room(overrides: Partial<SnakeLiveRoom> = {}): SnakeLiveRoom {
   return {
     id: 'room-1', ownerUserId: 'user', sessionId: snakeLiveRoomRunKey(source), roomCode: '2468', phase: 'MLB',
     status: 'open', publicRevision: 1, publicState: buildSnakeLivePublicState(source),
+    correctionAvailable: false,
     hostDeviceId: 'host-device', createdAt: '2026-07-19T00:00:00.000Z',
     updatedAt: '2026-07-19T00:00:00.000Z', ...overrides,
   };
@@ -105,6 +126,8 @@ function transportHarness(existing: SnakeLiveRoom | null = null) {
     findRoomBySession: vi.fn(async () => existing),
     findRoomByCode: vi.fn(async () => existing),
     getRoom: vi.fn(async () => currentRoom),
+    seedCatalog: vi.fn(async () => liveCatalogReceipt()),
+    getCatalog: vi.fn(async () => liveCatalogReceipt()),
     listEvents: vi.fn(async (_roomId: string, afterEventId = 0) => (
       serverEvents.filter((event) => event.id > afterEventId)
     )),
@@ -128,6 +151,7 @@ function transportHarness(existing: SnakeLiveRoom | null = null) {
     listDeviceIntents: vi.fn(),
     resolveIntent: vi.fn(),
     publishRoom: vi.fn(async () => room({ publicRevision: 2 })),
+    restorePreviousPublicState: vi.fn(async () => room({ publicRevision: 2 })),
     closeRoom: vi.fn(async () => room({ status: 'closed', publicRevision: 2 })),
     subscribe: vi.fn((_roomId, nextHandlers) => {
       handlers = nextHandlers;
@@ -158,12 +182,18 @@ describe('useSnakeLiveHostRoom', () => {
   it('publishes only public room state and seeds a private board without reading it', async () => {
     const harness = transportHarness();
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
 
     await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
     expect(result.current.hostAccessReady).toBe(true);
     expect(harness.transport.createRoom).toHaveBeenCalledOnce();
+    expect(harness.transport.seedCatalog).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-1',
+      hostDeviceId: 'host-device',
+      catalog: liveCatalogPayload(),
+    }));
+    expect(result.current.catalog?.catalogRevision).toBe(1);
 
     await act(async () => {
       await result.current.publishSession({
@@ -200,7 +230,7 @@ describe('useSnakeLiveHostRoom', () => {
   it('uses a live event only as a nudge, then reads scoped claims from the server', async () => {
     const harness = transportHarness(room());
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
     harness.setClaims([claim()]);
@@ -212,11 +242,102 @@ describe('useSnakeLiveHostRoom', () => {
 
   });
 
+  it('restores the server recovery slot and adopts the returned public room', async () => {
+    const restored = room({ publicRevision: 2, correctionAvailable: false });
+    const harness = transportHarness(room({ correctionAvailable: true }));
+    vi.mocked(harness.transport.restorePreviousPublicState).mockResolvedValue(restored);
+    const { result } = renderHook(() => useSnakeLiveHostRoom({
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
+    }));
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+
+    await act(async () => {
+      await expect(result.current.restorePreviousPublicState({
+        expectedRoomRevision: 1,
+        idempotencyKey: 'room-1:1',
+      })).resolves.toEqual(restored);
+    });
+
+    expect(harness.transport.restorePreviousPublicState).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-1',
+      expectedRoomRevision: 1,
+      idempotencyKey: expect.stringContaining('room-1:1'),
+    }));
+    expect(result.current.room?.publicRevision).toBe(2);
+    expect(result.current.room?.correctionAvailable).toBe(false);
+  });
+
+  it('uses the immutable cloud catalog on reconnect and does not reseed when local metadata changes', async () => {
+    const harness = transportHarness(room());
+    const originalLocalCatalog = liveCatalogPayload();
+    const changedLocalCatalog = {
+      ...liveCatalogPayload(),
+      league: { id: 'league', name: 'Changed Local League Name', teamIds: ['team-a'] },
+    } satisfies SnakeLiveJsonObject;
+    const initialSession = session();
+    const advancedSession = { ...initialSession, currentPickIndex: 1, revision: 2 };
+    const { result, rerender } = renderHook(({ localCatalog, currentSession }) => useSnakeLiveHostRoom({
+      session: currentSession,
+      hostDeviceId: 'host-device',
+      catalog: localCatalog,
+      transport: harness.transport,
+      capabilities,
+    }), { initialProps: { localCatalog: originalLocalCatalog, currentSession: initialSession } });
+
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+    expect(harness.transport.getCatalog).toHaveBeenCalledWith('room-1');
+    expect(harness.transport.seedCatalog).not.toHaveBeenCalled();
+    expect(result.current.catalog).toEqual(liveCatalogReceipt());
+
+    rerender({ localCatalog: changedLocalCatalog, currentSession: advancedSession });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(harness.transport.getCatalog).toHaveBeenCalledOnce();
+    expect(harness.transport.seedCatalog).not.toHaveBeenCalled();
+    expect(result.current.catalog).toEqual(liveCatalogReceipt());
+  });
+
+  it('reconnects from the immutable cloud catalog when the local catalog is unavailable', async () => {
+    const harness = transportHarness(room());
+    const { result } = renderHook(() => useSnakeLiveHostRoom({
+      session: session(),
+      hostDeviceId: 'host-device',
+      catalog: null,
+      transport: harness.transport,
+      capabilities,
+    }));
+
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+    expect(harness.transport.getCatalog).toHaveBeenCalledWith('room-1');
+    expect(harness.transport.seedCatalog).not.toHaveBeenCalled();
+    expect(result.current.catalog).toEqual(liveCatalogReceipt());
+  });
+
+  it('repairs a room created before its catalog write completed', async () => {
+    const harness = transportHarness(room());
+    vi.mocked(harness.transport.getCatalog).mockResolvedValueOnce(null);
+    const { result } = renderHook(() => useSnakeLiveHostRoom({
+      session: session(),
+      hostDeviceId: 'host-device',
+      catalog: liveCatalogPayload(),
+      transport: harness.transport,
+      capabilities,
+    }));
+
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+    expect(harness.transport.getCatalog).toHaveBeenCalledWith('room-1');
+    expect(harness.transport.seedCatalog).toHaveBeenCalledOnce();
+    expect(harness.transport.seedCatalog).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: 'room-1',
+      catalog: liveCatalogPayload(),
+    }));
+  });
+
   it('uses the fallback timer when Realtime misses a host update', async () => {
     vi.useFakeTimers();
     const harness = transportHarness(room());
     const { result, unmount } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await flushMicrotasks();
     expect(result.current.liveRoomReady).toBe(true);
@@ -237,7 +358,7 @@ describe('useSnakeLiveHostRoom', () => {
   ])('keeps both Realtime events when delivery order is %s then %s', async (firstId, secondId) => {
     const harness = transportHarness(room());
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
     harness.setClaims([claim()]);
@@ -260,7 +381,7 @@ describe('useSnakeLiveHostRoom', () => {
     const harness = transportHarness(room());
     harness.addEvent('ROOM_CREATED', { roomRevision: 0, phase: 'MLB' }, 100);
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
     await waitFor(() => expect(result.current.events.map((event) => event.id)).toEqual([100]));
@@ -285,7 +406,7 @@ describe('useSnakeLiveHostRoom', () => {
     const harness = transportHarness(room());
     harness.addEvent('ROOM_CREATED', { roomRevision: 0, phase: 'MLB' }, 200);
     const { result, unmount } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await flushMicrotasks();
     expect(result.current.liveRoomReady).toBe(true);
@@ -310,7 +431,7 @@ describe('useSnakeLiveHostRoom', () => {
     vi.useFakeTimers();
     const harness = transportHarness(room());
     const { result, unmount } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await flushMicrotasks();
     expect(result.current.liveRoomReady).toBe(true);
@@ -331,7 +452,7 @@ describe('useSnakeLiveHostRoom', () => {
   it('merges host board activity without refreshing public claims or intents', async () => {
     const harness = transportHarness(room());
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
     vi.mocked(harness.transport.getRoom).mockClear();
@@ -350,7 +471,7 @@ describe('useSnakeLiveHostRoom', () => {
     vi.useFakeTimers();
     const harness = transportHarness(room());
     const { result, unmount } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await flushMicrotasks();
     expect(result.current.liveRoomReady).toBe(true);
@@ -391,7 +512,7 @@ describe('useSnakeLiveHostRoom', () => {
       get: vi.fn(async () => ({ hostDeviceId: 'host-device', hostToken: 'first-token' })),
     };
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport,
       capabilities: localCapabilities,
     }));
     await waitFor(() => expect(result.current.status).toBe('error'));
@@ -412,7 +533,7 @@ describe('useSnakeLiveHostRoom', () => {
     });
     const harness = transportHarness(completedRoom);
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport, capabilities,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport, capabilities,
     }));
     await waitFor(() => expect(result.current.hostAccessReady).toBe(true));
     expect(result.current.room).toMatchObject({ status: 'complete', publicRevision: 176, roomCode: '9753' });
@@ -430,7 +551,7 @@ describe('useSnakeLiveHostRoom', () => {
       get: vi.fn(async () => ({ hostDeviceId: 'host-device', hostToken: 'lost-token' })),
     };
     const { result } = renderHook(() => useSnakeLiveHostRoom({
-      session: session(), hostDeviceId: 'host-device', transport: harness.transport,
+      session: session(), hostDeviceId: 'host-device', catalog: liveCatalogPayload(), transport: harness.transport,
       capabilities: localCapabilities,
     }));
     await waitFor(() => expect(result.current.status).toBe('error'));
