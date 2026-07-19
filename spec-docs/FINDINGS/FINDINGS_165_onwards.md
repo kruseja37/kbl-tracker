@@ -1076,7 +1076,7 @@ re-audit of frozen `9725c5bd`: **APPROVE — Major 0 / Minor 0**. JK's live retr
 merge, or deploy.
 
 ### FINDING-244
-**Date:** 2026-07-19 | **Phase:** Snake Draft / companion live-room authority | **Status:** FIXED — INDEPENDENTLY APPROVED — MIGRATION AND JK WALK PENDING
+**Date:** 2026-07-19 | **Phase:** Snake Draft / companion live-room authority | **Status:** FIXED — FROZEN — FINAL INDEPENDENT AUDIT PENDING
 **Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/syncEngine.ts`,
 `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`,
 `supabase/migrations/009_snake_live_rooms.sql`
@@ -1104,17 +1104,17 @@ No merge or deploy is authorized.
 board revisions. Hotseat alone writes public truth. Companions write only their approved teams'
 boards and submit pick/trade intent. Public actions never write a private board. Events are bounded
 hints; current scoped server state is the authority after subscribe, reconnect, and a five-second
-fallback. Generic backup sync no longer transports live MLB draft sessions or Snake seat boards,
-and its remaining account outbox is account-owned IndexedDB data. Focused live/auth proof is 73/73;
-targeted Snake UI/storage proof is 246/246; generic sync regression is 102 passed / 32 skipped;
-TypeScript, changed-file lint, production/PWA build, and diff integrity are green.
+fallback. The immutable catalog is exact to the active teams and pool and rejects private fields.
+The server keeps one private, one-use correction slot for the latest completed pick or trade. Local
+Hotseat mirrors are best effort after the cloud accepts public truth. Generic backup sync no longer
+transports live MLB draft sessions or Snake seat boards, and the companion route does not bind,
+initialize, or pull that generic engine. Its remaining account outbox is account-owned IndexedDB
+data. The current combined matrix is 12 files / 130 tests, all green; TypeScript, changed-file lint,
+production/PWA build, and diff integrity are green.
 
-**Final audit:** **APPROVE — Major 0 / Minor 0.** The separate auditor confirmed no maximum-event
-cursor, bounded current-state refresh, convergence under inverted delivery, migration/RPC parity,
-token length and hashing, exact idempotent replay, changed-payload conflict, team auto-revoke,
-room-wide intent keys, auth independence from generic backup binding, and the public/private privacy
-boundary. Migration `009_snake_live_rooms.sql`, deployment, the narrow test-state reset, and JK's
-real-device walk remain. No merge or deploy is authorized.
+**Final audit:** Pending against frozen code commit `fd07bba0` and the updated controlled-preview
+runbook. Migration `009_snake_live_rooms.sql`, deployment, narrow test-state reset, and JK's
+real-device walk remain blocked until that verdict. No merge or deploy is authorized.
 
 ### FINDING-245
 **Date:** 2026-07-19 | **Phase:** League Builder / draft target team isolation | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING

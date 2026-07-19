@@ -39,6 +39,11 @@
   is salary, so there is no duplicate Salary sort. Sorting and filtering are view-only until `TOP`
   persists the selected player to the current Overall or position board. Optional risk-worker
   lifecycle is one compact board state; only actionable player risk remains on rows.
+- 2026-07-19: `/snake-room` is the sole public draft writer. `/snake-companion` reads the immutable
+  active-room catalog, writes only the approved private board, and submits pick/trade intent. The
+  companion route does not start account-wide backup sync. Realtime is a hint; bounded scoped reads
+  restore current public and private state. The original Hotseat profile remains required for final
+  local roster handoff until that separate cloud migration is built.
 
 ---
 

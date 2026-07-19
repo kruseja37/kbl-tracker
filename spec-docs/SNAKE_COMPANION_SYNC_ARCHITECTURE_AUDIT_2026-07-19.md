@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-19
 **Thread:** SNAKE_DRAFT
-**Status:** REPAIR COMPLETE — INDEPENDENT AUDIT APPROVED — MIGRATION, DEPLOY, AND JK WALK PENDING
+**Status:** REPAIR FROZEN — FINAL INDEPENDENT AUDIT PENDING — MIGRATION, PREVIEW, AND JK WALK PENDING
 **Product gate:** JK's browser and real-device walk
 
 ## State checked before the audit
@@ -13,6 +13,8 @@
   `572971de7607058720c526b1ea31d35b5e8053c7`.
 - The clean repair build is `/private/tmp/kbl-snake-live-room-authority` on
   `codex/snake-live-room-authority`.
+- The cloud-authority implementation is commit `e553fcb6`. Companion isolation from generic sync is
+  commit `fd07bba0`.
 - No merge or deploy is authorized.
 
 ## Verdict
@@ -106,6 +108,11 @@ The service has separate records for:
 - companion pick and trade intent;
 - append-only public receipts.
 
+The service also stores:
+
+- one immutable, public-safe catalog containing only the exact active clubs and active player pool;
+- one private recovery slot containing the prior public state for the latest completed pick or trade.
+
 The generic account backup engine does not publish or pull active room or board records.
 
 ### C. Separate public and private writes
@@ -140,12 +147,32 @@ The generic account backup engine does not publish or pull active room or board 
 - A scoped fetch runs after reconnect and as a slow fallback.
 - No live action waits for an account-wide queue drain.
 
-### F. Account-owned local durability
+### F. Immutable public catalog
+
+- The host seeds the catalog once.
+- The database verifies that its clubs and player IDs exactly match the active room.
+- The catalog excludes hidden personality modifiers, salary factors, backstory, roster design,
+  rankings, lineups, rotations, and all private board data.
+- Companions fetch it once and do not refetch it after each pick or trade.
+- A private board can carry its own `designSlots`; only that approved device can read them.
+
+### G. One-step correction recovery
+
+- A completed pick or trade stores the prior public room state in one private recovery slot.
+- A pause cannot replace that slot.
+- Only the Hotseat can restore it, once, with the exact room revision and an idempotency key.
+- Public room JSON exposes only `correctionAvailable`; it never exposes the saved state.
+- Closing the room clears the slot.
+
+### H. Generic-sync isolation
 
 - The remaining generic sync outbox moves from localStorage to IndexedDB.
 - Every outbox item includes its owner user ID.
 - Sign-out stops drains and quarantines that account's outbox.
 - A new account cannot drain the prior account's work.
+- The companion route uses Supabase Auth without binding the generic backup engine.
+- Entering the companion route stops generic pull/drain timers and waits for tracked work to settle
+  before the live room opens. Leaving the route restores the prior generic-sync setting.
 
 ## Migration and recovery law
 
@@ -218,24 +245,41 @@ The generic account backup engine does not publish or pull active room or board 
   draft completion.
 - Live-room actions do not use the generic account backup queue.
 - The remaining account backup outbox is account-owned and stored in IndexedDB.
+- The shared catalog is immutable, exact to the active room, and server-checked for private fields.
+- Pick and trade correction uses a private, one-use server recovery slot.
+- Cloud public state is immediate authority. A failed local Hotseat mirror can warn, but it cannot
+  reject a cloud pick, trade, pause, correction, or final public pick.
+- Companion authentication and routing do not start or pull the generic account backup engine.
+- Final roster freeze still uses the Hotseat's local canonical private player records and local
+  League Builder transaction. The current repair does not claim that the whole application is
+  cloud-only.
+
+## Current verification
+
+- The combined live-room, catalog, host, companion, completion, reconnect, registration, and auth
+  matrix is 12 files / 130 tests, all green.
+- TypeScript, changed-file ESLint, production/PWA build, and diff integrity are green.
+- The final independent audit is pending against frozen commit `fd07bba0` and the current runbook.
+
+## Bounded follow-up outside this preview
+
+- Hotseat discovery and rejoin still require its local League Builder session plus the small host
+  capability key. Cloud room state alone cannot cold-boot a wiped Hotseat profile. Do not clear the
+  original Hotseat's League Builder or live-capability storage after a room starts.
+- A completed cloud draft still needs the original Hotseat's local canonical private player records
+  for final freeze and roster handoff.
+- Moving League Builder setup and final roster handoff to owner-only cloud records is a separate
+  product migration. It is not required for the controlled preview while the original Hotseat
+  storage remains intact.
+- This dedicated authority is for the MLB Snake live room. The FARM Snake room remains a Hotseat
+  path that reads local League Builder data and generic sync. Do not claim FARM is cloud-authoritative
+  or include FARM companion drafting in this preview.
 - Realtime events are hints. Each device also performs a bounded scoped read of current server
   state after subscribe, reconnect, and every five seconds while the room is open.
 - The source league keeps its original team IDs and rosters. A draft target receives new team IDs
   and empty rosters, so the draft cannot erase a source roster or inherit its slot state.
 - The live room targets Mac mini/Neo and laptop layouts first. One document scroll replaces nested
   desktop panes where possible.
-
-## Verification result
-
-- Final non-builder audit: **APPROVE — Major 0 / Minor 0**.
-- Live-room focused proof: 14 files, 188 passed, 32 skipped.
-- Combined live-room and authentication proof: 8 files, 73 passed.
-- Targeted Snake UI, storage, and team-isolation proof: 35 files, 246 passed.
-- Generic sync regression: 102 passed, 32 skipped.
-- TypeScript, changed-file ESLint, diff integrity, and production/PWA build are green.
-- Deterministic tests cover two devices, four devices, eight teams, all 176 public picks, inverted
-  event delivery, stale event history, reconnect, idempotency, privacy, claims, boards, picks,
-  trades, corrections, completion, and target/source team isolation.
 
 ## Remaining product gate
 

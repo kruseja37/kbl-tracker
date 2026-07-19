@@ -4266,6 +4266,18 @@ not covered by the current local room.
   backup outbox is account-owned IndexedDB data.
 - Browser data is an auth/device store and a disposable cache for the live room. It is not the live
   room source of truth.
+- The room's immutable catalog contains only the exact active teams and player pool. It excludes
+  private personality, salary-factor, roster-design, ranking, lineup, and history data. A private
+  board may carry its own approved-device-only design slots.
+- The latest completed pick or trade has one private, one-use server recovery slot. Public state
+  exposes only whether correction is available.
+- The companion route uses Supabase Auth without starting the generic backup engine. It stops that
+  engine while the private desk is open and restores the prior setting on exit.
+- This ruling does not make the full application cloud-only. The original Hotseat still needs its
+  local League Builder session plus host capability key to discover and rejoin the cloud room. It
+  also needs canonical private player records for final freeze and roster handoff.
+- The dedicated authority currently covers the MLB Snake live room only. FARM Snake remains a
+  Hotseat path on local League Builder and generic sync until a separate product ruling changes it.
 - A new draft target gets copied team records with new IDs and empty rosters. Source team IDs and
   source rosters remain unchanged.
 - Apply migration 009 and deploy the matching app before the narrow cleanup of old Snake test rooms
