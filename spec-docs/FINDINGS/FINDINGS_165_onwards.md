@@ -1047,7 +1047,7 @@ entries, parent/cumulative diff checks, and clean exact worktree. Only JK's live
 push, merge, or deploy.
 
 ### FINDING-243
-**Date:** 2026-07-18 | **Phase:** Cloud sync / current-device queued-intent recovery | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-18 | **Phase:** Cloud sync / current-device queued-intent recovery | **Status:** FIXED — INDEPENDENTLY APPROVED — JK BROWSER RETRY PENDING
 **Files:** `src/utils/syncEngine.ts`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`
 **Evidence:** JK's audited exact-content recovery reduced 806 pending operations to 805 and then
 reported that every remainder differed between this device and cloud. The implementation was
@@ -1062,8 +1062,8 @@ Protect local drift, concurrent replacement, account change, unreadable scope, u
 and any Snake room that does not cover unseen cloud companion intent. Never touch unrelated cloud
 rows or invoke full Upload/Download.
 **Builder result:** IndexedDB and localStorage current-intent regressions publish over exact cloud
-bases; exact duplicates retire; local-source drift and account-switch tests remain fail-closed. Full
-the first independent audit blocked the initial implementation because its post-rebase drain was
+bases; exact duplicates retire; local-source drift and account-switch tests remain fail-closed. The
+first independent audit blocked the initial implementation because its post-rebase drain was
 not identity-scoped and a shared Snake-room tombstone could bypass companion-intent protection.
 The second audit then blocked key-only targeting because a same-key replacement during the drain's
 auth await could bypass classification. All three Majors now have exact regressions: only the exact
@@ -1071,5 +1071,6 @@ operation objects returned by rebase drain, live/deleted room disagreement stays
 same-key replacements remain queued. Focused sync/UI proof is 138/138, including mixed
 safe/obsolete queues, same-key replacement, shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript,
 changed-file ESLint, the fresh 2,735-module
-production/PWA build with 223 precache entries, and diff integrity are green. Freeze, separate audit,
-and JK's live retry remain. No push, merge, or deploy.
+production/PWA build with 223 precache entries, and diff integrity are green. Final non-builder
+re-audit of frozen `9725c5bd`: **APPROVE — Major 0 / Minor 0**. JK's live retry remains. No push,
+merge, or deploy.

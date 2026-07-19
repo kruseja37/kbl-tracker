@@ -1823,3 +1823,15 @@ the approved key. The repair now binds the target to the exact rebased operation
 auditor reproduction is also permanent. Focused proof is 138/138, with TypeScript, changed-file
 ESLint, fresh production/PWA build, and diff integrity green. Final re-audit remains required before
 preview restart.
+
+### 2026-07-18 — FINDING-243 final independent re-audit
+
+Frozen code commit `9725c5bd` received **APPROVE — Major 0 / Minor 0** from separate auditor Gibbs.
+The auditor independently passed all three adversarial reproductions: mixed safe/obsolete queue,
+same-key replacement during targeted-drain authentication, and live Snake-room tombstone with
+unseen companion intent. It confirmed exact-operation binding after account validation, current
+local-source equality, shared-room protection, monotonic exact-base rebasing, durable checkpoint
+and rollback, and the unchanged atomic cloud-race authority. Independent gates passed focused
+138/138, TypeScript, changed-file ESLint, 2,735-module production/PWA build with 223 precache
+entries, parent/cumulative diff integrity, and clean frozen worktree. Engineering audit is closed;
+JK's live browser retry remains the only acceptance gate. No push, merge, or deploy.

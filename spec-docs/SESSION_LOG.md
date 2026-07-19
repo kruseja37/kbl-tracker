@@ -8091,6 +8091,10 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   exact rebased operation object and the auditor's reproduction is permanent.
 - Focused sync/UI proof is 138/138, including mixed safe/obsolete queues, same-key replacement,
   shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript, changed-file
-  ESLint, fresh production/PWA build, and diff integrity are green. Final independent re-audit remains.
+  ESLint, fresh production/PWA build, and diff integrity are green.
+- Final non-builder re-audit of frozen `9725c5bd`: **APPROVE — Major 0 / Minor 0**. The auditor
+  independently passed all three adversarial reproductions, focused 138/138, TypeScript, ESLint,
+  2,735-module production/PWA build with 223 precache entries, and parent/cumulative diff checks.
+  Exact preview restart and JK's live click remain; no push, merge, or deploy.
   build with 223 precache entries, and diff integrity are green. Freeze, separate audit, preview, and
   JK retry remain. No push, merge, or deploy.
