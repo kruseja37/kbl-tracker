@@ -243,3 +243,6 @@ Migration `009_snake_live_rooms.sql` has not been applied to the remote project.
 not been deployed. After those two actions, remove only old Snake test rooms and retired local sync
 keys, then run one real Hotseat-plus-companion browser walk. Do not wipe players, source leagues,
 teams, archetypes, or registered pools. JK's walk remains the sole product acceptance gate.
+
+The exact migration, preview, cleanup, rollback, and browser sequence is recorded in
+`spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`.

@@ -24,3 +24,8 @@
 4. Deploy the matching app build.
 5. Delete only old Snake live test rooms and retired local sync keys. Do not wipe product data.
 6. Run JK's real-device Hotseat and companion draft walk.
+
+The exact remote sequence and rollback boundary are in
+`spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. A current read-only check proved Supabase
+Auth is online, migration 009 is absent, Vercel production remains on `ba7f97d6`, and no preview yet
+contains `d86e8fca`.
