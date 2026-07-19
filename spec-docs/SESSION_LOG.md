@@ -8083,6 +8083,11 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   checkpoint, exact account, and unchanged atomic compare-and-set remain mandatory.
 - Unseen companion room activity, local/concurrent drift, unsafe base, cloud race, and account switch
   remain protected. Full Upload/Download and unrelated cloud rows remain untouched.
-- Focused sync/UI proof is 135/135, including rebase-snapshot cloud-race rejection; TypeScript, changed-file ESLint, 2,735-module production/PWA
+- The first independent audit blocked `641679b7` with two Majors: its post-rebase drain was not
+  identity-scoped, and a shared Snake-room tombstone could bypass companion-intent protection.
+  Both now have exact regressions and narrow repairs.
+- Focused sync/UI proof is 137/137, including mixed safe/obsolete queues, shared-room tombstones,
+  and rebase-snapshot cloud-race rejection; TypeScript, changed-file ESLint, fresh production/PWA
+  build, and diff integrity are green. The second independent audit remains.
   build with 223 precache entries, and diff integrity are green. Freeze, separate audit, preview, and
   JK retry remain. No push, merge, or deploy.

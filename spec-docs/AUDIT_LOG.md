@@ -1805,6 +1805,18 @@ The exact-only approved path proved honest but insufficient on JK's real 805 loc
 differences. The builder adds target-limited current-intent rebase: only a queued value still equal
 to actual local source may receive the freshly fetched exact cloud base and a new atomic operation.
 The queue checkpoint precedes drain; cloud races remain rejected. Shared Snake rooms additionally
-must cover unseen companion intent before publication. Focused proof is 135/135, including rebase-snapshot cloud-race rejection; TypeScript,
-changed-file ESLint, 2,735-module production/PWA build with 223 precache entries, and diff integrity
-are green. Separate non-builder audit and JK retry remain; no push, merge, or deploy.
+must cover unseen companion intent before publication. Focused proof is 137/137, including mixed
+safe/obsolete queues, shared-room tombstones, and rebase-snapshot cloud-race rejection; TypeScript,
+changed-file ESLint, and diff integrity are green. Separate non-builder audit and JK retry remain;
+no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-243 first independent audit block and repair
+
+Separate auditor Gibbs blocked frozen commit `641679b7` with **Major 2 / Minor 0**. It reproduced
+that an unfiltered post-rebase drain could publish a locally obsolete peer, and that a queued
+`mlbDraftSessions` tombstone could erase a live cloud room with unseen companion intent. The
+builder repaired both exact boundaries: the recovery drain accepts only the queue keys returned by
+the safe rebase classifier, and shared-room live/deleted disagreement is protected. The auditor's
+two minimal reproductions are now permanent tests. Repaired focused proof is 137/137, with
+TypeScript, changed-file ESLint, fresh production/PWA build, and diff integrity green. Second audit
+remains required before preview restart.

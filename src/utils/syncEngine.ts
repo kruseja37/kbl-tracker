@@ -1262,6 +1262,15 @@ class SyncEngine {
     await this.drainLocalQueue(expectedUserId, true);
   }
 
+  private async flushQueueKeysForExpectedUser(
+    expectedUserId: string,
+    storeQueueKeys: ReadonlySet<string>,
+    localQueueKeys: ReadonlySet<string>,
+  ): Promise<void> {
+    await this.drainQueue(expectedUserId, true, storeQueueKeys);
+    await this.drainLocalQueue(expectedUserId, true, localQueueKeys);
+  }
+
   /**
    * Recover an otherwise-valid queue when rebuildable write-base caches and
    * the durable queue together exceed the browser's localStorage quota.
@@ -1331,7 +1340,11 @@ class SyncEngine {
         if (pendingCount > 0) {
           const rebase = await this.rebaseQueuedOpsStillRepresentedLocally(recoveryUserId);
           if (rebase.rebasedCount > 0) {
-            await this.flushForExpectedUser(recoveryUserId);
+            await this.flushQueueKeysForExpectedUser(
+              recoveryUserId,
+              rebase.rebasedStoreQueueKeys,
+              rebase.rebasedLocalQueueKeys,
+            );
             if (!this.persistQueues()) {
               throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the rebased queue.');
             }
@@ -1611,10 +1624,14 @@ class SyncEngine {
   // Private — Push Queue
   // ============================================================
 
-  private async drainQueue(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+  private async drainQueue(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueKeys?: ReadonlySet<string>,
+  ): Promise<void> {
     if (this.drainQueuePromise) return this.drainQueuePromise;
 
-    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked).finally(() => {
+    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked, targetQueueKeys).finally(() => {
       if (this.drainQueuePromise === promise) {
         this.drainQueuePromise = null;
       }
@@ -1623,7 +1640,11 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainQueueOnce(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+  private async drainQueueOnce(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueKeys?: ReadonlySet<string>,
+  ): Promise<void> {
     if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.pushQueue.size === 0) return;
 
@@ -1636,10 +1657,15 @@ class SyncEngine {
       throw new Error('Sync recovery failed: signed-in account changed during sync');
     }
 
-    const ops = Array.from(this.pushQueue.values());
+    const ops = Array.from(this.pushQueue.entries())
+      .filter(([queueKey]) => !targetQueueKeys || targetQueueKeys.has(queueKey))
+      .map(([, op]) => op);
+    if (ops.length === 0) return;
     const inFlightOps = new Map(ops.map((op) => [this.pushQueueKey(op), op]));
     this.inFlightPushDrainOps = inFlightOps;
-    this.pushQueue.clear();
+    for (const [queueKey, op] of inFlightOps) {
+      if (this.pushQueue.get(queueKey) === op) this.pushQueue.delete(queueKey);
+    }
 
     try {
       // Process in batches
@@ -1719,10 +1745,14 @@ class SyncEngine {
     this.emitStatusChange();
   }
 
-  private async drainLocalQueue(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+  private async drainLocalQueue(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueKeys?: ReadonlySet<string>,
+  ): Promise<void> {
     if (this.drainLocalQueuePromise) return this.drainLocalQueuePromise;
 
-    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked).finally(() => {
+    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked, targetQueueKeys).finally(() => {
       if (this.drainLocalQueuePromise === promise) {
         this.drainLocalQueuePromise = null;
       }
@@ -1731,7 +1761,11 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainLocalQueueOnce(expectedUserId?: string, allowWhileBlocked = false): Promise<void> {
+  private async drainLocalQueueOnce(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueKeys?: ReadonlySet<string>,
+  ): Promise<void> {
     if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.localQueue.size === 0) return;
 
@@ -1744,10 +1778,15 @@ class SyncEngine {
       throw new Error('Sync recovery failed: signed-in account changed during sync');
     }
 
-    const ops = Array.from(this.localQueue.values());
+    const ops = Array.from(this.localQueue.entries())
+      .filter(([key]) => !targetQueueKeys || targetQueueKeys.has(key))
+      .map(([, op]) => op);
+    if (ops.length === 0) return;
     const inFlightOps = new Map(ops.map((op) => [op.key, op]));
     this.inFlightLocalDrainOps = inFlightOps;
-    this.localQueue.clear();
+    for (const [key, op] of inFlightOps) {
+      if (this.localQueue.get(key) === op) this.localQueue.delete(key);
+    }
 
     try {
       const liveOps = ops;
@@ -2009,12 +2048,19 @@ class SyncEngine {
    */
   private async rebaseQueuedOpsStillRepresentedLocally(userId: string): Promise<{
     rebasedCount: number;
+    rebasedStoreQueueKeys: Set<string>;
+    rebasedLocalQueueKeys: Set<string>;
     protectedConflicts: string[];
   }> {
     const storeSnapshot = new Map(this.pushQueue);
     const localSnapshot = new Map(this.localQueue);
     if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
-      return { rebasedCount: 0, protectedConflicts: [] };
+      return {
+        rebasedCount: 0,
+        rebasedStoreQueueKeys: new Set(),
+        rebasedLocalQueueKeys: new Set(),
+        protectedConflicts: [],
+      };
     }
 
     const [storeRows, localRows] = await Promise.all([
@@ -2082,10 +2128,13 @@ class SyncEngine {
       if (
         op.dbName === 'kbl-league-builder'
         && op.storeName === 'mlbDraftSessions'
-        && !op.deleted
         && cloudRow
-        && !cloudRow.deleted
       ) {
+        if (op.deleted !== cloudRow.deleted) {
+          protectedConflicts.push(this.formatStoreIdentity(identity));
+          continue;
+        }
+        if (op.deleted) continue;
         const cloudRoom = this.asSnakeDraftSession(cloudRow.data);
         const localRoom = this.asSnakeDraftSession(op.data);
         if (
@@ -2162,8 +2211,15 @@ class SyncEngine {
     }
 
     const rebasedCount = rebasedStoreEntries.length + rebasedLocalEntries.length;
+    const rebasedStoreQueueKeys = new Set(rebasedStoreEntries.map(([queueKey]) => queueKey));
+    const rebasedLocalQueueKeys = new Set(rebasedLocalEntries.map(([key]) => key));
     if (rebasedCount === 0) {
-      return { rebasedCount, protectedConflicts };
+      return {
+        rebasedCount,
+        rebasedStoreQueueKeys,
+        rebasedLocalQueueKeys,
+        protectedConflicts,
+      };
     }
 
     if (!this.persistQueues()) {
@@ -2182,7 +2238,12 @@ class SyncEngine {
       );
     }
 
-    return { rebasedCount, protectedConflicts };
+    return {
+      rebasedCount,
+      rebasedStoreQueueKeys,
+      rebasedLocalQueueKeys,
+      protectedConflicts,
+    };
   }
 
   private async waitForQueueDrains(): Promise<void> {

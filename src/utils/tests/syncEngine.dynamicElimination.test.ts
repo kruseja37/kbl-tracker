@@ -3943,6 +3943,137 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]);
   });
 
+  test("quota recovery drains only rebased identities and keeps a locally obsolete peer protected", async () => {
+    const now = Date.now();
+    mockState.cloudRows.push({
+      id: "cloud-safe-rebase",
+      user_id: "user-1",
+      db_name: "kbl-event-log",
+      store_name: "atBatEvents",
+      record_key: JSON.stringify("safe-rebase"),
+      data: { eventId: "safe-rebase", result: "SINGLE" },
+      changed_at: now + 10_000,
+      received_at: "2026-07-18T19:00:00.000Z",
+      deleted: false,
+    });
+    await putAtBatEventRecord({ eventId: "safe-rebase", result: "DOUBLE" });
+    await putAtBatEventRecord({ eventId: "obsolete-peer", result: "TRIPLE" });
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectedQueueSaves = 0;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectedQueueSaves < 2) {
+        rejectedQueueSaves += 1;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "safe-rebase", {
+      eventId: "safe-rebase",
+      result: "DOUBLE",
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "obsolete-peer", {
+      eventId: "obsolete-peer",
+      result: "SINGLE",
+    });
+    mockState.failNextUpsertTable = "kbl_stores";
+    mockState.nextRpcResponse = {
+      table: "kbl_stores",
+      data: null,
+      error: { message: "second transient failure" },
+    };
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "1 operation(s) are not exact matches across this device and cloud and remain protected",
+    );
+
+    expect(mockState.cloudRows.some((row) =>
+      row.record_key === JSON.stringify("obsolete-peer")
+      && (row.data as { result?: string }).result === "SINGLE"
+    )).toBe(false);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+  });
+
+  test("quota recovery does not tombstone a live snake room with unseen companion intent", async () => {
+    const leagueId = "audit-room-delete";
+    const roomId = `${leagueId}::startup-mlb-draft::1`;
+    const cloudRoom = {
+      id: roomId,
+      leagueId,
+      seasonNumber: 1,
+      seed: "audit-seed",
+      workflowVersion: "audit",
+      engineMethodVersion: "audit",
+      tier: "Standard" as const,
+      balanceMode: "taxed" as const,
+      rounds: 22,
+      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
+      completedPicks: [],
+      currentPickIndex: 0,
+      snakeCompanions: {
+        roomCode: "4821",
+        claims: [{
+          claimId: "unseen-claim",
+          claimVersion: 1,
+          deviceId: "phone",
+          gmName: "Alex",
+          teamId: "team-a",
+          status: "pending" as const,
+        }],
+      },
+      createdDate: "2026-07-18T19:00:00.000Z",
+      lastModified: "2026-07-18T19:00:00.000Z",
+      revision: 1,
+    };
+    mockState.cloudRows.push({
+      id: "cloud-room-delete",
+      user_id: "user-1",
+      db_name: "kbl-league-builder",
+      store_name: "mlbDraftSessions",
+      record_key: JSON.stringify(roomId),
+      data: cloudRoom,
+      changed_at: 100,
+      received_at: "2026-07-18T19:00:00.000Z",
+      deleted: false,
+    });
+    const storage = await import("../leagueBuilderStorage");
+    await storage.initLeagueBuilderDatabase();
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    syncEngine.remove("kbl-league-builder", "mlbDraftSessions", roomId);
+    mockState.failNextUpsertTable = "kbl_stores";
+    mockState.nextRpcResponse = {
+      table: "kbl_stores",
+      data: null,
+      error: { message: "second transient failure" },
+    };
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "1 operation(s) are not exact matches across this device and cloud and remain protected",
+    );
+
+    expect(mockState.cloudRows[0]).toEqual(expect.objectContaining({ deleted: false }));
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    syncEngine.destroy();
+    storage.__resetLeagueBuilderDatabaseForTests();
+  });
+
   test("quota recovery keeps current local intent queued when cloud changes after its rebase snapshot", async () => {
     const localData = { eventId: "rebase-race-event", result: "DOUBLE" };
     mockState.cloudRows.push({

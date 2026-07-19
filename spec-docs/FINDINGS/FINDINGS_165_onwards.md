@@ -1063,6 +1063,11 @@ and any Snake room that does not cover unseen cloud companion intent. Never touc
 rows or invoke full Upload/Download.
 **Builder result:** IndexedDB and localStorage current-intent regressions publish over exact cloud
 bases; exact duplicates retire; local-source drift and account-switch tests remain fail-closed. Full
-focused sync/UI proof is 135/135, including rebase-snapshot cloud-race rejection. TypeScript, changed-file ESLint, the fresh 2,735-module
+the first independent audit blocked the initial implementation because its post-rebase drain was
+not identity-scoped and a shared Snake-room tombstone could bypass companion-intent protection.
+Both Majors now have exact regressions: only returned rebase keys drain, and live/deleted room
+disagreement stays protected. Focused sync/UI proof is 137/137, including mixed safe/obsolete
+queues, shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript,
+changed-file ESLint, the fresh 2,735-module
 production/PWA build with 223 precache entries, and diff integrity are green. Freeze, separate audit,
 and JK's live retry remain. No push, merge, or deploy.
