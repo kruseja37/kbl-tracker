@@ -82,4 +82,25 @@ describe('useAuth live-room independence', () => {
     expect(mocks.signOut).toHaveBeenCalledOnce();
     expect(result.current.user).toBeNull();
   });
+
+  test('keeps companion auth separate from the generic backup engine', async () => {
+    mocks.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'user-1', email: 'gm@example.test' } } },
+    });
+    const { result } = renderHook(() => useAuth({ bindGenericSync: false }));
+
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    act(() => {
+      mocks.emitAuthChange({ user: { id: 'user-2', email: 'other@example.test' } });
+    });
+    await waitFor(() => expect(result.current.user?.id).toBe('user-2'));
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(mocks.setAuthenticatedUser).not.toHaveBeenCalled();
+    expect(mocks.prepareForSignOut).not.toHaveBeenCalled();
+    expect(mocks.signOut).toHaveBeenCalledOnce();
+  });
 });

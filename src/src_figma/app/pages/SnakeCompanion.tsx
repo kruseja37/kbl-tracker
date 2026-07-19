@@ -33,6 +33,7 @@ import {
   projectSnakeLiveTradeOffers,
 } from '../../../utils/snakeLiveTradeIntents';
 import { useAuth } from '../../../hooks/useAuth';
+import { syncEngine } from '../../../utils/syncEngine';
 import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { CompanionClaimScreen } from '../components/snake/companion/CompanionClaimScreen';
 import { CompanionSignInScreen } from '../components/snake/companion/CompanionSignInScreen';
@@ -315,11 +316,23 @@ function pendingPickIntent(input: {
 }
 
 export default function SnakeCompanion() {
-  const auth = useAuth();
+  const [genericSyncIsolated, setGenericSyncIsolated] = useState(false);
+  useLayoutEffect(() => {
+    let active = true;
+    void syncEngine.enterLiveRoomIsolation().then(() => {
+      if (active) setGenericSyncIsolated(true);
+    });
+    return () => {
+      active = false;
+      syncEngine.leaveLiveRoomIsolation();
+    };
+  }, []);
+
+  const auth = useAuth({ bindGenericSync: false });
   const authenticatedUserId = auth.isAuthenticated ? auth.user?.id ?? null : null;
   const liveRoom = useSnakeLiveCompanionRoom({
     ownerUserId: authenticatedUserId,
-    enabled: auth.isAuthenticated,
+    enabled: auth.isAuthenticated && genericSyncIsolated,
   });
   const { runProof: runSeatingProof } = useSnakeSetupProofClient();
   const ownDeviceId = liveRoom.deviceId ?? '';
@@ -1408,6 +1421,7 @@ export default function SnakeCompanion() {
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;
   if (!auth.isAuthenticated) return <CompanionSignInScreen error={auth.error} onSignIn={auth.signIn} />;
+  if (!genericSyncIsolated) return <main className="ballpark-page"><p>OPENING THE PRIVATE DESK…</p></main>;
   if (liveRoom.status === 'connecting' && !session) return <main className="ballpark-page"><p>OPENING THE LIVE ROOM…</p></main>;
   if (!approved || !session) {
     return <>

@@ -616,6 +616,8 @@ class SyncEngine {
   private drainTimer: ReturnType<typeof setInterval> | null = null;
   private pullTimer: ReturnType<typeof setInterval> | null = null;
   private initialized = false;
+  private liveRoomIsolationDepth = 0;
+  private enabledBeforeLiveRoomIsolation = true;
   private queueDrainsBlocked = false;
   private activeSyncOperation: Promise<void> | null = null;
   private syncOperationQueue: Promise<void> = Promise.resolve();
@@ -731,12 +733,14 @@ class SyncEngine {
   async init(): Promise<void> {
     if (this.initialized) return;
     if (!supabase) return;
+    if (!this._enabled) return;
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    if (!this._enabled) return;
 
     await this.setAuthenticatedUser(session.user.id);
-    if (this.activeOwnerUserId !== session.user.id) return;
+    if (!this._enabled || this.activeOwnerUserId !== session.user.id) return;
 
     // Load cursor before any pull. If this fails, an initial pull from zero
     // could replay stale cloud rows, so leave sync unstarted until retry.
@@ -751,22 +755,23 @@ class SyncEngine {
       this._error = null;
     }
 
-    // Start drain and pull timers
-    this.drainTimer = setInterval(() => this.flush(), DRAIN_INTERVAL_MS);
-    this.pullTimer = setInterval(() => this.pull(), PULL_INTERVAL_MS);
-
     // Event listeners for flush/online
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') this.flush();
+        if (this._enabled && document.visibilityState === 'hidden') this.flush();
       });
-      window.addEventListener('pagehide', () => this.flush());
+      window.addEventListener('pagehide', () => {
+        if (this._enabled) this.flush();
+      });
       window.addEventListener('online', () => {
-        void this.restoreOutboxForOwner(session.user.id).then(() => this.pull());
+        if (this._enabled) {
+          void this.restoreOutboxForOwner(session.user.id).then(() => this.pull());
+        }
       });
     }
 
     this.initialized = true;
+    this.startTimers();
 
     // Initial pull
     this.pull();
@@ -903,11 +908,12 @@ class SyncEngine {
       } else {
         await this.authTransitionPromise;
       }
-      if (this.activeOwnerUserId !== session.user.id) return;
+      if (!this._enabled || this.activeOwnerUserId !== session.user.id) return;
 
       try {
         await this.loadCursor();
         await this.flush();
+        if (!this._enabled) return;
         await this.pullForUser(session.user.id);
       } catch (err) {
         this._error = err instanceof Error ? err.message : 'Pull failed';
@@ -1232,6 +1238,7 @@ class SyncEngine {
    * Drain push queue immediately.
    */
   async flush(options: { throwOnPending?: boolean } = {}): Promise<void> {
+    if (!this._enabled) return;
     await this.authTransitionPromise;
     await this.awaitOutboxPersistence();
     await this.drainQueue();
@@ -1561,12 +1568,68 @@ class SyncEngine {
   }
 
   setEnabled(enabled: boolean): void {
-    this._enabled = enabled;
+    if (this.liveRoomIsolationDepth > 0) {
+      this.enabledBeforeLiveRoomIsolation = enabled;
+      this._enabled = false;
+    } else {
+      this._enabled = enabled;
+    }
+    if (this._enabled) this.startTimers();
+    else this.stopTimers();
     this.emitStatusChange();
   }
 
   isEnabled(): boolean {
     return this._enabled;
+  }
+
+  /**
+   * Stop the account-wide backup engine before a companion opens a live room.
+   * Existing work is allowed to settle, but no new generic pull or queue drain
+   * can overlap the live-room transport. Call leaveLiveRoomIsolation on exit.
+   */
+  async enterLiveRoomIsolation(): Promise<void> {
+    if (this.liveRoomIsolationDepth === 0) {
+      this.enabledBeforeLiveRoomIsolation = this._enabled;
+      this._enabled = false;
+      this.stopTimers();
+      this.emitStatusChange();
+    }
+    this.liveRoomIsolationDepth += 1;
+
+    await Promise.allSettled([
+      this.syncOperationQueue,
+      this.authTransitionPromise,
+      this.outboxPersistencePromise,
+    ]);
+    await this.waitForQueueDrains();
+  }
+
+  leaveLiveRoomIsolation(): void {
+    if (this.liveRoomIsolationDepth === 0) return;
+    this.liveRoomIsolationDepth -= 1;
+    if (this.liveRoomIsolationDepth > 0) return;
+
+    this._enabled = this.enabledBeforeLiveRoomIsolation;
+    if (this._enabled) this.startTimers();
+    this.emitStatusChange();
+  }
+
+  private startTimers(): void {
+    if (!this.initialized || !this._enabled) return;
+    if (!this.drainTimer) {
+      this.drainTimer = setInterval(() => this.flush(), DRAIN_INTERVAL_MS);
+    }
+    if (!this.pullTimer) {
+      this.pullTimer = setInterval(() => this.pull(), PULL_INTERVAL_MS);
+    }
+  }
+
+  private stopTimers(): void {
+    if (this.drainTimer) clearInterval(this.drainTimer);
+    if (this.pullTimer) clearInterval(this.pullTimer);
+    this.drainTimer = null;
+    this.pullTimer = null;
   }
 
   private async runSyncOperation(
@@ -5429,8 +5492,7 @@ class SyncEngine {
   }
 
   destroy(): void {
-    if (this.drainTimer) clearInterval(this.drainTimer);
-    if (this.pullTimer) clearInterval(this.pullTimer);
+    this.stopTimers();
     this.persistQueues();
     void this.outboxPersistencePromise.finally(() => syncOutboxStore.close());
   }

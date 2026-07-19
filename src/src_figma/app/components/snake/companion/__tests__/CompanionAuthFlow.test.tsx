@@ -7,6 +7,8 @@ const harness = vi.hoisted(() => ({
   signIn: vi.fn(async () => undefined),
   signOut: vi.fn(async () => undefined),
   forbiddenCatalogPull: vi.fn(() => { throw new Error('GENERIC SYNC MUST NOT RUN.'); }),
+  enterLiveRoomIsolation: vi.fn(async () => undefined),
+  leaveLiveRoomIsolation: vi.fn(),
   forbiddenLeagueBuilderHook: vi.fn(() => { throw new Error('LOCAL LEAGUE BUILDER DATA MUST NOT BE READ.'); }),
   runProof: vi.fn(),
   useLive: vi.fn(),
@@ -30,7 +32,11 @@ vi.mock('../../../../../hooks/useLeagueBuilderData', () => ({
 }));
 
 vi.mock('../../../../../../utils/syncEngine', () => ({
-  syncEngine: { pull: harness.forbiddenCatalogPull },
+  syncEngine: {
+    pull: harness.forbiddenCatalogPull,
+    enterLiveRoomIsolation: harness.enterLiveRoomIsolation,
+    leaveLiveRoomIsolation: harness.leaveLiveRoomIsolation,
+  },
 }));
 
 vi.mock('../../../../../../utils/franchisePhase2Flags', () => ({
@@ -83,6 +89,8 @@ describe('SnakeCompanion live-room entry', () => {
     harness.signIn.mockClear();
     harness.signOut.mockClear();
     harness.forbiddenCatalogPull.mockClear();
+    harness.enterLiveRoomIsolation.mockClear();
+    harness.leaveLiveRoomIsolation.mockClear();
     harness.forbiddenLeagueBuilderHook.mockClear();
     harness.runProof.mockClear();
     setLiveRoom();
@@ -101,7 +109,8 @@ describe('SnakeCompanion live-room entry', () => {
 
     render(<SnakeCompanion />);
 
-    expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(harness.enterLiveRoomIsolation).toHaveBeenCalledOnce();
     expect(harness.useLive).toHaveBeenLastCalledWith({ ownerUserId: 'user-owner', enabled: true });
     fireEvent.change(screen.getByLabelText('GM NAME'), { target: { value: 'Poke Foster' } });
     fireEvent.change(screen.getByLabelText('ROOM CODE'), { target: { value: '1252' } });
@@ -120,7 +129,7 @@ describe('SnakeCompanion live-room entry', () => {
 
     render(<SnakeCompanion />);
 
-    expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('GM NAME'), { target: { value: 'Poke Foster' } });
     fireEvent.change(screen.getByLabelText('ROOM CODE'), { target: { value: '1252' } });
     fireEvent.click(screen.getByRole('button', { name: 'ASK TO SEE MY DESK' }));
@@ -138,7 +147,7 @@ describe('SnakeCompanion live-room entry', () => {
 
     render(<SnakeCompanion />);
 
-    expect(screen.getByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
   });
 });

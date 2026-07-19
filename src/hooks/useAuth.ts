@@ -17,7 +17,16 @@ interface UseAuthReturn {
   signOut: () => Promise<void>;
 }
 
-export function useAuth(): UseAuthReturn {
+interface UseAuthOptions {
+  /**
+   * The companion route uses Supabase Auth without starting the account-wide
+   * backup engine. Live draft transport has its own narrow cloud authority.
+   */
+  bindGenericSync?: boolean;
+}
+
+export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
+  const bindGenericSync = options.bindGenericSync ?? true;
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +40,9 @@ export function useAuth(): UseAuthReturn {
     void supabase.auth.getSession()
       .then(({ data: { session } }) => {
         setUser(session?.user ?? null);
-        void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
+        if (bindGenericSync) {
+          void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
+        }
       })
       .catch((authError) => {
         setError(authError instanceof Error ? authError.message : 'Could not read this account.');
@@ -41,11 +52,13 @@ export function useAuth(): UseAuthReturn {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
+      if (bindGenericSync) {
+        void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [bindGenericSync]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     if (!supabase) {
@@ -63,10 +76,12 @@ export function useAuth(): UseAuthReturn {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
-    await syncEngine.prepareForSignOut().catch(() => undefined);
+    if (bindGenericSync) {
+      await syncEngine.prepareForSignOut().catch(() => undefined);
+    }
     await supabase.auth.signOut();
     setUser(null);
-  }, []);
+  }, [bindGenericSync]);
 
   return {
     user,
