@@ -297,7 +297,7 @@ function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: T
     saveMlbDraftSession: vi.fn(async (next) => next),
     refresh: mocks.refresh,
   };
-  return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
 }
 
 async function revealSeatAndSettle(teamName: string): Promise<void> {
@@ -313,7 +313,7 @@ function selectTeam(teamId: string): void {
 }
 
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
-  test('derives the room from authority re-read after pull instead of the stale hook snapshot', async () => {
+  test('derives the room from the storage authority instead of the stale hook snapshot', async () => {
     const freshPlayers = players.map((row) => row.id === 'a-replacement'
       ? { ...row, firstName: 'Fresh', lastName: 'Authority' }
       : row);
@@ -331,10 +331,11 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     };
     mocks.freshData = { leagues: [league], teams, players: freshPlayers };
 
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
 
     await screen.findByTestId('snake-draft-room');
-    expect(mocks.pull.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(readAllPlayers).mock.invocationCallOrder[0]);
+    expect(mocks.pull).not.toHaveBeenCalled();
+    expect(vi.mocked(readAllPlayers)).toHaveBeenCalled();
     selectTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     expect(await screen.findAllByText(/Fresh Authority/i)).not.toHaveLength(0);
@@ -642,7 +643,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   }, 10_000);
 
-  test('assistant viewing and optimize never invent Revert; stale Keep fails closed', async () => {
+  test('assistant viewing and optimize never invent Revert; a stale board Keep fails closed', async () => {
     const source = session(false);
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
@@ -661,14 +662,19 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
     const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
     const current = mocks.roomState!;
-    mocks.roomState = { ...current, revision: (current.revision ?? 0) + 1 };
-    const pullCountBeforeKeep = mocks.pull.mock.calls.length;
+    mocks.roomState = {
+      ...current,
+      seatBoards: {
+        ...current.seatBoards,
+        a: { ...current.seatBoards!.a, revision: current.seatBoards!.a.revision + 1 },
+      },
+    };
     fireEvent.click(keep);
 
-    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('THE DRAFT MOVED BEFORE THIS BOARD CHANGE COULD BE SAVED');
-    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('BOARD REVISION CHANGED');
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.saveRoom).not.toHaveBeenCalled();
-    expect(mocks.pull.mock.calls.length).toBeGreaterThan(pullCountBeforeKeep);
+    expect(mocks.pull).not.toHaveBeenCalled();
   });
 
   test('successful guarded Keep persists the exact preview and reloads as already on My Board', async () => {
@@ -828,7 +834,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
       saveMlbDraftSession: vi.fn(async (next) => next),
       refresh: mocks.refresh,
     };
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByText(/temporary room read failure/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'RETRY' }));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
@@ -876,7 +882,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
   });
 
-  test('a recorded live pick selects the new on-clock club and opens its private seat covered', async () => {
+  test('a recorded practice pick selects the new on-clock club and opens its private seat covered', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
@@ -885,12 +891,12 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).completedPicks).toHaveLength(1);
-    await waitFor(() => expect(mocks.flush).toHaveBeenCalledWith({ throwOnPending: true }));
+    expect(mocks.flush).not.toHaveBeenCalled();
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
   });
 
-  test('an executed live trade publishes the saved pick ownership before reporting success', async () => {
+  test('an executed practice trade saves the new pick ownership', async () => {
     const { source, traded } = sessionWithReadyTrade();
     mocks.executeTradeResult = {
       valid: true,
@@ -911,10 +917,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
       .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
-    await waitFor(() => expect(mocks.flush).toHaveBeenCalledWith({ throwOnPending: true }));
+    expect(mocks.flush).not.toHaveBeenCalled();
   });
 
-  test('a trade publication failure keeps the saved trade and never asks the commissioner to execute it twice', async () => {
+  test('a generic cloud failure cannot break a saved practice trade', async () => {
     const { source, traded } = sessionWithReadyTrade();
     mocks.executeTradeResult = {
       valid: true,
@@ -936,8 +942,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
       .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
-    expect(await screen.findAllByText(/TRADE WAS SAVED HERE, BUT COMPANION DEVICES DID NOT UPDATE/))
-      .not.toHaveLength(0);
+    expect(mocks.flush).not.toHaveBeenCalled();
+    expect(screen.queryByText(/COMPANION DEVICES DID NOT UPDATE/)).not.toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('THE TRADE WAS NOT SAVED. TRY AGAIN.');
   });
 

@@ -1091,6 +1091,7 @@ async function seedCopiedDb(
 async function loadFreshSyncEngine() {
   vi.resetModules();
   const { syncEngine } = await import("../syncEngine");
+  await syncEngine.setAuthenticatedUser(mockState.sessionUserId);
   return syncEngine;
 }
 
@@ -1409,6 +1410,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       deleteDatabase("kbl-event-log"),
       deleteDatabase("kbl-tracker"),
       deleteDatabase("kbl-league-builder"),
+      deleteDatabase("kbl-sync-outbox"),
     ]);
   });
 
@@ -1427,9 +1429,11 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       deleteDatabase("kbl-event-log"),
       deleteDatabase("kbl-tracker"),
       deleteDatabase("kbl-league-builder"),
+      deleteDatabase("kbl-sync-outbox"),
     ]);
   });
 
+  describe.skip("retired generic snake live-room transport", () => {
   test.each([
     ["session-first", "2026-07-12T01:00:00.000Z", "2026-07-12T01:00:01.000Z"],
     ["pool-first", "2026-07-12T01:00:01.000Z", "2026-07-12T01:00:00.000Z"],
@@ -2067,6 +2071,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]);
     expect(phoneAfterFinalPull?.seatBoards?.["team-a"].rankings.global).toEqual(["player-board-new"]);
   });
+  });
 
   test("replaceCloudWithLocal uploads copied elimination players and teams", async () => {
     await seedEliminationMeta("elim-sync");
@@ -2395,10 +2400,11 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       result: "DOUBLE",
     });
     syncEngine.upsertLocal("kbl-current-season", "reload-season");
+    await syncEngine.setAuthenticatedUser("user-1");
 
     expect(syncEngine.getStatus().pendingCount).toBe(2);
-    expect(localStorage.getItem("kbl-sync-queue")).toContain("reload-event-1");
-    expect(localStorage.getItem("kbl-sync-local-queue")).toContain("kbl-current-season");
+    expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+    expect(localStorage.getItem("kbl-sync-local-queue")).toBeNull();
 
     syncEngine.destroy();
     syncEngine = await loadFreshSyncEngine();
@@ -2409,6 +2415,8 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(syncEngine.getStatus().pendingCount).toBe(0);
     expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
     expect(localStorage.getItem("kbl-sync-local-queue")).toBeNull();
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.loadOwner("user-1")).resolves.toEqual([]);
     expect(mockState.cloudRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -2428,6 +2436,236 @@ describe("syncEngine dynamic elimination copied DBs", () => {
         }),
       ]),
     );
+  });
+
+  test("account A pending work is quarantined before account B can drain", async () => {
+    const syncEngine = await loadFreshSyncEngine();
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "account-a-only", {
+      eventId: "account-a-only",
+      result: "DOUBLE",
+    });
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+
+    await syncEngine.prepareForSignOut();
+    mockState.sessionUserId = "user-2";
+    await syncEngine.setAuthenticatedUser("user-2");
+    await syncEngine.flush({ throwOnPending: true });
+
+    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(mockState.cloudRows).toEqual([]);
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.listQuarantined()).resolves.toEqual([
+      expect.objectContaining({
+        ownerUserId: "user-1",
+        queueKey: expect.stringContaining("account-a-only"),
+      }),
+    ]);
+
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "account-b-only", {
+      eventId: "account-b-only",
+      result: "SINGLE",
+    });
+    await syncEngine.flush({ throwOnPending: true });
+    expect(mockState.cloudRows).toEqual([
+      expect.objectContaining({
+        user_id: "user-2",
+        record_key: JSON.stringify("account-b-only"),
+      }),
+    ]);
+  });
+
+  test("an owned legacy localStorage queue cannot cross to another account", async () => {
+    localStorage.setItem("kbl-sync-queue", JSON.stringify([
+      ["kbl-event-log|atBatEvents|\"legacy-account-a\"", {
+        ownerUserId: "user-1",
+        opId: "legacy-account-a-op",
+        dbName: "kbl-event-log",
+        storeName: "atBatEvents",
+        recordKey: JSON.stringify("legacy-account-a"),
+        data: { eventId: "legacy-account-a", result: "DOUBLE" },
+        changedAt: 100,
+        deleted: false,
+      }],
+    ]));
+    mockState.sessionUserId = "user-2";
+
+    const syncEngine = await loadFreshSyncEngine();
+    await syncEngine.flush({ throwOnPending: true });
+
+    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+    expect(mockState.cloudRows).toEqual([]);
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.listQuarantined()).resolves.toEqual([
+      expect.objectContaining({ ownerUserId: "user-1" }),
+    ]);
+  });
+
+  test("an unowned legacy localStorage queue is quarantined instead of assigned to the current account", async () => {
+    localStorage.setItem("kbl-sync-queue", JSON.stringify([
+      ["kbl-event-log|atBatEvents|\"legacy-unowned\"", {
+        opId: "legacy-unowned-op",
+        dbName: "kbl-event-log",
+        storeName: "atBatEvents",
+        recordKey: JSON.stringify("legacy-unowned"),
+        data: { eventId: "legacy-unowned", result: "DOUBLE" },
+        changedAt: 100,
+        deleted: false,
+      }],
+    ]));
+
+    const syncEngine = await loadFreshSyncEngine();
+    await syncEngine.flush({ throwOnPending: true });
+
+    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+    expect(mockState.cloudRows).toEqual([]);
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.listQuarantined()).resolves.toEqual([
+      expect.objectContaining({
+        ownerUserId: "__legacy_unowned__",
+        queueKey: expect.stringContaining("legacy-unowned"),
+      }),
+    ]);
+  });
+
+  test("large queue payloads survive reload without using localStorage quota", async () => {
+    const originalSetItem = Storage.prototype.setItem;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" || key === "kbl-sync-local-queue") {
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+
+    let syncEngine = await loadFreshSyncEngine();
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "large-outbox-event", {
+      eventId: "large-outbox-event",
+      notes: "x".repeat(2_000_000),
+    });
+    await syncEngine.setAuthenticatedUser("user-1");
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+
+    syncEngine.destroy();
+    syncEngine = await loadFreshSyncEngine();
+
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+    await syncEngine.flush({ throwOnPending: true });
+    expect(syncEngine.getStatus().pendingCount).toBe(0);
+    expect(mockState.cloudRows).toEqual([
+      expect.objectContaining({ record_key: JSON.stringify("large-outbox-event") }),
+    ]);
+  });
+
+  test("a full localStorage area cannot crash sync engine module startup", async () => {
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new DOMException("Storage is full.", "QuotaExceededError");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Storage is full.", "QuotaExceededError");
+    });
+
+    vi.resetModules();
+    const module = await import("../syncEngine");
+    const fallbackDeviceId = Reflect.get(module.syncEngine, "deviceId");
+
+    expect(module.syncEngine.getStatus()).toEqual(expect.objectContaining({
+      state: expect.any(String),
+      pendingCount: 0,
+    }));
+    expect(fallbackDeviceId).toMatch(/^device-/);
+    expect(Reflect.get(module.syncEngine, "deviceId")).toBe(fallbackDeviceId);
+
+    await module.syncEngine.setAuthenticatedUser("user-1");
+    module.syncEngine.upsert("kbl-event-log", "atBatEvents", "no-local-storage-event", {
+      eventId: "no-local-storage-event",
+      result: "SINGLE",
+    });
+    await module.syncEngine.setAuthenticatedUser("user-1");
+    expect(module.syncEngine.getStatus().pendingCount).toBe(1);
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.loadOwner("user-1")).resolves.toHaveLength(1);
+  });
+
+  test("many write bases persist and reload from IndexedDB when localStorage writes always fail", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+    });
+
+    let syncEngine = await loadFreshSyncEngine();
+    await syncEngine.batchMutations(async () => {
+      for (let index = 0; index < 150; index += 1) {
+        syncEngine.upsert("kbl-league-builder", "globalPlayers", `quota-player-${index}`, {
+          id: `quota-player-${index}`,
+          name: `Quota Player ${index}`,
+        });
+      }
+    });
+    await syncEngine.flush({ throwOnPending: true });
+
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await expect(syncOutboxStore.loadAccountState("user-1")).resolves.toEqual(
+      expect.objectContaining({
+        ownerUserId: "user-1",
+        storeWriteBases: expect.arrayContaining([
+          expect.arrayContaining([expect.stringContaining("quota-player-149")]),
+        ]),
+      }),
+    );
+    expect(localStorage.getItem("kbl-sync-store-write-bases")).toBeNull();
+    expect(localStorage.getItem("kbl-sync-local-write-bases")).toBeNull();
+
+    syncEngine.destroy();
+    syncEngine = await loadFreshSyncEngine();
+
+    const restoredStoreBases = Reflect.get(syncEngine, "storeWriteBaseOverrides") as Map<string, unknown>;
+    expect(restoredStoreBases.size).toBe(150);
+  });
+
+  test("owned legacy localStorage write bases migrate to IndexedDB", async () => {
+    localStorage.setItem("kbl-sync-write-base-owner", "user-1");
+    localStorage.setItem("kbl-sync-store-write-bases", JSON.stringify([
+      ["legacy-store-base", { receivedAt: "2026-01-01T00:00:00Z", id: "legacy-row" }],
+    ]));
+    localStorage.setItem("kbl-sync-local-write-bases", JSON.stringify([
+      ["legacy-local-base", { receivedAt: "2026-01-02T00:00:00Z", key: "legacy-local-base" }],
+    ]));
+
+    const syncEngine = await loadFreshSyncEngine();
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+
+    await expect(syncOutboxStore.loadAccountState("user-1")).resolves.toEqual(
+      expect.objectContaining({
+        storeWriteBases: [["legacy-store-base", expect.any(Object)]],
+        localWriteBases: [["legacy-local-base", expect.any(Object)]],
+      }),
+    );
+    expect((Reflect.get(syncEngine, "storeWriteBaseOverrides") as Map<string, unknown>).size).toBe(1);
+    expect((Reflect.get(syncEngine, "localWriteBaseOverrides") as Map<string, unknown>).size).toBe(1);
+    expect(localStorage.getItem("kbl-sync-store-write-bases")).toBeNull();
+    expect(localStorage.getItem("kbl-sync-local-write-bases")).toBeNull();
+  });
+
+  test("unowned legacy localStorage write bases are quarantined", async () => {
+    localStorage.setItem("kbl-sync-store-write-bases", JSON.stringify([
+      ["legacy-unowned-base", { receivedAt: "2026-01-01T00:00:00Z", id: "legacy-unowned-row" }],
+    ]));
+
+    const syncEngine = await loadFreshSyncEngine();
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+
+    expect((Reflect.get(syncEngine, "storeWriteBaseOverrides") as Map<string, unknown>).size).toBe(0);
+    await expect(syncOutboxStore.listQuarantinedAccountStates()).resolves.toEqual([
+      expect.objectContaining({
+        ownerUserId: "__legacy_unowned__",
+        storeWriteBases: [["legacy-unowned-base", expect.any(Object)]],
+      }),
+    ]);
   });
 
   test("stale durable queue replays do not overwrite newer cloud rows", async () => {
@@ -2451,6 +2689,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     };
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       [`${staleUpsert.db_name}|${staleUpsert.store_name}|${staleUpsert.record_key}`, {
+        ownerUserId: "user-1",
         dbName: staleUpsert.db_name,
         storeName: staleUpsert.store_name,
         recordKey: staleUpsert.record_key,
@@ -2459,6 +2698,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
         deleted: staleUpsert.deleted,
       }],
       [`${staleDelete.db_name}|${staleDelete.store_name}|${staleDelete.record_key}`, {
+        ownerUserId: "user-1",
         dbName: staleDelete.db_name,
         storeName: staleDelete.store_name,
         recordKey: staleDelete.record_key,
@@ -2469,12 +2709,14 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]));
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         key: "kbl-current-season",
         data: "stale-season",
         changedAt: 12,
         deleted: false,
       }],
       ["kbl-app-state", {
+        ownerUserId: "user-1",
         key: "kbl-app-state",
         data: {},
         changedAt: 13,
@@ -2554,6 +2796,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("accepted durable queue replays are idempotent even when their timestamp is higher", async () => {
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       ["kbl-event-log|atBatEvents|\"accepted-replay-event\"", {
+        ownerUserId: "user-1",
         opId: "accepted-store-op",
         dbName: "kbl-event-log",
         storeName: "atBatEvents",
@@ -2565,6 +2808,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]));
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         opId: "accepted-local-op",
         key: "kbl-current-season",
         data: "stale-season",
@@ -2625,6 +2869,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("accepted durable queue replays from before payload metadata stay idempotent", async () => {
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       ["kbl-event-log|atBatEvents|\"legacy-accepted-replay-event\"", {
+        ownerUserId: "user-1",
         opId: "legacy-accepted-store-op",
         dbName: "kbl-event-log",
         storeName: "atBatEvents",
@@ -2636,6 +2881,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]));
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         opId: "legacy-accepted-local-op",
         key: "kbl-current-season",
         data: "legacy-season",
@@ -2699,6 +2945,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("duplicate store replay restores the write base for an immediate same-record edit", async () => {
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       ["kbl-event-log|atBatEvents|\"duplicate-base-event\"", {
+        ownerUserId: "user-1",
         opId: "duplicate-base-store-op",
         dbName: "kbl-event-log",
         storeName: "atBatEvents",
@@ -2744,6 +2991,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("duplicate localStorage replay restores the write base for an immediate same-key edit", async () => {
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         opId: "duplicate-base-local-op",
         key: "kbl-current-season",
         data: "2",
@@ -2781,6 +3029,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("duplicate op ids with mismatched targets stay pending instead of clearing", async () => {
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       ["kbl-event-log|atBatEvents|\"op-collision-new-event\"", {
+        ownerUserId: "user-1",
         opId: "collided-store-op",
         dbName: "kbl-event-log",
         storeName: "atBatEvents",
@@ -2792,6 +3041,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]));
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         opId: "collided-local-op",
         key: "kbl-current-season",
         data: "2",
@@ -2830,6 +3080,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
   test("duplicate op ids with mismatched payloads stay pending instead of clearing", async () => {
     localStorage.setItem("kbl-sync-queue", JSON.stringify([
       ["kbl-event-log|atBatEvents|\"same-target-payload-event\"", {
+        ownerUserId: "user-1",
         opId: "same-target-store-op",
         dbName: "kbl-event-log",
         storeName: "atBatEvents",
@@ -2841,6 +3092,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     ]));
     localStorage.setItem("kbl-sync-local-queue", JSON.stringify([
       ["kbl-current-season", {
+        ownerUserId: "user-1",
         opId: "same-target-local-op",
         key: "kbl-current-season",
         data: "2",
@@ -2947,646 +3199,286 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     );
   });
 
-  test("commissioner room recovery republishes only the current snake room over its exact stale cloud base", async () => {
-    const roomId = "league-recovery::startup-mlb-draft::1";
-    const cloudRoom = {
-      id: roomId,
-      leagueId: "league-recovery",
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [
-        { round: 1, pick: 1, teamId: "team-a" },
-        { round: 1, pick: 2, teamId: "team-b" },
-      ],
-      completedPicks: [],
-      currentPickIndex: 0,
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:00:00.000Z",
-      revision: 2,
-    };
-    const localRoom = {
-      ...cloudRoom,
-      pickOrder: [
-        { round: 1, pick: 1, teamId: "team-b" },
-        { round: 1, pick: 2, teamId: "team-a" },
-      ],
-      trades: [{ id: "trade-1", status: "executed" }],
-      lastModified: "2026-07-17T12:05:00.000Z",
-      revision: 4,
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-hotseat-recovery",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    mockState.cloudRows = [
-      {
-        id: "cloud-room-row",
-        user_id: "user-1",
-        db_name: "kbl-league-builder",
-        store_name: "mlbDraftSessions",
-        record_key: JSON.stringify(roomId),
-        data: cloudRoom,
-        changed_at: 200,
-        received_at: "2026-07-17T12:00:00.000Z",
-        deleted: false,
-      },
-      {
-        id: "cloud-unrelated-row",
-        user_id: "user-1",
-        db_name: "kbl-event-log",
-        store_name: "atBatEvents",
-        record_key: JSON.stringify("unrelated-stale-write"),
-        data: { eventId: "unrelated-stale-write", result: "TRIPLE" },
-        changed_at: 201,
-        received_at: "2026-07-17T12:00:01.000Z",
-        deleted: false,
-      },
-    ];
-    const syncEngine = await loadFreshSyncEngine();
+  describe("retired generic snake live-room boundary", () => {
+    test.each(["mlbDraftSessions", "snakeSeatBoards"] as const)(
+      "does not queue or transport %s through generic account sync",
+      async (storeName) => {
+        const syncEngine = await loadFreshSyncEngine();
 
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(300);
-    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, localRoom);
-    syncEngine.upsert("kbl-event-log", "atBatEvents", "unrelated-stale-write", {
-      eventId: "unrelated-stale-write",
-      result: "SINGLE",
-    });
-    nowSpy.mockRestore();
-    await syncEngine.flush();
-    expect(syncEngine.getStatus().pendingCount).toBe(2);
+        syncEngine.upsert("kbl-league-builder", storeName, `retired-${storeName}`, {
+          id: `retired-${storeName}`,
+        });
+        syncEngine.remove("kbl-league-builder", storeName, `retired-${storeName}`);
 
-    await syncEngine.publishCommissionerSnakeRoom(localRoom);
-
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    expect(mockState.cloudRows.find((row) => row.id === "cloud-room-row")?.data).toEqual(localRoom);
-    expect(mockState.cloudRows.find((row) => row.id === "cloud-unrelated-row")?.data).toEqual({
-      eventId: "unrelated-stale-write",
-      result: "TRIPLE",
-    });
-  });
-
-  test("commissioner publication releases a second device from only its legacy embedded-board room write", async () => {
-    const leagueId = "league-second-device-recovery";
-    const roomId = `${leagueId}::startup-mlb-draft::1`;
-    const initialBoard = {
-      slots: {},
-      rankings: { global: ["player-old"] },
-      revision: 1,
-    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
-    const cloudRoom = {
-      id: roomId,
-      leagueId,
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [
-        { round: 1, pick: 1, teamId: "team-a" },
-        { round: 1, pick: 2, teamId: "team-b" },
-      ],
-      completedPicks: [],
-      currentPickIndex: 0,
-      seatBoards: { "team-a": initialBoard },
-      snakeSetup: {
-        poolPlayerIds: ["player-old", "player-new"],
-        versionSelections: {},
-        clubs: [
-          { teamId: "team-a", hotseat: false },
-          { teamId: "team-b", hotseat: true },
-        ],
-        orderSeed: "order",
+        expect(syncEngine.getStatus().pendingCount).toBe(0);
+        await expect(syncEngine.flush({ throwOnPending: true })).resolves.toBeUndefined();
+        expect(mockState.kblStoreUpserts).toHaveLength(0);
+        expect(mockState.cloudRows).toHaveLength(0);
+        syncEngine.destroy();
       },
-      snakeCompanions: {
-        roomCode: "4821",
-        claims: [{
-          claimId: "claim-phone",
-          claimVersion: 1,
-          deviceId: "phone-device",
-          gmName: "Alex",
-          teamId: "team-a",
-          status: "approved" as const,
-        }],
-      },
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:00:00.000Z",
-      revision: 2,
-    };
-    mockState.cloudRows = [
-      {
-        id: "cloud-second-device-room",
-        user_id: "user-1",
-        db_name: "kbl-league-builder",
-        store_name: "mlbDraftSessions",
-        record_key: JSON.stringify(roomId),
-        data: cloudRoom,
-        changed_at: 200,
-        received_at: "2026-07-17T12:00:00.000Z",
-        deleted: false,
-      },
-      {
-        id: "cloud-second-device-unrelated",
-        user_id: "user-1",
-        db_name: "kbl-event-log",
-        store_name: "atBatEvents",
-        record_key: JSON.stringify("unrelated-second-device"),
-        data: { eventId: "unrelated-second-device", result: "TRIPLE" },
-        changed_at: 201,
-        received_at: "2026-07-17T12:00:01.000Z",
-        deleted: false,
-      },
-    ];
-
-    // Companion device: pull the room, edit its private board, then reproduce
-    // the retired pre-Contract-42 whole-room board queue entry.
-    let syncEngine = await loadFreshSyncEngine();
-    let storage = await import("../leagueBuilderStorage");
-    await storage.initLeagueBuilderDatabase();
-    await syncEngine.pull({ throwOnError: true });
-    const companionRoom = await storage.patchMlbDraftSessionSeatBoard({
-      leagueId,
-      seasonNumber: 1,
-      teamId: "team-a",
-      expectedBoardRevision: 1,
-      board: {
-        ...initialBoard,
-        rankings: { global: ["player-new"] },
-        revision: 2,
-      },
-    });
-    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, companionRoom);
-    syncEngine.upsert("kbl-event-log", "atBatEvents", "unrelated-second-device", {
-      eventId: "unrelated-second-device",
-      result: "SINGLE",
-    });
-    expect(syncEngine.getStatus().pendingCount).toBe(3);
-    syncEngine.destroy();
-    storage.__resetLeagueBuilderDatabaseForTests();
-    const companionLocalStorage = new Map<string, string>();
-    for (let index = 0; index < localStorage.length; index += 1) {
-      const key = localStorage.key(index);
-      if (key !== null) companionLocalStorage.set(key, localStorage.getItem(key) ?? "");
-    }
-
-    // Hotseat device: it has the already-completed trade and publishes that
-    // exact room over the cloud row without seeing the companion's local queue.
-    localStorage.clear();
-    syncEngine = await loadFreshSyncEngine();
-    const publishedRoom = {
-      ...cloudRoom,
-      pickOrder: [
-        { round: 1, pick: 1, teamId: "team-b" },
-        { round: 1, pick: 2, teamId: "team-a" },
-      ],
-      trades: [{
-        id: "trade-second-device",
-        atPickIndex: 0,
-        humanTeamId: "team-a",
-        cpuTeamId: "team-b",
-        humanPickNumbers: [1],
-        cpuPickNumbers: [2],
-        humanValue: 100,
-        cpuValue: 100,
-        greedMargin: 0,
-      }],
-      lastModified: "2026-07-17T12:05:00.000Z",
-      revision: 4,
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-second-device",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    await syncEngine.publishCommissionerSnakeRoom(publishedRoom);
-    syncEngine.destroy();
-
-    // The unrelated cloud row also advances. Recovery must not clear that
-    // companion-side pending write while adopting the published room.
-    const unrelatedCloud = mockState.cloudRows.find((row) => row.id === "cloud-second-device-unrelated")!;
-    unrelatedCloud.data = { eventId: "unrelated-second-device", result: "DOUBLE" };
-    unrelatedCloud.changed_at = 999_999;
-    unrelatedCloud.received_at = "2099-07-17T12:06:00.000Z";
-
-    // Return to the companion device with its original durable queue and local
-    // private board. Its normal poll must retire only the legacy room op.
-    localStorage.clear();
-    for (const [key, value] of companionLocalStorage) localStorage.setItem(key, value);
-    syncEngine = await loadFreshSyncEngine();
-    storage = await import("../leagueBuilderStorage");
-    await storage.initLeagueBuilderDatabase();
-    await syncEngine.pull({ throwOnError: true });
-    await syncEngine.pull({ throwOnError: true });
-
-    const recovered = await storage.getMlbDraftSession(leagueId, 1);
-    expect(recovered?.pickOrder).toEqual(publishedRoom.pickOrder);
-    expect(recovered?.trades).toEqual(publishedRoom.trades);
-    expect(recovered?.seatBoards?.["team-a"].rankings.global).toEqual(["player-new"]);
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    expect(mockState.cloudRows.find((row) => row.id === "cloud-second-device-unrelated")?.data).toEqual({
-      eventId: "unrelated-second-device",
-      result: "DOUBLE",
-    });
-    syncEngine.destroy();
-    storage.__resetLeagueBuilderDatabaseForTests();
-  });
-
-  test("commissioner publication does not discard an unpublished companion pick request", async () => {
-    const leagueId = "league-recovery-unpublished-request";
-    const roomId = `${leagueId}::startup-mlb-draft::1`;
-    const initialBoard = {
-      slots: {},
-      rankings: { global: ["player-old"] },
-      revision: 1,
-    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
-    const baseRoom = {
-      id: roomId,
-      leagueId,
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
-      completedPicks: [],
-      currentPickIndex: 0,
-      seatBoards: { "team-a": initialBoard },
-      snakeSetup: {
-        poolPlayerIds: ["player-old", "player-new"],
-        versionSelections: {},
-        clubs: [{ teamId: "team-a", hotseat: false }],
-        orderSeed: "order",
-      },
-      snakeCompanions: {
-        roomCode: "4821",
-        claims: [{
-          claimId: "claim-phone",
-          claimVersion: 1,
-          deviceId: "phone-device",
-          gmName: "Alex",
-          teamId: "team-a",
-          status: "approved" as const,
-        }],
-      },
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:00:00.000Z",
-      revision: 2,
-    };
-    mockState.cloudRows = [{
-      id: "cloud-unpublished-request-room",
-      user_id: "user-1",
-      db_name: "kbl-league-builder",
-      store_name: "mlbDraftSessions",
-      record_key: JSON.stringify(roomId),
-      data: baseRoom,
-      changed_at: 200,
-      received_at: "2026-07-17T12:00:00.000Z",
-      deleted: false,
-    }];
-    const syncEngine = await loadFreshSyncEngine();
-    const storage = await import("../leagueBuilderStorage");
-    await storage.initLeagueBuilderDatabase();
-    await syncEngine.pull({ throwOnError: true });
-    const companionRoom = await storage.patchMlbDraftSessionSeatBoard({
-      leagueId,
-      seasonNumber: 1,
-      teamId: "team-a",
-      expectedBoardRevision: 1,
-      board: {
-        ...initialBoard,
-        rankings: { global: ["player-new"] },
-        revision: 2,
-      },
-    });
-    const queuedWithRequest = {
-      ...companionRoom,
-      snakeCompanions: {
-        ...companionRoom.snakeCompanions!,
-        pickRequest: {
-          id: "unpublished-request",
-          teamId: "team-a",
-          playerId: "player-new",
-          pick: 1,
-          submittedAt: companionRoom.lastModified,
-          deviceId: "phone-device",
-          claimId: "claim-phone",
-          sessionRevision: 2,
-        },
-      },
-      revision: 3,
-    };
-    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", roomId, queuedWithRequest);
-
-    const publishedRoom = {
-      ...baseRoom,
-      revision: 4,
-      lastModified: "2026-07-17T12:05:00.000Z",
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-without-request",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    mockState.cloudRows[0] = {
-      ...mockState.cloudRows[0],
-      data: publishedRoom,
-      changed_at: 500,
-      received_at: "2026-07-17T12:05:00.000Z",
-    };
-
-    await syncEngine.pull({ throwOnError: true });
-    await syncEngine.pull({ throwOnError: true });
-
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    expect((await storage.getMlbDraftSession(leagueId, 1))?.companionRoomPublication).toBeUndefined();
-    syncEngine.destroy();
-    storage.__resetLeagueBuilderDatabaseForTests();
-  });
-
-  test("commissioner publication does not resurrect an offer after an unpublished companion decline", async () => {
-    const leagueId = "league-recovery-unpublished-decline";
-    const roomId = `${leagueId}::startup-mlb-draft::1`;
-    const initialBoard = {
-      slots: {},
-      rankings: { global: ["player-old"] },
-      revision: 1,
-    } as unknown as import("../leagueBuilderStorage").SnakeSeatBoardRecord;
-    const openOffer = {
-      id: "offer-unpublished-decline",
-      phase: "MLB" as const,
-      buyerTeamId: "team-a",
-      sellerTeamId: "team-b",
-      targetPick: 2,
-      offerPickNumbers: [1],
-      receivePickNumbers: [2],
-      offerValue: 100,
-      receiveValue: 100,
-      sellerPremium: 0,
-      postedSessionRevision: 1,
-      buyerNod: true,
-      sellerNod: false,
-      postedAt: "2026-07-17T12:00:00.000Z",
-    };
-    const baseRoom = {
-      id: roomId,
-      leagueId,
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [
-        { round: 1, pick: 1, teamId: "team-a" },
-        { round: 1, pick: 2, teamId: "team-b" },
-      ],
-      completedPicks: [],
-      currentPickIndex: 0,
-      seatBoards: { "team-a": initialBoard },
-      snakeSetup: {
-        poolPlayerIds: ["player-old", "player-new"],
-        versionSelections: {},
-        clubs: [
-          { teamId: "team-a", hotseat: false },
-          { teamId: "team-b", hotseat: true },
-        ],
-        orderSeed: "order",
-      },
-      snakeCompanions: {
-        roomCode: "4821",
-        claims: [{
-          claimId: "claim-phone",
-          claimVersion: 1,
-          deviceId: "phone-device",
-          gmName: "Alex",
-          teamId: "team-a",
-          status: "approved" as const,
-        }],
-      },
-      openTradeOffers: [openOffer],
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:00:00.000Z",
-      revision: 2,
-    };
-    mockState.cloudRows = [{
-      id: "cloud-unpublished-decline-room",
-      user_id: "user-1",
-      db_name: "kbl-league-builder",
-      store_name: "mlbDraftSessions",
-      record_key: JSON.stringify(roomId),
-      data: baseRoom,
-      changed_at: 200,
-      received_at: "2026-07-17T12:00:00.000Z",
-      deleted: false,
-    }];
-    const syncEngine = await loadFreshSyncEngine();
-    const storage = await import("../leagueBuilderStorage");
-    await storage.initLeagueBuilderDatabase();
-    await syncEngine.pull({ throwOnError: true });
-
-    const declineClock = vi.spyOn(Date, "now").mockReturnValue(300);
-    const declined = await storage.respondApprovedCompanionTradeOffer({
-      leagueId,
-      seasonNumber: 1,
-      deviceId: "phone-device",
-      teamId: "team-a",
-      offerId: openOffer.id,
-      action: "DECLINE",
-    });
-    declineClock.mockRestore();
-    expect(declined.openTradeOffers).toEqual([]);
-    expect(declined.revision).toBe(3);
-
-    // A later ordinary board edit creates the same newer standalone-board
-    // evidence that exposed the false-positive retirement in audit.
-    const boardClock = vi.spyOn(Date, "now").mockReturnValue(400);
-    await storage.patchMlbDraftSessionSeatBoard({
-      leagueId,
-      seasonNumber: 1,
-      teamId: "team-a",
-      expectedBoardRevision: 1,
-      board: {
-        ...initialBoard,
-        rankings: { global: ["player-new"] },
-        revision: 2,
-      },
-    });
-    boardClock.mockRestore();
-
-    const publishedRoom = {
-      ...baseRoom,
-      revision: 4,
-      lastModified: "2026-07-17T12:05:00.000Z",
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-with-still-open-offer",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    mockState.cloudRows[0] = {
-      ...mockState.cloudRows[0],
-      data: publishedRoom,
-      changed_at: 500,
-      received_at: "2026-07-17T12:05:00.000Z",
-    };
-
-    await syncEngine.pull({ throwOnError: true });
-    await syncEngine.pull({ throwOnError: true });
-
-    const stillDeclined = await storage.getMlbDraftSession(leagueId, 1);
-    expect(stillDeclined?.openTradeOffers).toEqual([]);
-    expect(stillDeclined?.companionRoomPublication).toBeUndefined();
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    syncEngine.destroy();
-    storage.__resetLeagueBuilderDatabaseForTests();
-  });
-
-  test("commissioner room recovery fails closed and retains the pending room write when the atomic publish is rejected", async () => {
-    const room = {
-      id: "league-recovery-fail::startup-mlb-draft::1",
-      leagueId: "league-recovery-fail",
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
-      completedPicks: [],
-      currentPickIndex: 0,
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:05:00.000Z",
-      revision: 4,
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-hotseat-recovery-fail",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    mockState.cloudRows = [{
-      id: "cloud-room-fail-row",
-      user_id: "user-1",
-      db_name: "kbl-league-builder",
-      store_name: "mlbDraftSessions",
-      record_key: JSON.stringify(room.id),
-      data: { ...room, revision: 2 },
-      changed_at: 200,
-      received_at: "2026-07-17T12:00:00.000Z",
-      deleted: false,
-    }];
-    const syncEngine = await loadFreshSyncEngine();
-    syncEngine.upsert("kbl-league-builder", "mlbDraftSessions", room.id, room);
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    mockState.nextRpcResponse = {
-      table: "kbl_stores",
-      data: [{ row_index: 0, status: "skipped" }],
-    };
-
-    await expect(syncEngine.publishCommissionerSnakeRoom(room)).rejects.toThrow(/rejected|stale/i);
-    expect(syncEngine.getStatus().pendingCount).toBe(1);
-    expect(mockState.cloudRows[0].data).toEqual(expect.objectContaining({ revision: 2 }));
-  });
-
-  test("commissioner room recovery refuses to overwrite unseen cloud companion activity", async () => {
-    const roomId = "league-recovery-cloud-intent::startup-mlb-draft::1";
-    const approvedClaim = {
-      claimId: "claim-cloud-intent",
-      claimVersion: 1,
-      deviceId: "phone-device",
-      gmName: "Alex",
-      teamId: "team-a",
-      status: "approved" as const,
-    };
-    const cloudRoom = {
-      id: roomId,
-      leagueId: "league-recovery-cloud-intent",
-      seasonNumber: 1,
-      seed: "seed",
-      workflowVersion: "snake-v2",
-      engineMethodVersion: "snake-v2",
-      tier: "standard" as const,
-      balanceMode: "taxed" as const,
-      rounds: 22,
-      pickOrder: [{ round: 1, pick: 1, teamId: "team-a" }],
-      completedPicks: [],
-      currentPickIndex: 0,
-      snakeSetup: {
-        poolPlayerIds: ["player-requested"],
-        versionSelections: {},
-        clubs: [{ teamId: "team-a", hotseat: false }],
-        orderSeed: "order",
-      },
-      snakeCompanions: {
-        roomCode: "4821",
-        claims: [approvedClaim],
-        pickRequest: {
-          id: "cloud-only-request",
-          teamId: "team-a",
-          playerId: "player-requested",
-          pick: 1,
-          submittedAt: "2026-07-17T12:04:00.000Z",
-          deviceId: "phone-device",
-          claimId: "claim-cloud-intent",
-          sessionRevision: 2,
-        },
-      },
-      createdDate: "2026-07-17T12:00:00.000Z",
-      lastModified: "2026-07-17T12:04:00.000Z",
-      revision: 3,
-    };
-    const localRoom = {
-      ...cloudRoom,
-      snakeCompanions: {
-        roomCode: "4821",
-        claims: [approvedClaim],
-      },
-      lastModified: "2026-07-17T12:05:00.000Z",
-      revision: 4,
-      companionRoomPublication: {
-        formatVersion: "snake-companion-room-publication-v1" as const,
-        publicationId: "publication-missing-cloud-intent",
-        supersedesRevision: 3,
-        publishedRevision: 4,
-        publishedAt: "2026-07-17T12:05:00.000Z",
-      },
-    };
-    mockState.cloudRows = [{
-      id: "cloud-room-with-unseen-intent",
-      user_id: "user-1",
-      db_name: "kbl-league-builder",
-      store_name: "mlbDraftSessions",
-      record_key: JSON.stringify(roomId),
-      data: cloudRoom,
-      changed_at: 300,
-      received_at: "2026-07-17T12:04:00.000Z",
-      deleted: false,
-    }];
-    const syncEngine = await loadFreshSyncEngine();
-
-    await expect(syncEngine.publishCommissionerSnakeRoom(localRoom)).rejects.toThrow(
-      /new companion activity/i,
     );
-    expect(mockState.cloudRows[0].data).toEqual(cloudRoom);
+
+    test.each(["mlbDraftSessions", "snakeSeatBoards"] as const)(
+      "rejects a direct atomic %s write before any transport",
+      async (storeName) => {
+        const syncEngine = await loadFreshSyncEngine();
+        const atomicBoundary = syncEngine as unknown as {
+          atomicUpsertStoreRows(
+            rows: AtomicStoreRow[],
+            message: string,
+          ): Promise<unknown>;
+        };
+        const rows: AtomicStoreRow[] = [
+          {
+            user_id: "user-1",
+            db_name: "kbl-event-log",
+            store_name: "atBatEvents",
+            record_key: JSON.stringify("safe-peer"),
+            data: { eventId: "safe-peer", result: "SINGLE" },
+            changed_at: 100,
+            deleted: false,
+          },
+          {
+            user_id: "user-1",
+            db_name: "kbl-league-builder",
+            store_name: storeName,
+            record_key: JSON.stringify(`retired-${storeName}`),
+            data: { id: `retired-${storeName}` },
+            changed_at: 101,
+            deleted: false,
+          },
+        ];
+
+        await expect(
+          atomicBoundary.atomicUpsertStoreRows(rows, "test retired boundary"),
+        ).rejects.toThrow(
+          `Generic cloud sync cannot write retired live-draft store kbl-league-builder.${storeName}.`,
+        );
+        expect(mockState.kblStoreUpserts).toHaveLength(0);
+        expect(mockState.cloudRows).toHaveLength(0);
+        syncEngine.destroy();
+      },
+    );
+
+    test("keeps registered pools and normal stores on generic account sync", async () => {
+      const syncEngine = await loadFreshSyncEngine();
+
+      syncEngine.upsert("kbl-league-builder", "registeredPools", "pool-safe", {
+        leagueId: "pool-safe",
+        players: [],
+      });
+      syncEngine.upsert("kbl-event-log", "atBatEvents", "event-safe", {
+        eventId: "event-safe",
+        result: "SINGLE",
+      });
+
+      expect(syncEngine.getStatus().pendingCount).toBe(2);
+      await expect(syncEngine.flush({ throwOnPending: true })).resolves.toBeUndefined();
+      expect(mockState.kblStoreUpserts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          db_name: "kbl-league-builder",
+          store_name: "registeredPools",
+          record_key: JSON.stringify("pool-safe"),
+        }),
+        expect.objectContaining({
+          db_name: "kbl-event-log",
+          store_name: "atBatEvents",
+          record_key: JSON.stringify("event-safe"),
+        }),
+      ]));
+      syncEngine.destroy();
+    });
+
+    test("removes a large legacy Snake queue while preserving other pending stores", async () => {
+      const { syncOutboxRecordId, syncOutboxStore } = await import("../syncOutboxStore");
+      const retiredRecords = Array.from({ length: 160 }, (_, index) => {
+        const storeName = index % 2 === 0 ? "mlbDraftSessions" : "snakeSeatBoards";
+        const recordKey = JSON.stringify(`retired-${index}`);
+        const queueKey = `kbl-league-builder|${storeName}|${recordKey}`;
+        return {
+          id: syncOutboxRecordId("user-1", "store", queueKey),
+          ownerUserId: "user-1",
+          kind: "store" as const,
+          queueKey,
+          operation: {
+            ownerUserId: "user-1",
+            opId: `legacy-retired-${index}`,
+            baseReceivedAt: null,
+            baseId: null,
+            dbName: "kbl-league-builder",
+            storeName,
+            recordKey,
+            data: { id: `retired-${index}` },
+            changedAt: 100 + index,
+            deleted: false,
+          },
+          updatedAt: 100 + index,
+        };
+      });
+      const safeRecordKey = JSON.stringify("pool-preserved");
+      const safeQueueKey = `kbl-league-builder|registeredPools|${safeRecordKey}`;
+      await syncOutboxStore.importOwnedRecords([
+        ...retiredRecords,
+        {
+          id: syncOutboxRecordId("user-1", "store", safeQueueKey),
+          ownerUserId: "user-1",
+          kind: "store",
+          queueKey: safeQueueKey,
+          operation: {
+            ownerUserId: "user-1",
+            opId: "legacy-safe-pool",
+            baseReceivedAt: null,
+            baseId: null,
+            dbName: "kbl-league-builder",
+            storeName: "registeredPools",
+            recordKey: safeRecordKey,
+            data: { leagueId: "pool-preserved", players: [] },
+            changedAt: 500,
+            deleted: false,
+          },
+          updatedAt: 500,
+        },
+      ]);
+
+      const syncEngine = await loadFreshSyncEngine();
+
+      expect(syncEngine.getStatus().pendingCount).toBe(1);
+      expect(await syncOutboxStore.loadOwner("user-1")).toEqual([
+        expect.objectContaining({
+          kind: "store",
+          queueKey: safeQueueKey,
+        }),
+      ]);
+
+      await expect(syncEngine.flush({ throwOnPending: true })).resolves.toBeUndefined();
+      expect(mockState.kblStoreUpserts).toEqual([
+        expect.objectContaining({
+          db_name: "kbl-league-builder",
+          store_name: "registeredPools",
+          record_key: safeRecordKey,
+        }),
+      ]);
+      expect(mockState.kblStoreUpserts.some((row) => (
+        row.store_name === "mlbDraftSessions" || row.store_name === "snakeSeatBoards"
+      ))).toBe(false);
+      expect(await syncOutboxStore.loadOwner("user-1")).toEqual([]);
+      syncEngine.destroy();
+    });
+
+    test("discards a large legacy localStorage Snake queue before IndexedDB import", async () => {
+      const retiredEntries = Array.from({ length: 805 }, (_, index) => {
+        const storeName = index % 2 === 0 ? "mlbDraftSessions" : "snakeSeatBoards";
+        const recordKey = JSON.stringify(`legacy-local-retired-${index}`);
+        return [
+          `kbl-league-builder|${storeName}|${recordKey}`,
+          {
+            ownerUserId: "user-1",
+            opId: `legacy-local-retired-${index}`,
+            baseReceivedAt: null,
+            baseId: null,
+            dbName: "kbl-league-builder",
+            storeName,
+            recordKey,
+            data: { id: `legacy-local-retired-${index}` },
+            changedAt: 1_000 + index,
+            deleted: false,
+          },
+        ];
+      });
+      const safeRecordKey = JSON.stringify("legacy-local-pool-preserved");
+      const safeQueueKey = `kbl-league-builder|registeredPools|${safeRecordKey}`;
+      localStorage.setItem("kbl-sync-queue", JSON.stringify([
+        ...retiredEntries,
+        [
+          safeQueueKey,
+          {
+            ownerUserId: "user-1",
+            opId: "legacy-local-safe-pool",
+            baseReceivedAt: null,
+            baseId: null,
+            dbName: "kbl-league-builder",
+            storeName: "registeredPools",
+            recordKey: safeRecordKey,
+            data: { leagueId: "legacy-local-pool-preserved", players: [] },
+            changedAt: 2_000,
+            deleted: false,
+          },
+        ],
+      ]));
+
+      vi.resetModules();
+      const { syncOutboxStore } = await import("../syncOutboxStore");
+      const importOwnedRecords = vi.spyOn(syncOutboxStore, "importOwnedRecords");
+      const { syncEngine } = await import("../syncEngine");
+      await syncEngine.setAuthenticatedUser(mockState.sessionUserId);
+
+      expect(importOwnedRecords).toHaveBeenCalledTimes(1);
+      expect(importOwnedRecords.mock.calls[0]?.[0]).toEqual([
+        expect.objectContaining({
+          kind: "store",
+          queueKey: safeQueueKey,
+          operation: expect.objectContaining({
+            dbName: "kbl-league-builder",
+            storeName: "registeredPools",
+          }),
+        }),
+      ]);
+      expect(syncEngine.getStatus().pendingCount).toBe(1);
+      expect(localStorage.getItem("kbl-sync-queue")).toBeNull();
+      expect(await syncOutboxStore.loadOwner("user-1")).toEqual([
+        expect.objectContaining({ queueKey: safeQueueKey }),
+      ]);
+
+      await expect(syncEngine.flush({ throwOnPending: true })).resolves.toBeUndefined();
+      expect(mockState.kblStoreUpserts).toEqual([
+        expect.objectContaining({
+          db_name: "kbl-league-builder",
+          store_name: "registeredPools",
+          record_key: safeRecordKey,
+        }),
+      ]);
+      expect(mockState.kblStoreUpserts.some((row) => (
+        row.store_name === "mlbDraftSessions" || row.store_name === "snakeSeatBoards"
+      ))).toBe(false);
+      syncEngine.destroy();
+    });
+
+    test("removes retired Snake entries discovered during queue recovery", async () => {
+      const syncEngine = await loadFreshSyncEngine();
+      const { syncOutboxRecordId, syncOutboxStore } = await import("../syncOutboxStore");
+      const records = Array.from({ length: 120 }, (_, index) => {
+        const storeName = index % 2 === 0 ? "mlbDraftSessions" : "snakeSeatBoards";
+        const recordKey = JSON.stringify(`recovery-retired-${index}`);
+        const queueKey = `kbl-league-builder|${storeName}|${recordKey}`;
+        return {
+          id: syncOutboxRecordId("user-1", "store", queueKey),
+          ownerUserId: "user-1",
+          kind: "store" as const,
+          queueKey,
+          operation: {
+            ownerUserId: "user-1",
+            opId: `recovery-retired-${index}`,
+            baseReceivedAt: null,
+            baseId: null,
+            dbName: "kbl-league-builder",
+            storeName,
+            recordKey,
+            data: { id: `recovery-retired-${index}` },
+            changedAt: 1_000 + index,
+            deleted: false,
+          },
+          updatedAt: 1_000 + index,
+        };
+      });
+      await syncOutboxStore.importOwnedRecords(records);
+
+      await expect(syncEngine.recoverQuotaBlockedQueue()).resolves.toBeUndefined();
+
+      expect(syncEngine.getStatus().pendingCount).toBe(0);
+      expect(mockState.kblStoreUpserts).toHaveLength(0);
+      expect(await syncOutboxStore.loadOwner("user-1")).toEqual([]);
+      syncEngine.destroy();
+    });
   });
 
   test("equal-millisecond writes advance with a monotonic timestamp instead of skipping forever", async () => {
@@ -3644,6 +3536,7 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(mockState.cloudRows.find((row) => row.record_key === JSON.stringify("malformed-rpc-event"))).toBeUndefined();
   });
 
+  describe.skip("retired localStorage queue quota recovery", () => {
   test("queue persistence failures surface as sync errors and diagnostics warnings", async () => {
     const syncEngine = await loadFreshSyncEngine();
     const originalSetItem = Storage.prototype.setItem;
@@ -4353,6 +4246,8 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(mockState.cloudRows).toHaveLength(100);
   });
 
+  });
+
   test("auth loss before cursor save leaves restored write bases durable and fails closed", async () => {
     const cloudRow: StoreRow = {
       id: "cloud-auth-loss-event",
@@ -4371,10 +4266,13 @@ describe("syncEngine dynamic elimination copied DBs", () => {
       "atBatEvents",
       JSON.stringify("auth-loss-event"),
     ].join("\u0000");
-    const persistedBases = JSON.stringify([
-      [baseIdentity, { receivedAt: cloudRow.received_at, id: cloudRow.id }],
-    ]);
-    localStorage.setItem("kbl-sync-store-write-bases", persistedBases);
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    await syncOutboxStore.replaceAccountState({
+      ownerUserId: "user-1",
+      storeWriteBases: [[baseIdentity, { receivedAt: cloudRow.received_at, id: cloudRow.id }]],
+      localWriteBases: [],
+      updatedAt: 1,
+    });
     const syncEngine = await loadFreshSyncEngine();
     mockState.afterSelect = (table) => {
       if (table === "kbl_local_storage") mockState.sessionUserId = null;
@@ -4385,22 +4283,19 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     );
 
     expect(mockState.metaRows).toHaveLength(0);
-    expect(localStorage.getItem("kbl-sync-store-write-bases")).toBe(persistedBases);
+    await expect(syncOutboxStore.loadAccountState("user-1")).resolves.toEqual(
+      expect.objectContaining({
+        storeWriteBases: [[baseIdentity, { receivedAt: cloudRow.received_at, id: cloudRow.id }]],
+      }),
+    );
   });
 
   test("strict incremental store flush rejects when accepted write bases cannot be persisted", async () => {
     const syncEngine = await loadFreshSyncEngine();
-    const originalSetItem = Storage.prototype.setItem;
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (key === "kbl-sync-store-write-bases") {
-        throw new Error("store write-base quota exceeded intentionally");
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    vi.spyOn(syncOutboxStore, "replaceAccountState").mockRejectedValue(
+      new Error("store write-base IndexedDB failure intentionally"),
+    );
 
     syncEngine.upsert("kbl-event-log", "atBatEvents", "accepted-store-no-base-cache", {
       eventId: "accepted-store-no-base-cache",
@@ -4423,17 +4318,10 @@ describe("syncEngine dynamic elimination copied DBs", () => {
 
   test("strict incremental localStorage flush rejects when accepted write bases cannot be persisted", async () => {
     const syncEngine = await loadFreshSyncEngine();
-    const originalSetItem = Storage.prototype.setItem;
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (key === "kbl-sync-local-write-bases") {
-        throw new Error("local write-base quota exceeded intentionally");
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    vi.spyOn(syncOutboxStore, "replaceAccountState").mockRejectedValue(
+      new Error("local write-base IndexedDB failure intentionally"),
+    );
 
     localStorage.setItem("kbl-current-season", "strict-local-base");
     syncEngine.upsertLocal("kbl-current-season", "strict-local-base");
@@ -5250,17 +5138,10 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     const gameId = "game-write-base-quota";
     await seedCompletedGameWithEventLog(gameId);
     const syncEngine = await loadFreshSyncEngine();
-    const originalSetItem = Storage.prototype.setItem;
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
-      this: Storage,
-      key: string,
-      value: string,
-    ) {
-      if (key === "kbl-sync-store-write-bases") {
-        throw new Error("write base quota exceeded intentionally");
-      }
-      return originalSetItem.call(this, key, value);
-    });
+    const { syncOutboxStore } = await import("../syncOutboxStore");
+    vi.spyOn(syncOutboxStore, "replaceAccountState").mockRejectedValue(
+      new Error("write base IndexedDB failure intentionally"),
+    );
 
     await expect(syncEngine.replaceCloudWithLocal()).rejects.toThrow(
       "could not persist write bases for reload-safe edits",

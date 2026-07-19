@@ -8098,3 +8098,29 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   Exact preview restart and JK's live click remain; no push, merge, or deploy.
   build with 223 precache entries, and diff integrity are green. Freeze, separate audit, preview, and
   JK retry remain. No push, merge, or deploy.
+## 2026-07-19 — Snake live-room authority repair
+
+- Fetched and audited the current Snake companion path after repeated quota errors, stale writes,
+  invisible claims, stale companion rooms, and equal-revision board corruption.
+- Proved the root cause: private boards had two live authorities and live actions depended on the
+  whole-account backup queue.
+- Replaced that path with dedicated Supabase live-room records and RPCs. Hotseat alone writes public
+  state. Companions write only approved private boards and submit pick/trade intent.
+- Separated public and private revisions. Public actions no longer read or write private boards.
+  Events are hints; bounded scoped reads restore current state after subscribe and reconnect.
+- Retired MLB draft sessions and Snake seat boards from generic backup sync. Moved the remaining
+  account outbox to account-owned IndexedDB storage. Authentication no longer waits for backup sync
+  binding or quarantine.
+- Fixed source/target team identity overlap. Draft targets now receive new team IDs and empty
+  rosters; source teams and rosters remain unchanged. Old shared-ID targets fail closed.
+- Kept the primary companion layout focused on Mac mini/Neo and laptop use. No FIT, tax, legality,
+  archetype, Assistant GM, trade-value, FARM-trade, or Help-button law changed.
+- The first independent audit found event-order and migration-test gaps. Those were repaired with
+  current-state refresh, inverted-delivery tests, and a server harness that matches migration 009.
+- Final independent audit: **APPROVE — Major 0 / Minor 0**.
+- Verification: 188 passed / 32 skipped live-room tests; 73/73 live/auth tests; 246/246 targeted
+  Snake UI/storage tests; 102 passed / 32 skipped generic-sync regression; TypeScript,
+  changed-file ESLint, production/PWA build, and diff integrity green.
+- Remaining: fetch current `origin/main`, commit this branch, apply migration 009, deploy the matching
+  app, remove only old Snake test rooms and retired local sync keys, then run JK's real Hotseat plus
+  companion walk. No merge, push, remote migration, or deploy was authorized in this session.

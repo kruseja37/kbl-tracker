@@ -1074,3 +1074,62 @@ changed-file ESLint, the fresh 2,735-module
 production/PWA build with 223 precache entries, and diff integrity are green. Final non-builder
 re-audit of frozen `9725c5bd`: **APPROVE — Major 0 / Minor 0**. JK's live retry remains. No push,
 merge, or deploy.
+
+### FINDING-244
+**Date:** 2026-07-19 | **Phase:** Snake Draft / companion live-room authority | **Status:** FIXED — INDEPENDENTLY APPROVED — MIGRATION AND JK WALK PENDING
+**Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/syncEngine.ts`,
+`src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`,
+`supabase/migrations/009_snake_live_rooms.sql`
+**Evidence:** A normal companion board edit and a Hotseat pick can both read board revision 12,
+produce different revision-13 boards, and publish them through the separate `mlbDraftSessions` and
+`snakeSeatBoards` cloud identities. The reader then fails closed on equal revision and different
+content. Live claims, boards, picks, and trades also depend on the generic account backup queue, so
+an unrelated stale row or localStorage quota failure can stop live-room delivery.
+**Impact:** Companion claims can remain invisible, picks and trades can stay stale on other devices,
+private boards can become unreadable, and a valid draft can stop even when local draft truth is
+saved.
+**Action:** Use one private server board as each claimed team's only durable live board authority;
+add a dedicated Supabase live-room service
+with separate public room, claim, private board, intent, and receipt records; make Hotseat the sole
+public-draft writer; use separate public and private revisions with idempotency keys; ensure no
+private-board state can reject or delay a public action; project public picks and corrections into
+each private board in memory without a board write; permit only an insert-only, metadata-only host
+seed before first claim approval; remove live room records from generic backup sync; move the
+remaining account-owned outbox to IndexedDB; and verify separate Mac desktop Chrome profiles for
+two devices, Hotseat plus three companions in an eight-team room, and the full 176-pick stream.
+**Gate:** Separate builder and auditor. JK's browser and real-device walk is the sole product gate.
+No merge or deploy is authorized.
+
+**Builder result:** The dedicated live-room service now separates public room revisions from private
+board revisions. Hotseat alone writes public truth. Companions write only their approved teams'
+boards and submit pick/trade intent. Public actions never write a private board. Events are bounded
+hints; current scoped server state is the authority after subscribe, reconnect, and a five-second
+fallback. Generic backup sync no longer transports live MLB draft sessions or Snake seat boards,
+and its remaining account outbox is account-owned IndexedDB data. Focused live/auth proof is 73/73;
+targeted Snake UI/storage proof is 246/246; generic sync regression is 102 passed / 32 skipped;
+TypeScript, changed-file lint, production/PWA build, and diff integrity are green.
+
+**Final audit:** **APPROVE — Major 0 / Minor 0.** The separate auditor confirmed no maximum-event
+cursor, bounded current-state refresh, convergence under inverted delivery, migration/RPC parity,
+token length and hashing, exact idempotent replay, changed-payload conflict, team auto-revoke,
+room-wide intent keys, auth independence from generic backup binding, and the public/private privacy
+boundary. Migration `009_snake_live_rooms.sql`, deployment, the narrow test-state reset, and JK's
+real-device walk remain. No merge or deploy is authorized.
+
+### FINDING-245
+**Date:** 2026-07-19 | **Phase:** League Builder / draft target team isolation | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
+**Files:** `src/utils/draftLeagueTeamIsolation.ts`, `src/utils/leagueBuilderStorage.ts`,
+`src/utils/leagueBuilderAuctionPipeline.ts`, `src/src_figma/hooks/useLeagueBuilderData.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+**Evidence:** A new draft league could reuse a source league team's ID. `TeamRoster` is keyed by
+team ID, not league plus team. Clearing the target roster could therefore clear the source roster,
+while a reused source roster could also make an empty draft team appear to have filled slots.
+**Impact:** One club could lose its source roster, inherit false draft slots, or fail board seeding
+and legal-finish checks even when the selected player pool was valid.
+**Action:** Copy each selected source club into the target draft with a new target-scoped team ID and
+an empty target roster. Keep source teams and rosters unchanged. Block old shared-ID draft targets
+until they are recreated; do not guess which roster data belongs to which league.
+**Result:** Unit, integration, persistence, Draft Setup, and Snake-room regressions prove unique
+target IDs, empty draft rosters, preserved source rosters, and fail-closed legacy handling. This
+repair is included in the final FINDING-244 independent audit. JK's browser walk remains the product
+gate. No merge or deploy is authorized.

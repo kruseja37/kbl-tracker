@@ -12,6 +12,7 @@ import {
   type SnakeOpenTradeOffer,
   type SnakeSeatBoardRecord,
 } from '../../../utils/leagueBuilderStorage';
+import type { SnakeLiveClaim, SnakeLiveIntent } from '../../../utils/snakeLiveRoomTypes';
 import { SnakeDraftRoomView } from '../components/snake/SnakeDraftRoomView';
 import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
 import { CompanionCoveredScreen, SnakeCompanionFrame } from '../components/snake/companion/SnakeCompanionFrame';
@@ -984,6 +985,37 @@ function CompanionPreview() {
     revision: pickRequest ? pickRequest.sessionRevision + 1 : previewSessionRevision,
     currentPickIndex: state.currentPickIndex,
   }), [pickRequest, previewSessionRevision, state]);
+  const previewLiveClaims = useMemo<SnakeLiveClaim[]>(() => PREVIEW_TEAMS.map((entry) => ({
+    id: `preview-claim-${entry.id}`,
+    roomId: 'preview-live-room',
+    requestKey: `preview-request-${entry.id}`,
+    deviceId: 'preview-companion-device',
+    gmName: 'Preview GM',
+    teamId: entry.id,
+    status: 'approved',
+    revision: 2,
+    createdAt: '2026-07-16T12:00:00.000Z',
+    resolvedAt: '2026-07-16T12:00:00.000Z',
+  })), []);
+  const previewLiveIntents = useMemo<SnakeLiveIntent[]>(() => pickRequest ? [{
+    id: pickRequest.id,
+    roomId: 'preview-live-room',
+    idempotencyKey: pickRequest.id,
+    deviceId: pickRequest.deviceId,
+    teamId: pickRequest.teamId,
+    kind: 'pick',
+    status: 'pending',
+    intentRevision: 1,
+    expectedRoomRevision: 1,
+    payload: {
+      playerId: pickRequest.playerId,
+      pick: pickRequest.pick,
+      submittedAt: pickRequest.submittedAt,
+      sessionRevision: pickRequest.sessionRevision,
+    },
+    createdAt: pickRequest.submittedAt,
+    resolvedAt: null,
+  }] : [], [pickRequest]);
   const draftedTruth = previewRosterTruth((state.rosters[teamId] ?? []).map((player) => player.id));
   const privateGuide = (showHelp?: boolean) => <PrivateTradeGuide
     teamId={teamId}
@@ -1085,11 +1117,15 @@ function CompanionPreview() {
     return <div data-testid="snake-responsive-preview" data-surface="companion" data-proof-device="hotseat">
       {proofNavigation}
       <CompanionApprovalCard
-        session={companionSession}
+        roomCode="4821"
         teams={PREVIEW_TEAMS}
+        claims={previewLiveClaims}
+        intents={previewLiveIntents}
+        ready
         playerName={(playerId) => PREVIEW_CANDIDATES.find((candidate) => candidate.id === playerId)?.name ?? playerId}
-        onApprovePick={approvePreviewPickRequest}
-        onChange={() => undefined}
+        onResolveClaim={() => undefined}
+        onApprovePick={(_intent, request) => approvePreviewPickRequest(request)}
+        onRejectPick={() => setPickRequest(null)}
       />
       <section className="ballpark-panel mt-3" data-testid="preview-hotseat-public-truth">
         <h2 className="ballpark-title text-xl">PUBLIC DRAFT TRUTH</h2>

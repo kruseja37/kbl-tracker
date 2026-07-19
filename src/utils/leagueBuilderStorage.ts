@@ -415,6 +415,8 @@ export interface SnakeSeatBoardStoreRecord {
   lastModified: string;
 }
 
+export const SNAKE_SEAT_BOARD_AUTHORITY_FORMAT = 'snake-seat-boards-standalone-v1' as const;
+
 export interface SnakeVersionState {
   draftedPlayerIdByGroupId: Record<string, string>;
   retiredPlayerIdsByGroupId: Record<string, string[]>;
@@ -594,6 +596,11 @@ export interface LeagueBuilderMlbDraftSession {
   seatBoards?: Record<string, SnakeSeatBoardRecord>;
   /** Optional so old FARM sessions seed deterministically on first use. */
   farmSeatBoards?: Record<string, FarmSeatBoardRecord>;
+  /**
+   * Persisted rows with this marker never contain seatBoards or farmSeatBoards.
+   * Reads hydrate those compatibility maps from snakeSeatBoards only.
+   */
+  seatBoardAuthorityFormat?: typeof SNAKE_SEAT_BOARD_AUTHORITY_FORMAT;
   versionState?: SnakeVersionState;
   /** Confirmation-time immutable truth. Optional so all pre-manifest sessions remain loadable. */
   draftManifest?: SnakeDraftManifest;
@@ -2477,14 +2484,75 @@ export async function getMlbDraftSession(
   const db = await initLeagueBuilderDatabase();
   const id = createMlbDraftSessionId(leagueId, seasonNumber);
 
-  const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readonly');
-  const [stored, boardRows] = await Promise.all([
-    requestToPromise(tx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(id)),
-    requestToPromise(tx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id)),
+  const readTx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readonly');
+  const [initialStored, initialBoardRows] = await Promise.all([
+    requestToPromise(readTx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(id)),
+    requestToPromise(readTx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id)),
   ]);
-  const session = stored as LeagueBuilderMlbDraftSession | undefined;
-  if (!session) return null;
-  return hydrateIndependentSeatBoards(session, boardRows as SnakeSeatBoardStoreRecord[]);
+  const initialSession = initialStored as LeagueBuilderMlbDraftSession | undefined;
+  if (!initialSession) return null;
+  if (initialSession.seatBoardAuthorityFormat !== undefined) {
+    return hydrateIndependentSeatBoards(
+      initialSession,
+      initialBoardRows as SnakeSeatBoardStoreRecord[],
+    );
+  }
+
+  let hydrated: LeagueBuilderMlbDraftSession | null = null;
+  let persistedMigration: LeagueBuilderMlbDraftSession | null = null;
+  let rowsToWrite: SnakeSeatBoardStoreRecord[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readwrite');
+    const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
+    const sessionRead = sessionStore.get(id);
+    const boardsRead = boardStore.index('sessionId').getAll(id);
+    let reads = 0;
+    const apply = () => {
+      reads += 1;
+      if (reads !== 2) return;
+      try {
+        const stored = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+        if (!stored) return;
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(stored, standaloneRows);
+        const prepared = prepareSeatBoardPersistence({
+          preAction: undefined,
+          proposed: current,
+          standaloneRows,
+          modifiedAt: nowISO(),
+        });
+        hydrated = prepared.session;
+        rowsToWrite = prepared.rowsToWrite;
+        const needsRoomMigration = !structurallyEqual(stored, prepared.persistedSession);
+        for (const row of rowsToWrite) boardStore.put(row);
+        if (needsRoomMigration) {
+          persistedMigration = prepared.persistedSession;
+          sessionStore.put(prepared.persistedSession);
+        }
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+    sessionRead.onsuccess = apply;
+    boardsRead.onsuccess = apply;
+    sessionRead.onerror = () => reject(sessionRead.error);
+    boardsRead.onerror = () => reject(boardsRead.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} migration was aborted.`));
+  });
+  if (!syncEngine.isSuppressed()) {
+    for (const row of rowsToWrite) {
+      syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+    }
+    const migrationToSync = persistedMigration as LeagueBuilderMlbDraftSession | null;
+    if (migrationToSync) {
+      syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', migrationToSync.id, migrationToSync);
+    }
+  }
+  return hydrated;
 }
 
 function hydrateIndependentSeatBoards(
@@ -2492,6 +2560,7 @@ function hydrateIndependentSeatBoards(
   rows: SnakeSeatBoardStoreRecord[],
 ): LeagueBuilderMlbDraftSession {
   assertFarmSessionHasNoTradeState(session);
+  assertPersistedSeatBoardAuthorityShape(session);
   validateEmbeddedSeatBoardAuthority(session);
   const sessionPhase = validatedSnakeSessionPhase(session);
   const frozenTeamIds = validatedFrozenSnakeTeamIds(session);
@@ -2537,7 +2606,7 @@ function hydrateIndependentSeatBoards(
     if (resolved) farmSeatBoards[teamId] = resolved as FarmSeatBoardRecord;
   }
   return {
-    ...session,
+    ...stripSeatBoardsForPersistence(session),
     ...(Object.keys(seatBoards).length > 0 ? { seatBoards } : {}),
     ...(Object.keys(farmSeatBoards).length > 0 ? { farmSeatBoards } : {}),
   };
@@ -2565,6 +2634,31 @@ function seatBoardCorruptionError(phase: 'MLB' | 'FARM', teamId: string, revisio
   return new Error(
     `${label} ${teamId} is corrupted: embedded and standalone copies share revision ${revision} but differ.`,
   );
+}
+
+function assertPersistedSeatBoardAuthorityShape(session: LeagueBuilderMlbDraftSession): void {
+  const format = session.seatBoardAuthorityFormat;
+  if (format !== undefined && format !== SNAKE_SEAT_BOARD_AUTHORITY_FORMAT) {
+    throw new Error('The snake session is corrupted: its seat-board authority format is unknown.');
+  }
+  if (
+    format === SNAKE_SEAT_BOARD_AUTHORITY_FORMAT
+    && (session.seatBoards !== undefined || session.farmSeatBoards !== undefined)
+  ) {
+    throw new Error('The snake session is corrupted: a standalone-authority room contains embedded seat boards.');
+  }
+}
+
+function stripSeatBoardsForPersistence(
+  session: LeagueBuilderMlbDraftSession,
+): LeagueBuilderMlbDraftSession {
+  const persisted = {
+    ...session,
+    seatBoardAuthorityFormat: SNAKE_SEAT_BOARD_AUTHORITY_FORMAT,
+  };
+  delete persisted.seatBoards;
+  delete persisted.farmSeatBoards;
+  return persisted;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2778,7 +2872,11 @@ function prepareSeatBoardPersistence(input: {
   proposed: LeagueBuilderMlbDraftSession;
   standaloneRows: SnakeSeatBoardStoreRecord[];
   modifiedAt: string;
-}): { session: LeagueBuilderMlbDraftSession; rowsToWrite: SnakeSeatBoardStoreRecord[] } {
+}): {
+  session: LeagueBuilderMlbDraftSession;
+  persistedSession: LeagueBuilderMlbDraftSession;
+  rowsToWrite: SnakeSeatBoardStoreRecord[];
+} {
   const proposedPhase = validatedSnakeSessionPhase(input.proposed);
   const preActionPhase = input.preAction ? validatedSnakeSessionPhase(input.preAction) : undefined;
   if (preActionPhase && proposedPhase !== preActionPhase) {
@@ -2800,7 +2898,12 @@ function prepareSeatBoardPersistence(input: {
     preAction: input.preAction,
     initialSession: input.proposed,
   }) as LeagueBuilderMlbDraftSession['farmSeatBoards'];
-  const session = { ...input.proposed, seatBoards, farmSeatBoards };
+  const session = {
+    ...input.proposed,
+    seatBoardAuthorityFormat: SNAKE_SEAT_BOARD_AUTHORITY_FORMAT,
+    seatBoards,
+    farmSeatBoards,
+  };
   if (!seatBoards) delete session.seatBoards;
   if (!farmSeatBoards) delete session.farmSeatBoards;
   validateEmbeddedSeatBoardAuthority(session);
@@ -2827,7 +2930,61 @@ function prepareSeatBoardPersistence(input: {
       lastModified: input.modifiedAt,
     });
   }
-  return { session, rowsToWrite };
+  return {
+    session,
+    persistedSession: stripSeatBoardsForPersistence(session),
+    rowsToWrite,
+  };
+}
+
+/**
+ * Convert backup or transport records to the single persisted board authority.
+ * The function rejects ambiguous equal-revision conflicts.
+ */
+export function normalizeSnakeSeatBoardAuthorityRecords(input: {
+  sessions: unknown[];
+  boardRows: unknown[];
+  modifiedAt: string;
+}): { sessions: LeagueBuilderMlbDraftSession[]; boardRows: SnakeSeatBoardStoreRecord[] } {
+  const sessions = input.sessions.map((value) => {
+    if (!isRecord(value) || typeof value.id !== 'string') {
+      throw new Error('A backed-up snake session is malformed.');
+    }
+    return value as unknown as LeagueBuilderMlbDraftSession;
+  });
+  const boardRows = input.boardRows.map((value) => {
+    if (!isRecord(value) || typeof value.sessionId !== 'string') {
+      throw new Error('A backed-up snake seat-board row is malformed.');
+    }
+    return value as unknown as SnakeSeatBoardStoreRecord;
+  });
+  const rowsBySessionId = new Map<string, SnakeSeatBoardStoreRecord[]>();
+  for (const row of boardRows) {
+    const rows = rowsBySessionId.get(row.sessionId) ?? [];
+    rows.push(row);
+    rowsBySessionId.set(row.sessionId, rows);
+  }
+  const finalRowsById = new Map(boardRows.map((row) => [row.id, row]));
+  const normalizedSessions = sessions.map((stored) => {
+    if (stored.seatBoards === undefined && stored.farmSeatBoards === undefined) {
+      assertPersistedSeatBoardAuthorityShape(stored);
+      return stripSeatBoardsForPersistence(stored);
+    }
+    const standaloneRows = rowsBySessionId.get(stored.id) ?? [];
+    const current = hydrateIndependentSeatBoards(stored, standaloneRows);
+    const prepared = prepareSeatBoardPersistence({
+      preAction: undefined,
+      proposed: current,
+      standaloneRows,
+      modifiedAt: input.modifiedAt,
+    });
+    for (const row of prepared.rowsToWrite) finalRowsById.set(row.id, row);
+    return prepared.persistedSession;
+  });
+  return {
+    sessions: normalizedSessions,
+    boardRows: [...finalRowsById.values()],
+  };
 }
 
 export interface SaveMlbDraftSessionOptions {
@@ -2880,6 +3037,7 @@ export async function saveMlbDraftSession(
     const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
     const boardsRead = boardStore.index('sessionId').getAll(id);
     let fullSession: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSession: LeagueBuilderMlbDraftSession | null = null;
     let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
     let staleTransitionBoardRows: SnakeSeatBoardStoreRecord[] = [];
     let completedReads = 0;
@@ -2927,18 +3085,21 @@ export async function saveMlbDraftSession(
           ...(farmProspectSnapshot ? { farmProspectSnapshot } : {}),
         };
         assertFarmSessionHasNoTradeState(proposed, existing);
+        const initialCandidate = { ...proposed };
+        delete initialCandidate.seatBoardAuthorityFormat;
         const prepared = prepareSeatBoardPersistence({
           preAction: existing,
-          proposed: existing ? proposed : hydrateIndependentSeatBoards(proposed, authoritativeStandaloneRows),
+          proposed: existing ? proposed : hydrateIndependentSeatBoards(initialCandidate, authoritativeStandaloneRows),
           standaloneRows: authoritativeStandaloneRows,
           modifiedAt: now,
         });
         fullSession = prepared.session;
+        persistedSession = prepared.persistedSession;
         boardRowsWritten = prepared.rowsToWrite;
         staleTransitionBoardRows = createsFarmAuthority ? standaloneRows : [];
         for (const row of staleTransitionBoardRows) boardStore.delete(row.id);
-        store.put(fullSession);
         for (const row of boardRowsWritten) boardStore.put(row);
+        store.put(persistedSession);
       } catch (error) {
         reject(error);
         tx.abort();
@@ -2951,7 +3112,7 @@ export async function saveMlbDraftSession(
     mlbAuthorityRead.onerror = () => reject(mlbAuthorityRead.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!fullSession) {
+      if (!fullSession || !persistedSession) {
         reject(new Error(`MLB draft session ${id} was not saved.`));
         return;
       }
@@ -2962,10 +3123,10 @@ export async function saveMlbDraftSession(
             syncEngine.remove('kbl-league-builder', 'snakeSeatBoards', row.id);
           }
         }
-        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', fullSession.id, fullSession);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
         }
+        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSession.id, persistedSession);
       }
       resolve(fullSession);
     };
@@ -2992,6 +3153,7 @@ export async function updateMlbDraftSessionAtomically(
     const read = store.get(id);
     const boardsRead = tx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id);
     let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
     let sessionWritten = false;
     const boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
     let completedReads = 0;
@@ -3031,12 +3193,16 @@ export async function updateMlbDraftSessionAtomically(
           modifiedAt: now,
         });
         saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
         boardRowsWritten.push(...prepared.rowsToWrite);
-        sessionWritten = !structurallyEqual(stored, saved);
-        if (sessionWritten && !callbackChanged) saved = { ...saved, lastModified: now };
-        if (sessionWritten) store.put(saved);
+        sessionWritten = !structurallyEqual(stored, persistedSaved);
+        if (sessionWritten && !callbackChanged) {
+          saved = { ...saved, lastModified: now };
+          persistedSaved = { ...persistedSaved, lastModified: now };
+        }
         const seatBoardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
         for (const row of boardRowsWritten) seatBoardStore.put(row);
+        if (sessionWritten) store.put(persistedSaved);
       } catch (error) {
         reject(error);
         tx.abort();
@@ -3047,14 +3213,16 @@ export async function updateMlbDraftSessionAtomically(
     read.onerror = () => reject(read.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!saved) {
+      if (!saved || !persistedSaved) {
         reject(new Error(`MLB draft session ${id} was not updated.`));
         return;
       }
       if (!syncEngine.isSuppressed()) {
-        if (sessionWritten) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+        }
+        if (sessionWritten) {
+          syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved.id, persistedSaved);
         }
       }
       resolve(saved);
@@ -3087,13 +3255,15 @@ async function patchIndependentSeatBoard(input: {
   const now = nowISO();
   let record: SnakeSeatBoardStoreRecord | null = null;
   let savedSession: LeagueBuilderMlbDraftSession | null = null;
+  let persistedMigration: LeagueBuilderMlbDraftSession | null = null;
+  let recordsToSync: SnakeSeatBoardStoreRecord[] = [];
 
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readwrite');
     const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
     const sessionRead = sessionStore.get(sessionId);
     const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
-    const boardRead = boardStore.get(boardId);
+    const boardsRead = boardStore.index('sessionId').getAll(sessionId);
     let completedReads = 0;
     const apply = () => {
       completedReads += 1;
@@ -3101,19 +3271,13 @@ async function patchIndependentSeatBoard(input: {
       try {
         const session = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
         if (!session) throw new Error(`MLB draft session ${sessionId} does not exist.`);
-        authorizeSeatBoardWrite(session, input.phase, input.teamId);
-        input.authorize?.(session);
-        const storedRecord = boardRead.result as SnakeSeatBoardStoreRecord | undefined;
-        const embeddedBoard = input.phase === 'MLB'
-          ? session.seatBoards?.[input.teamId]
-          : session.farmSeatBoards?.[input.teamId];
-        const currentBoard = resolveAuthoritativeSeatBoard(
-          embeddedBoard,
-          storedRecord,
-          input.phase,
-          input.teamId,
-          session,
-        );
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(session, standaloneRows);
+        authorizeSeatBoardWrite(current, input.phase, input.teamId);
+        input.authorize?.(current);
+        const currentBoard = input.phase === 'MLB'
+          ? current.seatBoards?.[input.teamId]
+          : current.farmSeatBoards?.[input.teamId];
         if (!currentBoard || currentBoard.revision !== input.expectedBoardRevision) {
           throw new Error(`${input.phase === 'FARM' ? 'Farm seat' : 'Seat'} board ${input.teamId} changed before it could be saved.`);
         }
@@ -3134,26 +3298,36 @@ async function patchIndependentSeatBoard(input: {
         };
         savedSession = input.phase === 'MLB'
           ? {
-              ...session,
-              seatBoards: { ...(session.seatBoards ?? {}), [input.teamId]: input.board },
-              lastModified: now,
+              ...current,
+              seatBoards: { ...(current.seatBoards ?? {}), [input.teamId]: input.board },
             }
           : {
-              ...session,
-              farmSeatBoards: { ...(session.farmSeatBoards ?? {}), [input.teamId]: input.board },
-              lastModified: now,
+              ...current,
+              farmSeatBoards: { ...(current.farmSeatBoards ?? {}), [input.teamId]: input.board },
             };
-        sessionStore.put(savedSession);
-        boardStore.put(record);
+        const migration = prepareSeatBoardPersistence({
+          preAction: undefined,
+          proposed: current,
+          standaloneRows,
+          modifiedAt: now,
+        });
+        persistedMigration = structurallyEqual(session, migration.persistedSession)
+          ? null
+          : migration.persistedSession;
+        const rowsById = new Map(migration.rowsToWrite.map((row) => [row.id, row]));
+        rowsById.set(record.id, record);
+        recordsToSync = [...rowsById.values()];
+        for (const row of recordsToSync) boardStore.put(row);
+        if (persistedMigration) sessionStore.put(persistedMigration);
       } catch (error) {
         reject(error);
         tx.abort();
       }
     };
     sessionRead.onsuccess = apply;
-    boardRead.onsuccess = apply;
+    boardsRead.onsuccess = apply;
     sessionRead.onerror = () => reject(sessionRead.error);
-    boardRead.onerror = () => reject(boardRead.error);
+    boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error ?? new Error(`Seat board ${input.teamId} update was aborted.`));
@@ -3164,7 +3338,13 @@ async function patchIndependentSeatBoard(input: {
   if (!syncedRecord) throw new Error(`Seat board ${input.teamId} was not saved.`);
   if (!syncedSession) throw new Error(`MLB draft session ${sessionId} was not updated.`);
   if (!syncEngine.isSuppressed()) {
-    syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', syncedRecord.id, syncedRecord);
+    for (const row of recordsToSync) {
+      syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+    }
+    const migrationToSync = persistedMigration as LeagueBuilderMlbDraftSession | null;
+    if (migrationToSync) {
+      syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', migrationToSync.id, migrationToSync);
+    }
   }
   const hydrated = await getMlbDraftSession(input.leagueId, input.seasonNumber);
   if (!hydrated) throw new Error(`MLB draft session ${sessionId} does not exist.`);
@@ -3724,6 +3904,7 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
     let currentPool: RegisteredPool | null = null;
     let reads = 0;
     let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
     let sessionWritten = false;
     let poolWritten = false;
     let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
@@ -3745,10 +3926,11 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
             modifiedAt: now,
           });
           saved = prepared.session;
+          persistedSaved = prepared.persistedSession;
           boardRowsWritten = prepared.rowsToWrite;
-          sessionWritten = !structurallyEqual(currentSession, saved);
-          if (sessionWritten) sessionStore.put(saved);
           for (const row of boardRowsWritten) boardStore.put(row);
+          sessionWritten = !structurallyEqual(currentSession, persistedSaved);
+          if (sessionWritten) sessionStore.put(persistedSaved);
           return;
         }
         if ((current.revision ?? 0) !== input.expectedRevision) {
@@ -3776,10 +3958,11 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
           modifiedAt: now,
         });
         saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
         boardRowsWritten = prepared.rowsToWrite;
-        sessionStore.put(saved);
-        sessionWritten = true;
         for (const row of boardRowsWritten) boardStore.put(row);
+        sessionStore.put(persistedSaved);
+        sessionWritten = true;
         poolStore.put(input.registeredPool);
         poolWritten = true;
       } catch (error) {
@@ -3794,12 +3977,14 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
     poolRead.onerror = () => reject(poolRead.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!saved) return reject(new Error(`MLB draft session ${id} was not frozen.`));
+      if (!saved || !persistedSaved) return reject(new Error(`MLB draft session ${id} was not frozen.`));
       if (!syncEngine.isSuppressed()) {
         if (poolWritten) syncEngine.upsert('kbl-league-builder', 'registeredPools', input.registeredPool.leagueId, input.registeredPool);
-        if (sessionWritten) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+        }
+        if (sessionWritten) {
+          syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved.id, persistedSaved);
         }
       }
       resolve(saved);

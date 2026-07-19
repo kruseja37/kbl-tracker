@@ -138,7 +138,13 @@ import {
 } from '../../src_figma/app/utils/draftStaffingPersistence';
 
 const LEAGUE_ID = 'draft-pipeline-integration-league';
-const TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
+const SOURCE_TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
+const TEAM_IDS = SOURCE_TEAM_IDS.map((teamId) => `${LEAGUE_ID}-${teamId}`) as [
+  string,
+  string,
+  string,
+  string,
+];
 const MLB_AUCTION_SEED = 'draft-pipeline-mlb-auction-seed';
 const FARM_AUCTION_SEED = 'draft-pipeline-farm-auction-seed';
 const HUB_ARCHETYPE_ID = 'murderers-row';
@@ -350,7 +356,9 @@ function makeCommitRegressionPlayerAt(
   };
 }
 
-async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
+async function seedDraftLeagueWithRealMlbPlayers(options: {
+  populateTargetRosters?: boolean;
+} = {}): Promise<{
   addedFreeAgentId: string;
   removedCuratedPlayerId: string;
   initialRosterPlayerIdsByTeamId: Record<string, string[]>;
@@ -369,36 +377,41 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   });
 
   const initialRosterPlayerIdsByTeamId: Record<string, string[]> = {};
-  for (const teamId of TEAM_IDS) {
-    const team = await getTeam(teamId);
-    if (!team) throw new Error(`Seeded MLB team ${teamId} was not found.`);
+  for (const [teamIndex, teamId] of TEAM_IDS.entries()) {
+    const sourceTeamId = SOURCE_TEAM_IDS[teamIndex];
+    const team = await getTeam(sourceTeamId);
+    if (!team) throw new Error(`Seeded MLB team ${sourceTeamId} was not found.`);
     await saveTeam({
       ...team,
-      leagueIds: Array.from(new Set([...(team.leagueIds ?? []), LEAGUE_ID])),
+      id: teamId,
+      leagueIds: [LEAGUE_ID],
       controlledBy: teamId === TEAM_IDS[0] ? 'human' : 'ai',
       farmArchetypeKey: teamId === TEAM_IDS[0] ? 'web-gems' : 'bomba-squad',
     });
 
-    const seededRoster = await getTeamRoster(teamId);
+    const seededRoster = await getTeamRoster(sourceTeamId);
     const seededMlbRoster = seededRoster?.mlbRoster ?? [];
     expect(seededMlbRoster.length).toBeGreaterThanOrEqual(22);
     const selectedRosterIds = seededMlbRoster.slice(0, 22);
     initialRosterPlayerIdsByTeamId[teamId] = selectedRosterIds;
 
-    await saveTeamRoster({
-      ...(seededRoster ?? createEmptyTeamRoster(teamId)),
-      mlbRoster: selectedRosterIds,
-      farmRoster: [],
-    });
+    await saveTeamRoster(options.populateTargetRosters
+      ? {
+          ...createEmptyTeamRoster(teamId),
+          mlbRoster: selectedRosterIds,
+        }
+      : createEmptyTeamRoster(teamId));
 
     for (const playerId of selectedRosterIds) {
       const player = await getPlayer(playerId);
       if (!player) throw new Error(`Seeded roster player ${playerId} was not found.`);
-      expect(player.leagueAssignments ?? []).toEqual(
-        expect.not.arrayContaining([
-          expect.objectContaining({ leagueId: LEAGUE_ID }),
-        ]),
-      );
+      if (!options.populateTargetRosters) {
+        await assignPlayerToLeague(player, {
+          leagueId: LEAGUE_ID,
+          teamId: '',
+          rosterStatus: 'FREE_AGENT',
+        });
+      }
     }
 
     await saveScoutProfile({
@@ -410,7 +423,7 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
       weaknesses: ['CP'],
       accuracyByPosition: { CF: 84, SP: 80, CP: 55, '1B': 64 },
       seed: `${LEAGUE_ID}:${teamId}:scout`,
-      hiredPick: { round: 1, pickNumber: TEAM_IDS.indexOf(teamId as typeof TEAM_IDS[number]) + 1, teamId },
+      hiredPick: { round: 1, pickNumber: teamIndex + 1, teamId },
     });
   }
 
@@ -454,9 +467,17 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
     }),
   );
 
-  for (const teamId of TEAM_IDS) {
-    const roster = await getTeamRoster(teamId);
-    expect(roster?.mlbRoster.length).toBeGreaterThan(0);
+  for (const [teamIndex, teamId] of TEAM_IDS.entries()) {
+    if (options.populateTargetRosters) {
+      expect(await getTeamRoster(teamId)).toEqual(expect.objectContaining({
+        mlbRoster: initialRosterPlayerIdsByTeamId[teamId],
+        farmRoster: [],
+      }));
+    } else {
+      expectRosterToBeEmpty(await getTeamRoster(teamId));
+    }
+    const sourceRoster = await getTeamRoster(SOURCE_TEAM_IDS[teamIndex]);
+    expect(sourceRoster?.mlbRoster.length).toBeGreaterThanOrEqual(22);
   }
 
   return {
@@ -1084,6 +1105,14 @@ async function runDraftPipeline(options: RunDraftPipelineOptions = {}): Promise<
   expect(poolIds).toEqual(expect.arrayContaining(rosterPoolPlayerIds));
   expect(poolIds).toContain(curatedFixture.addedFreeAgentId);
   expect(poolIds).not.toContain(curatedFixture.removedCuratedPlayerId);
+
+  // The registered pool is an immutable draft input. Source-roster players do not
+  // become target-league players until the draft assigns them to a target club.
+  for (const playerId of rosterPoolPlayerIds) {
+    const player = await getPlayer(playerId);
+    if (!player) throw new Error(`Pool player ${playerId} missing after registration.`);
+    await removePlayerFromLeague(player, LEAGUE_ID);
+  }
 
   for (const teamId of TEAM_IDS) {
     await clearTeamRoster(teamId, LEAGUE_ID);
@@ -2733,7 +2762,7 @@ describe('draft pipeline integration', () => {
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {
     const { addedFreeAgentId, removedCuratedPlayerId, initialRosterPlayerIdsByTeamId } =
-      await seedDraftLeagueWithRealMlbPlayers();
+      await seedDraftLeagueWithRealMlbPlayers({ populateTargetRosters: true });
     const mlbSlots = TEAM_IDS.length * 22;
 
     // Pool mode (a): import the players rostered on the league's branded teams (4 × 22 = 88).

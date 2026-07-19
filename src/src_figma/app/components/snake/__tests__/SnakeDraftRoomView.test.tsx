@@ -115,14 +115,15 @@ describe('SnakeDraftRoomView', () => {
     expect(screen.getByText('PRIVATE FIT STRONG · CHEM 2→3')).toBeInTheDocument();
   });
 
-  it('puts the private desk first at iPad width and keeps the ritual rail sticky on wide screens', () => {
+  it('puts the private desk first and gives desktop CSS one untrapped status rail', () => {
     render(<SnakeDraftRoomView {...props()} />);
     const privateSeat = screen.getByRole('region', { name: 'Private seat' });
     const ritual = screen.getByRole('region', { name: 'Draft ritual' });
 
-    expect(privateSeat.parentElement).toHaveClass('xl:grid-cols-[minmax(0,1fr)_minmax(280px,30vw)]');
+    expect(privateSeat.parentElement).toHaveClass('snake-room-layout');
     expect(privateSeat.compareDocumentPosition(ritual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(ritual.parentElement).toHaveClass('self-start', 'xl:sticky', 'xl:top-4');
+    expect(ritual.parentElement).toHaveClass('self-start', 'snake-room-aside');
+    expect(ritual.parentElement).not.toHaveClass('xl:sticky', 'xl:top-4');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD').parentElement).toHaveClass('min-h-36');
     expect(screen.getByText('KODIAKS IS REVIEWING THE BOARD')).toHaveClass('text-xl');
 
@@ -245,7 +246,7 @@ describe('SnakeDraftRoomView', () => {
       }
     };
     expect(screen.getByTestId('snake-draft-room')).toHaveClass('min-w-0', 'overflow-x-clip', 'overflow-y-visible');
-    expect(screen.getByTestId('room-layout')).toHaveClass('min-w-0');
+    expect(screen.getByTestId('room-layout')).toHaveClass('min-w-0', 'snake-room-layout');
     expect(screen.getByRole('combobox', { name: 'TEAM' })).toHaveClass('min-h-11');
     expectEveryPersistentControlToBeTouchSafe();
     fireEvent.click(screen.getByRole('button', { name: 'REVEAL KODIAKS SEAT' }));
@@ -424,6 +425,7 @@ describe('SnakeDraftRoomView', () => {
     scrollIntoView.mockClear();
     expect(screen.getByTestId('private-workspace-layout')).toHaveClass(
       'snake-private-workspace',
+      'snake-host-private-workspace',
       'lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)]',
     );
     expect(screen.getByTestId('selected-player-pane')).toContainElement(screen.getByTestId('profile-details'));

@@ -45,6 +45,8 @@ describe('BoardView Batch 5 ledger', () => {
     const truth = screen.getByTestId('plan-truth-strip');
     const grid = screen.getByTestId('board-slot-grid');
     expect(truth.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('LINEUP + BENCH')).toBeInTheDocument();
+    expect(screen.getByText('PITCHING STAFF')).toBeInTheDocument();
     expect([...grid.children].map((row) => row.getAttribute('data-board-slot'))).toEqual(SNAKE_BOARD_SLOT_IDS);
     expect(grid.children).toHaveLength(22);
     expect(grid.querySelector('[data-board-slot="1B"]')).toHaveTextContent('UNKNOWN PLAYER');

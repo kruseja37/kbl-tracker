@@ -196,7 +196,7 @@ describe('snake draft durable completion and recap', () => {
     const session = setMlbData();
     renderRoom(`/snake-room?leagueId=${league.id}`);
     expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' })).toBeInTheDocument();
-    expect(mocks.pull).toHaveBeenCalledWith({ throwOnError: true });
+    expect(mocks.pull).not.toHaveBeenCalled();
     expect(screen.queryByText('KODIAKS IS REVIEWING THE BOARD')).not.toBeInTheDocument();
     expect(screen.getByText('MARA DIAZ')).toBeInTheDocument();
     expect(screen.getAllByText('$100,000').length).toBeGreaterThan(0);

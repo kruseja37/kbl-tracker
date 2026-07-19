@@ -32743,3 +32743,56 @@ replacement or loss of unseen companion activity.
 current-local drift, account switch, concurrent replacement, cloud race, and unseen companion intent
 stay queued/cloud-unchanged; focused tests; TypeScript; changed-file lint; production/PWA build;
 separate non-builder audit; JK's live click. No push, merge, or deploy.
+
+## SNAKE-LIVE-ROOM-AUTHORITY-51
+
+**Goal:** Replace the Snake companion room's whole-account backup sync path with one dedicated,
+revision-safe live-room authority that keeps public draft truth and private team data separate.
+
+**Frozen law:**
+
+- The Hotseat is the only writer of public room and draft state.
+- A companion submits a claim, board change, pick request, or trade request through a scoped live-room
+  operation. It never writes the public draft session.
+- The public room payload contains no private boards, private team logs, open trade negotiation data,
+  proof assignments, recovery snapshots, or companion capability data.
+- Each claimed team's live board has one durable authority: its private server row. The companion
+  may cache that row in memory. The host's local setup board is seed material only after transfer;
+  it is not a live mirror. The public room row contains no board copy.
+- Public draft actions and private-board edits use separate revision domains. A stale or missing
+  private board can never reject, delay, or roll back a valid public pick, trade, correction, pause,
+  completion, or order change.
+- The host may seed the exact setup board once when it approves a team's first companion claim. The
+  seed is insert-only, returns metadata only, and cannot read or overwrite an existing private board.
+  After that seed, only an approved device for that team may read or write the board.
+- Every companion derives drafted-player availability and its owned roster from the current public
+  session in memory. A public action performs no private-board write. A correction recomputes the
+  view from the saved private board and the corrected public state.
+- Every write requires an expected revision, an idempotency key, the signed-in account, and a
+  host/device/team capability check. Capability tokens are random, stored outside localStorage, and
+  hashed at rest on the server.
+- Public Realtime events contain only public metadata. A device uses a scoped RPC to read its own
+  claims, intents, and approved team boards.
+- Generic account backup sync does not transport open Snake room state or Snake seat boards. Its
+  outbox is account-bound and stored outside localStorage so Auth storage cannot lose its quota.
+- The supported eight-team topology is one Hotseat plus as many as three companion devices. A
+  companion can control more than one approved team. Additional devices fail closed.
+- Mac mini/Neo and laptop browsers with keyboard, mouse, or trackpad are the primary companion
+  target. The desktop layout uses available width, avoids nested scroll areas, and keeps one clear
+  main scroll path. Compact layouts are fallback surfaces.
+- FIT, tax, roster legality, archetype, Assistant GM, trade-value, FARM-trade, and Help-button law do
+  not change in this contract.
+
+**Required proof:** migration and RLS/RPC review; deterministic separate-client 2-device and
+Hotseat-plus-3-companion 8-team tests; concurrent public-pick/private-board independent-success
+proof; stale-board non-interference for picks, trades, corrections, and completion; claim, revoke,
+board, pick, trade, reconnect, idempotency, privacy, and overload tests; separate persistent Chrome-profile
+latency runs; TypeScript; changed-file lint; production/PWA build; a separate non-builder audit; and
+one preview for JK's browser walk. JK's walk is the sole product gate. No push, merge, or deploy.
+
+**Close record (2026-07-19):** Builder work is complete. A separate auditor returned **APPROVE —
+Major 0 / Minor 0** after the event-order, reconnect, migration-contract, auth, privacy, and
+public/private-authority repairs. Focused live-room proof is 188 passed / 32 skipped; combined
+live/auth proof is 73/73; targeted Snake UI/storage proof is 246/246; TypeScript, changed-file lint,
+production/PWA build, and diff integrity are green. Remote migration 009, deployment, the narrow old
+Snake test-state reset, and JK's real-device walk remain. No merge or deploy is authorized.

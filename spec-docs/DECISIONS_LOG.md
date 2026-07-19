@@ -4251,3 +4251,26 @@ durable checkpoint before the unchanged atomic RPC. A cloud race is rejected.
 This is target-limited queue recovery, not full Upload. It may not publish an obsolete queue entry,
 change unrelated cloud rows, cross accounts, or overwrite a Snake room containing companion intent
 not covered by the current local room.
+## 2026-07-19 — Live Snake rooms use cloud authority, not browser backup sync
+
+- The Hotseat is the only writer of public Snake draft state.
+- A companion can read public state, write only its approved teams' private boards, and submit pick
+  or trade intent for Hotseat approval.
+- Each private board has one server authority. The host can seed it once but cannot read or update it
+  after transfer.
+- Public room revisions and private board revisions are separate. A board error cannot stop or undo
+  a public pick, trade, correction, order change, or completion.
+- Realtime messages are hints. Devices read current scoped server state on subscribe, reconnect, and
+  a bounded fallback interval. Event order is never draft authority.
+- Active Snake rooms and seat boards are retired from generic account backup sync. The remaining
+  backup outbox is account-owned IndexedDB data.
+- Browser data is an auth/device store and a disposable cache for the live room. It is not the live
+  room source of truth.
+- A new draft target gets copied team records with new IDs and empty rosters. Source team IDs and
+  source rosters remain unchanged.
+- Apply migration 009 and deploy the matching app before the narrow cleanup of old Snake test rooms
+  and retired local sync keys. Do not wipe players, source leagues, teams, archetypes, or pools.
+- One Hotseat plus three companion devices can run an eight-team draft. One companion can control
+  more than one team.
+- Mac mini/Neo and laptop are the primary companion layouts. Help-button law remains canon. JK's
+  real browser and device walk remains the only product acceptance gate.

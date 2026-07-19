@@ -10,6 +10,13 @@ import {
 } from 'react-router';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+const liveRoomMocks = vi.hoisted(() => ({
+  publishSession: vi.fn(),
+  seedBoard: vi.fn(),
+  resolveClaim: vi.fn(),
+  claims: [] as import('../../../utils/snakeLiveRoomTypes').SnakeLiveClaim[],
+}));
+
 vi.mock('../../../utils/syncEngine', () => ({
   syncEngine: {
     isSuppressed: () => true,
@@ -66,6 +73,66 @@ vi.mock('../../app/components/snake/snakeRoomFreshness', async (importOriginal) 
   const actual = await importOriginal<typeof import('../../app/components/snake/snakeRoomFreshness')>();
   return { ...actual, startSnakeRoomFreshness: () => () => undefined };
 });
+
+vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', async () => {
+  const React = await import('react');
+  return { useSnakeLiveHostRoom: (options: {
+    session: import('../../../utils/leagueBuilderStorage').LeagueBuilderMlbDraftSession | null;
+    enabled?: boolean;
+  }) => {
+    const session = options.session;
+    const [, rerenderClaims] = React.useReducer((revision: number) => revision + 1, 0);
+    const roomCode = session?.snakeCompanions?.roomCode ?? '';
+    const roomRef = React.useRef<null | Record<string, unknown>>(null);
+    const publicSessionRef = React.useRef(session);
+    if (session && !roomRef.current) {
+      roomRef.current = {
+        id: `live:${session.id}`,
+        sessionId: session.id,
+        roomCode,
+        phase: session.draftPhase ?? 'MLB',
+        status: 'open',
+        hostDeviceId: 'test-host',
+        publicRevision: session.revision ?? 0,
+        publicState: {},
+        createdAt: session.createdDate,
+        updatedAt: session.lastModified,
+      };
+      publicSessionRef.current = session;
+    }
+    if (roomRef.current && roomCode) roomRef.current.roomCode = roomCode;
+    const room = roomRef.current;
+    return {
+      room,
+      publicSession: publicSessionRef.current,
+      claims: liveRoomMocks.claims,
+      intents: [],
+      events: [],
+      status: options.enabled ? 'live' : 'idle',
+      subscriptionStatus: options.enabled ? 'live' : null,
+      error: null,
+      working: false,
+      hostAccessReady: Boolean(options.enabled && room),
+      liveRoomReady: Boolean(options.enabled && room),
+      refresh: vi.fn(async () => undefined),
+      publishSession: async (input: { session: import('../../../utils/leagueBuilderStorage').LeagueBuilderMlbDraftSession }) => {
+        liveRoomMocks.publishSession(input);
+        publicSessionRef.current = input.session;
+        if (room) room.publicRevision = input.session.revision ?? 0;
+        return room;
+      },
+      resolveClaim: async (...args: Parameters<typeof liveRoomMocks.resolveClaim>) => {
+        const claim = await liveRoomMocks.resolveClaim(...args);
+        rerenderClaims();
+        return claim;
+      },
+      resolveIntent: vi.fn(),
+      submitTradeIntent: vi.fn(),
+      seedBoard: liveRoomMocks.seedBoard,
+      closeRoom: vi.fn(),
+    };
+  },
+}; });
 
 import { TIER_CAPS } from '../../../data/tierParams';
 import {
@@ -249,6 +316,23 @@ function NavigationTarget() {
 
 describe('ROOMFIX setup to playable snake room', () => {
   beforeEach(async () => {
+    liveRoomMocks.publishSession.mockReset();
+    liveRoomMocks.claims.splice(0);
+    liveRoomMocks.seedBoard.mockReset().mockImplementation(async (input: { teamId: string }) => ({
+      roomId: 'live-room',
+      teamId: input.teamId,
+      boardRevision: 0,
+      seeded: true,
+    }));
+    liveRoomMocks.resolveClaim.mockReset().mockImplementation(async (
+      claim: import('../../../utils/snakeLiveRoomTypes').SnakeLiveClaim,
+      status: 'approved' | 'revoked',
+    ) => {
+      claim.status = status;
+      claim.revision += 1;
+      claim.resolvedAt = '2026-07-19T00:00:00.000Z';
+      return claim;
+    });
     await resetStorage();
     await seedLeagueFormOutput();
   });
@@ -322,6 +406,19 @@ describe('ROOMFIX setup to playable snake room', () => {
     const navigationTarget = await screen.findByTestId('navigation-target', {}, { timeout: 150_000 });
     expect(navigationTarget).toHaveTextContent(`/snake-room?leagueId=${LEAGUE_ID}`);
     const roomTarget = navigationTarget.textContent!;
+    const preparedSession = await getMlbDraftSession(LEAGUE_ID, 1);
+    liveRoomMocks.claims.push({
+      id: 'claim-team-2',
+      roomId: `live:${preparedSession!.id}`,
+      requestKey: 'claim-team-2-request',
+      deviceId: 'companion-device-2',
+      gmName: 'Guest GM',
+      teamId: TEAM_IDS[1],
+      status: 'pending',
+      revision: 0,
+      createdAt: '2026-07-19T00:00:00.000Z',
+      resolvedAt: null,
+    });
     cleanup();
     render(<RoomMemoryRouter initialEntries={[roomTarget]}><SnakeDraftRoom /></RoomMemoryRouter>);
     await act(async () => {
@@ -406,6 +503,21 @@ describe('ROOMFIX setup to playable snake room', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'HOLD THE GAVEL' }));
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });
     expect(await screen.findByText('PICK RECORDED')).toBeInTheDocument();
+    expect(liveRoomMocks.publishSession).toHaveBeenCalledWith(expect.objectContaining({
+      eventKind: 'PICK_RECORDED',
+    }));
+    const publishedPick = liveRoomMocks.publishSession.mock.calls.at(-1)?.[0] as {
+      session: Record<string, unknown>;
+    };
+    for (const privateField of [
+      'seatBoards',
+      'farmSeatBoards',
+      'roomLogByTeamId',
+      'snakeCompanions',
+      'correctionSnapshots',
+    ]) {
+      expect(publishedPick.session).not.toHaveProperty(privateField);
+    }
     expect(screen.getByText(selectedName.toUpperCase())).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'ADVANCE TO NEXT PICK' })).not.toBeInTheDocument();
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_600)); });
@@ -426,5 +538,18 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(nextName).toBeTruthy();
       expect(nextName).not.toBe(selectedName);
     });
+    const fallbackBoard = (await getMlbDraftSession(LEAGUE_ID, 1))!.seatBoards![TEAM_IDS[1]];
+    fireEvent.click(screen.getByRole('button', { name: /^COMPANIONS/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'APPROVE ROOMFIX CLUB 2' }));
+    await waitFor(() => expect(liveRoomMocks.resolveClaim).toHaveBeenCalledTimes(1));
+    expect(liveRoomMocks.seedBoard).toHaveBeenCalledWith({
+      teamId: TEAM_IDS[1],
+      board: JSON.parse(JSON.stringify(fallbackBoard)),
+    });
+    expect(liveRoomMocks.seedBoard.mock.invocationCallOrder[0])
+      .toBeLessThan(liveRoomMocks.resolveClaim.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument());
+    expect((await getMlbDraftSession(LEAGUE_ID, 1))!.seatBoards![TEAM_IDS[1]])
+      .toEqual(fallbackBoard);
   }, 180_000);
 });

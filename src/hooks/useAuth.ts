@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { syncEngine } from '../utils/syncEngine';
 
 interface UseAuthReturn {
   user: User | null;
@@ -18,24 +19,29 @@ interface UseAuthReturn {
 
 export function useAuth(): UseAuthReturn {
   const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(Boolean(supabase));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!supabase) {
-      setIsLoading(false);
       return;
     }
 
     // Load initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
+    void supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setUser(session?.user ?? null);
+        void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
+      })
+      .catch((authError) => {
+        setError(authError instanceof Error ? authError.message : 'Could not read this account.');
+      })
+      .finally(() => setIsLoading(false));
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      void syncEngine.setAuthenticatedUser(session?.user.id ?? null).catch(() => undefined);
     });
 
     return () => subscription.unsubscribe();
@@ -57,6 +63,7 @@ export function useAuth(): UseAuthReturn {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
+    await syncEngine.prepareForSignOut().catch(() => undefined);
     await supabase.auth.signOut();
     setUser(null);
   }, []);

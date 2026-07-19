@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react';
 import type { SnakePlanBill } from '../../../../../engines/snakeEconomics';
-import { SNAKE_BOARD_SLOT_IDS } from '../../../../../utils/leagueBuilderStorage';
+import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId } from '../../../../../utils/leagueBuilderStorage';
 import { DeskCandidateRow } from './DeskCandidateRow';
 import { DraftTruthStrip } from './DraftTruthStrip';
 import { buildPlanLedger, type ChemistryStripRow, type DraftMoneyLedger } from './draftTruthModel';
@@ -10,6 +11,31 @@ const RATING_ROOM_GROUPS: ReadonlyArray<{ id: TaxCoreRow['group']; label: string
   { id: 'rotation', label: 'ROTATION' },
   { id: 'bullpen', label: 'BULLPEN' },
 ];
+
+const DESKTOP_SLOT_LAYOUT: Readonly<Record<SnakeBoardSlotId, { column: 1 | 2; row: number }>> = {
+  C: { column: 1, row: 1 },
+  '1B': { column: 1, row: 2 },
+  '2B': { column: 1, row: 3 },
+  '3B': { column: 1, row: 4 },
+  SS: { column: 1, row: 5 },
+  LF: { column: 1, row: 6 },
+  CF: { column: 1, row: 7 },
+  RF: { column: 1, row: 8 },
+  BACKUP_C: { column: 1, row: 9 },
+  FLEX1: { column: 1, row: 10 },
+  FLEX2: { column: 1, row: 11 },
+  FLEX3: { column: 1, row: 12 },
+  FLEX4: { column: 1, row: 13 },
+  SP1: { column: 2, row: 1 },
+  SP2: { column: 2, row: 2 },
+  SP3: { column: 2, row: 3 },
+  SP4: { column: 2, row: 4 },
+  RP1: { column: 2, row: 5 },
+  RP2: { column: 2, row: 6 },
+  RP3: { column: 2, row: 7 },
+  CP: { column: 2, row: 8 },
+  SWING: { column: 2, row: 9 },
+};
 
 function ratingPoints(value: number): string {
   return (Math.round(value * 10) / 10).toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -33,50 +59,61 @@ export function BoardView(props: {
 }) {
   const byId = new Map(props.candidates.map((candidate) => [candidate.id, candidate]));
   const ledger = props.planLedger ?? (props.planBill ? buildPlanLedger(props.planBill) : null);
+  const renderSlot = (slotId: SnakeBoardSlotId) => {
+    const playerId = props.boardSlots[slotId];
+    const candidate = playerId ? byId.get(playerId) : undefined;
+    const slotLabel = slotId === 'BACKUP_C'
+      && candidate
+      && candidate.position !== 'C'
+      && !candidate.eligiblePositions?.includes('C')
+      ? 'FLEX5'
+      : slotId;
+    const state = props.brokenSlots.includes(slotId)
+      ? 'PLAN BROKEN'
+      : !playerId
+        ? 'MISSING'
+        : !candidate
+          ? 'UNKNOWN PLAYER'
+          : candidate.draftedByActiveTeam
+            ? 'ROSTER'
+            : candidate.drafted
+              ? 'UNAVAILABLE'
+              : (props.slotDepth[slotId] ?? 3) <= 2
+                ? `${props.slotDepth[slotId]} LEFT`
+                : null;
+    const desktopLayout = DESKTOP_SLOT_LAYOUT[slotId];
+    return <div
+      key={slotId}
+      data-board-slot={slotId}
+      data-board-state={state ?? 'READY'}
+      style={{
+        '--snake-board-column': desktopLayout.column,
+        '--snake-board-row': desktopLayout.row,
+      } as CSSProperties}
+    >
+      {candidate
+        ? <DeskCandidateRow
+            candidate={candidate}
+            prefix={slotLabel}
+            selected={props.selectedCandidateId === playerId}
+            onSelect={props.onSelectCandidate}
+            warning={state}
+            teamColors={props.teamColors}
+          />
+        : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotLabel}</span>{state}</p>}
+    </div>;
+  };
   return (
     <div data-testid={props.readOnly ? 'assistant-board-view' : 'my-board-view'}>
       {ledger && props.planChemistry ? (
         <div className="mb-4"><DraftTruthStrip title={props.planTitle ?? '22-PLAYER PLAN'} ledger={ledger} chemistry={props.planChemistry} testId={props.readOnly ? 'assistant-plan-truth-strip' : 'plan-truth-strip'} /></div>
       ) : null}
-      <div
-        className="grid grid-cols-1 gap-1"
-        data-testid="board-slot-grid"
-      >
-        {SNAKE_BOARD_SLOT_IDS.map((slotId) => {
-          const playerId = props.boardSlots[slotId];
-          const candidate = playerId ? byId.get(playerId) : undefined;
-          const slotLabel = slotId === 'BACKUP_C'
-            && candidate
-            && candidate.position !== 'C'
-            && !candidate.eligiblePositions?.includes('C')
-            ? 'FLEX5'
-            : slotId;
-          const state = props.brokenSlots.includes(slotId)
-            ? 'PLAN BROKEN'
-            : !playerId
-              ? 'MISSING'
-              : !candidate
-                ? 'UNKNOWN PLAYER'
-                : candidate.draftedByActiveTeam
-                  ? 'ROSTER'
-                  : candidate.drafted
-                  ? 'UNAVAILABLE'
-                  : (props.slotDepth[slotId] ?? 3) <= 2
-                    ? `${props.slotDepth[slotId]} LEFT`
-                    : null;
-          return <div key={slotId} data-board-slot={slotId} data-board-state={state ?? 'READY'}>
-            {candidate
-              ? <DeskCandidateRow
-                  candidate={candidate}
-                  prefix={slotLabel}
-                  selected={props.selectedCandidateId === playerId}
-                  onSelect={props.onSelectCandidate}
-                  warning={state}
-                  teamColors={props.teamColors}
-                />
-              : <p className="min-h-12 border-2 border-[var(--ballpark-panel-border)] bg-[var(--ballpark-well)] px-2 py-3 font-black"><span className="mr-2 text-[var(--ballpark-brass)]">{slotLabel}</span>{state}</p>}
-          </div>
-        })}
+      <div className="snake-board-slot-headings">
+        <span>LINEUP + BENCH</span>
+        <span>PITCHING STAFF</span>
+      </div>
+      <div className="snake-board-slot-layout grid grid-cols-1 gap-1" data-testid="board-slot-grid">
+        {SNAKE_BOARD_SLOT_IDS.map(renderSlot)}
       </div>
       {props.taxCoreRows.length > 0 ? <details className="mt-3 border-4 border-[var(--ballpark-panel-border)] p-3" data-testid={props.readOnly ? 'assistant-rating-room' : 'rating-room'}>
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 font-black">

@@ -49,13 +49,27 @@
   padding: 2rem;
 }
 
+.snake-board-slot-headings {
+  display: none;
+}
+
 /* Mac/laptop draft rooms use the document as the only vertical scroll owner.
  * Touch-first layouts keep their compact independent panes from the utility classes. */
 @media (min-width: 1024px) and (hover: hover) and (pointer: fine) {
+  .ballpark-page.snake-workspace-page {
+    padding: clamp(1rem, 1.6vw, 1.5rem);
+  }
+
   .snake-workspace-page .snake-private-workspace {
     height: auto !important;
     min-height: 0;
     overflow: visible;
+  }
+
+  .snake-workspace-page .snake-host-private-workspace,
+  .snake-workspace-page .snake-companion-private-workspace {
+    grid-template-columns: minmax(300px, 0.52fr) minmax(0, 1fr) !important;
+    gap: 0.75rem;
   }
 
   .snake-workspace-page .snake-selected-pane {
@@ -70,6 +84,54 @@
     min-height: 0;
     overflow: visible !important;
     overscroll-behavior: auto;
+  }
+
+  .snake-workspace-page .snake-room-aside {
+    position: static;
+    min-width: 0;
+  }
+}
+
+/* Laptop and desktop rooms use a board-first shell. The status rail stays
+ * narrow enough to scan without forcing the draft board into an iPad column. */
+@media (min-width: 1180px) and (hover: hover) and (pointer: fine) {
+  .snake-workspace-page .snake-room-layout {
+    grid-template-columns: minmax(0, 1fr) clamp(290px, 22vw, 340px);
+    gap: 1rem;
+  }
+
+  .snake-workspace-page .snake-host-private-workspace {
+    grid-template-columns: minmax(300px, 0.44fr) minmax(0, 1fr) !important;
+  }
+
+  .snake-workspace-page .snake-companion-private-workspace {
+    grid-template-columns: minmax(320px, 0.42fr) minmax(0, 1fr) !important;
+  }
+}
+
+/* Wide desktop boards show roster construction as two natural groups. This
+ * cuts the page length without adding a second scroll owner. */
+@media (min-width: 1680px) and (hover: hover) and (pointer: fine) {
+  .snake-workspace-page .snake-board-slot-headings {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    color: var(--ballpark-brass);
+    font-size: 0.625rem;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+  }
+
+  .snake-workspace-page .snake-board-slot-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .snake-workspace-page .snake-board-slot-layout > [data-board-slot] {
+    grid-column: var(--snake-board-column);
+    grid-row: var(--snake-board-row);
   }
 }
 

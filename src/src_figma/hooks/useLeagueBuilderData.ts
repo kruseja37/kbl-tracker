@@ -61,6 +61,153 @@ import {
   type HistoricalLegendsImportResult,
 } from '../../utils/historicalLegendsImport';
 
+type LeagueCreateInput = Omit<LeagueTemplate, 'id' | 'createdDate' | 'lastModified'>;
+
+async function copyTeamsIntoLeague(
+  sourceTeamIds: readonly string[],
+  leagueId: string,
+): Promise<Map<string, string>> {
+  const uniqueSourceTeamIds = [...new Set(sourceTeamIds)];
+  const sourceTeams = await Promise.all(uniqueSourceTeamIds.map(async (sourceTeamId) => {
+    const team = await getTeam(sourceTeamId);
+    if (!team) throw new Error(`Team not found: ${sourceTeamId}`);
+    return team;
+  }));
+  const sourceToTargetId = new Map<string, string>();
+  const copiedTeamsBySourceId = new Map<string, Team>();
+
+  for (const sourceTeam of sourceTeams) {
+    if (sourceTeam.leagueIds.includes(leagueId)) {
+      sourceToTargetId.set(sourceTeam.id, sourceTeam.id);
+      copiedTeamsBySourceId.set(sourceTeam.id, sourceTeam);
+      continue;
+    }
+
+    const {
+      id: _id,
+      createdDate: _createdDate,
+      lastModified: _lastModified,
+      rivalries: _rivalries,
+      rosterDesign: _rosterDesign,
+      boardRankOverrides: _boardRankOverrides,
+      captainPlayerId: _captainPlayerId,
+      fanHopefulPlayerId: _fanHopefulPlayerId,
+      lineupWithDH: _lineupWithDH,
+      lineupWithoutDH: _lineupWithoutDH,
+      startingRotation: _startingRotation,
+      optimalLineupVsRHPWithDH: _optimalLineupVsRHPWithDH,
+      optimalLineupVsLHPWithDH: _optimalLineupVsLHPWithDH,
+      optimalLineupVsRHPWithoutDH: _optimalLineupVsRHPWithoutDH,
+      optimalLineupVsLHPWithoutDH: _optimalLineupVsLHPWithoutDH,
+      ...copyInput
+    } = sourceTeam;
+    void [
+      _id,
+      _createdDate,
+      _lastModified,
+      _rivalries,
+      _rosterDesign,
+      _boardRankOverrides,
+      _captainPlayerId,
+      _fanHopefulPlayerId,
+      _lineupWithDH,
+      _lineupWithoutDH,
+      _startingRotation,
+      _optimalLineupVsRHPWithDH,
+      _optimalLineupVsLHPWithDH,
+      _optimalLineupVsRHPWithoutDH,
+      _optimalLineupVsLHPWithoutDH,
+    ];
+    const copiedTeam = await saveTeam({
+      ...copyInput,
+      id: undefined,
+      leagueIds: [leagueId],
+      rivalries: undefined,
+      rosterDesign: undefined,
+      boardRankOverrides: undefined,
+      captainPlayerId: null,
+      fanHopefulPlayerId: null,
+      lineupWithDH: [],
+      lineupWithoutDH: [],
+      startingRotation: [],
+      optimalLineupVsRHPWithDH: undefined,
+      optimalLineupVsLHPWithDH: undefined,
+      optimalLineupVsRHPWithoutDH: undefined,
+      optimalLineupVsLHPWithoutDH: undefined,
+    });
+    await saveTeamRoster(createEmptyTeamRoster(copiedTeam.id));
+    sourceToTargetId.set(sourceTeam.id, copiedTeam.id);
+    copiedTeamsBySourceId.set(sourceTeam.id, copiedTeam);
+  }
+
+  for (const sourceTeam of sourceTeams) {
+    const copiedTeam = copiedTeamsBySourceId.get(sourceTeam.id);
+    if (!copiedTeam || copiedTeam.id === sourceTeam.id || !sourceTeam.rivalries?.length) continue;
+    const rivalries = sourceTeam.rivalries.flatMap((rivalry) => {
+      const copiedOpponentTeamId = sourceToTargetId.get(rivalry.opponentTeamId);
+      return copiedOpponentTeamId
+        ? [{ ...rivalry, opponentTeamId: copiedOpponentTeamId }]
+        : [];
+    });
+    await saveTeam({
+      ...copiedTeam,
+      rivalries: rivalries.length > 0 ? rivalries : undefined,
+    });
+  }
+
+  return sourceToTargetId;
+}
+
+function remapLeagueTeamIds<T extends Pick<LeagueTemplate, 'teamIds' | 'divisions'>>(
+  league: T,
+  sourceToTargetId: ReadonlyMap<string, string>,
+): T {
+  return {
+    ...league,
+    teamIds: league.teamIds.flatMap((teamId) => {
+      const mapped = sourceToTargetId.get(teamId);
+      return mapped ? [mapped] : [];
+    }),
+    divisions: league.divisions.map((division) => ({
+      ...division,
+      teamIds: division.teamIds.flatMap((teamId) => {
+        const mapped = sourceToTargetId.get(teamId);
+        return mapped ? [mapped] : [];
+      }),
+    })),
+  };
+}
+
+async function createLeagueWithIsolatedTeams(data: LeagueCreateInput): Promise<LeagueTemplate> {
+  const sourceTeamIds = [...new Set(data.teamIds)];
+  const sourceTeams = await Promise.all(sourceTeamIds.map((teamId) => getTeam(teamId)));
+  const missingTeamId = sourceTeamIds.find((_teamId, index) => !sourceTeams[index]);
+  if (missingTeamId) throw new Error(`Team not found: ${missingTeamId}`);
+
+  const seed = await saveLeagueTemplate({
+    ...data,
+    teamIds: [],
+    divisions: data.divisions.map((division) => ({ ...division, teamIds: [] })),
+  });
+  const sourceToTargetId = await copyTeamsIntoLeague(sourceTeamIds, seed.id);
+  return saveLeagueTemplate(remapLeagueTeamIds({ ...seed, ...data, id: seed.id }, sourceToTargetId));
+}
+
+async function updateLeagueWithIsolatedAdditions(data: LeagueTemplate): Promise<LeagueTemplate> {
+  const original = await getLeagueTemplate(data.id);
+  if (!original) throw new Error('League not found');
+  const originalTeamIds = new Set(original.teamIds);
+  const addedTeamIds = [...new Set(data.teamIds.filter((teamId) => !originalTeamIds.has(teamId)))];
+  if (addedTeamIds.length === 0) return saveLeagueTemplate(data);
+
+  const sourceToTargetId = new Map(original.teamIds.map((teamId) => [teamId, teamId]));
+  const addedMappings = await copyTeamsIntoLeague(addedTeamIds, data.id);
+  for (const [sourceTeamId, targetTeamId] of addedMappings) {
+    sourceToTargetId.set(sourceTeamId, targetTeamId);
+  }
+  return saveLeagueTemplate(remapLeagueTeamIds(data, sourceToTargetId));
+}
+
 // Re-export types for convenience
 export type {
   LeagueTemplate,
@@ -311,45 +458,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   const createLeague = useCallback(async (data: Omit<LeagueTemplate, 'id' | 'createdDate' | 'lastModified'>) => {
     try {
-      const league = await saveLeagueTemplate(data);
-
-      // Auto-assign players: for each team in the new league, find players
-      // already assigned to that team (in any league) and give them a new
-      // assignment for this league on the same team. This lets users then
-      // move players to different teams within the new league independently.
-      if (league.teamIds?.length) {
-        const allPlayers = await getAllPlayers();
-        const teamIdSet = new Set(league.teamIds);
-
-        for (const player of allPlayers) {
-          if (!player.leagueAssignments?.length) continue;
-
-          // Find any existing assignment on a team that's in this new league
-          const matchingAssignment = player.leagueAssignments.find(
-            a => teamIdSet.has(a.teamId)
-          );
-          if (!matchingAssignment) continue;
-
-          // Skip if player already has an assignment for this league
-          const alreadyAssigned = player.leagueAssignments.some(
-            a => a.leagueId === league.id
-          );
-          if (alreadyAssigned) continue;
-
-          // Add new assignment for this league, same team + roster status
-          await savePlayer({
-            ...player,
-            leagueAssignments: [
-              ...player.leagueAssignments,
-              {
-                leagueId: league.id,
-                teamId: matchingAssignment.teamId,
-                rosterStatus: matchingAssignment.rosterStatus,
-              },
-            ],
-          });
-        }
-      }
+      const league = await createLeagueWithIsolatedTeams(data);
 
       await refresh();
       return league;
@@ -362,7 +471,7 @@ export function useLeagueBuilderData(): UseLeagueBuilderDataReturn {
 
   const updateLeague = useCallback(async (data: LeagueTemplate) => {
     try {
-      const league = await saveLeagueTemplate(data);
+      const league = await updateLeagueWithIsolatedAdditions(data);
       await refresh();
       return league;
     } catch (err) {

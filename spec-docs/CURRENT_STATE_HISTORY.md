@@ -1522,3 +1522,13 @@ final re-audit pending. The separate auditor has now returned APPROVE with Major
 independent tests, TypeScript, lint, production/PWA build, and diff integrity. Only JK's live
 `FREE SPACE + SYNC` click and pending-zero observation remain. No push, merge, or deploy was
 authorized.
+## Outgoing Live Header Snapshot — before 2026-07-19 Snake live-room authority close
+
+The prior current-state file had accumulated many stale `RIGHT NOW` banners from the Snake and
+Draft Setup program. The active state is now one concise header. The live-room repair replaces the
+two-authority browser-sync design with one cloud authority: Hotseat writes public truth; companions
+write only approved private boards and submit intent; public and private revisions are independent;
+events are hints backed by bounded current-state reads; draft target teams have new IDs and empty
+rosters. Final independent audit is APPROVE, Major 0 / Minor 0. Migration 009, matching deployment,
+narrow old test-state cleanup, and JK's browser walk remain. No merge, push, remote migration, or
+deploy was authorized.

@@ -1835,3 +1835,9 @@ and rollback, and the unchanged atomic cloud-race authority. Independent gates p
 138/138, TypeScript, changed-file ESLint, 2,735-module production/PWA build with 223 precache
 entries, parent/cumulative diff integrity, and clean frozen worktree. Engineering audit is closed;
 JK's live browser retry remains the only acceptance gate. No push, merge, or deploy.
+### 2026-07-19 — Snake live-room authority close
+
+| Finding | Date | Status | Surface | Summary |
+|---|---|---|---|---|
+| FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — MIGRATION AND JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own only scoped private boards and submit intent; live actions no longer use generic backup sync. Final audit APPROVE, Major 0 / Minor 0. |
+| FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |

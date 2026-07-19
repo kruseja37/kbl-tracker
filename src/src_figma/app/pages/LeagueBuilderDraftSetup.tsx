@@ -125,6 +125,10 @@ import {
   type Position,
 } from "../../../utils/leagueBuilderStorage";
 import { registerLeaguePoolForLeague } from "../../../utils/leagueBuilderPoolRegistration";
+import {
+  DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE,
+  draftLeagueTeamSharingConflicts,
+} from "../../../utils/draftLeagueTeamIsolation";
 import { readMlbDraftCompletion } from "../../../utils/mlbDraftCompletion";
 import { isSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
@@ -1641,6 +1645,11 @@ export function LeagueBuilderDraftSetup() {
     () => leagues.find((l) => l.id === activeLeagueId) ?? null,
     [leagues, activeLeagueId],
   );
+  const sharedLeagueTeamIds = useMemo(
+    () => league ? draftLeagueTeamSharingConflicts(leagues, league.id).map((conflict) => conflict.teamId) : [],
+    [league, leagues],
+  );
+  const legacyTeamIsolationBlocked = sharedLeagueTeamIds.length > 0;
 
   const leagueTeams = useMemo(() => {
     if (!league?.teamIds?.length) return [];
@@ -3405,12 +3414,14 @@ export function LeagueBuilderDraftSetup() {
     runProof: runSnakeSetupProof,
   });
 
-  const effectiveStartReady = isSnakeFormat
+  const effectiveStartReady = !legacyTeamIsolationBlocked && (isSnakeFormat
     ? Boolean(hasSavedDraft || (startReady && snakeAdapter.ready))
-    : startReady;
-  const effectiveStartBlocker = isSnakeFormat && !hasSavedDraft
-    ? snakeAdapter.readinessReasons[0] ?? startBlocker
-    : startBlocker;
+    : startReady);
+  const effectiveStartBlocker = legacyTeamIsolationBlocked
+    ? DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE
+    : isSnakeFormat && !hasSavedDraft
+      ? snakeAdapter.readinessReasons[0] ?? startBlocker
+      : startBlocker;
 
   const handleAdd = () =>
     runAction(async () => {
@@ -3951,6 +3962,7 @@ export function LeagueBuilderDraftSetup() {
 
   const handleLock = () =>
     runAction(async () => {
+      if (legacyTeamIsolationBlocked) throw new Error(DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE);
       assertPoolCanMutate();
       let leagueForLock = league;
       let lockedPool: RegisteredPool;
@@ -4015,6 +4027,7 @@ export function LeagueBuilderDraftSetup() {
   const handleRunItBack = () =>
     runAction(async () => {
       if (!activeLeagueId) return;
+      if (legacyTeamIsolationBlocked) throw new Error(DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE);
       await resetCompletedDraftArc(activeLeagueId);
       setRunItBackConfirm(false);
       setHasSavedDraft(false);
@@ -4025,6 +4038,7 @@ export function LeagueBuilderDraftSetup() {
 
   const handleStartDraft = () => {
     if (!league || !effectiveStartReady) return;
+    if (legacyTeamIsolationBlocked) return;
     if (isSnakeFormat) {
       // The adapter's enterDraft handles both fresh GO and resume-to-room —
       // it supersedes the PR #96 early return (audit merge recipe, 2026-07-11).
@@ -4107,7 +4121,9 @@ export function LeagueBuilderDraftSetup() {
   const nonGreenClubCount = clubCheckRows.filter((row) => row.tone !== "green").length;
   const runItBackBlockedMessage = runItBackLinkedFranchise
     ? RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE
-    : null;
+    : legacyTeamIsolationBlocked
+      ? DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE
+      : null;
   // Snake's exact roster-local simultaneous certificate already owns this answer. The legacy
   // salary-only Auction re-check is both weaker and expensive, so it must not run or render beside
   // the authoritative Snake proof.
@@ -4166,6 +4182,7 @@ export function LeagueBuilderDraftSetup() {
   }, [currentRecheckKey, humanTeams, inPoolPlayers, league?.poolExtractedAt, leagueTeams, locked, ownerName, recheckVisible, seats, tierBudget]);
   const canModeALock =
     !busy &&
+    !legacyTeamIsolationBlocked &&
     !savedDraftMutationBlocked &&
     inPoolPlayers.length > 0 &&
     sufficiency.meetsFloor &&
@@ -4177,7 +4194,7 @@ export function LeagueBuilderDraftSetup() {
   // authoritative for Auction, but Snake's roster-local, archetype-shifted tax
   // proof in `snakeAdapter` is the only Snake lock/GO gate.
   const poolFirstLegalCompletionBlocked = !isSnakeFormat && poolFirstSalaryCompletionBlocked;
-  const authoritativePoolLockBlocked = authoritativeDraftPoolLockBlocked({
+  const authoritativePoolLockBlocked = legacyTeamIsolationBlocked || authoritativeDraftPoolLockBlocked({
     draftFormat: activeDraftFormat,
     legacySalaryOnlyBlocked: poolFirstSalaryCompletionBlocked,
     snakeRosterLocalProofBlocked: snakeAdapter.lockProofBlocked,
@@ -4297,10 +4314,13 @@ export function LeagueBuilderDraftSetup() {
 
   const displayedReadinessReasons = isSnakeFormat
     ? [...new Set([
+        ...(legacyTeamIsolationBlocked ? [DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE] : []),
         ...readinessReasons.map((reason) => reason.replaceAll("auction", "draft").replaceAll("AUCTION", "DRAFT")),
         ...snakeAdapter.readinessReasons,
       ])]
-    : readinessReasons;
+    : legacyTeamIsolationBlocked
+      ? [DRAFT_LEAGUE_TEAM_ISOLATION_MESSAGE, ...readinessReasons]
+      : readinessReasons;
 
   const runModeALock = () => {
     if (!canModeALock) return;
@@ -5125,7 +5145,7 @@ export function LeagueBuilderDraftSetup() {
               </PressButton>
               <PressButton
                 onClick={() => void runAction(async () => snakeAdapter.enterPractice(), { refreshData: false, refreshPool: false })}
-                disabled={busy || !snakeAdapter.ready}
+                disabled={busy || legacyTeamIsolationBlocked || !snakeAdapter.ready}
                 size="lg"
               >
                 PRACTICE
@@ -5943,7 +5963,7 @@ export function LeagueBuilderDraftSetup() {
                   {!locked ? (
                     <PressButton
                       onClick={handleLock}
-                      disabled={busy || savedDraftMutationBlocked || inPoolPlayers.length === 0 || poolFirstLegalCompletionBlocked}
+                      disabled={busy || legacyTeamIsolationBlocked || savedDraftMutationBlocked || inPoolPlayers.length === 0 || poolFirstLegalCompletionBlocked}
                       variant="gold"
                       shadow={4}
                     >

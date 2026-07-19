@@ -1,41 +1,73 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import {
-  declineCompanionPickRequest,
-  fallBackCompanionSeatToHotseat,
-  patchMlbDraftSessionSnakeCompanions,
-  type LeagueBuilderMlbDraftSession,
-  type SnakeCompanionPickRequest,
-  type SnakeCompanionState,
+import type {
+  SnakeCompanionPickRequest,
 } from '../../../../../utils/leagueBuilderStorage';
+import type {
+  SnakeLiveClaim,
+  SnakeLiveIntent,
+} from '../../../../../utils/snakeLiveRoomTypes';
 import { CompanionHelp } from './CompanionHelp';
 import {
   discoverCompanionOrigin,
   isLoopbackCompanionHost,
   resolveCompanionJoinUrl,
 } from './companionJoinUrl';
-import {
-  approveCompanionClaim,
-  companionClaimIdentity,
-  ensureCompanionRoom,
-  type CompanionClaim,
-} from './companionModel';
 
 export interface CompanionApprovalCardProps {
-  session: LeagueBuilderMlbDraftSession;
+  roomCode: string;
   teams: readonly { id: string; name: string }[];
-  onChange: (session: LeagueBuilderMlbDraftSession) => void | Promise<void>;
-  createRoomCode?: () => string;
+  claims: readonly SnakeLiveClaim[];
+  intents: readonly SnakeLiveIntent[];
+  ready: boolean;
+  working?: boolean;
+  liveError?: string | null;
   playerName?: (playerId: string) => string;
-  onApprovePick?: (request: SnakeCompanionPickRequest) => void | Promise<void>;
-  onPublishCurrentRoom?: () => void | Promise<void>;
+  onResolveClaim: (
+    claim: SnakeLiveClaim,
+    status: 'approved' | 'revoked',
+  ) => void | Promise<void>;
+  onApprovePick: (
+    intent: SnakeLiveIntent,
+    request: SnakeCompanionPickRequest,
+  ) => void | Promise<void>;
+  onRejectPick: (intent: SnakeLiveIntent) => void | Promise<void>;
+}
+
+interface PendingPick {
+  intent: SnakeLiveIntent;
+  request: SnakeCompanionPickRequest;
+}
+
+function positiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+}
+
+function readLivePickRequest(intent: SnakeLiveIntent): SnakeCompanionPickRequest | null {
+  if (intent.kind !== 'pick' || intent.status !== 'pending') return null;
+  const playerId = intent.payload.playerId;
+  const pick = intent.payload.pick;
+  const submittedAt = intent.payload.submittedAt;
+  const sessionRevision = intent.payload.sessionRevision;
+  if (typeof playerId !== 'string' || !playerId.trim() || !positiveInteger(pick)
+    || typeof submittedAt !== 'string' || !submittedAt.trim()
+    || typeof sessionRevision !== 'number' || !Number.isInteger(sessionRevision) || sessionRevision < 0) {
+    return null;
+  }
+  return {
+    id: intent.id,
+    teamId: intent.teamId,
+    playerId,
+    pick,
+    submittedAt,
+    deviceId: intent.deviceId,
+    sessionRevision,
+  };
 }
 
 export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
   const [error, setError] = useState<string | null>(null);
-  const [pickWorking, setPickWorking] = useState(false);
-  const [publishWorking, setPublishWorking] = useState(false);
-  const [publishStatus, setPublishStatus] = useState<string | null>(null);
+  const [actionWorking, setActionWorking] = useState(false);
   const configuredOrigin = import.meta.env.VITE_COMPANION_ORIGIN as string | undefined;
   const currentIsLoopback = (() => {
     try { return isLoopbackCompanionHost(new URL(window.location.origin).hostname); } catch { return true; }
@@ -44,11 +76,8 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
     currentIsLoopback && !configuredOrigin ? undefined : null
   ));
   const shareableOrigin = configuredOrigin ?? discoveredOrigin;
-  const joinUrl = resolveCompanionJoinUrl(
-    window.location.origin,
-    shareableOrigin,
-    props.session.snakeCompanions?.roomCode,
-  );
+  const joinUrl = resolveCompanionJoinUrl(window.location.origin, shareableOrigin, props.roomCode);
+
   useEffect(() => {
     if (!currentIsLoopback || configuredOrigin) return;
     let cancelled = false;
@@ -57,129 +86,87 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
     });
     return () => { cancelled = true; };
   }, [configuredOrigin, currentIsLoopback]);
-  useEffect(() => {
-    if (props.session.snakeCompanions?.roomCode) return;
-    void patchMlbDraftSessionSnakeCompanions({
-      leagueId: props.session.leagueId,
-      seasonNumber: props.session.seasonNumber,
-      patch: (current, fresh) => ensureCompanionRoom(
-        { ...fresh, snakeCompanions: current },
-        props.createRoomCode,
-      ).snakeCompanions as SnakeCompanionState,
-    }).then(props.onChange);
-  }, [props.createRoomCode, props.onChange, props.session.leagueId, props.session.seasonNumber, props.session.snakeCompanions?.roomCode]);
 
-  const companions = props.session.snakeCompanions;
-  if (!companions) return <section className="ballpark-panel"><p>OPENING THE COMPANION ROOM…</p></section>;
-  const pendingPackages = [...companions.claims.filter((claim) => claim.status === 'pending').reduce((packages, claim) => {
-    const rows = packages.get(claim.deviceId) ?? [];
-    rows.push(claim);
-    packages.set(claim.deviceId, rows);
-    return packages;
-  }, new Map<string, CompanionClaim[]>()).values()];
+  const pendingPackages = useMemo(() => [...props.claims
+    .filter((claim) => claim.status === 'pending')
+    .reduce((packages, claim) => {
+      const rows = packages.get(claim.deviceId) ?? [];
+      rows.push(claim);
+      packages.set(claim.deviceId, rows);
+      return packages;
+    }, new Map<string, SnakeLiveClaim[]>())
+    .values()], [props.claims]);
+  const approvedClaims = useMemo(
+    () => props.claims.filter((claim) => claim.status === 'approved'),
+    [props.claims],
+  );
+  const pendingPicks = useMemo(() => props.intents
+    .map((intent): PendingPick | null => {
+      const request = readLivePickRequest(intent);
+      return request ? { intent, request } : null;
+    })
+    .filter((entry): entry is PendingPick => Boolean(entry))
+    .sort((left, right) => left.intent.createdAt.localeCompare(right.intent.createdAt)), [props.intents]);
+  const pendingPick = pendingPicks[0] ?? null;
   const teamName = (teamId: string) => props.teams.find((team) => team.id === teamId)?.name ?? 'UNKNOWN TEAM';
-  const update = async (claim: CompanionClaim, status: 'approved' | 'revoked') => {
+  const disabled = actionWorking || props.working || !props.ready;
+
+  const act = async (operation: () => void | Promise<void>) => {
+    if (disabled) return;
     setError(null);
-    const identity = companionClaimIdentity(claim);
+    setActionWorking(true);
     try {
-      const saved = await patchMlbDraftSessionSnakeCompanions({
-        leagueId: props.session.leagueId,
-        seasonNumber: props.session.seasonNumber,
-        patch: (current, fresh) => approveCompanionClaim(
-          { ...fresh, snakeCompanions: current },
-          identity,
-          status,
-        ).snakeCompanions as SnakeCompanionState,
-      });
-      await props.onChange(saved);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-  const fallBackToHotseat = async (claim: CompanionClaim) => {
-    setError(null);
-    try {
-      const saved = await fallBackCompanionSeatToHotseat({
-        leagueId: props.session.leagueId,
-        seasonNumber: props.session.seasonNumber,
-        claimId: claim.claimId,
-        claimVersion: claim.claimVersion,
-        deviceId: claim.deviceId,
-        teamId: claim.teamId,
-      });
-      await props.onChange(saved);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  };
-  const actOnPickRequest = async (action: 'APPROVE' | 'DECLINE') => {
-    const request = props.session.snakeCompanions?.pickRequest;
-    if (!request || pickWorking) return;
-    setError(null);
-    setPickWorking(true);
-    try {
-      if (action === 'APPROVE') {
-        if (!props.onApprovePick) throw new Error('THE MAIN PICK PATH IS NOT READY.');
-        await props.onApprovePick(request);
-      } else {
-        const saved = await declineCompanionPickRequest({
-          leagueId: props.session.leagueId,
-          seasonNumber: props.session.seasonNumber,
-          requestId: request.id,
-        });
-        await props.onChange(saved);
-      }
+      await operation();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setPickWorking(false);
-    }
-  };
-  const publishCurrentRoom = async () => {
-    if (!props.onPublishCurrentRoom || publishWorking) return;
-    setError(null);
-    setPublishStatus(null);
-    setPublishWorking(true);
-    try {
-      await props.onPublishCurrentRoom();
-      setPublishStatus('ROOM PUBLISHED — COMPANIONS UPDATE WITHIN 5 SECONDS.');
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setPublishWorking(false);
+      setActionWorking(false);
     }
   };
 
   return (
     <section className="ballpark-panel" aria-label="Companion approvals">
-      <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
-      <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {companions.roomCode}</h2>
-      {props.onPublishCurrentRoom ? (
-        <button
-          type="button"
-          className="ballpark-press-button ballpark-press-sm ballpark-press-gold mt-3 min-h-11"
-          disabled={publishWorking}
-          onClick={() => void publishCurrentRoom()}
-        >{publishWorking ? 'SYNCING…' : 'SYNC COMPANIONS'}</button>
-      ) : null}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold tracking-[0.18em] text-[var(--ballpark-brass)]">COMPANION DEVICES</p>
+          <h2 className="ballpark-title mt-1 text-2xl">ROOM CODE {props.roomCode || '—'}</h2>
+        </div>
+        <p
+          className={`border-2 px-3 py-2 text-xs font-black ${props.ready ? 'border-[var(--ballpark-status-good)] text-[var(--ballpark-status-good)]' : 'border-[var(--ballpark-status-warn)] text-[var(--ballpark-warn-text)]'}`}
+          role="status"
+        >{props.ready ? 'LIVE' : 'CONNECTING'}</p>
+      </div>
       <CompanionHelp>
         {joinUrl
-          ? <p>ON YOUR PHONE, GO TO: <strong data-testid="companion-join-url">{joinUrl}</strong> — SAME WI-FI.</p>
+          ? <p>ON THE COMPANION DEVICE, GO TO: <strong data-testid="companion-join-url">{joinUrl}</strong></p>
           : discoveredOrigin === undefined
             ? <p>FINDING THE SHAREABLE ADDRESS…</p>
             : <p className="font-bold text-[var(--ballpark-warn-text)]" role="alert">COMPANION SHARING IS OFF. RESTART THE PREVIEW WITH <strong>NPM RUN DEV</strong>.</p>}
-        <p>USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.</p>
+        <p>USE THIS CODE ON THE LEAGUE OWNER'S SIGNED-IN DEVICES.</p>
       </CompanionHelp>
-      {error ? <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">{error}</p> : null}
-      {publishStatus ? <p className="mt-3 font-bold text-[var(--ballpark-status-good)]" role="status">{publishStatus}</p> : null}
+      {props.liveError || error ? (
+        <p className="mt-3 font-bold text-[var(--ballpark-warn-text)]" role="alert">
+          {(error ?? props.liveError)?.toUpperCase()}
+        </p>
+      ) : null}
       <div className="mt-4 grid gap-3">
-        {companions.pickRequest ? (
+        {pendingPick ? (
           <div className="border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="companion-pick-request">
             <p className="text-xs font-black tracking-[0.16em] text-[var(--ballpark-brass)]">PICK REQUEST</p>
-            <p className="mt-1 text-lg font-black">#{companions.pickRequest.pick} · {teamName(companions.pickRequest.teamId).toUpperCase()} · {(props.playerName?.(companions.pickRequest.playerId) ?? companions.pickRequest.playerId).toUpperCase()}</p>
+            <p className="mt-1 text-lg font-black">
+              #{pendingPick.request.pick} · {teamName(pendingPick.request.teamId).toUpperCase()} · {(props.playerName?.(pendingPick.request.playerId) ?? pendingPick.request.playerId).toUpperCase()}
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={pickWorking} onClick={() => void actOnPickRequest('APPROVE')}>APPROVE PICK</button>
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" disabled={pickWorking} onClick={() => void actOnPickRequest('DECLINE')}>DECLINE</button>
+              <button
+                className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11"
+                disabled={disabled}
+                onClick={() => void act(() => props.onApprovePick(pendingPick.intent, pendingPick.request))}
+              >APPROVE PICK</button>
+              <button
+                className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11"
+                disabled={disabled}
+                onClick={() => void act(() => props.onRejectPick(pendingPick.intent))}
+              >DECLINE</button>
             </div>
           </div>
         ) : null}
@@ -189,23 +176,32 @@ export function CompanionApprovalCard(props: CompanionApprovalCardProps) {
               {claims[0].gmName.toUpperCase()} · {claims.length} TEAM{claims.length === 1 ? '' : 'S'}
             </p>
             {claims.map((claim) => (
-              <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t-2 border-[var(--ballpark-panel-border)] pt-2">
+              <div key={claim.id} className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t-2 border-[var(--ballpark-panel-border)] pt-2">
                 <p className="font-bold">{teamName(claim.teamId).toUpperCase()}</p>
                 <div className="flex gap-2">
-                  <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={() => void update(claim, 'approved')}>APPROVE {teamName(claim.teamId).toUpperCase()}</button>
-                  <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REFUSE</button>
+                  <button
+                    className="ballpark-press-button ballpark-press-sm ballpark-press-gold"
+                    disabled={disabled}
+                    onClick={() => void act(() => props.onResolveClaim(claim, 'approved'))}
+                  >APPROVE {teamName(claim.teamId).toUpperCase()}</button>
+                  <button
+                    className="ballpark-press-button ballpark-press-sm ballpark-press-default"
+                    disabled={disabled}
+                    onClick={() => void act(() => props.onResolveClaim(claim, 'revoked'))}
+                  >REFUSE</button>
                 </div>
               </div>
             ))}
           </div>
         ))}
-        {companions.claims.filter((claim) => claim.status === 'approved').map((claim) => (
-          <div key={claim.claimId ?? `${claim.deviceId}:${claim.teamId}:${claim.claimVersion ?? 0}`} className="flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-panel-border)] p-3">
+        {approvedClaims.map((claim) => (
+          <div key={claim.id} className="flex flex-wrap items-center justify-between gap-2 border-2 border-[var(--ballpark-panel-border)] p-3">
             <p><strong>{claim.gmName.toUpperCase()}</strong> — {teamName(claim.teamId).toUpperCase()}</p>
-            <div className="flex flex-wrap gap-2">
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-gold" onClick={() => void fallBackToHotseat(claim)}>FALL BACK TO HOTSEAT</button>
-              <button className="ballpark-press-button ballpark-press-sm ballpark-press-default" onClick={() => void update(claim, 'revoked')}>REVOKE {claim.gmName.toUpperCase()}</button>
-            </div>
+            <button
+              className="ballpark-press-button ballpark-press-sm ballpark-press-gold"
+              disabled={disabled}
+              onClick={() => void act(() => props.onResolveClaim(claim, 'revoked'))}
+            >RETURN TO HOTSEAT</button>
           </div>
         ))}
       </div>

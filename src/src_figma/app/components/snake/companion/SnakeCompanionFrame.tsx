@@ -140,7 +140,7 @@ export function SnakeCompanionFrame(props: {
         </div>
       </section>
       <div
-        className="snake-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(300px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+        className="snake-private-workspace snake-companion-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(300px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
         data-testid="companion-private-workspace-layout"
       >
         <div className="snake-selected-pane sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:max-h-[calc(100vh-18rem)]" data-testid="companion-selected-player-pane">
