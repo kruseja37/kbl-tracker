@@ -61,9 +61,10 @@
   - `kbl-sync-local-write-bases`
   - `kbl-sync-write-base-owner`
   - `kbl-sync-deferred-snake-protected-rows`
-- Delete the old local IndexedDB databases `kbl-snake-live-capabilities` and `kbl-sync-outbox` only
-  before starting the final clean acceptance draft. Do not clear them after the Hotseat opens the
-  new room.
+- Delete only the dedicated `kbl-snake-live-capabilities` IndexedDB database before starting the
+  final clean acceptance draft. Do not clear it after the Hotseat opens the new room.
+- Do not delete `kbl-sync-outbox`. It can contain unrelated durable or quarantined account changes
+  and is no longer involved in companion live-room entry.
 - Keep Supabase Auth data, device identity, players, source leagues, teams, archetypes, registered
   pools, and any non-test product data.
 
@@ -76,7 +77,8 @@
 
 ## Known controlled-preview boundary
 
-- Public draft state, private boards, claims, and pick/trade intent are cloud-authoritative.
+- Public draft state, claimed companion private boards, claims, and pick/trade intent are
+  cloud-authoritative. Unclaimed Hotseat boards remain local.
 - The Hotseat still discovers and rejoins the cloud room from its local League Builder session plus
   the small host capability key. Cloud room state alone cannot cold-boot a wiped Hotseat profile.
 - Final freeze and roster handoff still use the Hotseat's local canonical private player records.
