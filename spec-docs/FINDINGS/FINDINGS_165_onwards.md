@@ -1065,9 +1065,11 @@ rows or invoke full Upload/Download.
 bases; exact duplicates retire; local-source drift and account-switch tests remain fail-closed. Full
 the first independent audit blocked the initial implementation because its post-rebase drain was
 not identity-scoped and a shared Snake-room tombstone could bypass companion-intent protection.
-Both Majors now have exact regressions: only returned rebase keys drain, and live/deleted room
-disagreement stays protected. Focused sync/UI proof is 137/137, including mixed safe/obsolete
-queues, shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript,
+The second audit then blocked key-only targeting because a same-key replacement during the drain's
+auth await could bypass classification. All three Majors now have exact regressions: only the exact
+operation objects returned by rebase drain, live/deleted room disagreement stays protected, and
+same-key replacements remain queued. Focused sync/UI proof is 138/138, including mixed
+safe/obsolete queues, same-key replacement, shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript,
 changed-file ESLint, the fresh 2,735-module
 production/PWA build with 223 precache entries, and diff integrity are green. Freeze, separate audit,
 and JK's live retry remain. No push, merge, or deploy.

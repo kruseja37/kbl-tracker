@@ -3998,6 +3998,54 @@ describe("syncEngine dynamic elimination copied DBs", () => {
     expect(syncEngine.getStatus().pendingCount).toBe(1);
   });
 
+  test("targeted recovery drain does not publish a same-key replacement", async () => {
+    await putAtBatEventRecord({ eventId: "target-replaced", result: "DOUBLE" });
+    const syncEngine = await loadFreshSyncEngine();
+    const originalSetItem = Storage.prototype.setItem;
+    let rejectFirstQueueSave = true;
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string,
+    ) {
+      if (key === "kbl-sync-queue" && rejectFirstQueueSave) {
+        rejectFirstQueueSave = false;
+        throw new DOMException("Setting the value exceeded the quota.", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    });
+    syncEngine.upsert("kbl-event-log", "atBatEvents", "target-replaced", {
+      eventId: "target-replaced",
+      result: "DOUBLE",
+    });
+    mockState.failNextUpsertTable = "kbl_stores";
+    mockState.nextRpcResponse = {
+      table: "kbl_stores",
+      data: null,
+      error: { message: "second transient failure" },
+    };
+    let sessionReads = 0;
+    mockState.afterGetSession = () => {
+      sessionReads += 1;
+      if (sessionReads === 6) {
+        syncEngine.upsert("kbl-event-log", "atBatEvents", "target-replaced", {
+          eventId: "target-replaced",
+          result: "HOME_RUN",
+        });
+      }
+    };
+
+    await expect(syncEngine.recoverQuotaBlockedQueue()).rejects.toThrow(
+      "1 operation(s) are not exact matches across this device and cloud and remain protected",
+    );
+
+    expect(mockState.cloudRows.some((row) =>
+      row.record_key === JSON.stringify("target-replaced")
+      && (row.data as { result?: string }).result === "HOME_RUN"
+    )).toBe(false);
+    expect(syncEngine.getStatus().pendingCount).toBe(1);
+  });
+
   test("quota recovery does not tombstone a live snake room with unseen companion intent", async () => {
     const leagueId = "audit-room-delete";
     const roomId = `${leagueId}::startup-mlb-draft::1`;

@@ -1815,8 +1815,11 @@ no push, merge, or deploy.
 Separate auditor Gibbs blocked frozen commit `641679b7` with **Major 2 / Minor 0**. It reproduced
 that an unfiltered post-rebase drain could publish a locally obsolete peer, and that a queued
 `mlbDraftSessions` tombstone could erase a live cloud room with unseen companion intent. The
-builder repaired both exact boundaries: the recovery drain accepts only the queue keys returned by
+builder repaired both exact boundaries: the recovery drain initially accepted only the queue keys returned by
 the safe rebase classifier, and shared-room live/deleted disagreement is protected. The auditor's
-two minimal reproductions are now permanent tests. Repaired focused proof is 137/137, with
-TypeScript, changed-file ESLint, fresh production/PWA build, and diff integrity green. Second audit
-remains required before preview restart.
+two minimal reproductions are now permanent tests. The second audit blocked `e774f405` with
+**Major 1 / Minor 0** because a same-key replacement during the drain's auth await could still match
+the approved key. The repair now binds the target to the exact rebased operation object; that third
+auditor reproduction is also permanent. Focused proof is 138/138, with TypeScript, changed-file
+ESLint, fresh production/PWA build, and diff integrity green. Final re-audit remains required before
+preview restart.

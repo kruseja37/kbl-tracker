@@ -8086,8 +8086,11 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - The first independent audit blocked `641679b7` with two Majors: its post-rebase drain was not
   identity-scoped, and a shared Snake-room tombstone could bypass companion-intent protection.
   Both now have exact regressions and narrow repairs.
-- Focused sync/UI proof is 137/137, including mixed safe/obsolete queues, shared-room tombstones,
-  and rebase-snapshot cloud-race rejection; TypeScript, changed-file ESLint, fresh production/PWA
-  build, and diff integrity are green. The second independent audit remains.
+- The second independent audit blocked `e774f405` with Major 1: key-only targeting could pick up a
+  same-key replacement during the drain's authentication await. The target is now bound to the
+  exact rebased operation object and the auditor's reproduction is permanent.
+- Focused sync/UI proof is 138/138, including mixed safe/obsolete queues, same-key replacement,
+  shared-room tombstones, and rebase-snapshot cloud-race rejection. TypeScript, changed-file
+  ESLint, fresh production/PWA build, and diff integrity are green. Final independent re-audit remains.
   build with 223 precache entries, and diff integrity are green. Freeze, separate audit, preview, and
   JK retry remain. No push, merge, or deploy.

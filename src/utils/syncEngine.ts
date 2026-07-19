@@ -1262,13 +1262,13 @@ class SyncEngine {
     await this.drainLocalQueue(expectedUserId, true);
   }
 
-  private async flushQueueKeysForExpectedUser(
+  private async flushQueueOpsForExpectedUser(
     expectedUserId: string,
-    storeQueueKeys: ReadonlySet<string>,
-    localQueueKeys: ReadonlySet<string>,
+    storeQueueOps: ReadonlyMap<string, PendingOp>,
+    localQueueOps: ReadonlyMap<string, PendingLocalOp>,
   ): Promise<void> {
-    await this.drainQueue(expectedUserId, true, storeQueueKeys);
-    await this.drainLocalQueue(expectedUserId, true, localQueueKeys);
+    await this.drainQueue(expectedUserId, true, storeQueueOps);
+    await this.drainLocalQueue(expectedUserId, true, localQueueOps);
   }
 
   /**
@@ -1340,10 +1340,10 @@ class SyncEngine {
         if (pendingCount > 0) {
           const rebase = await this.rebaseQueuedOpsStillRepresentedLocally(recoveryUserId);
           if (rebase.rebasedCount > 0) {
-            await this.flushQueueKeysForExpectedUser(
+            await this.flushQueueOpsForExpectedUser(
               recoveryUserId,
-              rebase.rebasedStoreQueueKeys,
-              rebase.rebasedLocalQueueKeys,
+              rebase.rebasedStoreQueueOps,
+              rebase.rebasedLocalQueueOps,
             );
             if (!this.persistQueues()) {
               throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the rebased queue.');
@@ -1627,11 +1627,11 @@ class SyncEngine {
   private async drainQueue(
     expectedUserId?: string,
     allowWhileBlocked = false,
-    targetQueueKeys?: ReadonlySet<string>,
+    targetQueueOps?: ReadonlyMap<string, PendingOp>,
   ): Promise<void> {
     if (this.drainQueuePromise) return this.drainQueuePromise;
 
-    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked, targetQueueKeys).finally(() => {
+    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked, targetQueueOps).finally(() => {
       if (this.drainQueuePromise === promise) {
         this.drainQueuePromise = null;
       }
@@ -1643,7 +1643,7 @@ class SyncEngine {
   private async drainQueueOnce(
     expectedUserId?: string,
     allowWhileBlocked = false,
-    targetQueueKeys?: ReadonlySet<string>,
+    targetQueueOps?: ReadonlyMap<string, PendingOp>,
   ): Promise<void> {
     if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.pushQueue.size === 0) return;
@@ -1658,7 +1658,7 @@ class SyncEngine {
     }
 
     const ops = Array.from(this.pushQueue.entries())
-      .filter(([queueKey]) => !targetQueueKeys || targetQueueKeys.has(queueKey))
+      .filter(([queueKey, op]) => !targetQueueOps || targetQueueOps.get(queueKey) === op)
       .map(([, op]) => op);
     if (ops.length === 0) return;
     const inFlightOps = new Map(ops.map((op) => [this.pushQueueKey(op), op]));
@@ -1748,11 +1748,11 @@ class SyncEngine {
   private async drainLocalQueue(
     expectedUserId?: string,
     allowWhileBlocked = false,
-    targetQueueKeys?: ReadonlySet<string>,
+    targetQueueOps?: ReadonlyMap<string, PendingLocalOp>,
   ): Promise<void> {
     if (this.drainLocalQueuePromise) return this.drainLocalQueuePromise;
 
-    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked, targetQueueKeys).finally(() => {
+    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked, targetQueueOps).finally(() => {
       if (this.drainLocalQueuePromise === promise) {
         this.drainLocalQueuePromise = null;
       }
@@ -1764,7 +1764,7 @@ class SyncEngine {
   private async drainLocalQueueOnce(
     expectedUserId?: string,
     allowWhileBlocked = false,
-    targetQueueKeys?: ReadonlySet<string>,
+    targetQueueOps?: ReadonlyMap<string, PendingLocalOp>,
   ): Promise<void> {
     if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.localQueue.size === 0) return;
@@ -1779,7 +1779,7 @@ class SyncEngine {
     }
 
     const ops = Array.from(this.localQueue.entries())
-      .filter(([key]) => !targetQueueKeys || targetQueueKeys.has(key))
+      .filter(([key, op]) => !targetQueueOps || targetQueueOps.get(key) === op)
       .map(([, op]) => op);
     if (ops.length === 0) return;
     const inFlightOps = new Map(ops.map((op) => [op.key, op]));
@@ -2048,8 +2048,8 @@ class SyncEngine {
    */
   private async rebaseQueuedOpsStillRepresentedLocally(userId: string): Promise<{
     rebasedCount: number;
-    rebasedStoreQueueKeys: Set<string>;
-    rebasedLocalQueueKeys: Set<string>;
+    rebasedStoreQueueOps: Map<string, PendingOp>;
+    rebasedLocalQueueOps: Map<string, PendingLocalOp>;
     protectedConflicts: string[];
   }> {
     const storeSnapshot = new Map(this.pushQueue);
@@ -2057,8 +2057,8 @@ class SyncEngine {
     if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
       return {
         rebasedCount: 0,
-        rebasedStoreQueueKeys: new Set(),
-        rebasedLocalQueueKeys: new Set(),
+        rebasedStoreQueueOps: new Map(),
+        rebasedLocalQueueOps: new Map(),
         protectedConflicts: [],
       };
     }
@@ -2211,13 +2211,17 @@ class SyncEngine {
     }
 
     const rebasedCount = rebasedStoreEntries.length + rebasedLocalEntries.length;
-    const rebasedStoreQueueKeys = new Set(rebasedStoreEntries.map(([queueKey]) => queueKey));
-    const rebasedLocalQueueKeys = new Set(rebasedLocalEntries.map(([key]) => key));
+    const rebasedStoreQueueOps = new Map(
+      rebasedStoreEntries.map(([queueKey, , rebasedOp]) => [queueKey, rebasedOp]),
+    );
+    const rebasedLocalQueueOps = new Map(
+      rebasedLocalEntries.map(([key, , rebasedOp]) => [key, rebasedOp]),
+    );
     if (rebasedCount === 0) {
       return {
         rebasedCount,
-        rebasedStoreQueueKeys,
-        rebasedLocalQueueKeys,
+        rebasedStoreQueueOps,
+        rebasedLocalQueueOps,
         protectedConflicts,
       };
     }
@@ -2240,8 +2244,8 @@ class SyncEngine {
 
     return {
       rebasedCount,
-      rebasedStoreQueueKeys,
-      rebasedLocalQueueKeys,
+      rebasedStoreQueueOps,
+      rebasedLocalQueueOps,
       protectedConflicts,
     };
   }
