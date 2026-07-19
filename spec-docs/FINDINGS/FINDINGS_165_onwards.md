@@ -1076,7 +1076,7 @@ re-audit of frozen `9725c5bd`: **APPROVE — Major 0 / Minor 0**. JK's live retr
 merge, or deploy.
 
 ### FINDING-244
-**Date:** 2026-07-19 | **Phase:** Snake Draft / companion live-room authority | **Status:** FIXED — FROZEN — FINAL INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-19 | **Phase:** Snake Draft / companion live-room authority | **Status:** FIXED — INDEPENDENTLY APPROVED — MIGRATION, PREVIEW, AND JK WALK PENDING
 **Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/syncEngine.ts`,
 `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`,
 `supabase/migrations/009_snake_live_rooms.sql`
@@ -1112,9 +1112,11 @@ initialize, or pull that generic engine. Its remaining account outbox is account
 data. The current combined matrix is 12 files / 130 tests, all green; TypeScript, changed-file lint,
 production/PWA build, and diff integrity are green.
 
-**Final audit:** Pending against frozen code commit `fd07bba0` and the updated controlled-preview
-runbook. Migration `009_snake_live_rooms.sql`, deployment, narrow test-state reset, and JK's
-real-device walk remain blocked until that verdict. No merge or deploy is authorized.
+**Final audit:** **APPROVE — Major 0 / Minor 0** against exact branch head `cedf96ee`. The auditor
+independently passed 12 files / 130 focused tests, TypeScript, changed-file ESLint, the 2,744-module
+production/PWA build with 223 precache entries, diff integrity, and the clean-worktree check.
+Migration `009_snake_live_rooms.sql`, deployment, narrow test-state reset, and JK's real-device walk
+remain. No merge or deploy is authorized.
 
 ### FINDING-245
 **Date:** 2026-07-19 | **Phase:** League Builder / draft target team isolation | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING

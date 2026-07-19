@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-19
 **Thread:** SNAKE_DRAFT
-**Status:** REPAIR FROZEN — FINAL INDEPENDENT AUDIT PENDING — MIGRATION, PREVIEW, AND JK WALK PENDING
+**Status:** INDEPENDENTLY APPROVED — MIGRATION, PREVIEW, AND JK WALK PENDING
 **Product gate:** JK's browser and real-device walk
 
 ## State checked before the audit
@@ -15,6 +15,8 @@
   `codex/snake-live-room-authority`.
 - The cloud-authority implementation is commit `e553fcb6`. Companion isolation from generic sync is
   commit `fd07bba0`.
+- The independent auditor inspected exact branch head `cedf96ee` and returned **APPROVE — Major 0 /
+  Minor 0**. Commits after `fd07bba0` are documentation only.
 - No merge or deploy is authorized.
 
 ## Verdict
@@ -259,7 +261,10 @@ The generic account backup engine does not publish or pull active room or board 
 - The combined live-room, catalog, host, companion, completion, reconnect, registration, and auth
   matrix is 12 files / 130 tests, all green.
 - TypeScript, changed-file ESLint, production/PWA build, and diff integrity are green.
-- The final independent audit is pending against frozen commit `fd07bba0` and the current runbook.
+- The final independent audit returned **APPROVE — Major 0 / Minor 0** against exact branch head
+  `cedf96ee`. The auditor independently passed 12 files / 130 focused tests, TypeScript,
+  changed-file ESLint, the 2,744-module production/PWA build with 223 precache entries, diff
+  integrity, and the clean-worktree check.
 
 ## Bounded follow-up outside this preview
 

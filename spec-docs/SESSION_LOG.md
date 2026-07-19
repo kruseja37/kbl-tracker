@@ -8121,6 +8121,9 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Verification: 188 passed / 32 skipped live-room tests; 73/73 live/auth tests; 246/246 targeted
   Snake UI/storage tests; 102 passed / 32 skipped generic-sync regression; TypeScript,
   changed-file ESLint, production/PWA build, and diff integrity green.
-- Remaining: fetch current `origin/main`, commit this branch, apply migration 009, deploy the matching
-  app, remove only old Snake test rooms and retired local sync keys, then run JK's real Hotseat plus
-  companion walk. No merge, push, remote migration, or deploy was authorized in this session.
+- Fetched current `origin/main` again after the audit; it remains
+  `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`, the exact branch base.
+- Remaining: obtain JK's authority to apply migration 009 and deploy the exact audited branch as a
+  Vercel preview, remove only old Snake test rooms and retired local sync keys, then run JK's real
+  Hotseat plus companion walk. Preserve `kbl-sync-outbox`. No merge, push, remote migration, or
+  deploy was authorized in this session.

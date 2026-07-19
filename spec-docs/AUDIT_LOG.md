@@ -1839,5 +1839,5 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 
 | Finding | Date | Status | Surface | Summary |
 |---|---|---|---|---|
-| FINDING-244 | 2026-07-19 | FIXED — FROZEN — FINAL INDEPENDENT AUDIT PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are frozen at `fd07bba0`. |
+| FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — MIGRATION, PREVIEW, AND JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are implemented at `fd07bba0` and independently approved at exact branch head `cedf96ee`, Major 0 / Minor 0. |
 | FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |

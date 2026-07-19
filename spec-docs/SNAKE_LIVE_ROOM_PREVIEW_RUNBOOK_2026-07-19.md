@@ -3,6 +3,7 @@
 **Date:** 2026-07-19
 **Thread:** SNAKE_DRAFT
 **Implementation commit:** `fd07bba0`
+**Independently audited branch head:** `cedf96ee` — **APPROVE, Major 0 / Minor 0**
 **Rule:** Preview only. Do not promote to production before JK accepts the real device walk.
 
 ## Current remote state
@@ -13,7 +14,7 @@
   `PGRST205` and HTTP 404.
 - Vercel project: `kbl-tracker`, project ID `prj_lUo6rUNcZ6g96VuQni0yuyrEH6co`.
 - Current production deployment is commit `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
-- No deployment contains commit `fd07bba0`.
+- No deployment contains commit `fd07bba0` or audited branch head `cedf96ee`.
 
 ## Safe preview sequence
 
