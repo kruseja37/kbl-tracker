@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — SNAKE LIVE-ROOM AUTHORITY IS CODE-COMPLETE AND INDEPENDENTLY APPROVED (2026-07-19; implementation `fd07bba0`; audited head `cedf96ee`; branch `codex/snake-live-room-authority`). The old companion system used two private-board authorities and routed live claims, picks, trades, and board updates through whole-account backup sync. The repair makes Supabase the live-room authority: Hotseat alone writes public draft state; companions write only their approved private boards and submit pick/trade intent; public and private revisions are independent; events are hints backed by bounded current-state reads; live rooms no longer use generic backup sync. Draft targets now receive new team IDs and empty rosters, so source team rosters cannot be erased or inherited. Final non-builder audit: **APPROVE — Major 0 / Minor 0**. The branch is based on freshly fetched `origin/main` `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`. **NEXT:** obtain authority to apply migration 009 and deploy the matching Vercel preview. After deployment, remove only old Snake test rooms and retired local sync keys. Preserve the account outbox, players, source leagues, teams, archetypes, and pools. **BROWSER VERIFY OUTSTANDING / OPEN PENDING-JK:** JK runs one real Hotseat plus companion walk. No merge, push, remote migration, deploy, or product acceptance has occurred.
+> ## RIGHT NOW — SNAKE LIVE-ROOM PREVIEW IS READY FOR JK'S REAL-DEVICE GATE (2026-07-19; implementation `fd07bba0`; independently audited head `cedf96ee`; deployed head `d2ac79d7`; branch `codex/snake-live-room-authority`). Migration 009 is installed on Supabase project `vmpvfswmnhpiiontwnjc`. All nine `snake_live_*` tables have RLS, only `snake_live_events` has direct authenticated SELECT and Realtime publication, anonymous RPC execution is off, and rollback-only owner/cross-account checks passed with no rows left behind. The exact branch head is pushed and Vercel preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb` is READY. Build metadata reports `d2ac79d7d58c`; the root and `/snake-companion` return HTTP 200 through the preview access link; the built bundle contains the configured Supabase project. Production remains on `ba7f97d6`; no merge or promotion occurred. **NEXT / OPEN PENDING-JK:** use the preview access link on the Hotseat and companion devices, then run the real Hotseat plus companion walk. JK's walk remains the only product acceptance gate.
 
 ## Current product law
 
@@ -18,13 +18,10 @@
 
 ## Open gates
 
-1. Apply `supabase/migrations/009_snake_live_rooms.sql` to the remote project after JK authorizes it.
-2. Deploy the exact audited branch as a Vercel preview after JK authorizes it. Do not promote it.
-3. Delete only old Snake live test rooms and retired local sync keys. Do not wipe product data or
+1. Delete only old Snake live test rooms and retired local sync keys if a device needs a clean start. Do not wipe product data or
    the account-owned `kbl-sync-outbox`.
-4. Run JK's real-device Hotseat and companion draft walk.
+2. Run JK's real-device Hotseat and companion draft walk.
 
 The exact remote sequence and rollback boundary are in
-`spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. A current read-only check proved Supabase
-Auth is online, migration 009 is absent, Vercel production remains on `ba7f97d6`, and no preview yet
-contains `d86e8fca`.
+`spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the one authorized
+Vercel preview are complete. Vercel production remains on `ba7f97d6`.

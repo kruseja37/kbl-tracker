@@ -1542,3 +1542,12 @@ non-builder auditor approved exact branch head `cedf96ee` with Major 0 / Minor 0
 leaves only authorized migration 009, an exact Vercel preview, narrow test-state cleanup, and JK's
 real-device browser walk. No merge, push, remote migration, deploy, or product acceptance has
 occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 Snake live-room browser gate
+
+JK authorized migration 009, a push of `codex/snake-live-room-authority`, and one Vercel preview.
+Migration 009 is now installed; the nine live-room tables, RLS, direct grants, Realtime publication,
+RPC allowlist, owner access, and cross-account isolation were checked remotely. The branch was
+pushed at exact head `d2ac79d7`. Vercel preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`
+is READY and reports build SHA `d2ac79d7d58c`. Production remains on `ba7f97d6`. JK's real-device
+walk is still the sole product gate; no merge or production promotion occurred.

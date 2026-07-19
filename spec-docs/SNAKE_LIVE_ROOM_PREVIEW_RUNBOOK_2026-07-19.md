@@ -4,32 +4,44 @@
 **Thread:** SNAKE_DRAFT
 **Implementation commit:** `fd07bba0`
 **Independently audited branch head:** `cedf96ee` — **APPROVE, Major 0 / Minor 0**
+**Deployed branch head:** `d2ac79d7d58c5e30c47e2af27979da96401b74a2`
 **Rule:** Preview only. Do not promote to production before JK accepts the real device walk.
 
 ## Current remote state
 
 - Configured Supabase project: `vmpvfswmnhpiiontwnjc`.
-- Supabase Auth is online. The authenticated health request returned HTTP 200.
-- Migration 009 is not installed. A read-only request for `public.snake_live_events` returned
-  `PGRST205` and HTTP 404.
+- Supabase Auth is online. Migration 009 is installed and recorded in remote migration history.
+- All nine `snake_live_*` tables exist with RLS enabled.
+- Direct grants expose only authenticated SELECT on `snake_live_events`; anonymous RPC execution is
+  false for every public live-room RPC.
+- Only `snake_live_events` is in the `supabase_realtime` publication.
+- Rollback-only remote checks proved owner create/read and cross-account hiding. They left zero test
+  room rows.
 - Vercel project: `kbl-tracker`, project ID `prj_lUo6rUNcZ6g96VuQni0yuyrEH6co`.
 - Current production deployment is commit `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
-- No deployment contains commit `fd07bba0` or audited branch head `cedf96ee`.
+- Preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb` is READY at exact commit `d2ac79d7`.
+- Build metadata reports `d2ac79d7d58c`; root and `/snake-companion` return HTTP 200 after the
+  preview access link sets its cookie. The bundle contains the configured Supabase project ref.
+- Supabase advisors report no Snake live-room performance warning. The security advisor reports the
+  intentional authenticated SECURITY DEFINER RPC boundary; direct table access is revoked, every
+  entry RPC checks account ownership plus host/device capability, and anonymous execution is off.
+  Existing project warnings for leaked-password protection and older generic-sync RLS policies are
+  outside migration 009.
 
 ## Safe preview sequence
 
-1. Apply `supabase/migrations/009_snake_live_rooms.sql` to the configured Supabase project.
+1. **DONE:** Apply `supabase/migrations/009_snake_live_rooms.sql` to the configured Supabase project.
    The migration adds new live-room tables and RPCs. The current production app does not call them.
-2. Confirm migration 009 is listed.
-3. Confirm all nine `snake_live_*` tables exist, RLS is on, and only `snake_live_events` has direct
+2. **DONE:** Confirm migration 009 is listed.
+3. **DONE:** Confirm all nine `snake_live_*` tables exist, RLS is on, and only `snake_live_events` has direct
    authenticated SELECT access.
-4. Run Supabase security and performance advisors. Resolve any migration-related warning before the
+4. **DONE:** Run Supabase security and performance advisors. Resolve or record any migration-related warning before the
    preview opens.
-5. Confirm an anonymous user cannot read a live-room table or execute a live-room RPC.
-6. Confirm an authenticated user can create and read only a room owned by that same account.
-7. Deploy the audited branch head that contains implementation commit `fd07bba0` and the final audit
+5. **DONE:** Confirm an anonymous user cannot read a live-room table or execute a live-room RPC.
+6. **DONE:** Confirm an authenticated user can create and read only a room owned by that same account.
+7. **DONE:** Deploy the audited branch head that contains implementation commit `fd07bba0` and the final audit
    record as a Vercel preview. Record the exact deployed hash. Do not promote it.
-8. Confirm the preview uses the same Supabase URL and publishable key as the configured app.
+8. **DONE:** Confirm the preview uses the configured Supabase project.
 9. Run the real browser test below.
 
 ## JK browser test

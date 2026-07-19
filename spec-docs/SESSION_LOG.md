@@ -8127,3 +8127,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   Vercel preview, remove only old Snake test rooms and retired local sync keys, then run JK's real
   Hotseat plus companion walk. Preserve `kbl-sync-outbox`. No merge, push, remote migration, or
   deploy was authorized in this session.
+
+## 2026-07-19 — Snake live-room remote preview gate
+
+- JK authorized exactly three remote actions: apply migration 009, push
+  `codex/snake-live-room-authority`, and create one Vercel preview.
+- Refreshed `origin/main` before the push; it remained
+  `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`, the branch merge-base.
+- Applied `009_snake_live_rooms.sql`; remote migration history now lists 001 through 009.
+- Verified nine live-room tables with RLS, only authenticated SELECT on `snake_live_events`, only
+  that event table in Realtime, and 22 authenticated SECURITY DEFINER RPCs with anonymous execution
+  off. Rollback-only owner and cross-account checks passed and left zero rows.
+- Supabase advisors found no live-room performance warning. The live-room security warnings are the
+  intentional RPC boundary: table access is revoked and RPCs enforce account plus capability. Older
+  generic-sync RLS and leaked-password warnings remain outside this migration.
+- Pushed exact head `d2ac79d7d58c5e30c47e2af27979da96401b74a2`.
+- Vercel created one preview, deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`; it is READY, targets
+  preview, uses Vite, and reports build SHA `d2ac79d7d58c`. Root and `/snake-companion` returned HTTP
+  200 through the preview access link, and the built bundle contains project ref
+  `vmpvfswmnhpiiontwnjc`.
+- Production remains on `ba7f97d6`. No merge or promotion occurred. JK's browser and real-device
+  walk is the only remaining product gate.
