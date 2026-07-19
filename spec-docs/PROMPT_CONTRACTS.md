@@ -32720,3 +32720,26 @@ between recovery capture and the first drain writes nothing and leaves the queue
 stale-write, account, cursor, ordinary sync, and destructive-path regressions; TypeScript;
 changed-file lint; production/PWA build; separate non-builder audit; JK's live click remains the
 product gate. No push, merge, or deploy.
+
+## SNAKE-SYNC-CURRENT-LOCAL-REBASE-50
+
+**Goal:** Make explicit quota recovery finish still-current device writes without a full-cloud
+replacement or loss of unseen companion activity.
+
+**Frozen law:**
+
+- Exact queue/current-local/cloud matches retire first.
+- A remaining queued write is publishable only if it still exactly matches current local source
+  truth in payload and tombstone state.
+- Fetch the exact current cloud row and bind a new operation id and monotonic timestamp to that
+  received server base; the atomic RPC remains the authority and rejects a later cloud race.
+- Checkpoint the rebased queue before its drain. Account switch, concurrent queue replacement,
+  unreadable local scope, or missing safe cloud base fails closed.
+- A queued Snake room may publish only if the local room covers every cloud companion claim,
+  request, pick, trade, and open/removed offer represented by the shared-room contract.
+- Never invoke full Upload/Download or change unrelated cloud rows.
+
+**Required proof:** current IndexedDB and localStorage intent publish; exact duplicates retire;
+current-local drift, account switch, concurrent replacement, cloud race, and unseen companion intent
+stay queued/cloud-unchanged; focused tests; TypeScript; changed-file lint; production/PWA build;
+separate non-builder audit; JK's live click. No push, merge, or deploy.

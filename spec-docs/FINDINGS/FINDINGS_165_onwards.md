@@ -1045,3 +1045,24 @@ wire normalization, and the non-destructive UI boundary remain sound. Independen
 133/133, TypeScript, changed-file ESLint, the 2,735-module production/PWA build with 223 precache
 entries, parent/cumulative diff checks, and clean exact worktree. Only JK's live click remains. No
 push, merge, or deploy.
+
+### FINDING-243
+**Date:** 2026-07-18 | **Phase:** Cloud sync / current-device queued-intent recovery | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/utils/syncEngine.ts`, `src/utils/tests/syncEngine.dynamicElimination.test.ts`
+**Evidence:** JK's audited exact-content recovery reduced 806 pending operations to 805 and then
+reported that every remainder differed between this device and cloud. The implementation was
+correct but could only retire duplicates, so it could not restore companion access to the device's
+actual pending work.
+**Impact:** Full Upload would be unnecessarily broad and Download could erase the protected local
+work. Repeating exact-only recovery could never progress.
+**Action:** After duplicate retirement, rebase only a queued payload that still exactly matches its
+current local source onto that identity's freshly fetched exact cloud base. Give the replacement a
+new operation id and monotonic timestamp, checkpoint it durably, then use the unchanged atomic RPC.
+Protect local drift, concurrent replacement, account change, unreadable scope, unsafe/missing base,
+and any Snake room that does not cover unseen cloud companion intent. Never touch unrelated cloud
+rows or invoke full Upload/Download.
+**Builder result:** IndexedDB and localStorage current-intent regressions publish over exact cloud
+bases; exact duplicates retire; local-source drift and account-switch tests remain fail-closed. Full
+focused sync/UI proof is 135/135, including rebase-snapshot cloud-race rejection. TypeScript, changed-file ESLint, the fresh 2,735-module
+production/PWA build with 223 precache entries, and diff integrity are green. Freeze, separate audit,
+and JK's live retry remain. No push, merge, or deploy.

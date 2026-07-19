@@ -1325,8 +1325,24 @@ class SyncEngine {
       }
 
       if (pendingCount > 0) {
-        const reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
+        let reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
         pendingCount = this.getPendingOperationCount();
+
+        if (pendingCount > 0) {
+          const rebase = await this.rebaseQueuedOpsStillRepresentedLocally(recoveryUserId);
+          if (rebase.rebasedCount > 0) {
+            await this.flushForExpectedUser(recoveryUserId);
+            if (!this.persistQueues()) {
+              throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the rebased queue.');
+            }
+            pendingCount = this.getPendingOperationCount();
+            reconciliation = pendingCount > 0
+              ? await this.retireQueuedOpsAlreadyInCloud(recoveryUserId)
+              : { retiredCount: 0, protectedConflicts: [] };
+            pendingCount = this.getPendingOperationCount();
+          }
+        }
+
         this.protectedConflictSummaries = reconciliation.protectedConflicts;
 
         if (pendingCount > 0) {
@@ -1983,6 +1999,190 @@ class SyncEngine {
     }
 
     return { retiredCount, protectedConflicts };
+  }
+
+  /**
+   * Rebase only still-current local intent onto the exact cloud rows it is
+   * replacing. A queued payload that no longer matches current local source
+   * truth is never published by recovery. The atomic RPC remains the final
+   * compare-and-set authority if cloud changes after this snapshot.
+   */
+  private async rebaseQueuedOpsStillRepresentedLocally(userId: string): Promise<{
+    rebasedCount: number;
+    protectedConflicts: string[];
+  }> {
+    const storeSnapshot = new Map(this.pushQueue);
+    const localSnapshot = new Map(this.localQueue);
+    if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
+      return { rebasedCount: 0, protectedConflicts: [] };
+    }
+
+    const [storeRows, localRows] = await Promise.all([
+      storeSnapshot.size > 0 ? this.fetchStoreWriteBaseRows(userId) : Promise.resolve([]),
+      localSnapshot.size > 0 ? this.fetchLocalStorageWriteBaseRows(userId) : Promise.resolve([]),
+    ]);
+    const storeCloudByIdentity = new Map(
+      storeRows.map((row) => [
+        this.storeIdentityKey(row.db_name, row.store_name, row.record_key),
+        row,
+      ]),
+    );
+    const localCloudByKey = new Map(localRows.map((row) => [row.key, row]));
+    const localStoreFingerprintsByScope = new Map<string, Map<string, string> | null>();
+    const storeScopes = new Map<string, { dbName: string; storeName: string }>();
+    for (const op of storeSnapshot.values()) {
+      storeScopes.set(this.storeCountKey(op.dbName, op.storeName), {
+        dbName: op.dbName,
+        storeName: op.storeName,
+      });
+    }
+    await Promise.all(Array.from(storeScopes.entries()).map(async ([scope, { dbName, storeName }]) => {
+      const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+      localStoreFingerprintsByScope.set(
+        scope,
+        keyPath ? await this.getLocalStoreFingerprints(dbName, storeName, keyPath) : null,
+      );
+    }));
+
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sync recovery failed: signed out during sync');
+    if (session.user.id !== userId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+
+    const rebasedStoreEntries: Array<[string, PendingOp, PendingOp, boolean]> = [];
+    const rebasedLocalEntries: Array<[string, PendingLocalOp, PendingLocalOp, boolean]> = [];
+    const protectedConflicts: string[] = [];
+
+    for (const [queueKey, op] of storeSnapshot) {
+      const identity = this.storeIdentityKey(op.dbName, op.storeName, op.recordKey);
+      if (this.pushQueue.get(queueKey) !== op) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      const localFingerprints = localStoreFingerprintsByScope.get(
+        this.storeCountKey(op.dbName, op.storeName),
+      );
+      const localMatchesQueued = localFingerprints !== null && localFingerprints !== undefined && (
+        op.deleted
+          ? !localFingerprints.has(identity)
+          : localFingerprints.get(identity) === this.fingerprintValue(op.data)
+      );
+      if (!localMatchesQueued) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+
+      const cloudRow = storeCloudByIdentity.get(identity);
+      if (cloudRow && (!cloudRow.received_at || !cloudRow.id)) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      if (
+        op.dbName === 'kbl-league-builder'
+        && op.storeName === 'mlbDraftSessions'
+        && !op.deleted
+        && cloudRow
+        && !cloudRow.deleted
+      ) {
+        const cloudRoom = this.asSnakeDraftSession(cloudRow.data);
+        const localRoom = this.asSnakeDraftSession(op.data);
+        if (
+          !cloudRoom
+          || !localRoom
+          || !this.publishedRoomCoversQueuedCompanionIntent(cloudRoom, localRoom)
+        ) {
+          protectedConflicts.push(this.formatStoreIdentity(identity));
+          continue;
+        }
+      }
+
+      const rebasedOp: PendingOp = {
+        ...op,
+        opId: this.createQueueOpId('store'),
+        changedAt: this.nextChangedAt(Math.max(
+          this.cursor.changedAt + 1,
+          op.changedAt + 1,
+          (cloudRow?.changed_at ?? 0) + 1,
+        )),
+        baseReceivedAt: cloudRow?.received_at ?? null,
+        baseId: cloudRow?.id ?? null,
+      };
+      rebasedStoreEntries.push([
+        queueKey,
+        op,
+        rebasedOp,
+        this.restoredPushQueueKeys.has(queueKey),
+      ]);
+      this.pushQueue.set(queueKey, rebasedOp);
+      this.restoredPushQueueKeys.delete(queueKey);
+    }
+
+    for (const [key, op] of localSnapshot) {
+      if (this.localQueue.get(key) !== op) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const currentLocalValue = localStorage.getItem(key);
+      const localMatchesQueued = op.deleted
+        ? currentLocalValue === null
+        : currentLocalValue !== null
+          && this.fingerprintLocalWriteState(currentLocalValue, false)
+            === this.fingerprintLocalWriteState(op.data, false);
+      if (!localMatchesQueued) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+
+      const cloudRow = localCloudByKey.get(key);
+      if (cloudRow && !cloudRow.received_at) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const rebasedOp: PendingLocalOp = {
+        ...op,
+        opId: this.createQueueOpId('local'),
+        changedAt: this.nextChangedAt(Math.max(
+          this.cursor.changedAt + 1,
+          op.changedAt + 1,
+          (cloudRow?.changed_at ?? 0) + 1,
+        )),
+        baseReceivedAt: cloudRow?.received_at ?? null,
+        baseKey: cloudRow?.key ?? null,
+      };
+      rebasedLocalEntries.push([
+        key,
+        op,
+        rebasedOp,
+        this.restoredLocalQueueKeys.has(key),
+      ]);
+      this.localQueue.set(key, rebasedOp);
+      this.restoredLocalQueueKeys.delete(key);
+    }
+
+    const rebasedCount = rebasedStoreEntries.length + rebasedLocalEntries.length;
+    if (rebasedCount === 0) {
+      return { rebasedCount, protectedConflicts };
+    }
+
+    if (!this.persistQueues()) {
+      for (const [queueKey, originalOp, rebasedOp, wasRestored] of rebasedStoreEntries) {
+        if (this.pushQueue.get(queueKey) === rebasedOp) this.pushQueue.set(queueKey, originalOp);
+        if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      }
+      for (const [key, originalOp, rebasedOp, wasRestored] of rebasedLocalEntries) {
+        if (this.localQueue.get(key) === rebasedOp) this.localQueue.set(key, originalOp);
+        if (wasRestored) this.restoredLocalQueueKeys.add(key);
+      }
+      this.persistQueues();
+      throw new Error(
+        this.queuePersistenceError
+          ?? 'Sync recovery could not save the current-local rebase checkpoint.',
+      );
+    }
+
+    return { rebasedCount, protectedConflicts };
   }
 
   private async waitForQueueDrains(): Promise<void> {

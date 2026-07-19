@@ -8073,3 +8073,16 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   exact clean worktree.
 - Engineering gate is closed. Restart exact port 5188, then JK hard-refreshes and presses only
   `FREE SPACE + SYNC` once. Upload/Download remain off-limits. No push, merge, or deploy.
+
+## 2026-07-18 — FINDING-243 current-device queue recovery build
+
+- JK's live audited exact-only retry retired one duplicate and kept 805 real differences. Confirmed
+  the engineering policy—not lost data—was the blocker preventing companion access.
+- After exact retirement, recovery now rebases only queued payloads still identical to current local
+  source onto each target's freshly fetched cloud base. New op id, monotonic timestamp, durable
+  checkpoint, exact account, and unchanged atomic compare-and-set remain mandatory.
+- Unseen companion room activity, local/concurrent drift, unsafe base, cloud race, and account switch
+  remain protected. Full Upload/Download and unrelated cloud rows remain untouched.
+- Focused sync/UI proof is 135/135, including rebase-snapshot cloud-race rejection; TypeScript, changed-file ESLint, 2,735-module production/PWA
+  build with 223 precache entries, and diff integrity are green. Freeze, separate audit, preview, and
+  JK retry remain. No push, merge, or deploy.

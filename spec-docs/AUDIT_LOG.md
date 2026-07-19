@@ -1798,3 +1798,13 @@ tombstones, source/concurrent drift, rollback, pagination, wire normalization, a
 separation remain fail-closed. Independent gates passed 133/133, TypeScript, changed-file ESLint,
 2,735-module production/PWA build with 223 precache entries, parent/cumulative diff checks, and a
 clean worktree. JK's live one-click retry remains; no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-243 current-device queue recovery builder close
+
+The exact-only approved path proved honest but insufficient on JK's real 805 local/cloud
+differences. The builder adds target-limited current-intent rebase: only a queued value still equal
+to actual local source may receive the freshly fetched exact cloud base and a new atomic operation.
+The queue checkpoint precedes drain; cloud races remain rejected. Shared Snake rooms additionally
+must cover unseen companion intent before publication. Focused proof is 135/135, including rebase-snapshot cloud-race rejection; TypeScript,
+changed-file ESLint, 2,735-module production/PWA build with 223 precache entries, and diff integrity
+are green. Separate non-builder audit and JK retry remain; no push, merge, or deploy.

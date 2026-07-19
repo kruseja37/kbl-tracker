@@ -1471,6 +1471,14 @@ independent tests, TypeScript, lint, production/PWA build, diff integrity, and e
 challenge. The new live header leaves only the exact preview restart and JK's one-click browser
 retry. No push, merge, or deploy was authorized.
 
+## Outgoing Live Header Snapshot — before 2026-07-18 current-device queue recovery
+
+The prior live header recorded independent approval of exact-content duplicate retirement. JK's
+live retry retired one of 806 operations, proving the remaining 805 were actual local/cloud
+differences rather than duplicates. The new live header records a target-limited, current-local
+rebase path with exact cloud bases and companion-intent protection. Separate audit and JK retry
+remain; no push, merge, or deploy was authorized.
+
 ## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
 
 The prior live header recorded independent approval of the exact 2,001-card eight-team setup and

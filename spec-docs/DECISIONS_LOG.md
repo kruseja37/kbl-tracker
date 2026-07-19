@@ -4239,3 +4239,15 @@ reconciliation or the final pull. Recovery blocks ordinary drains, waits for any
 drain to finish, captures one account, then revalidates that account before moving either an
 IndexedDB or localStorage queue entry in-flight. This prevents a mid-recovery sign-in change from
 stamping one account's protected queue onto another account.
+
+## 2026-07-18 — Explicit queue recovery may publish only still-current local intent
+
+Exact duplicate retirement is insufficient when a restored queue contains genuine local/cloud
+differences. On the explicit recovery action, a queued write may be rebased only if its payload and
+tombstone state still equal this device's current IndexedDB/localStorage source. The rebase uses the
+fresh exact cloud row as its compare-and-set base, a new operation id, monotonic timestamp, and a
+durable checkpoint before the unchanged atomic RPC. A cloud race is rejected.
+
+This is target-limited queue recovery, not full Upload. It may not publish an obsolete queue entry,
+change unrelated cloud rows, cross accounts, or overwrite a Snake room containing companion intent
+not covered by the current local room.
