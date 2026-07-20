@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-247 COMPLETED ROOM RECOVERY AND ATOMIC MLB FINALIZATION ARE INDEPENDENTLY APPROVED; NEW PREVIEW READY; JK WALK PENDING (2026-07-20; branch `codex/snake-live-room-authority`, approved recovery head and deployed source `56d1ab81`). JK completed every pick in room 4352. The first corrected preview fixed the recap transaction but could not expose recovery when the browser retained the league and lost the local pool/session. Recovery now appears in that exact state and explicitly reloads the restored league, pool, and session before navigation, including when the URL already names the same league. The same auditor rejected `05f7f6b0` for the same-URL dead end, then approved repaired head `56d1ab81`, **Major 0 / Minor 0**. Builder proof is 38/38 focused recovery/room tests plus TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build; independent proof is 17/17. Preview deployment `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY at `https://kbl-tracker-abdv24x2r-kruseja37s-projects.vercel.app`. **NEXT:** sign in, restore room 4352, reach MLB Draft Recap, and confirm the completed draft. Production remains on `ba7f97d6`; no merge or promotion occurred.
+> ## RIGHT NOW — FINDING-248 MLB-TO-FARM IDENTITY AND PROSPECT FLOW IS INDEPENDENTLY APPROVED; PREVIEW PENDING (2026-07-20; branch `codex/snake-live-room-authority`, approved head `914e35e9`). JK completed and confirmed room 4352, then reached Scout Reveal. That exposed a generic flow bug: Snake setup and recovery did not preserve each club's farm identity, so Scout Reveal built false Generalist scouts. New sessions now freeze both identities; the live catalog, recovery, and farm transition carry and cross-check them; missing legacy truth stops with a generic Snake-only repair. The production farm pool is proven to use the exact canonical Standard curve, not Juiced legacy logic, and true prospect grades and ratings remain hidden. Builder proof is 92/92 plus an exact N=500 zero-deviation distribution run, TypeScript, lint, diff integrity, and the 2,744-module production/PWA build. The separate auditor approved the exact head, **Major 0 / Minor 0**. **NEXT:** push the approved branch, publish one preview, smoke the remote flow, then JK tests one new Snake league and one recovered legacy league. Production remains on `ba7f97d6`; no merge or promotion occurred.
 
 ## Current product law
 
@@ -22,8 +22,9 @@
 
 ## Open gates
 
-1. Run JK's room 4352 completed-draft confirmation walk.
-2. After that succeeds, run the broader Hotseat plus companion re-walk.
+1. Publish and smoke one preview from the approved farm-identity repair.
+2. JK runs one new Snake league through Scout Reveal and one recovered legacy league through repair.
+3. After those succeed, run the broader Hotseat plus companion re-walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel

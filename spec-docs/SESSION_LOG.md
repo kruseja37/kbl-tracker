@@ -8248,3 +8248,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY at
   `https://kbl-tracker-abdv24x2r-kruseja37s-projects.vercel.app`. Production remains unchanged. JK
   now restores room 4352 and runs the sole product-acceptance gate.
+
+## 2026-07-20 — FINDING-248 MLB-to-farm identity and prospect-generation close
+
+- JK completed and confirmed room 4352, then reached Scout Reveal. All clubs displayed Generalist
+  because Snake setup and the immutable live catalog did not preserve farm identity.
+- Froze each club's farm identity with its MLB identity, transported both through the catalog,
+  cross-checked recovery, and made the MLB-to-farm transition reject missing, conflicting,
+  duplicate, or changed club sets.
+- Added one generic Snake-only repair for old completed drafts with missing farm identity. It updates
+  both team truth and the completed MLB session before scout construction. Auction's existing
+  Generalist fallback remains unchanged.
+- Proved the production farm-pool path uses the canonical Standard-only prospect generator. An
+  opt-in N=500 run matched all ten grade buckets exactly with zero total deviation and zero A+.
+  Public live-room and fog-board models still exclude true grade and ratings.
+- The hostile pre-freeze pass found a duplicate frozen-club-ID gap; the builder's negative-feedback
+  pass found an Auction-scope regression. Both were repaired and covered before the final freeze.
+- Builder gates: 10 files / 92 tests; N=500 distribution 1/1; TypeScript; changed-code ESLint;
+  2,744-module production/PWA build; diff integrity. Exact implementation head: `914e35e9`.
+- Separate read-only audit: **APPROVE — Major 0 / Minor 0** after independently reproducing 92/92,
+  the N=500 exact curve, TypeScript, lint, and full-range diff integrity.
+- Current `origin/main` was fetched again and remains
+  `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`; this branch is 0 commits behind it.
+- Next: push the approved branch, create one Vercel preview, run a remote smoke test, then give JK
+  one new and one recovered Snake league as the sole product gate. No merge or production deploy is
+  authorized.

@@ -4,6 +4,19 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW PENDING (2026-07-20; FINDING-248)
+- New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through
+  the live catalog, recovery, Scout Reveal, and farm-session creation. Missing, conflicting,
+  duplicate, or changed club truth fails closed.
+- Legacy completed drafts that lack farm identity get one generic Snake-only repair before scouts
+  are built. Auction's Generalist fallback is unchanged.
+- The production farm-pool path is the canonical Standard-only prospect generator, not a Juiced
+  legacy mode. N=500 matched every grade bucket exactly, with zero A+ players. True grades and
+  ratings remain hidden from public room and fog-board models.
+- Exact head `914e35e9` passed builder gates and a separate read-only audit, **Major 0 / Minor 0**.
+  **Next:** publish one preview, smoke the remote flow, then JK tests one new and one recovered Snake
+  league. No merge or production promotion is authorized.
+
 ## INDEPENDENTLY APPROVED / NEW PREVIEW NOT AUTHORIZED (2026-07-19; FINDING-246)
 - JK's completed four-team browser walk produced five exact follow-ups: position-first starting
   slots, distinct public-pick and companion-submit sounds, red `LIKELY GONE`, no pitcher-FLD tax,

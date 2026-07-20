@@ -1230,7 +1230,7 @@ TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production
 remains unchanged. JK's room 4352 confirmation walk remains.
 
 ### FINDING-248
-**Date:** 2026-07-20 | **Phase:** Snake Draft / MLB-to-farm identity and prospect generation | **Status:** BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-20 | **Phase:** Snake Draft / MLB-to-farm identity and prospect generation | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW PENDING
 **Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`,
 `src/utils/snakeLiveCatalog.ts`, `src/utils/leagueBuilderStorage.ts`,
 `src/engines/snakeFarmSlots.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`,
@@ -1254,5 +1254,11 @@ conflicts or missing club truth. The generic repair path updates the team and co
 before scouts are built. The focused production-flow gate is 92/92, including four- and eight-team
 farm pools and the eight-team MLB-to-farm season gauntlet. The N=500 measurement matches every
 canonical grade bucket exactly with zero percentage-point deviation. TypeScript, changed-file
-ESLint, the 2,744-module production/PWA build, and diff integrity are green. Independent audit and
-JK's browser walk remain. No production deploy or merge is authorized.
+ESLint, the 2,744-module production/PWA build, and diff integrity are green. During the hostile
+pre-freeze pass, the auditor found that duplicate frozen club IDs could satisfy the length check;
+the builder's negative-feedback pass also found that the missing-identity repair gate was too broad
+and could alter Auction's Generalist fallback. Both seams were repaired and covered before the final
+freeze. The separate auditor approved exact head `914e35e9`, **Major 0 / Minor 0**, after independently
+passing 92/92 focused tests, the exact N=500 distribution invariant, TypeScript, changed-code ESLint,
+and full-range diff integrity. One preview and JK's browser walk remain. No production deploy or
+merge is authorized.

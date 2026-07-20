@@ -1588,3 +1588,11 @@ Major cleanup finding. The narrow repair was frozen at `6c7b5714`: after verifie
 absent recovered room is already clean; a present room still receives best-effort close. The same
 auditor rechecked the full contract and returned APPROVE, Major 0 / Minor 0. No push, preview,
 merge, production deployment, or product acceptance had occurred at this snapshot.
+
+## 2026-07-20 — Outgoing before FINDING-248 MLB-to-farm identity close
+
+The prior live header recorded approved completed-room recovery at `56d1ab81` and a READY preview
+for JK's room 4352 confirmation. JK completed that gate and reached Scout Reveal, where every club
+showed a false Generalist because farm identity had not been frozen or transported. The new live
+header records the generic end-to-end identity repair and exact Standard prospect proof at approved
+head `914e35e9`. One new preview and JK's new/recovered league walk remain. Production is unchanged.
