@@ -1620,3 +1620,11 @@ room, extra catalog fields could carry private values, and FARM correction used 
 instead of the server recovery slot. The new header records the narrow server, catalog, and recovery
 repairs. Same-auditor recheck remains. No migration, push, preview, merge, or production promotion
 is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-249 second-audit repair
+
+The prior live header recorded the first repair at `1e53eb8f`. The same auditor returned BLOCK,
+Major 2 / Minor 0. It proved that SQL accepted non-scalar public identity values and that a raw host
+could publish an arbitrary FARM state rewrite as a pick. The new header records exact scalar gates
+and an exact one-pick server transition. Final same-auditor recheck remains. No migration, push,
+preview, merge, or production promotion is authorized.

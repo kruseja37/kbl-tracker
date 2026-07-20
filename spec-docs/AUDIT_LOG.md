@@ -1893,3 +1893,14 @@ recovery slot. The builder repaired only those seams and added permanent server-
 completion regressions. Direct repair proof is 60/60 and the combined MLB/FARM live-room gate is
 205/205. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build
 are green. Same-auditor recheck is required before remote work.
+
+### 2026-07-20 — FINDING-249 second independent audit block
+
+The same auditor reviewed first repair `1e53eb8f` and returned **BLOCK — Major 2 / Minor 0**. The
+real SQL catalog validator still accepted object values in allowed public identity fields even
+though the TypeScript reader rejected them. The FARM publish RPC also checked only the event label,
+so a raw host could change pause, trades, order, or other public state while calling the change a
+pick. The second repair aligns SQL and the test server on exact scalar catalog types and one exact
+next-pick transition. Its 33-test delta gate and 241-test MLB/FARM gate pass. TypeScript,
+changed-file ESLint, diff integrity, and the 2,744-module production/PWA build pass. Final
+same-auditor recheck is required before remote work.

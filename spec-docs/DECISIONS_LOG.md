@@ -4344,3 +4344,8 @@ generic confirmation failure.
   private board state, but it cannot decide public order, picks, roster, or room revision.
 - The FARM public catalog uses an exact allowlist at the client and database boundaries. Unknown
   root, league, team, color, prospect, or roster fields fail closed.
+- Every allowed FARM catalog identity value has an exact JSON scalar type. An object cannot pass as
+  a league, team, color, prospect, or roster string.
+- A FARM `PICK_RECORDED` publish is one exact transition. It appends the next frozen slot and can
+  change only completed picks, current index, revision, and modification time. It cannot alter
+  pause, trades, order, version state, or other session facts.

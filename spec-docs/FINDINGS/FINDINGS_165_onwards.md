@@ -1267,7 +1267,7 @@ HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chr
 with no console warning or error. JK's new/recovered league walk is the remaining product gate.
 
 ### FINDING-249
-**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** FIRST AUDIT BLOCKERS REPAIRED — RE-AUDIT PENDING
+**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** SECOND AUDIT BLOCKERS REPAIRED — FINAL RE-AUDIT PENDING
 **Files:** `src/utils/snakeLiveCatalog.ts`,
 `src/src_figma/app/components/snake/companion/useSnakeLiveHostRoom.ts`,
 `src/src_figma/app/components/snake/farm/farmRoomModel.ts`,
@@ -1294,4 +1294,13 @@ catalog uses the same exact allowlist in TypeScript and SQL, and correction rest
 recovery slot before it repairs local private boards. Direct repaired proof is 60/60; the combined
 MLB/FARM live-room gate is 205/205. TypeScript, changed-file ESLint, diff integrity, and the
 2,744-module production/PWA build are green. The required migration is local and unapplied.
-Same-auditor recheck, explicit remote authority, and JK's browser walk remain.
+The same auditor blocked first repair `1e53eb8f`, **Major 2 / Minor 0**. The SQL catalog validator
+still accepted objects where public identity strings were required, and a raw host could change
+arbitrary FARM public state under a `PICK_RECORDED` label. The second repair requires the exact
+scalar type for every allowed public identity field and validates one exact next-pick transition.
+Only `completedPicks`, `currentPickIndex`, `revision`, and `lastModified` can change. The new pick
+must match the frozen slot, public event, pool, slot salary, zero FARM tax, and final/open room
+status. FARM does not retain the MLB version ledger. The 33-test delta gate and a broader 241-test
+MLB/FARM live-room gate pass. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module
+production/PWA build pass. Same-auditor final recheck, explicit remote authority, and JK's browser
+walk remain.

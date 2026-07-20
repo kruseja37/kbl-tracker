@@ -642,7 +642,7 @@ export class SnakeLiveRoomTestServer {
 
   private publishRoom(args: Row): RpcResponse {
     this.requireHost(args);
-    const room = this.requireOpenRoom(String(args.p_room_id));
+    const room = this.requireRoom(String(args.p_room_id));
     if (room.phase === 'FARM' && args.p_event_kind !== 'PICK_RECORDED') {
       return Promise.resolve(error('FARM public actions can record picks only.'));
     }
@@ -654,11 +654,20 @@ export class SnakeLiveRoomTestServer {
         error: null,
       });
     }
+    if (room.status !== 'open') return Promise.resolve(error('The live room is not open.'));
     if (room.public_revision !== args.p_expected_room_revision) {
       return Promise.resolve(error('Stale expected room revision.'));
     }
     if (!['PICK_RECORDED', 'TRADE_EXECUTED', 'PAUSE_CHANGED'].includes(String(args.p_event_kind))) {
       return Promise.resolve(error('The public draft event kind is invalid.'));
+    }
+    if (room.phase === 'FARM' && !isValidFarmPickTransition(
+      room.public_state,
+      args.p_public_state,
+      args.p_public_event,
+      args.p_status,
+    )) {
+      return Promise.resolve(error('The FARM pick transition is invalid.'));
     }
     if (args.p_event_kind === 'PICK_RECORDED' || args.p_event_kind === 'TRADE_EXECUTED') {
       this.recoverySlots.set(String(args.p_room_id), {
@@ -828,6 +837,84 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
+}
+
+function hasOnlyKeys(row: Row, allowed: readonly string[]): boolean {
+  return Object.keys(row).every((key) => allowed.includes(key));
+}
+
+function withoutKeys(row: Row, keys: readonly string[]): Row {
+  return Object.fromEntries(Object.entries(row).filter(([key]) => !keys.includes(key)));
+}
+
+function isValidFarmPickTransition(
+  previousValue: unknown,
+  nextValue: unknown,
+  eventValue: unknown,
+  status: unknown,
+): boolean {
+  if (!isRow(previousValue) || !isRow(nextValue) || !isRow(eventValue)
+    || !hasOnlyKeys(previousValue, ['formatVersion', 'session'])
+    || !hasOnlyKeys(nextValue, ['formatVersion', 'session'])
+    || previousValue.formatVersion !== 'snake-live-public-state-v1'
+    || nextValue.formatVersion !== 'snake-live-public-state-v1'
+    || !isRow(previousValue.session) || !isRow(nextValue.session)
+    || !hasOnlyKeys(eventValue, ['pick', 'teamId', 'playerId'])
+    || !isNonNegativeInteger(eventValue.pick) || eventValue.pick < 1
+    || !isNonEmptyString(eventValue.teamId)
+    || !isNonEmptyString(eventValue.playerId)) return false;
+
+  const previous = previousValue.session;
+  const next = nextValue.session;
+  if (previous.draftPhase !== 'FARM' || next.draftPhase !== 'FARM'
+    || !Array.isArray(previous.completedPicks) || !Array.isArray(next.completedPicks)
+    || !Array.isArray(previous.pickOrder) || !Array.isArray(next.pickOrder)
+    || !Array.isArray(previous.farmSlotSalaries) || !Array.isArray(next.farmSlotSalaries)
+    || !isNonNegativeInteger(previous.currentPickIndex)
+    || !isNonNegativeInteger(next.currentPickIndex)
+    || !isNonNegativeInteger(previous.revision)
+    || !isNonNegativeInteger(next.revision)
+    || typeof previous.lastModified !== 'string'
+    || typeof next.lastModified !== 'string'
+    || (previous.paused !== undefined && previous.paused !== false)
+    || (next.paused !== undefined && next.paused !== false)) return false;
+
+  const mutable = ['completedPicks', 'currentPickIndex', 'revision', 'lastModified'];
+  const previousCount = previous.completedPicks.length;
+  const nextCount = next.completedPicks.length;
+  if (previous.currentPickIndex !== previousCount
+    || next.currentPickIndex !== previous.currentPickIndex + 1
+    || nextCount !== previousCount + 1
+    || next.currentPickIndex !== nextCount
+    || next.revision !== previous.revision + 1
+    || previous.currentPickIndex >= previous.pickOrder.length
+    || !sameValue(withoutKeys(next, mutable), withoutKeys(previous, mutable))
+    || !sameValue(next.completedPicks.slice(0, -1), previous.completedPicks)) return false;
+
+  const expectedSlot = previous.pickOrder[previous.currentPickIndex];
+  const picked = next.completedPicks.at(-1);
+  if (!isRow(expectedSlot) || !isRow(picked)
+    || !hasOnlyKeys(picked, ['round', 'pick', 'teamId', 'playerId', 'settledSalary', 'marginalTax'])
+    || !isNonNegativeInteger(expectedSlot.round) || expectedSlot.round < 1
+    || !isNonNegativeInteger(expectedSlot.pick) || expectedSlot.pick < 1
+    || !isNonEmptyString(expectedSlot.teamId)
+    || picked.round !== expectedSlot.round
+    || picked.pick !== expectedSlot.pick
+    || picked.teamId !== expectedSlot.teamId
+    || picked.playerId !== eventValue.playerId
+    || picked.pick !== eventValue.pick
+    || picked.teamId !== eventValue.teamId
+    || picked.settledSalary !== next.farmSlotSalaries[previous.currentPickIndex]
+    || picked.marginalTax !== 0) return false;
+
+  const poolPlayerIds = isRow(next.snakeSetup) ? next.snakeSetup.poolPlayerIds : null;
+  if (!Array.isArray(poolPlayerIds)
+    || !poolPlayerIds.every(isNonEmptyString)
+    || !poolPlayerIds.includes(eventValue.playerId)
+    || previous.completedPicks.some((pick) => isRow(pick) && pick.playerId === eventValue.playerId)) return false;
+
+  const expectedStatus = next.currentPickIndex === previous.pickOrder.length ? 'complete' : 'open';
+  return status === expectedStatus;
 }
 
 function isValidPickPayload(payload: Row): boolean {

@@ -19,7 +19,9 @@ DECLARE
 BEGIN
   IF p_value IS NULL
     OR jsonb_typeof(p_value) <> 'object'
+    OR jsonb_typeof(p_value->'formatVersion') IS DISTINCT FROM 'string'
     OR jsonb_typeof(p_value->'league') <> 'object'
+    OR jsonb_typeof(p_value#>'{league,id}') IS DISTINCT FROM 'string'
     OR jsonb_typeof(p_value#>'{league,teamIds}') <> 'array'
     OR jsonb_typeof(p_value->'teams') <> 'array'
     OR jsonb_array_length(p_value->'teams') = 0
@@ -40,7 +42,9 @@ BEGIN
   ) OR EXISTS(
     SELECT 1
     FROM jsonb_array_elements(p_value->'teams') entry
-    WHERE jsonb_typeof(entry) <> 'object' OR length(btrim(COALESCE(entry->>'id', ''))) = 0
+    WHERE jsonb_typeof(entry) <> 'object'
+      OR jsonb_typeof(entry->'id') IS DISTINCT FROM 'string'
+      OR length(btrim(COALESCE(entry->>'id', ''))) = 0
   ) THEN
     RETURN FALSE;
   END IF;
@@ -116,6 +120,7 @@ BEGIN
       FROM jsonb_object_keys(p_value->'league') AS league_key(key)
       WHERE league_key.key NOT IN ('id', 'name', 'teamIds', 'tier')
     )
+    OR jsonb_typeof(p_value#>'{league,name}') IS DISTINCT FROM 'string'
     OR length(btrim(COALESCE(p_value#>>'{league,name}', ''))) = 0
     OR (
       p_value#>'{league,tier}' IS NOT NULL
@@ -132,9 +137,14 @@ BEGIN
             'id', 'name', 'abbreviation', 'colors', 'logoUrl', 'farmArchetypeKey'
           )
         )
+        OR jsonb_typeof(entry->'id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry->'name') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry->'abbreviation') IS DISTINCT FROM 'string'
         OR length(btrim(COALESCE(entry->>'name', ''))) = 0
         OR length(btrim(COALESCE(entry->>'abbreviation', ''))) = 0
         OR jsonb_typeof(entry->'colors') <> 'object'
+        OR jsonb_typeof(entry#>'{colors,primary}') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry#>'{colors,secondary}') IS DISTINCT FROM 'string'
         OR length(btrim(COALESCE(entry#>>'{colors,primary}', ''))) = 0
         OR length(btrim(COALESCE(entry#>>'{colors,secondary}', ''))) = 0
         OR length(btrim(COALESCE(entry->>'farmArchetypeKey', ''))) = 0
@@ -142,6 +152,10 @@ BEGIN
           SELECT 1
           FROM jsonb_object_keys(entry->'colors') AS color_key(key)
           WHERE color_key.key NOT IN ('primary', 'secondary', 'accent')
+        )
+        OR (
+          entry#>'{colors,accent}' IS NOT NULL
+          AND jsonb_typeof(entry#>'{colors,accent}') <> 'string'
         )
         OR (entry->'logoUrl' IS NOT NULL AND jsonb_typeof(entry->'logoUrl') <> 'string')
         OR jsonb_typeof(entry->'farmArchetypeKey') <> 'string'
@@ -156,6 +170,10 @@ BEGIN
       SELECT 1
       FROM jsonb_array_elements(p_value->'prospects') entry
       WHERE jsonb_typeof(entry) <> 'object'
+        OR jsonb_typeof(entry->'id') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry->'firstName') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry->'lastName') IS DISTINCT FROM 'string'
+        OR jsonb_typeof(entry->'primaryPosition') IS DISTINCT FROM 'string'
         OR length(btrim(COALESCE(entry->>'id', ''))) = 0
         OR length(btrim(COALESCE(entry->>'firstName', ''))) = 0
         OR length(btrim(COALESCE(entry->>'lastName', ''))) = 0
@@ -164,6 +182,10 @@ BEGIN
           SELECT 1
           FROM jsonb_object_keys(entry) AS prospect_key(key)
           WHERE prospect_key.key NOT IN ('id', 'firstName', 'lastName', 'primaryPosition', 'secondaryPosition')
+        )
+        OR (
+          entry ? 'secondaryPosition'
+          AND jsonb_typeof(entry->'secondaryPosition') NOT IN ('string', 'null')
         )
     )
   THEN
@@ -194,6 +216,9 @@ BEGIN
         SELECT 1
         FROM jsonb_array_elements(roster_entry.value) player
         WHERE jsonb_typeof(player) <> 'object'
+          OR jsonb_typeof(player->'id') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(player->'name') IS DISTINCT FROM 'string'
+          OR jsonb_typeof(player->'position') IS DISTINCT FROM 'string'
           OR length(btrim(COALESCE(player->>'id', ''))) = 0
           OR length(btrim(COALESCE(player->>'name', ''))) = 0
           OR length(btrim(COALESCE(player->>'position', ''))) = 0
@@ -456,6 +481,195 @@ BEGIN
 END;
 $fn$;
 
+-- A FARM publish is one exact pick transition. The host can advance public
+-- truth, but it cannot use a pick event to rewrite order, trades, pause, or
+-- any other saved session field.
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_farm_pick_transition_valid(
+  p_previous JSONB,
+  p_next JSONB,
+  p_event JSONB,
+  p_status TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $fn$
+DECLARE
+  previous_session JSONB;
+  next_session JSONB;
+  previous_picks JSONB;
+  next_picks JSONB;
+  pick_order JSONB;
+  expected_slot JSONB;
+  new_pick JSONB;
+  previous_static JSONB;
+  next_static JSONB;
+  previous_index INTEGER;
+  next_index INTEGER;
+  previous_revision INTEGER;
+  next_revision INTEGER;
+  previous_count INTEGER;
+  next_count INTEGER;
+  event_pick INTEGER;
+  event_team_id TEXT;
+  event_player_id TEXT;
+  expected_status TEXT;
+BEGIN
+  IF p_previous IS NULL
+    OR p_next IS NULL
+    OR p_event IS NULL
+    OR jsonb_typeof(p_previous) <> 'object'
+    OR jsonb_typeof(p_next) <> 'object'
+    OR jsonb_typeof(p_event) <> 'object'
+    OR jsonb_typeof(p_previous->'formatVersion') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(p_next->'formatVersion') IS DISTINCT FROM 'string'
+    OR p_previous->>'formatVersion' <> 'snake-live-public-state-v1'
+    OR p_next->>'formatVersion' <> 'snake-live-public-state-v1'
+    OR jsonb_typeof(p_previous->'session') IS DISTINCT FROM 'object'
+    OR jsonb_typeof(p_next->'session') IS DISTINCT FROM 'object'
+    OR EXISTS(
+      SELECT 1 FROM jsonb_object_keys(p_previous) root_key(key)
+      WHERE root_key.key NOT IN ('formatVersion', 'session')
+    )
+    OR EXISTS(
+      SELECT 1 FROM jsonb_object_keys(p_next) root_key(key)
+      WHERE root_key.key NOT IN ('formatVersion', 'session')
+    )
+    OR EXISTS(
+      SELECT 1 FROM jsonb_object_keys(p_event) event_key(key)
+      WHERE event_key.key NOT IN ('pick', 'teamId', 'playerId')
+    )
+    OR jsonb_typeof(p_event->'pick') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(p_event->'teamId') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(p_event->'playerId') IS DISTINCT FROM 'string'
+    OR length(btrim(COALESCE(p_event->>'teamId', ''))) = 0
+    OR length(btrim(COALESCE(p_event->>'playerId', ''))) = 0
+  THEN
+    RETURN FALSE;
+  END IF;
+
+  previous_session := p_previous->'session';
+  next_session := p_next->'session';
+  IF jsonb_typeof(previous_session->'draftPhase') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(next_session->'draftPhase') IS DISTINCT FROM 'string'
+    OR previous_session->>'draftPhase' <> 'FARM'
+    OR next_session->>'draftPhase' <> 'FARM'
+    OR jsonb_typeof(previous_session->'completedPicks') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(next_session->'completedPicks') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(previous_session->'pickOrder') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(next_session->'pickOrder') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(previous_session->'farmSlotSalaries') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(next_session->'farmSlotSalaries') IS DISTINCT FROM 'array'
+    OR jsonb_typeof(previous_session->'currentPickIndex') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(next_session->'currentPickIndex') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(previous_session->'revision') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(next_session->'revision') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(previous_session->'lastModified') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(next_session->'lastModified') IS DISTINCT FROM 'string'
+    OR (previous_session ? 'paused' AND previous_session->'paused' <> 'false'::JSONB)
+    OR (next_session ? 'paused' AND next_session->'paused' <> 'false'::JSONB)
+  THEN
+    RETURN FALSE;
+  END IF;
+
+  IF length(previous_session->>'currentPickIndex') > 9
+    OR length(next_session->>'currentPickIndex') > 9
+    OR length(previous_session->>'revision') > 9
+    OR length(next_session->>'revision') > 9
+    OR length(p_event->>'pick') > 9
+    OR (previous_session->>'currentPickIndex') !~ '^[0-9]+$'
+    OR (next_session->>'currentPickIndex') !~ '^[0-9]+$'
+    OR (previous_session->>'revision') !~ '^[0-9]+$'
+    OR (next_session->>'revision') !~ '^[0-9]+$'
+    OR (p_event->>'pick') !~ '^[1-9][0-9]*$'
+  THEN
+    RETURN FALSE;
+  END IF;
+
+  previous_index := (previous_session->>'currentPickIndex')::INTEGER;
+  next_index := (next_session->>'currentPickIndex')::INTEGER;
+  previous_revision := (previous_session->>'revision')::INTEGER;
+  next_revision := (next_session->>'revision')::INTEGER;
+  event_pick := (p_event->>'pick')::INTEGER;
+  event_team_id := p_event->>'teamId';
+  event_player_id := p_event->>'playerId';
+  previous_picks := previous_session->'completedPicks';
+  next_picks := next_session->'completedPicks';
+  pick_order := previous_session->'pickOrder';
+  previous_static := (((previous_session - 'completedPicks') - 'currentPickIndex') - 'revision') - 'lastModified';
+  next_static := (((next_session - 'completedPicks') - 'currentPickIndex') - 'revision') - 'lastModified';
+  previous_count := jsonb_array_length(previous_picks);
+  next_count := jsonb_array_length(next_picks);
+
+  IF previous_index <> previous_count
+    OR next_index <> previous_index + 1
+    OR next_count <> previous_count + 1
+    OR next_index <> next_count
+    OR next_revision <> previous_revision + 1
+    OR previous_index >= jsonb_array_length(pick_order)
+    OR jsonb_array_length(next_session->'pickOrder') <> jsonb_array_length(pick_order)
+    OR next_static IS DISTINCT FROM previous_static
+    OR (next_picks - (next_count - 1)) IS DISTINCT FROM previous_picks
+  THEN
+    RETURN FALSE;
+  END IF;
+
+  expected_slot := pick_order->previous_index;
+  new_pick := next_picks->(next_count - 1);
+  IF jsonb_typeof(expected_slot) IS DISTINCT FROM 'object'
+    OR jsonb_typeof(new_pick) IS DISTINCT FROM 'object'
+    OR EXISTS(
+      SELECT 1 FROM jsonb_object_keys(new_pick) pick_key(key)
+      WHERE pick_key.key NOT IN ('round', 'pick', 'teamId', 'playerId', 'settledSalary', 'marginalTax')
+    )
+    OR jsonb_typeof(expected_slot->'round') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(expected_slot->'pick') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(expected_slot->'teamId') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(new_pick->'round') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(new_pick->'pick') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(new_pick->'teamId') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(new_pick->'playerId') IS DISTINCT FROM 'string'
+    OR jsonb_typeof(new_pick->'settledSalary') IS DISTINCT FROM 'number'
+    OR jsonb_typeof(new_pick->'marginalTax') IS DISTINCT FROM 'number'
+    OR new_pick->'round' IS DISTINCT FROM expected_slot->'round'
+    OR new_pick->'pick' IS DISTINCT FROM expected_slot->'pick'
+    OR new_pick->'teamId' IS DISTINCT FROM expected_slot->'teamId'
+    OR new_pick->>'playerId' <> event_player_id
+    OR new_pick->'pick' IS DISTINCT FROM p_event->'pick'
+    OR new_pick->>'teamId' <> event_team_id
+    OR event_pick <> (expected_slot->>'pick')::INTEGER
+    OR jsonb_array_length(next_session->'farmSlotSalaries') <= previous_index
+    OR new_pick->'settledSalary' IS DISTINCT FROM next_session->'farmSlotSalaries'->previous_index
+    OR (new_pick->>'marginalTax')::NUMERIC <> 0
+    OR jsonb_typeof(next_session#>'{snakeSetup,poolPlayerIds}') IS DISTINCT FROM 'array'
+    OR EXISTS(
+      SELECT 1 FROM jsonb_array_elements(next_session#>'{snakeSetup,poolPlayerIds}') pool_id
+      WHERE jsonb_typeof(pool_id) <> 'string'
+    )
+    OR NOT EXISTS(
+      SELECT 1 FROM jsonb_array_elements_text(next_session#>'{snakeSetup,poolPlayerIds}') pool_id
+      WHERE pool_id = event_player_id
+    )
+    OR EXISTS(
+      SELECT 1 FROM jsonb_array_elements(previous_picks) prior_pick
+      WHERE prior_pick->>'playerId' = event_player_id
+    )
+  THEN
+    RETURN FALSE;
+  END IF;
+
+  expected_status := CASE
+    WHEN next_index = jsonb_array_length(pick_order) THEN 'complete'
+    ELSE 'open'
+  END;
+  RETURN p_status = expected_status;
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN FALSE;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_publish_room(
   p_room_id UUID,
   p_host_device_id TEXT,
@@ -519,6 +733,14 @@ BEGIN
   IF r.status <> 'open' THEN RAISE EXCEPTION 'The live room is not open.'; END IF;
   IF r.public_revision <> p_expected_room_revision THEN
     RAISE EXCEPTION 'Stale expected revision for the room.';
+  END IF;
+  IF r.phase = 'FARM' AND NOT public.kbl_snake_live_farm_pick_transition_valid(
+    r.public_state,
+    p_public_state,
+    p_public_event,
+    p_status
+  ) THEN
+    RAISE EXCEPTION 'The FARM pick transition is invalid.';
   END IF;
   IF p_event_kind IN ('PICK_RECORDED', 'TRADE_EXECUTED') THEN
     INSERT INTO public.snake_live_recovery_slots(

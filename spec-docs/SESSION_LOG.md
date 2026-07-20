@@ -8322,3 +8322,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green.
 - Same-auditor recheck remains. Migration is local and unapplied. No push, preview, merge, or
   production promotion is authorized.
+
+## 2026-07-20 — FINDING-249 second-audit repair
+
+- The same auditor blocked first repair `1e53eb8f`, Major 2 / Minor 0. SQL still accepted objects in
+  allowed FARM identity fields, and the publish RPC did not prove that a FARM pick changed only one
+  legal next slot.
+- Added exact JSON scalar checks for every FARM league, team, color, prospect, and public-roster
+  identity field. Added one exact FARM pick transition shared by the SQL contract and deterministic
+  multi-device server model.
+- The transition rejects pause, trade, order, version-state, extra-event, duplicate-player, wrong
+  slot, wrong salary, wrong tax, and wrong status changes. A legal pick, correction, completion, and
+  idempotent final replay pass. FARM now drops the MLB-only version ledger before publication.
+- Repaired proof: 33/33 delta tests and 241/241 broader MLB/FARM live-room tests. TypeScript,
+  changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green.
+- Final same-auditor recheck remains. Migration is local and unapplied. No push, preview, merge, or
+  production promotion is authorized.

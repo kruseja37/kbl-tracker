@@ -174,20 +174,46 @@ describe('Snake live-room multi-device contract', () => {
     const host = device(server, 'farm-hotseat-mac');
     const teamIds = ['team-1', 'team-2'];
     const prospectIds = ['prospect-1', 'prospect-2'];
+    const farmSession = {
+      id: 'farm-live-room',
+      leagueId: 'farm-league',
+      seasonNumber: 2,
+      seed: 'farm-seed',
+      workflowVersion: 'snake-v1-farm',
+      engineMethodVersion: 'snake-s6',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 1,
+      draftPhase: 'FARM',
+      farmSlotSalaries: [30_000, 10_000],
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-1' },
+        { round: 1, pick: 2, teamId: 'team-2' },
+      ],
+      completedPicks: [],
+      trades: [],
+      currentPickIndex: 0,
+      revision: 0,
+      createdDate: '2026-07-19T00:00:00.000Z',
+      lastModified: '2026-07-19T00:00:00.000Z',
+      snakeSetup: {
+        clubs: teamIds.map((teamId) => ({ teamId })),
+        poolPlayerIds: prospectIds,
+        versionSelections: {},
+        orderSeed: 'farm-seed',
+      },
+    };
+    const initialPublicState = {
+      formatVersion: 'snake-live-public-state-v1',
+      session: farmSession,
+    };
     const room = await host.transport.createRoom({
       sessionId: 'farm-live-room',
       roomCode: '8642',
       phase: 'FARM',
       hostDeviceId: host.id,
       hostToken: host.token,
-      publicState: {
-        session: {
-          snakeSetup: {
-            clubs: teamIds.map((teamId) => ({ teamId })),
-            poolPlayerIds: prospectIds,
-          },
-        },
-      },
+      publicState: initialPublicState,
     });
     const hostAccess = {
       roomId: room.id,
@@ -229,9 +255,23 @@ describe('Snake live-room multi-device contract', () => {
     })).rejects.toThrow('invalid or contains private data');
     await expect(host.transport.seedCatalog({
       ...hostAccess,
+      catalog: { ...catalog, league: { ...catalog.league, name: { display: 'Farm League' } } },
+    })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
       catalog: {
         ...catalog,
         teams: [{ ...catalog.teams[0], iv: 99 }, catalog.teams[1]],
+      },
+    })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: {
+        ...catalog,
+        teams: [{
+          ...catalog.teams[0],
+          colors: { ...catalog.teams[0].colors, accent: { display: '#ffffff' } },
+        }, catalog.teams[1]],
       },
     })).rejects.toThrow('invalid or contains private data');
     const seeded = await host.transport.seedCatalog({ ...hostAccess, catalog });
@@ -275,18 +315,112 @@ describe('Snake live-room multi-device contract', () => {
       ...hostAccess,
       expectedRoomRevision: 0,
       idempotencyKey: 'farm-pause-publish',
-      publicState: { ...room.publicState, paused: true },
+      publicState: initialPublicState,
       eventKind: 'PAUSE_CHANGED',
       publicEvent: { paused: true },
     })).rejects.toThrow('FARM public actions can record picks only');
+    const pickedPublicState = {
+      formatVersion: 'snake-live-public-state-v1',
+      session: {
+        ...farmSession,
+        completedPicks: [{
+          round: 1,
+          pick: 1,
+          teamId: 'team-1',
+          playerId: 'prospect-1',
+          settledSalary: 30_000,
+          marginalTax: 0,
+        }],
+        currentPickIndex: 1,
+        revision: 1,
+        lastModified: '2026-07-19T00:01:00.000Z',
+      },
+    };
+    const rejectedFarmRewrites = [
+      { key: 'paused', publicState: { ...pickedPublicState, session: { ...pickedPublicState.session, paused: true } } },
+      { key: 'trades', publicState: { ...pickedPublicState, session: { ...pickedPublicState.session, trades: [{ id: 'hidden-trade' }] } } },
+      { key: 'order', publicState: { ...pickedPublicState, session: { ...pickedPublicState.session, pickOrder: [...farmSession.pickOrder].reverse() } } },
+      { key: 'version', publicState: { ...pickedPublicState, session: { ...pickedPublicState.session, versionState: { private: true } } } },
+    ];
+    for (const attempt of rejectedFarmRewrites) {
+      await expect(host.transport.publishRoom({
+        ...hostAccess,
+        expectedRoomRevision: 0,
+        idempotencyKey: `farm-invalid-${attempt.key}`,
+        publicState: attempt.publicState,
+        eventKind: 'PICK_RECORDED',
+        publicEvent: { playerId: 'prospect-1', pick: 1, teamId: 'team-1' },
+        status: 'open',
+      })).rejects.toThrow('FARM pick transition is invalid');
+    }
     await expect(host.transport.publishRoom({
       ...hostAccess,
       expectedRoomRevision: 0,
+      idempotencyKey: 'farm-invalid-event-shape',
+      publicState: pickedPublicState,
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { playerId: 'prospect-1', pick: 1, teamId: 'team-1', note: 'extra' },
+      status: 'open',
+    })).rejects.toThrow('FARM pick transition is invalid');
+    const published = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
       idempotencyKey: 'farm-pick-publish',
-      publicState: { ...room.publicState, currentPickIndex: 1 },
+      publicState: pickedPublicState,
       eventKind: 'PICK_RECORDED',
       publicEvent: { playerId: 'prospect-1', pick: 1, teamId: 'team-1' },
-    })).resolves.toMatchObject({ publicRevision: 1, correctionAvailable: true });
+      status: 'open',
+    });
+    expect(published).toMatchObject({ publicRevision: 1, correctionAvailable: true });
+    const corrected = await host.transport.restorePreviousPublicState({
+      ...hostAccess,
+      expectedRoomRevision: published.publicRevision,
+      idempotencyKey: 'farm-correct-pick',
+    });
+    expect(corrected).toMatchObject({ publicRevision: 2, correctionAvailable: false });
+    expect(corrected.publicState).toEqual(initialPublicState);
+
+    const republishedFirst = await host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: corrected.publicRevision,
+      idempotencyKey: 'farm-pick-publish-after-correction',
+      publicState: pickedPublicState,
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { playerId: 'prospect-1', pick: 1, teamId: 'team-1' },
+      status: 'open',
+    });
+    const completedPublicState = {
+      ...pickedPublicState,
+      session: {
+        ...pickedPublicState.session,
+        completedPicks: [
+          ...pickedPublicState.session.completedPicks,
+          {
+            round: 1,
+            pick: 2,
+            teamId: 'team-2',
+            playerId: 'prospect-2',
+            settledSalary: 10_000,
+            marginalTax: 0,
+          },
+        ],
+        currentPickIndex: 2,
+        revision: 2,
+        lastModified: '2026-07-19T00:02:00.000Z',
+      },
+    };
+    const finalPublish = {
+      ...hostAccess,
+      expectedRoomRevision: republishedFirst.publicRevision,
+      idempotencyKey: 'farm-pick-final',
+      publicState: completedPublicState,
+      eventKind: 'PICK_RECORDED' as const,
+      publicEvent: { playerId: 'prospect-2', pick: 2, teamId: 'team-2' },
+      status: 'complete' as const,
+    };
+    const completed = await host.transport.publishRoom(finalPublish);
+    expect(completed).toMatchObject({ publicRevision: 4, status: 'complete' });
+    await expect(host.transport.publishRoom(finalPublish)).resolves.toEqual(completed);
   });
 
   test.each([

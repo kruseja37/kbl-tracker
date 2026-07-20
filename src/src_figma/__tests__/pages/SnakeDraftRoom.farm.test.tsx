@@ -323,6 +323,7 @@ describe('S6 farm room continuation', () => {
     ]);
     expect(publication.session.farmSeatBoards).toBeUndefined();
     expect(publication.session.farmProspectSnapshot).toBeUndefined();
+    expect(publication.session.versionState).toBeUndefined();
     expect(publication.publicEvent).toEqual(expect.objectContaining({ pick: 1, teamId: 'a' }));
   });
 

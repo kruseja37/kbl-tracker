@@ -230,12 +230,30 @@ describe('Snake live public catalog', () => {
       ...catalog,
       teams: [{ ...(catalog.teams as Array<Record<string, unknown>>)[0], iv: 99 }, catalog.teams[1]],
     })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      league: { ...(catalog.league as Record<string, unknown>), name: { display: 'Farm League' } },
+    })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      prospects: [{
+        ...(catalog.prospects as Array<Record<string, unknown>>)[0],
+        firstName: { display: 'Mara' },
+      }],
+    })).toBeNull();
     const firstTeam = (catalog.teams as Array<Record<string, unknown>>)[0];
     expect(readSnakeLiveFarmCatalog({
       ...catalog,
       teams: [{
         ...firstTeam,
         colors: { ...(firstTeam.colors as Record<string, unknown>), hiddenRatings: true },
+      }, catalog.teams[1]],
+    })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      teams: [{
+        ...firstTeam,
+        colors: { ...(firstTeam.colors as Record<string, unknown>), accent: { display: '#fff' } },
       }, catalog.teams[1]],
     })).toBeNull();
   });

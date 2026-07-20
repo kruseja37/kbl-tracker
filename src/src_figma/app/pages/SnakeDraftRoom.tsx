@@ -734,13 +734,17 @@ function FarmSnakeRoom() {
       if (!prospect || !source.snakeSetup?.poolPlayerIds.includes(playerId)) {
         throw new Error('THAT PROSPECT IS NOT IN THE FROZEN FARM POOL.');
       }
-      const picked = applySnakePickWithCorrection({
+      const pickedWithVersionState = applySnakePickWithCorrection({
         session: source,
         player: { playerId: prospect.id },
         settledSalary: farmPickSalary(source, slot.pick),
         marginalTax: 0,
         versionPool: farmPool.prospects.map((row) => ({ playerId: row.id })),
       });
+      // FARM prospects are one-card identities. The shared MLB pick helper
+      // creates a version ledger, but FARM must not publish or persist it.
+      const picked = { ...pickedWithVersionState };
+      delete picked.versionState;
       if (!reconcilePrivateBoards) return { next: picked, slot, activeTeam };
       const nextUnavailable = new Set(picked.completedPicks.map((pick) => pick.playerId));
       const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
