@@ -147,6 +147,7 @@ import {
   patchMlbDraftSessionSnakeCompanions,
   markSnakeRosterHandoff,
   recoverCanonicalMlbSnakePickOrder,
+  restoreSnakeLiveRoomLocally,
   saveMlbDraftRoomSession,
   updateMlbDraftSessionAtomically,
   resolveLeagueSalaryCap,
@@ -186,6 +187,7 @@ import {
   type SnakeLiveIntent,
   type SnakeLiveJsonObject,
 } from '../../../utils/snakeLiveRoomTypes';
+import { createSnakeLiveRoomTransport } from '../../../utils/snakeLiveRoomTransport';
 import {
   pendingSnakeLivePickIntentCount,
   readSnakeLivePublicSession,
@@ -808,6 +810,7 @@ function MlbSnakeDraftRoom() {
   }, [location.pathname, location.search]);
   const sessionSeasonNumber = practiceRequested ? PRACTICE_SEASON_NUMBER : SEASON_NUMBER;
   const requestedLeagueId = useMemo(() => new URLSearchParams(location.search).get('leagueId'), [location.search]);
+  const recoveryRoomCodeParam = useMemo(() => new URLSearchParams(location.search).get('roomCode') ?? '', [location.search]);
   const localLeague = useMemo(
     () => requestedLeagueId === null
       ? leagues[0] ?? null
@@ -822,6 +825,9 @@ function MlbSnakeDraftRoom() {
   const [session, setSession] = useState<Awaited<ReturnType<typeof getMlbDraftSession>>>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [recoveryRoomCode, setRecoveryRoomCode] = useState(recoveryRoomCodeParam);
+  const [recoveryWorking, setRecoveryWorking] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [writeNotice, setWriteNotice] = useState<string | null>(null);
   const [localMirrorWarning, setLocalMirrorWarning] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -1017,6 +1023,32 @@ function MlbSnakeDraftRoom() {
   }, [getMlbDraftSession, getRegisteredPool, practiceMode, refresh, requestedLeagueId, sessionSeasonNumber]);
 
   useEffect(() => { void loadSession(); }, [loadSession]);
+
+  const recoverOpenLiveRoom = useCallback(async () => {
+    const roomCode = recoveryRoomCode.trim();
+    if (!/^\d{4}$/.test(roomCode)) {
+      setRecoveryError('ENTER THE FOUR-DIGIT ROOM CODE.');
+      return;
+    }
+    setRecoveryWorking(true);
+    setRecoveryError(null);
+    try {
+      const transport = createSnakeLiveRoomTransport();
+      const room = await transport.findRoomByCode(roomCode);
+      if (!room || room.phase !== 'MLB') throw new Error('NO OPEN MLB LIVE ROOM MATCHES THIS CODE.');
+      const receipt = await transport.getCatalog(room.id);
+      const catalog = receipt ? readSnakeLiveCatalog(receipt.catalog) : null;
+      if (!catalog) throw new Error('THE LIVE ROOM CATALOG IS NOT AVAILABLE.');
+      const publicSession = readSnakeLivePublicSession(room);
+      await restoreSnakeLiveRoomLocally({ catalog, session: publicSession });
+      await refresh();
+      navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}`, { replace: true });
+    } catch (cause) {
+      setRecoveryError(cause instanceof Error ? cause.message : 'THE LIVE ROOM COULD NOT BE RESTORED HERE.');
+    } finally {
+      setRecoveryWorking(false);
+    }
+  }, [navigate, recoveryRoomCode, refresh]);
 
   const refreshRoomTruth = useCallback(async () => {
     try {
@@ -2983,7 +3015,7 @@ function MlbSnakeDraftRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadSession()}>RETRY</button></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p>{!practiceMode && !localLeague ? <div className="mt-5 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4"><p className="text-xs font-black">RESTORE OPEN LIVE ROOM</p><div className="mt-3 flex flex-wrap gap-2"><input aria-label="Live room code" value={recoveryRoomCode} onChange={(event) => setRecoveryRoomCode(event.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" placeholder="ROOM CODE" className="min-h-11 w-40 border-2 border-[var(--ballpark-brass)] bg-black/30 px-3 font-mono text-sm uppercase" /><button className="ballpark-press-button ballpark-press-gold min-h-11" disabled={recoveryWorking} onClick={() => void recoverOpenLiveRoom()}>{recoveryWorking ? 'RESTORING…' : 'RESTORE'}</button></div>{recoveryError ? <p className="mt-3 text-xs font-bold text-red-300">{recoveryError}</p> : null}</div> : null}<button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadSession()}>RETRY</button></div></main>;
   if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
 
   const mlbRecapPicks = session.draftManifest

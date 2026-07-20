@@ -36,6 +36,7 @@ import type { RebrandRelocationMarker } from '../engines/franchiseRebrandCascade
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import type { FarmAuctionPool } from './farmAuctionPool';
 import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
+import type { SnakeLiveCatalogData } from './snakeLiveCatalog';
 import {
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
@@ -1509,6 +1510,159 @@ export async function getRegisteredPool(leagueId: string): Promise<RegisteredPoo
 
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error);
+  });
+}
+
+export interface SnakeLiveRoomLocalRecoveryResult {
+  leagueId: string;
+  restoredLeague: boolean;
+  restoredTeams: number;
+  restoredPlayers: number;
+  restoredPool: boolean;
+  restoredSession: boolean;
+}
+
+function sameRecoveryPool(left: RegisteredPool, right: RegisteredPool): boolean {
+  if (left.leagueId !== right.leagueId || left.players.length !== right.players.length) return false;
+  const rightById = new Map(right.players.map((player) => [player.id, player]));
+  return left.players.every((player) => {
+    const other = rightById.get(player.id);
+    return Boolean(other && other.iv === player.iv && other.salary === player.salary);
+  });
+}
+
+/**
+ * Restore the public, immutable catalog and public draft snapshot of one open
+ * Snake room into this browser only.  This deliberately bypasses generic Cloud
+ * Sync: the live-room service is the source and this mirror must not create a
+ * second large sync queue or overwrite another device's League Builder data.
+ */
+export async function restoreSnakeLiveRoomLocally(input: {
+  catalog: SnakeLiveCatalogData;
+  session: LeagueBuilderMlbDraftSession;
+}): Promise<SnakeLiveRoomLocalRecoveryResult> {
+  const { catalog, session } = input;
+  if (catalog.league.id !== session.leagueId
+    || session.id !== createMlbDraftSessionId(session.leagueId, session.seasonNumber)
+    || (session.draftPhase && session.draftPhase !== 'MLB')) {
+    throw new Error('THE LIVE ROOM CATALOG DOES NOT MATCH ITS MLB DRAFT SESSION.');
+  }
+  const poolIds = new Set(catalog.registeredPool.players.map((player) => player.id));
+  const teamIds = new Set(catalog.league.teamIds);
+  if (poolIds.size !== catalog.players.length
+    || catalog.players.some((player) => !poolIds.has(player.id))
+    || session.pickOrder.some((pick) => !teamIds.has(pick.teamId))
+    || session.completedPicks.some((pick) => !poolIds.has(pick.playerId) || !teamIds.has(pick.teamId))) {
+    throw new Error('THE LIVE ROOM CATALOG IS INCOMPLETE.');
+  }
+
+  const recoveryLeague = structuredClone(catalog.league) as LeagueTemplate;
+  const recoveryTeams = catalog.teams.map((team) => ({
+    ...structuredClone(team),
+    // Stadium data is intentionally absent from the public live catalog. This
+    // fallback is only used when the source team is not already in this browser.
+    stadium: 'Recovery Park',
+    leagueIds: [...team.leagueIds],
+  }) as Team);
+  const recoveryPlayers = catalog.players.map((player) => ({
+    ...structuredClone(player),
+    leagueAssignments: [],
+  }) as Player);
+  const recoveryPool = structuredClone(catalog.registeredPool) as RegisteredPool;
+  const recoverySession = structuredClone(session) as LeagueBuilderMlbDraftSession;
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([
+      STORES.LEAGUE_TEMPLATES,
+      STORES.GLOBAL_TEAMS,
+      STORES.GLOBAL_PLAYERS,
+      STORES.REGISTERED_POOLS,
+      STORES.MLB_DRAFT_SESSIONS,
+    ], 'readwrite');
+    const leagues = tx.objectStore(STORES.LEAGUE_TEMPLATES);
+    const teams = tx.objectStore(STORES.GLOBAL_TEAMS);
+    const players = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const pools = tx.objectStore(STORES.REGISTERED_POOLS);
+    const sessions = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const leagueRead = leagues.get(recoveryLeague.id);
+    const poolRead = pools.get(recoveryPool.leagueId);
+    const sessionRead = sessions.get(recoverySession.id);
+    let reads = 0;
+    let restoredLeague = false;
+    let restoredPool = false;
+    let restoredSession = false;
+    let restoredTeams = 0;
+    let restoredPlayers = 0;
+
+    const fail = (message: string) => {
+      reject(new Error(message));
+      tx.abort();
+    };
+    const writeWhenReady = () => {
+      reads += 1;
+      if (reads !== 3) return;
+      const existingPool = poolRead.result as RegisteredPool | undefined;
+      const existingSession = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+      if (existingPool && !sameRecoveryPool(existingPool, recoveryPool)) {
+        fail('THIS BROWSER ALREADY HAS A DIFFERENT DRAFT POOL FOR THIS LEAGUE.');
+        return;
+      }
+      if (existingSession && (
+        existingSession.createdDate !== recoverySession.createdDate
+        || existingSession.seed !== recoverySession.seed
+      )) {
+        fail('THIS BROWSER ALREADY HAS A DIFFERENT DRAFT RUN FOR THIS LEAGUE.');
+        return;
+      }
+      if (!leagueRead.result) {
+        leagues.put(recoveryLeague);
+        restoredLeague = true;
+      }
+      if (!existingPool) {
+        pools.put(recoveryPool);
+        restoredPool = true;
+      }
+      if (!existingSession) {
+        sessions.put(recoverySession);
+        restoredSession = true;
+      }
+      for (const team of recoveryTeams) {
+        const request = teams.get(team.id);
+        request.onsuccess = () => {
+          if (!request.result) {
+            teams.put(team);
+            restoredTeams += 1;
+          }
+        };
+      }
+      for (const player of recoveryPlayers) {
+        const request = players.get(player.id);
+        request.onsuccess = () => {
+          if (!request.result) {
+            players.put(player);
+            restoredPlayers += 1;
+          }
+        };
+      }
+    };
+
+    leagueRead.onsuccess = writeWhenReady;
+    poolRead.onsuccess = writeWhenReady;
+    sessionRead.onsuccess = writeWhenReady;
+    leagueRead.onerror = () => fail('THE LOCAL LEAGUE RECORD COULD NOT BE READ.');
+    poolRead.onerror = () => fail('THE LOCAL DRAFT POOL COULD NOT BE READ.');
+    sessionRead.onerror = () => fail('THE LOCAL DRAFT SESSION COULD NOT BE READ.');
+    tx.oncomplete = () => resolve({
+      leagueId: recoveryLeague.id,
+      restoredLeague,
+      restoredTeams,
+      restoredPlayers,
+      restoredPool,
+      restoredSession,
+    });
+    tx.onerror = () => reject(tx.error ?? new Error('THE LIVE ROOM COULD NOT BE RESTORED HERE.'));
+    tx.onabort = () => reject(tx.error ?? new Error('THE LIVE ROOM RESTORE STOPPED.'));
   });
 }
 
