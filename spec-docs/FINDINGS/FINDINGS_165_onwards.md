@@ -1230,7 +1230,7 @@ TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production
 remains unchanged. JK's room 4352 confirmation walk remains.
 
 ### FINDING-248
-**Date:** 2026-07-20 | **Phase:** Snake Draft / MLB-to-farm identity and prospect generation | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW PENDING
+**Date:** 2026-07-20 | **Phase:** Snake Draft / MLB-to-farm identity and prospect generation | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING
 **Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`,
 `src/utils/snakeLiveCatalog.ts`, `src/utils/leagueBuilderStorage.ts`,
 `src/engines/snakeFarmSlots.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`,
@@ -1261,4 +1261,7 @@ and could alter Auction's Generalist fallback. Both seams were repaired and cove
 freeze. The separate auditor approved exact head `914e35e9`, **Major 0 / Minor 0**, after independently
 passing 92/92 focused tests, the exact N=500 distribution invariant, TypeScript, changed-code ESLint,
 and full-range diff integrity. One preview and JK's browser walk remain. No production deploy or
-merge is authorized.
+merge is authorized. Preview deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY at
+`https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Authenticated remote checks returned
+HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chrome loaded the app
+with no console warning or error. JK's new/recovered league walk is the remaining product gate.

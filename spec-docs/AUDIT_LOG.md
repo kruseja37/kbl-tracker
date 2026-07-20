@@ -1842,7 +1842,7 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 | FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — REMOTE PREVIEW READY — JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are implemented at `fd07bba0` and independently approved at exact branch head `cedf96ee`, Major 0 / Minor 0. Migration 009 is installed and exact deployed head `d2ac79d7` is READY in preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`. |
 | FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |
 | FINDING-247 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — NEW PREVIEW READY — JK WALK PENDING | Snake Draft completed MLB handoff and completed-room recovery | One transaction now freezes the exact pool/session, creates and saves all target rosters, saves player assignments/salaries and handoff, aborts without partial state, repairs old partial state, and repeats byte-for-byte across proven 4- and 8-team completions. Recovery now appears when a signed-in browser has the league but lacks its local pool/session and explicitly reloads the restored state even when the URL already names that league. Recovery head `05f7f6b0` was rejected Major 1 / Minor 0 for a same-URL dead end; repaired head `56d1ab81` received APPROVE, Major 0 / Minor 0. Preview `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY from source `56d1ab81`; production is unchanged. |
-| FINDING-248 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — PREVIEW PENDING | Snake Draft MLB-to-farm identity and prospect generation | New and recovered Snake drafts now carry each club's farm identity through setup, live catalog, recovery, Scout Reveal, and farm-session creation. Missing legacy identity fails closed with a generic repair control. Production farm pools use the exact Standard prospect distribution and keep true ratings hidden. Exact head `914e35e9` is approved, Major 0 / Minor 0. |
+| FINDING-248 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING | Snake Draft MLB-to-farm identity and prospect generation | New and recovered Snake drafts now carry each club's farm identity through setup, live catalog, recovery, Scout Reveal, and farm-session creation. Missing legacy identity fails closed with a generic repair control. Production farm pools use the exact Standard prospect distribution and keep true ratings hidden. Exact head `914e35e9` is approved, Major 0 / Minor 0; preview `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY. |
 
 ### 2026-07-20 — FINDING-248 audit close
 
@@ -1853,6 +1853,12 @@ auditor approved exact head `914e35e9`, **Major 0 / Minor 0**. Independent proof
 tests plus the exact N=500 Standard prospect distribution, TypeScript, changed-code ESLint, and
 full-range diff integrity. Preview publication and JK's browser walk remain. No merge or production
 deployment is authorized.
+
+Preview deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY at
+`https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Authenticated remote checks returned
+HTTP 200. The deployed Scout Reveal bundle contains `FARM IDENTITIES MISSING` and
+`SAVE FARM IDENTITIES`; Chrome loaded the app home page with no warning or error in the console.
+Production remains unchanged. JK's new/recovered league walk is the remaining product gate.
 
 ### 2026-07-19 — FINDING-246 first audit block and builder repair
 

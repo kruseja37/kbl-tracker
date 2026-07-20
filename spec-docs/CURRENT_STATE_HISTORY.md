@@ -1596,3 +1596,10 @@ for JK's room 4352 confirmation. JK completed that gate and reached Scout Reveal
 showed a false Generalist because farm identity had not been frozen or transported. The new live
 header records the generic end-to-end identity repair and exact Standard prospect proof at approved
 head `914e35e9`. One new preview and JK's new/recovered league walk remain. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-248 remote preview gate
+
+The prior live header recorded independent approval of the farm-identity and prospect flow at exact
+code head `914e35e9`, with preview publication still open. The new live header records READY preview
+`dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` and its remote smoke. Only JK's new/recovered league browser walk
+remains. Production is unchanged.

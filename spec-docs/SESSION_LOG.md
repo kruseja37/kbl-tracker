@@ -8273,3 +8273,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next: push the approved branch, create one Vercel preview, run a remote smoke test, then give JK
   one new and one recovered Snake league as the sole product gate. No merge or production deploy is
   authorized.
+- Pushed docs-complete branch head `3f2b30cd` and created exactly one Vercel preview. Deployment
+  `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY at
+  `https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app` and targets preview, not production.
+- Authenticated remote checks returned HTTP 200. The deployed Scout Reveal bundle contains the two
+  generic repair controls. Chrome loaded the app home page with no warning or error in the app
+  console. Vercel's local-upload build metadata reports `sha: unknown`, so the evidence uses the
+  pushed source head, deployment ID, build log, and deployed bundle instead of claiming a false SHA.
+- Remaining product gate: JK runs one new Snake league and one recovered legacy league through
+  Scout Reveal and farm transition. Production remains unchanged; no merge or promotion occurred.
