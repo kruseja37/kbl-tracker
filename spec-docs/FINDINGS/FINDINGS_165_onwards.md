@@ -1267,7 +1267,7 @@ HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chr
 with no console warning or error. JK's new/recovered league walk is the remaining product gate.
 
 ### FINDING-249
-**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** BUILT — SEPARATE AUDIT PENDING
+**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** FIRST AUDIT BLOCKERS REPAIRED — RE-AUDIT PENDING
 **Files:** `src/utils/snakeLiveCatalog.ts`,
 `src/src_figma/app/components/snake/companion/useSnakeLiveHostRoom.ts`,
 `src/src_figma/app/components/snake/farm/farmRoomModel.ts`,
@@ -1285,6 +1285,13 @@ prospect pool, and prove four/eight-team behavior.
 team board and send pick intent. The public catalog rejects true grades, ratings, hidden modifiers,
 private board data, and extra fields. Public picks update order, roster, budget, and every companion;
 the drafted prospect leaves each private board. Four/eight-team privacy and scale are covered.
-Focused proof is 214/214. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module
-production/PWA build are green. The required migration is local and unapplied. Separate audit,
-explicit remote authority, and JK's browser walk remain.
+The first separate audit blocked `256962dd`, **Major 3 / Minor 0**. Raw RPC callers could still
+submit FARM trades and publish trade or pause events; the catalog checked prospect rows but not an
+exact root, league, team, color, or public-roster allowlist; and the FARM correction button restored
+only local state, so other devices could stay stale after a reconnect. The repair moves all three
+laws to authoritative boundaries: FARM RPCs accept pick intent and pick publication only, the FARM
+catalog uses the same exact allowlist in TypeScript and SQL, and correction restores the server
+recovery slot before it repairs local private boards. Direct repaired proof is 60/60; the combined
+MLB/FARM live-room gate is 205/205. TypeScript, changed-file ESLint, diff integrity, and the
+2,744-module production/PWA build are green. The required migration is local and unapplied.
+Same-auditor recheck, explicit remote authority, and JK's browser walk remain.

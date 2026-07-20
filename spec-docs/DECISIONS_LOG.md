@@ -4332,3 +4332,15 @@ generic confirmation failure.
 - This is a generic four/eight-team product path. It is not a recovery rule for one saved league.
 - Mac mini/Neo and laptop remain the primary companion layouts. Help text remains behind `?`, and
   JK's browser walk remains the sole product gate.
+
+## 2026-07-20 — FARM room action law is enforced at the server boundary
+
+- A FARM room accepts only public `PICK_RECORDED` actions. It rejects `TRADE_EXECUTED` and
+  `PAUSE_CHANGED` even when a caller bypasses the UI.
+- A FARM companion can submit only a pick intent. Host and companion trade-intent RPCs reject the
+  FARM phase.
+- FARM has no clock, so it has no pause action.
+- `CORRECT LAST ACTION` restores the database recovery slot. A local correction snapshot can merge
+  private board state, but it cannot decide public order, picks, roster, or room revision.
+- The FARM public catalog uses an exact allowlist at the client and database boundaries. Unknown
+  root, league, team, color, prospect, or roster fields fail closed.

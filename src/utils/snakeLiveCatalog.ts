@@ -50,8 +50,20 @@ export interface SnakeLiveFarmCatalogSource {
 
 export interface SnakeLiveFarmCatalogData {
   formatVersion: typeof SNAKE_LIVE_FARM_CATALOG_FORMAT;
-  league: LeagueTemplate;
-  teams: Team[];
+  league: {
+    id: string;
+    name: string;
+    teamIds: string[];
+    tier?: LeagueTemplate['tier'];
+  };
+  teams: Array<{
+    id: string;
+    name: string;
+    abbreviation: string;
+    colors: { primary: string; secondary: string; accent?: string };
+    logoUrl?: string;
+    farmArchetypeKey: string;
+  }>;
   prospects: SnakeLiveFarmProspectIdentity[];
   existingFarmRostersByTeamId: Record<string, SnakeLiveFarmRosterPlayer[]>;
   farmTarget: number;
@@ -187,6 +199,30 @@ function publicTeam(team: Team): Record<string, unknown> {
   });
 }
 
+function publicFarmLeague(league: LeagueTemplate): Record<string, unknown> {
+  return defined({
+    id: league.id,
+    name: league.name,
+    teamIds: [...league.teamIds],
+    tier: league.tier,
+  });
+}
+
+function publicFarmTeam(team: Team): Record<string, unknown> {
+  return defined({
+    id: team.id,
+    name: team.name,
+    abbreviation: team.abbreviation,
+    colors: defined({
+      primary: team.colors.primary,
+      secondary: team.colors.secondary,
+      accent: team.colors.accent,
+    }),
+    logoUrl: team.logoUrl,
+    farmArchetypeKey: team.farmArchetypeKey,
+  });
+}
+
 function publicPlayer(player: Player): Record<string, unknown> {
   return defined({
     id: player.id,
@@ -280,6 +316,47 @@ function idSet(rows: readonly unknown[]): Set<string> | null {
 
 function sameIds(left: readonly string[], right: Set<string>): boolean {
   return left.length === right.size && left.every((id) => right.has(id));
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function validFarmCatalogEnvelope(catalog: SnakeLiveJsonObject): boolean {
+  if (!hasOnlyKeys(catalog, [
+    'formatVersion', 'league', 'teams', 'prospects', 'existingFarmRostersByTeamId', 'farmTarget',
+  ])) return false;
+  if (!objectValue(catalog.league)
+    || !hasOnlyKeys(catalog.league, ['id', 'name', 'teamIds', 'tier'])
+    || typeof catalog.league.id !== 'string'
+    || !catalog.league.id
+    || typeof catalog.league.name !== 'string'
+    || !catalog.league.name.trim()
+    || (catalog.league.tier !== undefined
+      && (typeof catalog.league.tier !== 'string' || !catalog.league.tier.trim()))
+    || !Array.isArray(catalog.league.teamIds)
+    || !catalog.league.teamIds.every((id) => typeof id === 'string' && Boolean(id))) return false;
+  if (!Array.isArray(catalog.teams) || !catalog.teams.every((team) => {
+    if (!objectValue(team)
+      || !hasOnlyKeys(team, ['id', 'name', 'abbreviation', 'colors', 'logoUrl', 'farmArchetypeKey'])
+      || typeof team.id !== 'string'
+      || !team.id
+      || typeof team.name !== 'string'
+      || !team.name.trim()
+      || typeof team.abbreviation !== 'string'
+      || !team.abbreviation.trim()
+      || !objectValue(team.colors)
+      || !hasOnlyKeys(team.colors, ['primary', 'secondary', 'accent'])
+      || typeof team.colors.primary !== 'string'
+      || !team.colors.primary.trim()
+      || typeof team.colors.secondary !== 'string'
+      || !team.colors.secondary.trim()
+      || typeof team.farmArchetypeKey !== 'string'
+      || !team.farmArchetypeKey.trim()) return false;
+    return (team.logoUrl === undefined || typeof team.logoUrl === 'string')
+      && (team.colors.accent === undefined || typeof team.colors.accent === 'string');
+  })) return false;
+  return true;
 }
 
 function toJsonObject(value: Record<string, unknown>): SnakeLiveJsonObject {
@@ -415,8 +492,8 @@ export function buildSnakeLiveFarmCatalog(source: SnakeLiveFarmCatalogSource): S
 
   const catalog = toJsonObject({
     formatVersion: SNAKE_LIVE_FARM_CATALOG_FORMAT,
-    league: publicLeague(source.league),
-    teams: activeTeams.map((team) => publicTeam(team!)),
+    league: publicFarmLeague(source.league),
+    teams: activeTeams.map((team) => publicFarmTeam(team!)),
     prospects: activeProspects.map((prospect) => defined({
       id: prospect!.id,
       firstName: prospect!.firstName,
@@ -435,6 +512,7 @@ export function buildSnakeLiveFarmCatalog(source: SnakeLiveFarmCatalogSource): S
 export function readSnakeLiveFarmCatalog(catalog: SnakeLiveJsonObject): SnakeLiveFarmCatalogData | null {
   if (snakeLiveCatalogForbiddenPath(catalog)) return null;
   if (catalog.formatVersion !== SNAKE_LIVE_FARM_CATALOG_FORMAT) return null;
+  if (!validFarmCatalogEnvelope(catalog)) return null;
   if (!objectValue(catalog.league) || !Array.isArray(catalog.teams)
     || !Array.isArray(catalog.prospects) || !objectValue(catalog.existingFarmRostersByTeamId)) return null;
   if (typeof catalog.league.id !== 'string' || !Array.isArray(catalog.league.teamIds)

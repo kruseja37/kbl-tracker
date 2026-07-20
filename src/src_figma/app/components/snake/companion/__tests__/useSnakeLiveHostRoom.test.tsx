@@ -44,7 +44,11 @@ function farmCatalogPayload(): SnakeLiveJsonObject {
   return {
     formatVersion: 'snake-live-farm-catalog-v1',
     league: { id: 'league', name: 'Test League', teamIds: ['team-a'] },
-    teams: [{ id: 'team-a', name: 'Team A' }],
+    teams: [{
+      id: 'team-a', name: 'Team A', abbreviation: 'TMA',
+      colors: { primary: '#123456', secondary: '#ffffff' },
+      farmArchetypeKey: 'web-gems',
+    }],
     prospects: [{ id: 'p1', firstName: 'Prospect', lastName: 'One', primaryPosition: 'SS' }],
     existingFarmRostersByTeamId: { 'team-a': [] },
     farmTarget: 10,

@@ -196,8 +196,14 @@ describe('Snake live-room multi-device contract', () => {
     };
     const catalog = {
       formatVersion: 'snake-live-farm-catalog-v1',
-      league: { id: 'farm-league', teamIds },
-      teams: teamIds.map((id) => ({ id })),
+      league: { id: 'farm-league', name: 'Farm League', teamIds },
+      teams: teamIds.map((id, index) => ({
+        id,
+        name: `Farm Team ${index + 1}`,
+        abbreviation: `F${index + 1}`,
+        colors: { primary: '#123456', secondary: '#ffffff' },
+        farmArchetypeKey: index === 0 ? 'web-gems' : 'bomba-squad',
+      })),
       prospects: [
         { id: 'prospect-1', firstName: 'Mara', lastName: 'Diaz', primaryPosition: 'SS' },
         { id: 'prospect-2', firstName: 'Jo', lastName: 'Arm', primaryPosition: 'SP' },
@@ -213,9 +219,74 @@ describe('Snake live-room multi-device contract', () => {
         prospects: [{ ...catalog.prospects[0], trueGrade: 'A+' }, catalog.prospects[1]],
       },
     })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: { ...catalog, trueGrade: 'A+' },
+    })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: { ...catalog, league: { ...catalog.league, salary: 99_000 } },
+    })).rejects.toThrow('invalid or contains private data');
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: {
+        ...catalog,
+        teams: [{ ...catalog.teams[0], iv: 99 }, catalog.teams[1]],
+      },
+    })).rejects.toThrow('invalid or contains private data');
     const seeded = await host.transport.seedCatalog({ ...hostAccess, catalog });
     const companion = device(server, 'farm-companion-mac');
     await expect(companion.transport.getCatalog(room.id)).resolves.toEqual(seeded);
+
+    const teamAccess = await approve(room.id, host, hostAccess, companion, 'team-1');
+    await expect(companion.transport.submitIntent({
+      ...teamAccess,
+      idempotencyKey: 'farm-pick-intent',
+      kind: 'pick',
+      expectedRoomRevision: 0,
+      payload: { playerId: 'prospect-1', pick: 1, sessionRevision: 0 },
+    })).resolves.toMatchObject({ kind: 'pick', teamId: 'team-1' });
+    const tradePayload = {
+      action: 'POST', offerId: 'farm-offer', buyerTeamId: 'team-1', sellerTeamId: 'team-2',
+    };
+    await expect(companion.transport.submitIntent({
+      ...teamAccess,
+      idempotencyKey: 'farm-trade-intent',
+      kind: 'trade',
+      expectedRoomRevision: 0,
+      payload: tradePayload,
+    })).rejects.toThrow('FARM trade intents are not allowed');
+    await expect(host.transport.submitIntentAsHost({
+      ...hostAccess,
+      teamId: 'team-1',
+      idempotencyKey: 'farm-host-trade-intent',
+      expectedRoomRevision: 0,
+      payload: tradePayload,
+    })).rejects.toThrow('FARM trade intents are not allowed');
+    await expect(host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'farm-trade-publish',
+      publicState: room.publicState,
+      eventKind: 'TRADE_EXECUTED',
+      publicEvent: { offerId: 'farm-offer' },
+    })).rejects.toThrow('FARM public actions can record picks only');
+    await expect(host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'farm-pause-publish',
+      publicState: { ...room.publicState, paused: true },
+      eventKind: 'PAUSE_CHANGED',
+      publicEvent: { paused: true },
+    })).rejects.toThrow('FARM public actions can record picks only');
+    await expect(host.transport.publishRoom({
+      ...hostAccess,
+      expectedRoomRevision: 0,
+      idempotencyKey: 'farm-pick-publish',
+      publicState: { ...room.publicState, currentPickIndex: 1 },
+      eventKind: 'PICK_RECORDED',
+      publicEvent: { playerId: 'prospect-1', pick: 1, teamId: 'team-1' },
+    })).resolves.toMatchObject({ publicRevision: 1, correctionAvailable: true });
   });
 
   test.each([

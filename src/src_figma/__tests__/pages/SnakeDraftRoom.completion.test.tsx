@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   restoreLiveRoom: vi.fn(),
   liveSession: null as LeagueBuilderMlbDraftSession | null,
   liveRoomStatus: 'complete' as 'open' | 'complete' | 'closed',
+  liveCorrectionAvailable: false,
+  restorePreviousPublicState: vi.fn(),
   forceMissingLiveRoom: false,
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
@@ -115,7 +117,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       status: mocks.liveRoomStatus,
       publicRevision: publicSession.revision ?? 0,
       publicState: {},
-      correctionAvailable: false,
+      correctionAvailable: mocks.liveCorrectionAvailable,
       hostDeviceId: 'completion-host-device',
       createdAt: publicSession.createdDate,
       updatedAt: publicSession.lastModified,
@@ -142,7 +144,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       publishSession: vi.fn(),
       resolveClaim: vi.fn(),
       resolveIntent: vi.fn(),
-      restorePreviousPublicState: vi.fn(),
+      restorePreviousPublicState: mocks.restorePreviousPublicState,
       submitTradeIntent: vi.fn(),
       seedBoard: vi.fn(),
       closeRoom: mocks.closeRoom,
@@ -295,6 +297,8 @@ describe('snake draft durable completion and recap', () => {
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
     mocks.liveSession = null;
     mocks.liveRoomStatus = 'complete';
+    mocks.liveCorrectionAvailable = false;
+    mocks.restorePreviousPublicState.mockReset();
     mocks.forceMissingLiveRoom = false;
     mocks.getLiveRoom.mockReset().mockResolvedValue(null);
     mocks.findRoomByCode.mockReset().mockResolvedValue(null);
@@ -645,9 +649,25 @@ describe('snake draft durable completion and recap', () => {
     };
     const session = {
       ...completed,
+      snakeCompanions: { roomCode: '2468', claims: [] },
       correctionSnapshots: [{ action: 'pick' as const, priorSession }],
     };
     setFarmData(session);
+    mocks.liveCorrectionAvailable = true;
+    mocks.restorePreviousPublicState.mockResolvedValue({
+      id: `live:${session.id}`,
+      ownerUserId: 'completion-owner',
+      sessionId: session.id,
+      roomCode: session.snakeCompanions?.roomCode ?? '2468',
+      phase: 'FARM',
+      status: 'open',
+      publicRevision: 2,
+      publicState: buildSnakeLivePublicState(priorSession),
+      correctionAvailable: false,
+      hostDeviceId: 'completion-host-device',
+      createdAt: session.createdDate,
+      updatedAt: session.lastModified,
+    });
     renderRoom(`/snake-room?leagueId=${league.id}&phase=farm`);
 
     fireEvent.click(await screen.findByRole('button', { name: 'BACK TO ROOM' }));
@@ -656,8 +676,14 @@ describe('snake draft durable completion and recap', () => {
     expect(screen.queryByRole('button', { name: 'DRAFT PROSPECT' })).not.toBeInTheDocument();
     expect(document.body.textContent).not.toContain('PICK 2 PAYS');
 
-    fireEvent.click(screen.getByRole('button', { name: 'CORRECT LAST ACTION' }));
+    const correct = screen.getByRole('button', { name: 'CORRECT LAST ACTION' });
+    await waitFor(() => expect(correct).not.toBeDisabled());
+    fireEvent.click(correct);
     fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));
+    await waitFor(() => expect(mocks.restorePreviousPublicState).toHaveBeenCalledWith({
+      expectedRoomRevision: session.revision ?? 0,
+      idempotencyKey: `farm-correct:live:${session.id}:${session.revision ?? 0}`,
+    }));
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledWith(expect.objectContaining({
       currentPickIndex: 1,
       completedPicks: [expect.objectContaining({ playerId: 'f1' })],

@@ -591,8 +591,14 @@ function FarmSnakeRoom() {
 
   const mirrorFarmSessionLocally = useCallback(async (
     next: LeagueBuilderMlbDraftSession,
+    options: { acceptLowerRevision?: boolean } = {},
   ): Promise<LeagueBuilderMlbDraftSession> => {
-    setSession(next);
+    setSession((current) => {
+      if (!options.acceptLowerRevision
+        && current?.id === next.id
+        && (current.revision ?? 0) > (next.revision ?? 0)) return current;
+      return next;
+    });
     try {
       const saved = await updateMlbDraftSessionAtomically(
         next.leagueId,
@@ -604,7 +610,12 @@ function FarmSnakeRoom() {
           snakeCompanions: fresh.snakeCompanions ?? next.snakeCompanions,
         }),
       );
-      setSession(saved);
+      setSession((current) => {
+        if (!options.acceptLowerRevision
+          && current?.id === saved.id
+          && (current.revision ?? 0) > (saved.revision ?? 0)) return current;
+        return saved;
+      });
       setWriteNotice(null);
       return saved;
     } catch (cause) {
@@ -831,6 +842,55 @@ function FarmSnakeRoom() {
     if (!session || session.currentPickIndex < session.pickOrder.length) return;
     setRecapOpen(true);
   }, [session]);
+  const correctLatestFarm = useCallback(async () => {
+    if (!session || !liveHostRef.current.room?.correctionAvailable) return;
+    const clickedRoom = liveHostRef.current.room;
+    const idempotencyKey = `farm-correct:${clickedRoom.id}:${clickedRoom.publicRevision}`;
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      let restoredRoom;
+      try {
+        restoredRoom = await host.restorePreviousPublicState({
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey,
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      const restoredPublic = readSnakeLivePublicSession(restoredRoom);
+      const localBase = session.correctionSnapshots?.[0]
+        ? restoreLatestSnakeCorrection(session)
+        : session;
+      const received = mergeLivePublicSession(localBase, restoredPublic);
+      const nextUnavailable = new Set(received.completedPicks.map((pick) => pick.playerId));
+      const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
+        received.pickOrder.slice(received.currentPickIndex).filter((slot) => slot.teamId === team.id).length,
+      ]));
+      const reconciled = reconcileFarmSeatBoards({
+        session: received,
+        unavailableProspectIds: nextUnavailable,
+        remainingTurnsByTeamId: nextRemainingTurns,
+      });
+      await mirrorFarmSessionLocally({
+        ...reconciled.session,
+        correctionSnapshots: [],
+      }, { acceptLowerRevision: true });
+      setRecapOpen(false);
+    };
+    await publish(false);
+  }, [leagueTeams, mirrorFarmSessionLocally, session]);
   const confirmFarm = useCallback(async () => {
     if (recapCommitInFlight.current || !league || !session || !farmPool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;
     recapCommitInFlight.current = true;
@@ -976,7 +1036,7 @@ function FarmSnakeRoom() {
     /> : undefined}
     selectedFitLabel={!deskHasApprovedCompanion && selected ? `SCOUT · ${selected.scoutedGrade}` : null}
     draftActionLabel="DRAFT PROSPECT"
-    paused={Boolean(session.paused)} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
+    paused={false} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(liveHost.room?.correctionAvailable)}
     hotseatNextName={hotseatPassName(session, currentTeam)}
     practiceMode={false}
     privateDesk={!deskHasApprovedCompanion && currentSlot ? <FarmPrivateDesk
@@ -1047,14 +1107,7 @@ function FarmSnakeRoom() {
     pendingPickRequestCount={!liveHost.room
       ? 0
       : pendingSnakeLivePickIntentCount(liveHost.intents, liveHost.room.publicRevision)}
-    onPauseChange={async (paused) => {
-      try {
-        await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
-      } catch (cause) {
-        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
-        throw cause;
-      }
-    }}
+    onPauseChange={() => undefined}
     onActiveSeatChange={setDeskTeamId}
     onRecordPick={async (playerId) => {
       try {
@@ -1066,8 +1119,7 @@ function FarmSnakeRoom() {
     }}
     onCorrectLatest={async () => {
       try {
-        const restored = restoreLatestSnakeCorrection(session);
-        await persist(restored);
+        await correctLatestFarm();
       } catch (cause) {
         setWriteNotice(cause instanceof Error ? cause.message : String(cause));
         throw cause;

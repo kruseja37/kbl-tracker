@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { FarmSeatBoardRecord, LeagueBuilderMlbDraftSession } from '../../../utils/leagueBuilderStorage';
@@ -17,12 +17,14 @@ const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows,
   ],
   live: {
     enabled: false,
+    correctionAvailable: false,
     claims: [] as Array<Record<string, unknown>>,
     intents: [] as Array<Record<string, unknown>>,
     seedBoard: vi.fn(async () => ({ teamId: 'a' })),
     resolveClaim: vi.fn(async (claim) => claim),
     resolveIntent: vi.fn(async (intent) => intent),
     publishSession: vi.fn(async () => null),
+    restorePreviousPublicState: vi.fn(),
     refresh: vi.fn(async () => undefined),
     closeRoom: vi.fn(async () => null),
   },
@@ -86,6 +88,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       id: 'farm-room', ownerUserId: 'owner', sessionId: options.session!.id,
       roomCode: options.session!.snakeCompanions!.roomCode, phase: 'FARM', status: 'open',
       publicRevision: 1, publicState: {}, hostDeviceId: 'host',
+      correctionAvailable: live.correctionAvailable,
       createdAt: 'now', updatedAt: 'now',
     } : null;
     return {
@@ -100,7 +103,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       resolveClaim: live.resolveClaim,
       resolveIntent: live.resolveIntent,
       submitTradeIntent: vi.fn(),
-      restorePreviousPublicState: vi.fn(),
+      restorePreviousPublicState: live.restorePreviousPublicState,
       seedBoard: live.seedBoard,
       closeRoom: live.closeRoom,
     };
@@ -126,14 +129,17 @@ import {
   buildSnakeRosterHandoff,
   freezeSnakeDraftSession,
 } from '../../../utils/snakeDraftManifest';
+import { buildSnakeLivePublicState } from '../../../utils/snakeLiveRoomSession';
 
 describe('S6 farm room continuation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     playerRows.length = 0;
     live.enabled = false;
+    live.correctionAvailable = false;
     live.claims.length = 0;
     live.intents.length = 0;
+    live.restorePreviousPublicState.mockReset();
     getRoster.mockResolvedValue({ teamId: 'a', mlbRoster: [], farmRoster: [] });
     const originalPickOrder = buildSnakeOrder(['a', 'b'], 22);
     const tradedPickOrder = originalPickOrder.map((slot) => {
@@ -318,6 +324,37 @@ describe('S6 farm room continuation', () => {
     expect(publication.session.farmSeatBoards).toBeUndefined();
     expect(publication.session.farmProspectSnapshot).toBeUndefined();
     expect(publication.publicEvent).toEqual(expect.objectContaining({ pick: 1, teamId: 'a' }));
+  });
+
+  test('uses the live recovery slot for FARM correction and has no pause action', async () => {
+    live.enabled = true;
+    live.correctionAvailable = true;
+    live.restorePreviousPublicState.mockImplementation(async () => {
+      const current = saveSession.mock.calls.at(-1)?.[0];
+      return {
+        id: 'farm-room', ownerUserId: 'owner', sessionId: current.id,
+        roomCode: current.snakeCompanions.roomCode, phase: 'FARM', status: 'open',
+        publicRevision: 2, publicState: buildSnakeLivePublicState(current),
+        correctionAvailable: false, hostDeviceId: 'host', createdAt: 'now', updatedAt: 'later',
+      };
+    });
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    await waitFor(() => expect(saveSession.mock.calls.some(([saved]) => (
+      saved.farmSeatBoards?.a && saved.farmSeatBoards?.b
+    ))).toBe(true));
+    fireEvent.click(await screen.findByRole('button', { name: 'I HAVE THE ROOM' }));
+    const correct = await screen.findByRole('button', { name: 'CORRECT LAST ACTION' });
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(correct); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));
+    });
+
+    await waitFor(() => expect(live.restorePreviousPublicState).toHaveBeenCalledWith({
+      expectedRoomRevision: 1,
+      idempotencyKey: 'farm-correct:farm-room:1',
+    }));
   });
 
   test('opens FARM companion approvals and seeds only the approved club scout board', async () => {

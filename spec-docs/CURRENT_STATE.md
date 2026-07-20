@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-249 FARM COMPANION PARITY IS BUILT; SEPARATE AUDIT PENDING (2026-07-20; branch `codex/snake-live-room-authority`). JK's recovered four-team league reached the FARM room and proved that FARM had no companion controls. The generic repair now extends the same cloud-authority model through FARM: Hotseat owns public picks and completion; an approved companion owns only its private fogged scout board and can send a pick request for Hotseat confirmation. The public FARM catalog carries only teams, safe prospect identity, public FARM rosters, order, and budget targets. It rejects true grades, ratings, hidden modifiers, private board data, and extra fields. FARM still has no trades. Four- and eight-team privacy/scale tests are included. Builder proof is 214/214 focused live-room tests, TypeScript and changed-file lint, diff integrity, and a 2,744-module production/PWA build. **NEXT:** freeze the exact diff and obtain a separate read-only audit. Migration `20260720213000_farm_snake_live_catalog.sql` must be applied with the matching app before a real FARM companion browser walk. It has not been applied. No push, preview, merge, or production promotion is authorized.
+> ## RIGHT NOW — FINDING-249 FIRST AUDIT BLOCKERS ARE REPAIRED; RE-AUDIT PENDING (2026-07-20; branch `codex/snake-live-room-authority`). JK's recovered four-team league reached the FARM room and proved that FARM had no companion controls. The generic repair now extends the same cloud-authority model through FARM: Hotseat owns public picks and completion; an approved companion owns only its private fogged scout board and can send a pick request for Hotseat confirmation. The first separate audit blocked commit `256962dd` with Major 3 / Minor 0: FARM trade and pause actions were absent only in the UI, the FARM catalog accepted extra private fields outside prospect rows, and correction used local state instead of server recovery. The repair now rejects FARM trade and pause events in the database RPCs, validates an exact public catalog allowlist at both client and database boundaries, and restores the prior public FARM revision from the cloud recovery slot. Direct FARM proof is 60/60; the combined MLB/FARM live-room gate is 205/205. TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** freeze this repair and send it to the same read-only auditor. Migration `20260720213000_farm_snake_live_catalog.sql` must be applied with the matching app before a real FARM companion browser walk. It has not been applied. No push, preview, merge, or production promotion is authorized.
 
 ## Current product law
 
@@ -22,7 +22,7 @@
 
 ## Open gates
 
-1. Separate read-only audit of the frozen FINDING-249 FARM companion diff.
+1. Same-auditor read-only recheck of the frozen FINDING-249 repair.
 2. With explicit authority, apply the FARM catalog migration, push the audited branch, and create
    one matching preview.
 3. JK runs a FARM Hotseat-plus-companion walk, then the broader new-league Snake re-walk.

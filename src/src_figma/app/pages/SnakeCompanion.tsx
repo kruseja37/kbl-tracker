@@ -20,9 +20,11 @@ import * as phaseFlags from '../../../utils/franchisePhase2Flags';
 import {
   SNAKE_BOARD_SLOT_IDS,
   type LeagueBuilderMlbDraftSession,
+  type LeagueTemplate,
   type SnakeOpenTradeOffer,
   type SnakeBoardSlotId,
   type SnakeSeatBoardRecord,
+  type Team,
 } from '../../../utils/leagueBuilderStorage';
 import type { DesignSlot } from '../../../engines/rosterDesignFeasibility';
 import { legacySnakeCompanionState } from '../../../utils/snakeLiveRoomSession';
@@ -431,13 +433,15 @@ export default function SnakeCompanion() {
     () => liveRoom.catalog ? readSnakeLiveFarmCatalog(liveRoom.catalog.catalog) : null,
     [liveRoom.catalog],
   );
-  const sharedCatalog = catalog ?? farmCatalog;
   const { league, leagueTeams, players, pool } = useMemo(() => ({
-    league: sharedCatalog?.league ?? null,
-    leagueTeams: sharedCatalog?.teams ?? [],
+    // The FARM reader has a strict public subset. The shared hook chain below
+    // needs the wider MLB types, but FARM exits through its own render branch
+    // and reads only the public team fields.
+    league: catalog?.league ?? (farmCatalog?.league as LeagueTemplate | undefined) ?? null,
+    leagueTeams: catalog?.teams ?? (farmCatalog?.teams as Team[] | undefined) ?? [],
     players: catalog?.players ?? [],
     pool: catalog?.registeredPool ?? null,
-  }), [catalog, sharedCatalog]);
+  }), [catalog, farmCatalog]);
 
   useEffect(() => {
     const syncCover = (covered: boolean) => {

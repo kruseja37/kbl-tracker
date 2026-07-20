@@ -1882,3 +1882,14 @@ Minor 0** after checking the exact `aeeb00a2..70fde7dc` diff. Independent focuse
 160/160 with diff integrity green. The auditor confirmed typed risk color, pick-intent-only host
 audio, position-first legal depth, legacy Two Way FLD treatment, and unchanged completion hard-gate
 ordering. No push, merge, deploy, or product acceptance is authorized.
+
+### 2026-07-20 — FINDING-249 first independent audit block
+
+Separate auditor Helmholtz reviewed initial FARM companion commit `256962dd` and returned
+**BLOCK — Major 3 / Minor 0**. The audit found three authoritative gaps: UI-only removal did not
+stop raw FARM trade intents or public trade/pause events; extra root, league, and team catalog
+fields could carry private values; and FARM correction used a local snapshot rather than the server
+recovery slot. The builder repaired only those seams and added permanent server-model, catalog, and
+completion regressions. Direct repair proof is 60/60 and the combined MLB/FARM live-room gate is
+205/205. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build
+are green. Same-auditor recheck is required before remote work.

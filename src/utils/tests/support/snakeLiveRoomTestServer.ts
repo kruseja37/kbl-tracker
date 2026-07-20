@@ -491,6 +491,7 @@ export class SnakeLiveRoomTestServer {
 
   private submitIntent(args: Row): RpcResponse {
     this.requireTeam(args);
+    const room = this.requireOpenRoom(String(args.p_room_id));
     const payload = args.p_payload;
     if (
       !isRow(payload)
@@ -498,6 +499,9 @@ export class SnakeLiveRoomTestServer {
       || !isNonEmptyString(args.p_idempotency_key)
     ) {
       return Promise.resolve(error('The companion intent is invalid.'));
+    }
+    if (room.phase === 'FARM' && args.p_kind !== 'pick') {
+      return Promise.resolve(error('FARM trade intents are not allowed.'));
     }
     if (args.p_kind === 'pick' && !isValidPickPayload(payload)) {
       return Promise.resolve(error('The private pick intent is invalid.'));
@@ -508,7 +512,6 @@ export class SnakeLiveRoomTestServer {
     const identity = `intent:${args.p_room_id}:${args.p_idempotency_key}`;
     const replay = this.idempotentResult(identity, args);
     if (replay) return Promise.resolve({ data: replay, error: null });
-    const room = this.requireOpenRoom(String(args.p_room_id));
     if (room.public_revision !== args.p_expected_room_revision) {
       return Promise.resolve(error('Stale expected room revision.'));
     }
@@ -540,6 +543,10 @@ export class SnakeLiveRoomTestServer {
 
   private submitHostTradeIntent(args: Row): RpcResponse {
     this.requireHost(args);
+    const room = this.requireOpenRoom(String(args.p_room_id));
+    if (room.phase === 'FARM') {
+      return Promise.resolve(error('FARM trade intents are not allowed.'));
+    }
     const payload = args.p_payload;
     if (
       !isRow(payload)
@@ -551,7 +558,6 @@ export class SnakeLiveRoomTestServer {
     const identity = `intent:${args.p_room_id}:${args.p_idempotency_key}`;
     const replay = this.idempotentResult(identity, args);
     if (replay) return Promise.resolve({ data: replay, error: null });
-    const room = this.requireOpenRoom(String(args.p_room_id));
     if (room.public_revision !== args.p_expected_room_revision) {
       return Promise.resolve(error('Stale expected room revision.'));
     }
@@ -636,6 +642,10 @@ export class SnakeLiveRoomTestServer {
 
   private publishRoom(args: Row): RpcResponse {
     this.requireHost(args);
+    const room = this.requireOpenRoom(String(args.p_room_id));
+    if (room.phase === 'FARM' && args.p_event_kind !== 'PICK_RECORDED') {
+      return Promise.resolve(error('FARM public actions can record picks only.'));
+    }
     const identity = `publish:${args.p_room_id}:${args.p_idempotency_key}`;
     const replay = this.idempotentResult(identity, args);
     if (replay) {
@@ -644,7 +654,6 @@ export class SnakeLiveRoomTestServer {
         error: null,
       });
     }
-    const room = this.requireOpenRoom(String(args.p_room_id));
     if (room.public_revision !== args.p_expected_room_revision) {
       return Promise.resolve(error('Stale expected room revision.'));
     }
@@ -892,7 +901,25 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
       && playerIds.length === expectedIds.length && expectedIds.every((id) => playerIds.includes(id)));
   }
 
-  if (!Array.isArray(value.prospects) || value.prospects.length === 0
+  if (!onlyKeys(value, [
+    'formatVersion', 'league', 'teams', 'prospects', 'existingFarmRostersByTeamId', 'farmTarget',
+  ])
+    || !onlyKeys(value.league, ['id', 'name', 'teamIds', 'tier'])
+    || !isNonEmptyString(value.league.name)
+    || (value.league.tier !== undefined && !isNonEmptyString(value.league.tier))
+    || !value.teams.every((team) => isRow(team)
+      && onlyKeys(team, ['id', 'name', 'abbreviation', 'colors', 'logoUrl', 'farmArchetypeKey'])
+      && isNonEmptyString(team.name)
+      && isNonEmptyString(team.abbreviation)
+      && isRow(team.colors)
+      && onlyKeys(team.colors, ['primary', 'secondary', 'accent'])
+      && isNonEmptyString(team.colors.primary)
+      && isNonEmptyString(team.colors.secondary)
+      && isNonEmptyString(team.farmArchetypeKey)
+      && (team.colors.accent === undefined || typeof team.colors.accent === 'string')
+      && (team.logoUrl === undefined || typeof team.logoUrl === 'string')
+      )
+    || !Array.isArray(value.prospects) || value.prospects.length === 0
     || !Number.isInteger(value.farmTarget) || Number(value.farmTarget) < 1
     || !isRow(value.existingFarmRostersByTeamId)) return false;
   if (!value.prospects.every((prospect) => isRow(prospect)

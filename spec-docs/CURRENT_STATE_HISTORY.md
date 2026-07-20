@@ -1611,3 +1611,12 @@ JK recovered Test Mock, entered its FARM draft, and found no companion machinery
 header records the generic FARM live-room implementation, strict fog-data boundary, four/eight-team
 proof, and required follow-on migration. Separate audit, remote authorization, and JK's browser walk
 remain. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-249 first-audit repair
+
+The prior live header recorded the initial FARM companion build at `256962dd`. The separate auditor
+returned BLOCK, Major 3 / Minor 0. It proved that raw RPC calls could still trade or pause a FARM
+room, extra catalog fields could carry private values, and FARM correction used a local snapshot
+instead of the server recovery slot. The new header records the narrow server, catalog, and recovery
+repairs. Same-auditor recheck remains. No migration, push, preview, merge, or production promotion
+is authorized.

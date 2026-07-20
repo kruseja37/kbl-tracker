@@ -8307,3 +8307,18 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   existing 176-pick scale path; TypeScript through the production build; changed-file ESLint; diff
   integrity; and a 2,744-module production/PWA build. Separate read-only audit is next. No migration,
   push, preview, merge, or production promotion is authorized.
+
+## 2026-07-20 — FINDING-249 first-audit repair
+
+- Separate auditor Helmholtz returned **BLOCK — Major 3 / Minor 0** on initial commit `256962dd`.
+  It proved server-level FARM trade/pause bypasses, incomplete catalog field allowlisting, and a
+  local-only correction path that could leave companions stale.
+- Repaired the authoritative seams. Companion and host trade-intent RPCs reject FARM. FARM public
+  publication accepts `PICK_RECORDED` only. Client, SQL, and the multi-device server model reject
+  unknown root, league, team, color, prospect, and public-roster fields.
+- FARM correction now restores the live room recovery slot and then reconciles private local boards.
+  FARM has no pause control or pause publication path.
+- Repaired proof: 60/60 direct FARM tests and 205/205 combined MLB/FARM live-room tests. TypeScript,
+  changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green.
+- Same-auditor recheck remains. Migration is local and unapplied. No push, preview, merge, or
+  production promotion is authorized.

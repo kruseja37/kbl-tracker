@@ -221,6 +221,23 @@ describe('Snake live public catalog', () => {
       ...catalog,
       prospects: [{ ...(catalog.prospects as Array<Record<string, unknown>>)[0], trueGrade: 'A+' }],
     })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({ ...catalog, trueGrade: 'A+' })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      league: { ...(catalog.league as Record<string, unknown>), salary: 123_000 },
+    })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      teams: [{ ...(catalog.teams as Array<Record<string, unknown>>)[0], iv: 99 }, catalog.teams[1]],
+    })).toBeNull();
+    const firstTeam = (catalog.teams as Array<Record<string, unknown>>)[0];
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      teams: [{
+        ...firstTeam,
+        colors: { ...(firstTeam.colors as Record<string, unknown>), hiddenRatings: true },
+      }, catalog.teams[1]],
+    })).toBeNull();
   });
 
   test('freezes one public FARM catalog for eight clubs without copying true prospect data', () => {
