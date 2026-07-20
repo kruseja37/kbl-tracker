@@ -208,6 +208,36 @@ interface MainPrivateIdentity {
   teamId: string;
 }
 
+function LiveRoomRecoveryPanel(props: {
+  roomCode: string;
+  working: boolean;
+  error: string | null;
+  onRoomCodeChange: (value: string) => void;
+  onRestore: () => void;
+}) {
+  return <div className="mt-5 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4">
+    <p className="text-xs font-black">RESTORE LIVE ROOM</p>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <input
+        aria-label="Live room code"
+        value={props.roomCode}
+        onChange={(event) => props.onRoomCodeChange(event.currentTarget.value.replace(/\D/g, '').slice(0, 4))}
+        inputMode="numeric"
+        placeholder="ROOM CODE"
+        className="min-h-11 w-40 border-2 border-[var(--ballpark-brass)] bg-black/30 px-3 font-mono text-sm uppercase"
+      />
+      <button
+        className="ballpark-press-button ballpark-press-gold min-h-11"
+        disabled={props.working}
+        onClick={props.onRestore}
+      >
+        {props.working ? 'RESTORING…' : 'RESTORE'}
+      </button>
+    </div>
+    {props.error ? <p className="mt-3 text-xs font-bold text-red-300">{props.error}</p> : null}
+  </div>;
+}
+
 interface MainPrivateGuard {
   epoch: number;
   identity: MainPrivateIdentity;
@@ -3033,10 +3063,18 @@ function MlbSnakeDraftRoom() {
     }
   }, [mirrorLiveSessionLocally, persist, pickValueChart, practiceMode, seatingProofInput, session]);
 
+  const liveRoomRecoveryPanel = !practiceMode ? <LiveRoomRecoveryPanel
+    roomCode={recoveryRoomCode}
+    working={recoveryWorking}
+    error={recoveryError}
+    onRoomCodeChange={setRecoveryRoomCode}
+    onRestore={() => void recoverOpenLiveRoom()}
+  /> : null;
+
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p>{!practiceMode && !localLeague ? <div className="mt-5 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4"><p className="text-xs font-black">RESTORE LIVE ROOM</p><div className="mt-3 flex flex-wrap gap-2"><input aria-label="Live room code" value={recoveryRoomCode} onChange={(event) => setRecoveryRoomCode(event.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric" placeholder="ROOM CODE" className="min-h-11 w-40 border-2 border-[var(--ballpark-brass)] bg-black/30 px-3 font-mono text-sm uppercase" /><button className="ballpark-press-button ballpark-press-gold min-h-11" disabled={recoveryWorking} onClick={() => void recoverOpenLiveRoom()}>{recoveryWorking ? 'RESTORING…' : 'RESTORE'}</button></div>{recoveryError ? <p className="mt-3 text-xs font-bold text-red-300">{recoveryError}</p> : null}</div> : null}<div className="mt-5 flex flex-wrap gap-3"><button className="ballpark-press-button ballpark-press-lg ballpark-press-default min-h-11" onClick={() => navigate('/')}>HOME / SIGN IN</button><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadSession()}>RETRY</button></div></div></main>;
-  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p>{liveRoomRecoveryPanel}<div className="mt-5 flex flex-wrap gap-3"><button className="ballpark-press-button ballpark-press-lg ballpark-press-default min-h-11" onClick={() => navigate('/')}>HOME / SIGN IN</button><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadSession()}>RETRY</button></div></div></main>;
+  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p>{liveRoomRecoveryPanel}<div className="mt-5 flex flex-wrap gap-3"><button className="ballpark-press-button ballpark-press-lg ballpark-press-default min-h-11" onClick={() => navigate('/')}>HOME / SIGN IN</button><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadSession()}>RETRY</button></div></div></main>;
 
   const mlbRecapPicks = session.draftManifest
     ? readSnakeDraftTruth(session, 'MLB').completedPicks
