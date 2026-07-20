@@ -1524,6 +1524,7 @@ function useSnakeDraftSetupAdapter(input: SnakeSetupAdapterInput): SnakeDraftSet
           hotseat: options.workflowVersion.includes('practice')
             ? team.id === order[0]
             : (seatModes[team.id] ?? 'hotseat') === 'hotseat',
+          ...(team.farmArchetypeKey ? { farmArchetypeId: team.farmArchetypeKey } : {}),
           ...(team.mlbArchetypeKey ? { archetypeId: team.mlbArchetypeKey } : {}),
         })),
         orderSeed: draftSeed,

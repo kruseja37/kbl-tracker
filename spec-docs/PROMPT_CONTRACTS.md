@@ -32848,3 +32848,42 @@ returned **APPROVE — Major 0 / Minor 0**. It confirmed the direct absent-room 
 best-effort close proof, the full atomic handoff contract, and no equivalent production cleanup
 branch. Independent completion, atomic pipeline, and recovered-origin proof is 37/37; TypeScript,
 repaired-file ESLint, and full-range diff integrity are green.
+
+## SNAKE-FARM-IDENTITY-PROSPECT-53
+
+**Route:** Codex 5.6 Sol | xhigh builder; separate read-only auditor | high reasoning effort.
+
+**Goal:** Preserve each club's selected farm identity from Snake setup through live-room recovery
+and farm-draft creation, and prove that hidden farm prospects use the canonical Standard prospect
+distribution rather than any Juiced legacy pool.
+
+**Frozen law:**
+
+- A new Snake MLB session freezes both the selected MLB identity and selected farm identity for
+  every drafting club before the first pick.
+- The immutable live-room catalog transports both identities. A recovery may fill a missing copy
+  from the other frozen copy, but conflicting copies fail closed.
+- Farm-draft creation uses the frozen MLB-session farm identity. A matching team copy is allowed as
+  a legacy fallback only. A mismatch, missing identity, duplicate club, or changed club set fails
+  closed.
+- Scout Reveal must not silently replace a missing farm identity with Generalist. A legacy room with
+  missing farm identity must show a generic repair control, save the user's choices to the team and
+  completed MLB session, and then use the normal scout and farm-draft path.
+- Farm pool generation stays Standard-only for v1. The exact grade distribution is A+ 0%, A 2%,
+  A- 5%, B+ 10%, B 15%, B- 15%, C+ 15%, C 18%, C- 12%, D 8%. Juiced and Nerfed farm generation
+  remain deferred. Generated true grades and ratings remain hidden from draft users.
+- The result must work for new and recovered leagues and for four- and eight-team Snake drafts. It
+  must not contain a room-specific team, league, or room-code repair.
+- No production deploy or merge is authorized. JK's browser walk remains the sole product gate.
+
+**Builder file surface:** `src/engines/snakeFarmSlots.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, `src/src_figma/app/pages/ScoutHire.tsx`,
+`src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/utils/leagueBuilderStorage.ts`,
+`src/utils/snakeLiveCatalog.ts`, and focused tests for these paths, farm pool generation, four/eight
+team flow, recovery, companion, and completed-draft continuation.
+
+**Required proof:** exact N=500 grade-distribution measurement; analyzer-grade parity; hidden-rating
+and no-A+ assertions; four-team and eight-team pool sizing; new-session identity freeze; catalog
+recovery; mismatch/missing fail-closed tests; Scout Reveal repair; MLB-to-FARM transition; eight-team
+season gauntlet; affected companion/completion regressions; TypeScript; changed-file ESLint;
+production/PWA build; diff integrity; separate non-builder audit. Use high reasoning effort.

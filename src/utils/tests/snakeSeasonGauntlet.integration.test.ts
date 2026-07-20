@@ -22,6 +22,7 @@ import {
   createFarmSnakeSession,
   FARM_SNAKE_SESSION_NUMBER,
   farmPickSalary,
+  resolveFarmArchetypeIdsForSnakeTransition,
 } from '../../engines/snakeFarmSlots';
 import { executeSnakeGuidePackage, searchSnakeGuidePackage } from '../../engines/snakeGuideTrade';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../engines/snakeSession';
@@ -374,6 +375,7 @@ describe('S7 snake draft to season closing gauntlet', () => {
           gmName: `GM ${index + 1}`,
           hotseat: true,
           archetypeId: 'balanced',
+          farmArchetypeId: teams[index].farmArchetypeKey,
         })),
         orderSeed: 's7-production-default-8-clubs',
       },
@@ -526,6 +528,10 @@ describe('S7 snake draft to season closing gauntlet', () => {
       );
     }
 
+    const frozenFarmArchetypeIdByTeamId = resolveFarmArchetypeIdsForSnakeTransition({
+      mlbSession,
+      teams,
+    });
     let farmSession = await saveMlbDraftSession(createFarmSnakeSession({
       mlbSession,
       teamOrder: recoverCanonicalMlbSnakePickOrder(mlbSession)
@@ -533,12 +539,15 @@ describe('S7 snake draft to season closing gauntlet', () => {
         .map((slot) => slot.teamId),
       existingFarmRosterCountsByTeamId: Object.fromEntries(TEAM_IDS.map((teamId) => [teamId, 0])),
       farmBudgetsByTeamId,
-      farmArchetypeIdByTeamId: Object.fromEntries(teams.map((team) => [team.id, team.farmArchetypeKey])),
+      farmArchetypeIdByTeamId: frozenFarmArchetypeIdByTeamId,
       prospectIds: farmPool.prospects.map((prospect) => prospect.id),
       prospects: farmPool.prospects,
       now: '2026-07-10T00:00:00.000Z',
     }), { phaseTransition: 'MLB_TO_FARM' });
     expect(farmSession.id).not.toBe(mlbSession.id);
+    expect(Object.fromEntries(farmSession.snakeSetup!.clubs.map((club) => [club.teamId, club.archetypeId]))).toEqual(
+      frozenFarmArchetypeIdByTeamId,
+    );
     expect((await getMlbDraftSession(LEAGUE_ID, 1))?.completedPicks).toHaveLength(176);
     expect(farmSession.trades).toEqual([]);
     expect(farmSession.openTradeOffers ?? []).toEqual([]);

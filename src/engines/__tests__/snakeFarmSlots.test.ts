@@ -5,6 +5,7 @@ import {
   createFarmSnakeSession,
   buildFarmMoneyLedger,
   farmPickSalary,
+  resolveFarmArchetypeIdsForSnakeTransition,
 } from '../snakeFarmSlots';
 import type { LeagueBuilderMlbDraftSession } from '../../utils/leagueBuilderStorage';
 import { freezeSnakeDraftSession } from '../../utils/snakeDraftManifest';
@@ -36,6 +37,45 @@ function farmSession(): LeagueBuilderMlbDraftSession {
 }
 
 describe('S6 farm slot salaries', () => {
+  test('freezes the exact farm identity for every club and rejects missing or changed values', () => {
+    const mlbSession = {
+      ...farmSession(),
+      draftPhase: 'MLB' as const,
+      snakeSetup: {
+        poolPlayerIds: ['mlb'],
+        versionSelections: {},
+        orderSeed: 'mlb-order',
+        clubs: [
+          { teamId: 'a', hotseat: true, farmArchetypeId: 'web-gems' },
+          { teamId: 'b', hotseat: true, farmArchetypeId: 'bomba-squad' },
+        ],
+      },
+    };
+    const teams = [
+      { id: 'a', name: 'A Club', farmArchetypeKey: 'web-gems' },
+      { id: 'b', name: 'B Club', farmArchetypeKey: 'bomba-squad' },
+    ];
+
+    expect(resolveFarmArchetypeIdsForSnakeTransition({ mlbSession, teams })).toEqual({
+      a: 'web-gems',
+      b: 'bomba-squad',
+    });
+    expect(() => resolveFarmArchetypeIdsForSnakeTransition({
+      mlbSession,
+      teams: [{ ...teams[0], farmArchetypeKey: 'bomba-squad' }, teams[1]],
+    })).toThrow('FARM IDENTITY CHANGED');
+    expect(() => resolveFarmArchetypeIdsForSnakeTransition({
+      mlbSession: {
+        ...mlbSession,
+        snakeSetup: {
+          ...mlbSession.snakeSetup,
+          clubs: mlbSession.snakeSetup.clubs.map((club) => ({ ...club, farmArchetypeId: undefined })),
+        },
+      },
+      teams: teams.map(({ id, name }) => ({ id, name })),
+    })).toThrow('FARM IDENTITY MISSING');
+  });
+
   test('calibrates a frozen geometric table to 3x endpoints and 75% of league budgets', () => {
     const table = buildFarmSlotTable(40, [1_000_000, 900_000, 1_100_000, 1_000_000]);
 

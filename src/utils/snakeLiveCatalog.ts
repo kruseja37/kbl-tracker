@@ -147,6 +147,7 @@ function publicTeam(team: Team): Record<string, unknown> {
     leagueIds: [...team.leagueIds],
     capIdentity: copyCapIdentity(team.capIdentity),
     mlbArchetypeKey: team.mlbArchetypeKey,
+    farmArchetypeKey: team.farmArchetypeKey,
     createdDate: team.createdDate,
     lastModified: team.lastModified,
   });
@@ -268,6 +269,12 @@ export function buildSnakeLiveCatalog(source: SnakeLiveCatalogSource): SnakeLive
   if (teamById.size !== source.teams.length) throw new Error('The live catalog has duplicate team ids.');
   const activeTeams = source.league.teamIds.map((teamId) => teamById.get(teamId));
   if (activeTeams.some((team) => !team)) throw new Error('The live catalog is missing an active team.');
+  const missingIdentity = activeTeams.find((team) => (
+    !team?.mlbArchetypeKey?.trim() || !team.farmArchetypeKey?.trim()
+  ));
+  if (missingIdentity) {
+    throw new Error(`The live catalog cannot freeze ${missingIdentity.name} without both draft identities.`);
+  }
 
   const expectedPoolIds = [...source.activePoolPlayerIds];
   if (expectedPoolIds.length === 0) throw new Error('The live catalog has no active-pool players.');

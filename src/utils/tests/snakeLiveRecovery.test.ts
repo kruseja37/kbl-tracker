@@ -49,6 +49,8 @@ function team(id: string): Team {
   return {
     id, name: id, abbreviation: id.toUpperCase(), location: 'Test', nickname: id,
     colors: { primary: '#006a8e', secondary: '#ffcf2f' }, stadium: 'Founders Field', leagueIds: [league.id],
+    mlbArchetypeKey: id === 'team-a' ? 'murderers-row' : 'whiteyball',
+    farmArchetypeKey: id === 'team-a' ? 'web-gems' : 'bomba-squad',
     createdDate: league.createdDate, lastModified: league.lastModified,
   };
 }
@@ -71,7 +73,15 @@ function session(): LeagueBuilderMlbDraftSession {
   return {
     id: createMlbDraftSessionId(league.id, 1), leagueId: league.id, seasonNumber: 1, seed: 'recovery-seed', workflowVersion: 'snake-v1', engineMethodVersion: 'snake-v1', tier: 'standard', balanceMode: 'taxed', rounds: 22,
     pickOrder: [{ round: 1, pick: 1, teamId: 'team-a' }, { round: 1, pick: 2, teamId: 'team-b' }], completedPicks: [],
-    snakeSetup: { poolPlayerIds: ['player-a', 'player-b'], versionSelections: {}, clubs: [{ teamId: 'team-a', hotseat: true }, { teamId: 'team-b', hotseat: false }], orderSeed: 'recovery-order' },
+    snakeSetup: {
+      poolPlayerIds: ['player-a', 'player-b'],
+      versionSelections: {},
+      clubs: [
+        { teamId: 'team-a', hotseat: true, archetypeId: 'murderers-row', farmArchetypeId: 'web-gems' },
+        { teamId: 'team-b', hotseat: false, archetypeId: 'whiteyball', farmArchetypeId: 'bomba-squad' },
+      ],
+      orderSeed: 'recovery-order',
+    },
     currentPickIndex: 0, createdDate: league.createdDate, lastModified: league.lastModified,
   };
 }
@@ -98,12 +108,42 @@ describe('Snake live-room local recovery', () => {
     expect(result).toMatchObject({ leagueId: league.id, restoredLeague: true, restoredTeams: 2, restoredPlayers: 2, restoredPool: true, restoredSession: true });
     expect((await getLeagueTemplate(league.id))?.name).toBe('Test Mock');
     expect((await getAllTeams()).map((entry) => entry.id)).toEqual(['team-a', 'team-b']);
+    expect((await getAllTeams()).map((entry) => [entry.id, entry.farmArchetypeKey])).toEqual([
+      ['team-a', 'web-gems'],
+      ['team-b', 'bomba-squad'],
+    ]);
     expect((await getAllPlayers()).map((entry) => entry.id)).toEqual(['player-a', 'player-b']);
     expect((await getRegisteredPool(league.id))?.players).toHaveLength(2);
     expect(await getMlbDraftSession(league.id, 1)).toMatchObject({
       id: session().id,
       liveRoomRecovery: { roomId: 'room-1', roomCode: '4352', publicRevision: 7 },
+      snakeSetup: {
+        clubs: [
+          expect.objectContaining({ teamId: 'team-a', farmArchetypeId: 'web-gems' }),
+          expect.objectContaining({ teamId: 'team-b', farmArchetypeId: 'bomba-squad' }),
+        ],
+      },
     });
+  });
+
+  test('rejects recovery when the catalog and frozen farm identity disagree', async () => {
+    const catalog = readSnakeLiveCatalog(buildSnakeLiveCatalog({
+      league,
+      teams: [team('team-a'), team('team-b')],
+      players: [player('player-a'), player('player-b')],
+      registeredPool: pool,
+      activeTeamIds: league.teamIds,
+      activePoolPlayerIds: pool.players.map((entry) => entry.id),
+    }));
+    expect(catalog).not.toBeNull();
+    const mismatched = session();
+    mismatched.snakeSetup!.clubs[0].farmArchetypeId = 'bomba-squad';
+
+    await expect(restoreSnakeLiveRoomLocally({
+      catalog: catalog!,
+      session: mismatched,
+      recovery: { roomId: 'room-1', roomCode: '4352', publicRevision: 7 },
+    })).rejects.toThrow('FARM IDENTITY DOES NOT MATCH');
   });
 
   test('finalizes a recovered completed room without pre-existing roster rows', async () => {
@@ -140,7 +180,12 @@ describe('Snake live-room local recovery', () => {
       snakeSetup: {
         poolPlayerIds: recoveredPool.players.map((row) => row.id),
         versionSelections: {},
-        clubs: league.teamIds.map((teamId) => ({ teamId, hotseat: true })),
+        clubs: league.teamIds.map((teamId) => ({
+          teamId,
+          hotseat: true,
+          archetypeId: team(teamId).mlbArchetypeKey,
+          farmArchetypeId: team(teamId).farmArchetypeKey,
+        })),
         orderSeed: 'recovered-complete-order',
       },
     };

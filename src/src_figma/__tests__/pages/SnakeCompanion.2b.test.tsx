@@ -489,6 +489,8 @@ const league: LeagueTemplate = {
 const teams: Team[] = ['a', 'b'].map((id) => ({
   id, name: `Club ${id.toUpperCase()}`, abbreviation: id.toUpperCase(), location: 'Test', nickname: 'Club',
   colors: { primary: '#234f32', secondary: '#f5d77a' }, stadium: 'Test Park', controlledBy: 'human',
+  mlbArchetypeKey: id === 'a' ? 'bash-brothers' : 'whiteyball',
+  farmArchetypeKey: id === 'a' ? 'web-gems' : 'bomba-squad',
   leagueIds: [league.id], createdDate: '2026-07-12', lastModified: '2026-07-12',
 }));
 
@@ -549,7 +551,15 @@ function session(): LeagueBuilderMlbDraftSession {
       { round: 2, pick: 3, teamId: 'a' }, { round: 2, pick: 4, teamId: 'b' },
     ], completedPicks: [], currentPickIndex: 0,
     revision: 4, seatBoards: { a: board('a-only'), b: board('b-only') },
-    snakeSetup: { poolPlayerIds: players.map((row) => row.id), versionSelections: {}, clubs: [{ teamId: 'a', gmName: 'Alex', hotseat: false }, { teamId: 'b', gmName: 'Blair', hotseat: false }], orderSeed: 'seed' },
+    snakeSetup: {
+      poolPlayerIds: players.map((row) => row.id),
+      versionSelections: {},
+      clubs: [
+        { teamId: 'a', gmName: 'Alex', hotseat: false, archetypeId: 'bash-brothers', farmArchetypeId: 'web-gems' },
+        { teamId: 'b', gmName: 'Blair', hotseat: false, archetypeId: 'whiteyball', farmArchetypeId: 'bomba-squad' },
+      ],
+      orderSeed: 'seed',
+    },
     snakeCompanions: { roomCode: '4821', claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'a', status: 'approved' }] },
     createdDate: '2026-07-12', lastModified: '2026-07-12',
   };

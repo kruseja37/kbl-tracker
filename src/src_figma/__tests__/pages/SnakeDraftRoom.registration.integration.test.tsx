@@ -463,7 +463,10 @@ describe('ROOMFIX setup to playable snake room', () => {
 
     const firstTeam = (await getTeam(TEAM_IDS[0]))!;
     const lockedSeat = resolveLockedSeat({ team: firstTeam, session: legs.session! });
-    expect(legs.session!.snakeSetup!.clubs[0]).toMatchObject({ archetypeId: 'murderers-row' });
+    expect(legs.session!.snakeSetup!.clubs[0]).toMatchObject({
+      archetypeId: 'murderers-row',
+      farmArchetypeId: 'whiteyball',
+    });
     expect(legs.session!.seatBoards?.[TEAM_IDS[0]].rankings.global?.[0]).toBe(PICKED_LEGEND_ID);
     expect(lockedSeat.capIdentity).toBeDefined();
     expect(lockedSeat.archetypeName).not.toBe('BALANCED');

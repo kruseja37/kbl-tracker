@@ -1228,3 +1228,31 @@ TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production
 `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY at
 `https://kbl-tracker-abdv24x2r-kruseja37s-projects.vercel.app` from source `56d1ab81`. Production
 remains unchanged. JK's room 4352 confirmation walk remains.
+
+### FINDING-248
+**Date:** 2026-07-20 | **Phase:** Snake Draft / MLB-to-farm identity and prospect generation | **Status:** BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`,
+`src/utils/snakeLiveCatalog.ts`, `src/utils/leagueBuilderStorage.ts`,
+`src/engines/snakeFarmSlots.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`,
+`src/src_figma/app/pages/ScoutHire.tsx`, focused flow and prospect-generation tests
+**Evidence:** A completed live room could recover its league, pool, players, and MLB session from the
+public catalog, but the catalog did not carry `farmArchetypeKey` and the MLB session did not freeze a
+farm identity. Scout Reveal then passed teams with no farm identity into `buildLiveScoutPool`, whose
+documented fallback is a Generalist scout. The farm generator itself was wired to the canonical
+Standard-only generator, but the normal four/eight-team farm-pool path did not have an explicit
+distribution and privacy gate.
+**Impact:** A recovered or future-origin draft could lose each club's selected farm plan, show false
+Generalist scouts, and create the farm session without the intended identity. Users could not verify
+the hidden prospect curve from the browser and therefore had no proof that the pool was not Juiced.
+**Action:** Freeze both identities at MLB draft creation; carry them in the immutable live catalog;
+restore and cross-check both copies; resolve farm identities from frozen session truth with a narrow
+legacy fallback; block Scout Reveal when identity is missing and provide a generic repair path; and
+measure the production prospect generator directly against the canonical Standard distribution while
+asserting that true grades and ratings stay hidden.
+**Builder result:** The new and recovered flows now transport farm identity end to end and reject
+conflicts or missing club truth. The generic repair path updates the team and completed MLB session
+before scouts are built. The focused production-flow gate is 91/91, including four- and eight-team
+farm pools and the eight-team MLB-to-farm season gauntlet. The N=500 measurement matches every
+canonical grade bucket exactly with zero percentage-point deviation. TypeScript, changed-file
+ESLint, the 2,744-module production/PWA build, and diff integrity are green. Independent audit and
+JK's browser walk remain. No production deploy or merge is authorized.

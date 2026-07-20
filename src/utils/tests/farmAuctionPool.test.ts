@@ -6,6 +6,7 @@ import {
   toFarmAuctionSalaryPlayer,
 } from '../farmAuctionPool';
 import { calculateIvBaseSalary, type PlayerForSalary, type PlayerPosition } from '../../engines/salaryCalculator';
+import { scoreSmb4Player } from '../../engines/smb4GradeEmulator';
 import type { LeagueBuilderProspectPlayerDto } from '../prospectScoutingDraftEngine';
 
 const BASE_INPUT = {
@@ -159,6 +160,46 @@ function serializePool(pool: ReturnType<typeof buildFarmAuctionPool>) {
   };
 }
 
+const STANDARD_PROSPECT_GRADE_SHARE = {
+  A: 0.02,
+  'A-': 0.05,
+  'B+': 0.10,
+  B: 0.15,
+  'B-': 0.15,
+  'C+': 0.15,
+  C: 0.18,
+  'C-': 0.12,
+  D: 0.08,
+} as const;
+
+type StandardProspectGrade = keyof typeof STANDARD_PROSPECT_GRADE_SHARE;
+
+function standardGrade(grade: string): StandardProspectGrade {
+  if (grade === 'A' || grade === 'A-' || grade === 'B+' || grade === 'B' || grade === 'B-'
+    || grade === 'C+' || grade === 'C' || grade === 'C-') return grade;
+  return 'D';
+}
+
+function analyzerGrade(prospect: LeagueBuilderProspectPlayerDto): StandardProspectGrade {
+  return standardGrade(scoreSmb4Player({
+    primaryPosition: prospect.primaryPosition,
+    secondaryPosition: prospect.secondaryPosition,
+    bats: prospect.bats,
+    throws: prospect.throws,
+    power: prospect.power,
+    contact: prospect.contact,
+    speed: prospect.speed,
+    fielding: prospect.fielding,
+    arm: prospect.arm,
+    velocity: prospect.velocity,
+    junk: prospect.junk,
+    accuracy: prospect.accuracy,
+    arsenal: prospect.arsenal,
+    trait1: prospect.trait1,
+    trait2: prospect.trait2,
+  }).grade);
+}
+
 describe('buildFarmAuctionPool AUC-5.1a', () => {
   test('prices known hitter and pitcher prospects through the MLB salary-IV path', () => {
     const hitter = makeProspect({
@@ -264,4 +305,37 @@ describe('buildFarmAuctionPool AUC-5.1a', () => {
     expect(pool.prospects).toHaveLength(10 * 3 * 4);
     expect(pool.auctionPlayers).toHaveLength(10 * 3 * 4);
   });
+
+  test.each([4, 8])('uses the canonical Standard prospect curve for a %i-team production farm pool', (teamCount) => {
+    const pool = buildFarmAuctionPool({
+      leagueId: `canonical-standard-${teamCount}`,
+      seasonNumber: 1,
+      seed: `canonical-standard-${teamCount}:farm`,
+      teamDraftOrder: Array.from({ length: teamCount }, (_, index) => ({
+        teamId: `team-${index + 1}`,
+        teamName: `Team ${index + 1}`,
+      })),
+    });
+    const expectedSize = 10 * teamCount * 3;
+    const counts = Object.fromEntries(
+      Object.keys(STANDARD_PROSPECT_GRADE_SHARE).map((grade) => [grade, 0]),
+    ) as Record<StandardProspectGrade, number>;
+
+    expect(pool.prospects).toHaveLength(expectedSize);
+    for (const prospect of pool.prospects) {
+      const realized = analyzerGrade(prospect);
+      counts[realized] += 1;
+      expect(realized).toBe(standardGrade(prospect.overallGrade));
+      expect(prospect.overallGrade).not.toBe('A+');
+      expect(prospect.ratingRevealState).toBe('hidden');
+      expect(prospect.leagueAssignments).toEqual([]);
+      expect(prospect.sourceDatabase).toBe('league-builder-startup-prospect-draft');
+    }
+    for (const [grade, share] of Object.entries(STANDARD_PROSPECT_GRADE_SHARE)) {
+      expect(Math.abs(counts[grade as StandardProspectGrade] - (expectedSize * share))).toBeLessThanOrEqual(1);
+    }
+    expect(new Set(pool.prospects.map((prospect) => prospect.primaryPosition))).toEqual(new Set([
+      'SP', 'SP/RP', 'RP', 'CP', 'C', '1B', '2B', 'SS', '3B', 'LF', 'CF', 'RF',
+    ]));
+  }, 30_000);
 });

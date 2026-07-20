@@ -20,6 +20,8 @@ import {
 import { getMlbDraftSession } from "../../../utils/leagueBuilderStorage";
 import { assertSnakeRosterHandoffReady } from "../../../utils/snakeRosterHandoff";
 import { companionTeamBranding } from "../components/snake/companion/companionBranding";
+import { HISTORICAL_ARCHETYPES } from "../../../data/historicalArchetypes";
+import { updateMlbDraftSessionAtomically } from "../../../utils/leagueBuilderStorage";
 
 function teamDisplayName(team: Team): string {
   return `${team.location} ${team.nickname}`.trim() || team.name;
@@ -30,7 +32,7 @@ export function ScoutHire() {
   const requestedLeagueId = useMemo(() => leagueIdFromSearch(window.location.search), []);
   const requestedShillCount = useMemo(() => shillCountFromSearch(window.location.search), []);
   const requestedReservePriceK = useMemo(() => reservePriceKFromSearch(window.location.search), []);
-  const { leagues, teams, isLoading, error, refresh } = useLeagueBuilderData();
+  const { leagues, teams, isLoading, error, refresh, updateTeam } = useLeagueBuilderData();
   const [activeLeagueId, setActiveLeagueId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function ScoutHire() {
   const [handoffState, setHandoffState] = useState<"checking" | "ready" | "blocked">("checking");
   const [handoffError, setHandoffError] = useState<string | null>(null);
   const [handoffRevision, setHandoffRevision] = useState(0);
+  const [farmIdentityRepairByTeamId, setFarmIdentityRepairByTeamId] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!activeLeagueId && leagues.length > 0) {
@@ -59,15 +62,64 @@ export function ScoutHire() {
     () => leagueTeams.filter((team) => isHumanControlledTeam(team)),
     [leagueTeams],
   );
+  const missingFarmIdentityTeams = useMemo(
+    () => leagueTeams.filter((team) => !team.farmArchetypeKey?.trim()),
+    [leagueTeams],
+  );
+  const farmIdentitiesReady = leagueTeams.length > 0 && missingFarmIdentityTeams.length === 0;
   const scoutPool = useMemo<LiveScoutCandidate[]>(
-    () => activeLeague ? buildLiveScoutPool(activeLeague.id, leagueTeams) : [],
-    [activeLeague, leagueTeams],
+    () => activeLeague && farmIdentitiesReady ? buildLiveScoutPool(activeLeague.id, leagueTeams) : [],
+    [activeLeague, farmIdentitiesReady, leagueTeams],
   );
   const scoutByTeamId = useMemo(
     () => new Map(scoutPool.map((scout) => [scout.teamId, scout])),
     [scoutPool],
   );
-  const allHumanTeamsReady = humanTeams.length > 0 && humanTeams.every((team) => scoutByTeamId.has(team.id));
+  const allHumanTeamsReady = farmIdentitiesReady
+    && humanTeams.length > 0
+    && humanTeams.every((team) => scoutByTeamId.has(team.id));
+
+  const saveMissingFarmIdentities = async (): Promise<void> => {
+    if (!activeLeague || activeLeague.draftFormat !== "snake" || missingFarmIdentityTeams.length === 0) return;
+    const selected = Object.fromEntries(missingFarmIdentityTeams.map((team) => [
+      team.id,
+      farmIdentityRepairByTeamId[team.id]?.trim() ?? "",
+    ]));
+    const firstMissing = missingFarmIdentityTeams.find((team) => !selected[team.id]);
+    if (firstMissing) {
+      setSaveError(`SELECT A FARM IDENTITY FOR ${teamDisplayName(firstMissing).toUpperCase()}.`);
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateMlbDraftSessionAtomically(activeLeague.id, 1, (current) => {
+        if (!current.snakeSetup) throw new Error("THE COMPLETED MLB DRAFT SETUP IS MISSING.");
+        return {
+          ...current,
+          snakeSetup: {
+            ...current.snakeSetup,
+            clubs: current.snakeSetup.clubs.map((club) => {
+              const repair = selected[club.teamId];
+              if (!repair) return club;
+              if (club.farmArchetypeId && club.farmArchetypeId !== repair) {
+                throw new Error(`THE FROZEN FARM IDENTITY DOES NOT MATCH ${club.teamId}.`);
+              }
+              return { ...club, farmArchetypeId: repair };
+            }),
+          },
+        };
+      });
+      for (const team of missingFarmIdentityTeams) {
+        await updateTeam({ ...team, farmArchetypeKey: selected[team.id] });
+      }
+      await refresh();
+    } catch (caught) {
+      setSaveError(caught instanceof Error ? caught.message : "THE FARM IDENTITIES COULD NOT BE SAVED.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (!activeLeague) return;
@@ -221,7 +273,42 @@ export function ScoutHire() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
+        {!farmIdentitiesReady ? (
+          <section className="mb-5 border-4 border-[#FFD27A] bg-[#6B3A3A] p-4 text-[#FFE8B0]">
+            <h2 className="text-lg font-bold tracking-[0.08em]">FARM IDENTITIES MISSING</h2>
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              {missingFarmIdentityTeams.map((team) => (
+                <label key={team.id} className="border-2 border-[#FFD27A] bg-[#2d3d2f] p-3">
+                  <span className="mb-2 block font-bold">{teamDisplayName(team)}</span>
+                  <select
+                    aria-label={`Farm identity for ${teamDisplayName(team)}`}
+                    value={farmIdentityRepairByTeamId[team.id] ?? ""}
+                    onChange={(event) => setFarmIdentityRepairByTeamId((current) => ({
+                      ...current,
+                      [team.id]: event.target.value,
+                    }))}
+                    className="min-h-11 w-full border-2 border-[#E8E8D8] bg-[#243024] px-3 text-[#E8E8D8]"
+                  >
+                    <option value="">SELECT FARM IDENTITY</option>
+                    {HISTORICAL_ARCHETYPES.map((archetype) => (
+                      <option key={archetype.id} value={archetype.id}>{archetype.name}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveMissingFarmIdentities()}
+              className="mt-4 min-h-11 border-4 border-[#E8E8D8] bg-[#C4A853] px-5 py-2 font-bold text-[#1A1A1A] disabled:opacity-40"
+            >
+              {saving ? "SAVING…" : "SAVE FARM IDENTITIES"}
+            </button>
+          </section>
+        ) : null}
+
+        {farmIdentitiesReady ? <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
           <section className="bg-[#2d3d2f] border-4 border-[#4A6844] p-4 h-fit">
             <h2 className="text-sm font-bold tracking-[0.12em] text-[#C4A853] mb-3">HUMAN CLUBS</h2>
             <div className="space-y-3">
@@ -314,7 +401,7 @@ export function ScoutHire() {
               ) : null}
             </div>
           </section>
-        </div>
+        </div> : null}
       </div>
     </div>
   );

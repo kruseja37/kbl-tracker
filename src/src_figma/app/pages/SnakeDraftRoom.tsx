@@ -17,6 +17,7 @@ import {
   buildFarmMoneyLedger,
   FARM_SNAKE_SESSION_NUMBER,
   farmPickSalary,
+  resolveFarmArchetypeIdsForSnakeTransition,
 } from '../../../engines/snakeFarmSlots';
 import {
   evaluateSnakeLegalFinish,
@@ -457,6 +458,10 @@ function FarmSnakeRoom() {
 
       let nextSession = stored;
       if (!storedFarm) {
+        const farmArchetypeIdByTeamId = resolveFarmArchetypeIdsForSnakeTransition({
+          mlbSession: stored,
+          teams: freshLeagueTeams,
+        });
         const recoveredMlbPickOrder = recoverCanonicalMlbSnakePickOrder(stored);
         const order = recoveredMlbPickOrder
           .filter((slot) => slot.round === 1)
@@ -467,7 +472,7 @@ function FarmSnakeRoom() {
           teamOrder: order,
           existingFarmRosterCountsByTeamId: Object.fromEntries(rosters.map(([teamId, roster]) => [teamId, roster?.farmRoster.length ?? 0])),
           farmBudgetsByTeamId: nextBudgets,
-          farmArchetypeIdByTeamId: Object.fromEntries(freshLeagueTeams.map((team) => [team.id, team.farmArchetypeKey])),
+          farmArchetypeIdByTeamId,
           prospectIds: nextPool.prospects.map((prospect) => prospect.id),
           prospects: nextPool.prospects,
           now,

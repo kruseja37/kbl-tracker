@@ -34,6 +34,7 @@ function team(id: string): Team {
     leagueIds: ['league-1'],
     capIdentity: { increase: ['Power'], decrease: ['Speed'] },
     mlbArchetypeKey: 'BASH_BROTHERS',
+    farmArchetypeKey: id === 'team-1' ? 'web-gems' : 'bomba-squad',
     rosterDesign: { slots: [], rankOverrides: { SP1: ['private-player'] } },
     boardRankOverrides: { global: ['private-player'] },
     lineupWithDH: [],
@@ -116,6 +117,10 @@ describe('Snake live public catalog', () => {
 
     expect(catalog.formatVersion).toBe('snake-live-catalog-v1');
     expect((catalog.teams as Array<{ id: string }>).map((row) => row.id)).toEqual(['team-1', 'team-2']);
+    expect(catalog.teams).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'team-1', mlbArchetypeKey: 'BASH_BROTHERS', farmArchetypeKey: 'web-gems' }),
+      expect.objectContaining({ id: 'team-2', mlbArchetypeKey: 'BASH_BROTHERS', farmArchetypeKey: 'bomba-squad' }),
+    ]));
     expect((catalog.players as Array<{ id: string }>).map((row) => row.id)).toEqual(['player-1', 'player-2']);
     expect(snakeLiveCatalogForbiddenPath(catalog)).toBeNull();
     expect(readSnakeLiveCatalog(catalog)).not.toBeNull();
@@ -150,6 +155,15 @@ describe('Snake live public catalog', () => {
       activeTeamIds: ['team-1', 'team-3'],
       activePoolPlayerIds: ['player-1', 'player-2'],
     })).toThrow('does not match the active draft teams');
+    const missingFarmIdentity = { ...team('team-2'), farmArchetypeKey: undefined };
+    expect(() => buildSnakeLiveCatalog({
+      league,
+      teams: [team('team-1'), missingFarmIdentity],
+      players: [player('player-1'), player('player-2')],
+      registeredPool: pool,
+      activeTeamIds: ['team-1', 'team-2'],
+      activePoolPlayerIds: ['player-1', 'player-2'],
+    })).toThrow('without both draft identities');
   });
 
   test('rejects incomplete or private catalog payloads on read', () => {

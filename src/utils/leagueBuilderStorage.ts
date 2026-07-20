@@ -619,6 +619,8 @@ export interface LeagueBuilderMlbDraftSession {
       teamId: string;
       gmName?: string;
       hotseat: boolean;
+      /** Frozen farm identity selected before MLB draft start. */
+      farmArchetypeId?: string;
       archetypeId?: string;
     }>;
     /** The visible shuffle seed shown on the ORDER card. */
@@ -1578,20 +1580,47 @@ export async function restoreSnakeLiveRoomLocally(input: {
   }
 
   const recoveryLeague = structuredClone(catalog.league) as LeagueTemplate;
-  const recoveryTeams = catalog.teams.map((team) => ({
-    ...structuredClone(team),
+  const sessionClubByTeamId = new Map(
+    (session.snakeSetup?.clubs ?? []).map((club) => [club.teamId, club]),
+  );
+  const recoveryTeams = catalog.teams.map((team) => {
+    const sessionFarmArchetypeId = sessionClubByTeamId.get(team.id)?.farmArchetypeId;
+    if (team.farmArchetypeKey && sessionFarmArchetypeId
+      && team.farmArchetypeKey !== sessionFarmArchetypeId) {
+      throw new Error(`THE LIVE ROOM FARM IDENTITY DOES NOT MATCH ${team.name}.`);
+    }
+    return ({
+      ...structuredClone(team),
+      ...(team.farmArchetypeKey || !sessionFarmArchetypeId
+        ? {}
+        : { farmArchetypeKey: sessionFarmArchetypeId }),
     // Stadium data is intentionally absent from the public live catalog. This
     // fallback is only used when the source team is not already in this browser.
-    stadium: 'Recovery Park',
-    leagueIds: [...team.leagueIds],
-  }) as Team);
+      stadium: 'Recovery Park',
+      leagueIds: [...team.leagueIds],
+    }) as Team;
+  });
   const recoveryPlayers = catalog.players.map((player) => ({
     ...structuredClone(player),
     leagueAssignments: [],
   }) as Player);
   const recoveryPool = structuredClone(catalog.registeredPool) as RegisteredPool;
+  const recoveredFarmArchetypeByTeamId = new Map(
+    recoveryTeams.flatMap((team) => team.farmArchetypeKey ? [[team.id, team.farmArchetypeKey] as const] : []),
+  );
   const recoverySession: LeagueBuilderMlbDraftSession = {
     ...(structuredClone(session) as LeagueBuilderMlbDraftSession),
+    ...(session.snakeSetup ? {
+      snakeSetup: {
+        ...structuredClone(session.snakeSetup),
+        clubs: session.snakeSetup.clubs.map((club) => ({
+          ...club,
+          ...(!club.farmArchetypeId && recoveredFarmArchetypeByTeamId.has(club.teamId)
+            ? { farmArchetypeId: recoveredFarmArchetypeByTeamId.get(club.teamId)! }
+            : {}),
+        })),
+      },
+    } : {}),
     liveRoomRecovery: {
       roomId: recovery.roomId,
       roomCode: recovery.roomCode,

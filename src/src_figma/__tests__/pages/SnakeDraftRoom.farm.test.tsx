@@ -12,8 +12,8 @@ const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows,
   playerRows: [] as Array<Record<string, unknown>>,
   farmLeagueRows: [{ id: 'league-farm', name: 'Farm League', teamIds: ['a', 'b'], draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed', salaryCap: 1_000_000 }],
   farmTeamRows: [
-    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human' },
-    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai' },
+    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human', farmArchetypeKey: 'web-gems' },
+    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai', farmArchetypeKey: 'bomba-squad' },
   ],
 }));
 
@@ -107,7 +107,10 @@ describe('S6 farm room continuation', () => {
       snakeSetup: {
         poolPlayerIds: mlbPlayerIds,
         versionSelections: {},
-        clubs: [{ teamId: 'b', hotseat: true }, { teamId: 'a', hotseat: true }],
+        clubs: [
+          { teamId: 'b', hotseat: true, farmArchetypeId: 'bomba-squad' },
+          { teamId: 'a', hotseat: true, farmArchetypeId: 'web-gems' },
+        ],
         orderSeed: 'ranked-club-order-is-not-draft-order',
       },
     };
@@ -134,6 +137,10 @@ describe('S6 farm room continuation', () => {
     expect(created.pickOrder).toHaveLength(20);
     expect(created.pickOrder.slice(0, 2).map((slot) => slot.teamId)).toEqual(['a', 'b']);
     expect(created.snakeSetup.clubs.map((club) => club.teamId)).toEqual(['a', 'b']);
+    expect(created.snakeSetup.clubs).toEqual([
+      expect.objectContaining({ teamId: 'a', archetypeId: 'web-gems' }),
+      expect.objectContaining({ teamId: 'b', archetypeId: 'bomba-squad' }),
+    ]);
     expect(created.farmSlotSalaries).toHaveLength(20);
     expect(created.farmSlotSalaries[0]).toBe(3 * created.farmSlotSalaries.at(-1));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();

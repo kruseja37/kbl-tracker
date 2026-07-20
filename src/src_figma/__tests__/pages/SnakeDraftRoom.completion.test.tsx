@@ -165,8 +165,8 @@ const league: LeagueTemplate = {
   createdDate: '2026-01-01', lastModified: '2026-01-01',
 };
 const teams: Team[] = [
-  { id: 'a', name: 'Kodiaks', abbreviation: 'KOD', location: 'North', nickname: 'Kodiaks', colors: { primary: '#234f32', secondary: '#f5d77a' }, stadium: 'A', controlledBy: 'human', leagueIds: [league.id], createdDate: '2026-01-01', lastModified: '2026-01-01' },
-  { id: 'b', name: 'Comets', abbreviation: 'COM', location: 'South', nickname: 'Comets', colors: { primary: '#31543d', secondary: '#f3efdc' }, stadium: 'B', controlledBy: 'human', leagueIds: [league.id], createdDate: '2026-01-01', lastModified: '2026-01-01' },
+  { id: 'a', name: 'Kodiaks', abbreviation: 'KOD', location: 'North', nickname: 'Kodiaks', colors: { primary: '#234f32', secondary: '#f5d77a' }, stadium: 'A', controlledBy: 'human', mlbArchetypeKey: 'bash-brothers', farmArchetypeKey: 'web-gems', leagueIds: [league.id], createdDate: '2026-01-01', lastModified: '2026-01-01' },
+  { id: 'b', name: 'Comets', abbreviation: 'COM', location: 'South', nickname: 'Comets', colors: { primary: '#31543d', secondary: '#f3efdc' }, stadium: 'B', controlledBy: 'human', mlbArchetypeKey: 'whiteyball', farmArchetypeKey: 'bomba-squad', leagueIds: [league.id], createdDate: '2026-01-01', lastModified: '2026-01-01' },
 ];
 
 function player(id: string, firstName: string, lastName: string, position: Player['primaryPosition']): Player {
@@ -207,7 +207,10 @@ function completedSession(phase: 'MLB' | 'FARM'): LeagueBuilderMlbDraftSession {
     snakeSetup: {
       poolPlayerIds: phase === 'FARM' ? ['f1', 'f2'] : ['p1', 'p2'],
       versionSelections: {},
-      clubs: [{ teamId: 'a', hotseat: true }, { teamId: 'b', hotseat: true }],
+      clubs: [
+        { teamId: 'a', hotseat: true, archetypeId: 'bash-brothers', farmArchetypeId: 'web-gems' },
+        { teamId: 'b', hotseat: true, archetypeId: 'whiteyball', farmArchetypeId: 'bomba-squad' },
+      ],
       orderSeed: 'complete-seed',
     },
     snakeCompanions: phase === 'MLB' ? { roomCode: '2468', claims: [] } : undefined,
