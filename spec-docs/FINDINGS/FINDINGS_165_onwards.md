@@ -1174,7 +1174,7 @@ received **APPROVE — Major 0 / Minor 0** from the same non-builder auditor aft
 focused tests. An explicitly authorized push and new preview remain before JK's browser re-walk.
 
 ### FINDING-247
-**Date:** 2026-07-20 | **Phase:** Snake Draft / completed MLB roster handoff | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-20 | **Phase:** Snake Draft / completed MLB roster handoff | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW + JK WALK PENDING
 **Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/leagueBuilderAuctionPipeline.ts`,
 `src/src_figma/app/pages/SnakeDraftRoom.tsx`, focused storage/pipeline/completion tests
 **Evidence:** JK completed every pick in a four-team live draft and reached the MLB Draft Recap.
@@ -1210,5 +1210,9 @@ recovered completed room that had already disappeared could finish the local han
 during cleanup and falsely remain blocked. The narrow repair treats an absent room as already
 cleaned up after verified handoff; a present room still receives best-effort close. The new direct
 UI proof advances without an active room or an error banner. The affected suite is now 113/113;
-TypeScript, changed-file ESLint, diff integrity, and the production/PWA build are green. Re-audit,
-one preview, and JK's walk remain.
+TypeScript, changed-file ESLint, diff integrity, and the production/PWA build are green.
+
+**Independent result:** The same auditor rechecked repaired head `6c7b5714` and returned
+**APPROVE — Major 0 / Minor 0**. Independent completion, atomic pipeline, and recovered-origin proof
+is 37/37. TypeScript, repaired-file ESLint, and full-range diff integrity are green. The auditor
+confirmed no equivalent post-handoff cleanup branch remains. One preview and JK's walk remain.

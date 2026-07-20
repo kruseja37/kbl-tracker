@@ -32842,3 +32842,9 @@ and verify the local handoff, then enter cleanup with no active room and falsely
 After a verified handoff, an absent room now means there is nothing left to close. A present open
 room still receives best-effort close. The product must navigate after either result. A focused UI
 test must cover the absent-room recovery receipt directly.
+
+**Independent close:** The same non-builder auditor rechecked exact repaired head `6c7b5714` and
+returned **APPROVE — Major 0 / Minor 0**. It confirmed the direct absent-room proof, the present-room
+best-effort close proof, the full atomic handoff contract, and no equivalent production cleanup
+branch. Independent completion, atomic pipeline, and recovered-origin proof is 37/37; TypeScript,
+repaired-file ESLint, and full-range diff integrity are green.

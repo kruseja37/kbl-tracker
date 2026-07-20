@@ -1580,3 +1580,11 @@ then JK's browser re-walk. No push, merge, deploy, or product acceptance occurre
 ## 2026-07-20 — Outgoing before FINDING-247 atomic MLB finalization
 
 > ## RIGHT NOW — SNAKE BROWSER-FEEDBACK REPAIR INDEPENDENTLY APPROVED; NEW PREVIEW NOT YET AUTHORIZED (2026-07-19; branch `codex/snake-live-room-authority`). JK completed the four-team preview draft. The bounded repair makes each position board control its starting slot, adds distinct public-pick and companion-submit cues, renders `LIKELY GONE` in red, removes ordinary pitcher FLD from tax while keeping its salary/IV value, and lets proven public completion finish local roster handoff even if live-room cleanup is late. The first non-builder audit rejected frozen `aeeb00a2` with Major 3 / Minor 1. The repaired head `70fde7dc` passed the same auditor with **APPROVE — Major 0 / Minor 0** and an independent 160/160 focused gate. Builder proof is 148/148; the 93-test production-shape gate completed 88/88 and 176/176 picks, kept every Assistant GM available, and passed every Standard/Nerfed pool preset. TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** with explicit authority, push the approved head and update one preview for JK's browser re-walk. The prior `d2ac79d7` preview is stale. Production remains on `ba7f97d6`; no merge or promotion occurred.
+
+## 2026-07-20 — Outgoing before FINDING-247 independent approval
+
+The prior live header recorded the atomic completed-MLB handoff repair and the first audit's one
+Major cleanup finding. The narrow repair was frozen at `6c7b5714`: after verified local success, an
+absent recovered room is already clean; a present room still receives best-effort close. The same
+auditor rechecked the full contract and returned APPROVE, Major 0 / Minor 0. No push, preview,
+merge, production deployment, or product acceptance had occurred at this snapshot.

@@ -8221,3 +8221,8 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   still receives best-effort close. Direct UI proof now covers a recovery receipt whose room lookup
   returns null and confirms navigation with no error. The affected builder gate is 113/113 plus
   TypeScript, changed-file ESLint, diff integrity, and production/PWA build. Re-audit remains.
+- Repaired head `6c7b5714` received **APPROVE — Major 0 / Minor 0** from the same non-builder
+  auditor. Independent completion, atomic pipeline, and recovered-origin proof is 37/37. TypeScript,
+  repaired-file ESLint, full-range diff integrity, and the no-parallel-cleanup search are green.
+- Next: push the approved branch, create one Vercel preview, restore room 4352, and give the recap
+  confirmation back to JK as the sole product gate. No merge or production deploy is authorized.

@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-247 ATOMIC MLB FINALIZATION REPAIRED AFTER FIRST AUDIT; RE-AUDIT PENDING (2026-07-20; branch `codex/snake-live-room-authority`). JK completed every pick in room 4352, but the recap's separate freeze, roster, player, and marker writes failed before franchise handoff. The completed public room remains safe. One new transaction now persists the exact frozen session and pool, every target roster, every changed player assignment and salary, independent board rows, and the valid handoff marker. It creates missing target rosters, repairs an old partial commit, ignores generic backup-queue failure after local success, and repeats byte-for-byte. Exact four-team and eight-team proofs complete 88 and 176 picks. Frozen `a1ffe606` received REJECT, Major 1 / Minor 0: after verified local success, an already-absent recovered room could still make cleanup report failure. The narrow repair treats absence as already clean and proves navigation directly. The affected gate is 113/113; TypeScript, changed-file lint, diff integrity, and production/PWA build are green. **NEXT:** freeze and obtain the same auditor's recheck, then publish one preview and restore room 4352 for JK's browser walk. Production remains on `ba7f97d6`; no merge or promotion occurred.
+> ## RIGHT NOW — FINDING-247 ATOMIC MLB FINALIZATION IS INDEPENDENTLY APPROVED; PREVIEW + JK WALK PENDING (2026-07-20; branch `codex/snake-live-room-authority`, approved head `6c7b5714`). JK completed every pick in room 4352, but the recap's separate freeze, roster, player, and marker writes failed before franchise handoff. The completed public room remains safe. One transaction now persists the exact frozen session and pool, every target roster, every changed player assignment and salary, independent board rows, and the valid handoff marker. It creates missing target rosters, repairs old partial commits, ignores generic backup-queue failure after local success, and repeats byte-for-byte. Exact four-team and eight-team proofs complete 88 and 176 picks. Frozen `a1ffe606` received REJECT, Major 1 / Minor 0 for an absent-room cleanup edge; repaired head `6c7b5714` received **APPROVE — Major 0 / Minor 0** from the same auditor. Builder proof is 113/113; independent proof is 37/37; TypeScript, changed-file lint, diff integrity, and production/PWA build are green. **NEXT:** push the approved head, publish one preview, restore room 4352, and let JK confirm the completed draft. Production remains on `ba7f97d6`; no merge or promotion occurred.
 
 ## Current product law
 
@@ -22,9 +22,8 @@
 
 ## Open gates
 
-1. Freeze the exact FINDING-247 implementation and obtain a separate non-builder audit.
-2. Push the approved head and update one preview for room 4352 recovery.
-3. Run JK's completed-draft confirmation walk, then the broader Hotseat plus companion re-walk.
+1. Push the approved head and update one preview for room 4352 recovery.
+2. Run JK's completed-draft confirmation walk, then the broader Hotseat plus companion re-walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the one authorized
