@@ -4,6 +4,20 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## BUILDER COMPLETE / SEPARATE AUDIT PENDING (2026-07-20; FINDING-249)
+- FARM now uses the dedicated Snake live-room authority instead of the old Hotseat-only path.
+  Hotseat alone writes public picks, order, rosters, and completion. An approved companion writes
+  only its private fogged scout board and sends a pick request for Hotseat confirmation.
+- The public FARM catalog contains only safe draft identity and public state. It rejects true
+  grades, ratings, hidden modifiers, private board data, and unknown extra fields. FARM trades remain
+  absent.
+- Four- and eight-team tests cover private-board isolation, approval, pick requests, public pick
+  adoption, roster/budget updates, and drafted-prospect removal. The focused gate is 214/214.
+  TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green.
+- Migration `20260720213000_farm_snake_live_catalog.sql` extends the installed live-room catalog
+  validator to FARM. It is local only. **Next:** separate read-only audit, then explicit authority
+  for the migration, push, and one preview. JK's browser walk remains the product gate.
+
 ## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW READY / JK WALK PENDING (2026-07-20; FINDING-248)
 - New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through
   the live catalog, recovery, Scout Reveal, and farm-session creation. Missing, conflicting,

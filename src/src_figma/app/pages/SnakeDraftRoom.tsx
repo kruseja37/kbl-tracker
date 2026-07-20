@@ -122,6 +122,7 @@ import {
 } from '../components/snake/trade/tradeGuideModel';
 import { FarmPrivateDesk, FarmSelectedProspectCard } from '../components/snake/farm/FarmPrivateDesk';
 import {
+  buildFarmLivePrivateBoard,
   buildFarmFogCard,
   buildFarmPublicRosters,
   buildFarmScoutPressure,
@@ -182,7 +183,11 @@ import {
   type DraftFreezePlayerMeta,
 } from '../../../utils/draftFreezeInputs';
 import { getOrCreateSnakeLiveDeviceId } from '../../../utils/snakeLiveCapabilityStore';
-import { buildSnakeLiveCatalog, readSnakeLiveCatalog } from '../../../utils/snakeLiveCatalog';
+import {
+  buildSnakeLiveCatalog,
+  buildSnakeLiveFarmCatalog,
+  readSnakeLiveCatalog,
+} from '../../../utils/snakeLiveCatalog';
 import {
   SnakeLiveTransportError,
   type SnakeLiveIntent,
@@ -522,6 +527,105 @@ function FarmSnakeRoom() {
     completedPicks: session?.completedPicks ?? [],
     prospects: farmPool?.prospects ?? [],
   }), [existingFarmRosterIdsByTeamId, farmPool, leagueTeams, players, session?.completedPicks]);
+  const farmLiveCatalogTeamIdsKey = session?.snakeSetup?.clubs.map((club) => club.teamId).join('\u0000') ?? '';
+  const farmLiveCatalogProspectIdsKey = session?.snakeSetup?.poolPlayerIds.join('\u0000') ?? '';
+  const farmLiveCatalog = useMemo(() => {
+    if (!league || !farmPool) return null;
+    const activeTeamIds = farmLiveCatalogTeamIdsKey ? farmLiveCatalogTeamIdsKey.split('\u0000') : [];
+    const activeProspectIds = farmLiveCatalogProspectIdsKey ? farmLiveCatalogProspectIdsKey.split('\u0000') : [];
+    try {
+      return buildSnakeLiveFarmCatalog({
+        league,
+        teams: leagueTeams,
+        prospects: farmPool.prospects,
+        existingFarmRostersByTeamId: rostersByTeamId,
+        activeTeamIds,
+        activeProspectIds,
+        farmTarget: FARM_AUCTION_ROSTER_SLOTS_PER_TEAM,
+      });
+    } catch {
+      return null;
+    }
+  }, [farmLiveCatalogProspectIdsKey, farmLiveCatalogTeamIdsKey, farmPool, league, leagueTeams, rostersByTeamId]);
+  const [hostDeviceId, setHostDeviceId] = useState<string | null>(null);
+  const farmLiveSessionId = session?.id ?? null;
+  const liveHost = useSnakeLiveHostRoom({
+    session,
+    hostDeviceId,
+    catalog: farmLiveCatalog,
+    enabled: Boolean(session?.snakeCompanions?.roomCode),
+  });
+  const liveHostRef = useRef(liveHost);
+  liveHostRef.current = liveHost;
+
+  useEffect(() => {
+    if (!farmLiveSessionId) {
+      setHostDeviceId(null);
+      return;
+    }
+    let cancelled = false;
+    void getOrCreateSnakeLiveDeviceId().then((deviceId) => {
+      if (!cancelled) setHostDeviceId(deviceId);
+    }).catch((cause) => {
+      if (!cancelled) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [farmLiveSessionId]);
+
+  useEffect(() => {
+    if (!session || session.snakeCompanions?.roomCode) return;
+    let cancelled = false;
+    void patchMlbDraftSessionSnakeCompanions({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      patch: (current, fresh) => ensureCompanionRoom(
+        { ...fresh, snakeCompanions: current },
+      ).snakeCompanions!,
+    }).then((saved) => {
+      if (!cancelled) setSession(saved);
+    }).catch((cause) => {
+      if (!cancelled) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [session]);
+
+  const mirrorFarmSessionLocally = useCallback(async (
+    next: LeagueBuilderMlbDraftSession,
+  ): Promise<LeagueBuilderMlbDraftSession> => {
+    setSession(next);
+    try {
+      const saved = await updateMlbDraftSessionAtomically(
+        next.leagueId,
+        next.seasonNumber,
+        (fresh) => ({
+          ...next,
+          farmSeatBoards: next.farmSeatBoards ?? fresh.farmSeatBoards,
+          farmProspectSnapshot: next.farmProspectSnapshot ?? fresh.farmProspectSnapshot,
+          snakeCompanions: fresh.snakeCompanions ?? next.snakeCompanions,
+        }),
+      );
+      setSession(saved);
+      setWriteNotice(null);
+      return saved;
+    } catch (cause) {
+      setWriteNotice(`THE LIVE FARM ROOM IS CURRENT. THE LOCAL BACKUP FAILED — ${cause instanceof Error ? cause.message : String(cause)}`);
+      return next;
+    }
+  }, []);
+
+  const farmLiveAdoptedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const remote = liveHost.publicSession;
+    const room = liveHost.room;
+    if (!session || !remote || !room || !liveHost.hostAccessReady || remote.id !== session.id) return;
+    const key = `${room.id}:${room.publicRevision}`;
+    if (farmLiveAdoptedKeyRef.current === key) return;
+    farmLiveAdoptedKeyRef.current = key;
+    const received = mergeLivePublicSession(session, remote);
+    setSession(received);
+    if (received.currentPickIndex >= received.pickOrder.length) setRecapOpen(true);
+    void mirrorFarmSessionLocally(received);
+  }, [liveHost.hostAccessReady, liveHost.publicSession, liveHost.room, mirrorFarmSessionLocally, session]);
   const ownedPicksByTeamId = useMemo(() => Object.fromEntries(leagueTeams.map((team) => [team.id,
     (session?.pickOrder ?? []).slice(session?.currentPickIndex ?? 0).filter((slot) => slot.teamId === team.id).map((slot) => slot.pick),
   ])), [leagueTeams, session]);
@@ -598,36 +702,131 @@ function FarmSnakeRoom() {
       if (wrote) setSession(saved);
     }).catch((cause) => setWriteNotice(cause instanceof Error ? cause.message : String(cause)));
   }, [deskTeam, farmAdvisorLogBySeat, session]);
-  const recordPick = useCallback(async (playerId: string) => {
-    if (!session || !currentSlot || !farmPool) return;
-    if (!deskTeam || !currentTeam || deskTeam.id !== currentTeam.id) throw new Error('Only the club on the clock can record this pick.');
-    if (!session.farmSeatBoards) throw new Error('The private farm boards are still opening.');
-    const prospect = farmPool.prospects.find((row) => row.id === playerId);
-    if (!prospect) throw new Error('That prospect is no longer in the farm pool.');
-    const saved = await updateMlbDraftSessionAtomically(session.leagueId, session.seasonNumber, (fresh) => {
-      const freshSlot = fresh.pickOrder[fresh.currentPickIndex];
-      if (!freshSlot || freshSlot.pick !== currentSlot.pick || freshSlot.teamId !== currentSlot.teamId) {
-        throw new Error('The farm draft moved before this pick could be saved.');
+  const recordPick = useCallback(async (
+    playerId: string,
+    companionRequest?: SnakeCompanionPickRequest,
+    companionIntent?: SnakeLiveIntent,
+  ) => {
+    if (!session || !farmPool) throw new Error('THE FARM SNAKE DRAFT IS NOT READY.');
+    const buildPick = (source: LeagueBuilderMlbDraftSession, reconcilePrivateBoards: boolean) => {
+      const slot = source.pickOrder[source.currentPickIndex];
+      const activeTeam = leagueTeams.find((team) => team.id === slot?.teamId);
+      if (!slot || !activeTeam) throw new Error('THE CLUB ON THE CLOCK IS NOT READY.');
+      const authorizedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      if (!authorizedTeamId || authorizedTeamId !== activeTeam.id) {
+        throw new Error('ONLY THE CLUB ON THE CLOCK CAN MAKE THIS PICK.');
+      }
+      if (source.completedPicks.some((pick) => pick.playerId === playerId)) {
+        throw new Error('THAT PROSPECT IS NO LONGER AVAILABLE.');
+      }
+      const prospect = farmPool.prospects.find((row) => row.id === playerId);
+      if (!prospect || !source.snakeSetup?.poolPlayerIds.includes(playerId)) {
+        throw new Error('THAT PROSPECT IS NOT IN THE FROZEN FARM POOL.');
       }
       const picked = applySnakePickWithCorrection({
-        session: fresh,
+        session: source,
         player: { playerId: prospect.id },
-        settledSalary: farmPickSalary(fresh, freshSlot.pick),
+        settledSalary: farmPickSalary(source, slot.pick),
         marginalTax: 0,
         versionPool: farmPool.prospects.map((row) => ({ playerId: row.id })),
       });
+      if (!reconcilePrivateBoards) return { next: picked, slot, activeTeam };
       const nextUnavailable = new Set(picked.completedPicks.map((pick) => pick.playerId));
       const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
-        picked.pickOrder.slice(picked.currentPickIndex).filter((slot) => slot.teamId === team.id).length,
+        picked.pickOrder.slice(picked.currentPickIndex).filter((row) => row.teamId === team.id).length,
       ]));
-      return reconcileFarmSeatBoards({
-        session: picked,
+      return {
+        next: reconcileFarmSeatBoards({
+          session: picked,
+          unavailableProspectIds: nextUnavailable,
+          remainingTurnsByTeamId: nextRemainingTurns,
+        }).session,
+        slot,
+        activeTeam,
+      };
+    };
+
+    const clickedRoom = liveHostRef.current.room;
+    const actionIncarnation = clickedRoom
+      ? `${clickedRoom.id}:${clickedRoom.publicRevision}`
+      : 'room-not-ready';
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      const requestedSlot = session.pickOrder[session.currentPickIndex];
+      const requestedPick = companionRequest?.pick ?? requestedSlot?.pick;
+      const requestedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      const alreadySaved = host.publicSession.completedPicks.find((pick) => (
+        pick.pick === requestedPick && pick.teamId === requestedTeamId
+      ));
+      if (alreadySaved?.playerId === playerId) {
+        const received = mergeLivePublicSession(session, host.publicSession);
+        await mirrorFarmSessionLocally(received);
+        if (companionIntent?.status === 'pending') {
+          await host.resolveIntent(companionIntent, 'accepted', `farm-pick-accepted:${companionIntent.id}`)
+            .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION RECEIPT NEEDS A REFRESH.'));
+        }
+        return;
+      }
+      const source = snakeLivePublicActionSession(mergeLivePublicSession(session, host.publicSession));
+      const result = buildPick(source, false);
+      if (companionRequest && companionIntent) {
+        const approved = host.claims.some((claim) => claim.deviceId === companionIntent.deviceId
+          && claim.teamId === companionIntent.teamId && claim.status === 'approved');
+        if (!approved
+          || companionIntent.kind !== 'pick'
+          || companionIntent.status !== 'pending'
+          || companionIntent.expectedRoomRevision !== host.room.publicRevision
+          || companionRequest.sessionRevision !== (source.revision ?? 0)
+          || companionRequest.pick !== result.slot.pick
+          || companionRequest.teamId !== result.activeTeam.id) {
+          throw new Error('THE COMPANION FARM PICK REQUEST IS STALE.');
+        }
+      }
+      try {
+        await host.publishSession({
+          session: snakeLivePublicActionSession(result.next),
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `farm-pick:${result.next.id}:${result.slot.pick}:${playerId}:${actionIncarnation}`,
+          eventKind: 'PICK_RECORDED',
+          publicEvent: { pick: result.slot.pick, teamId: result.activeTeam.id, playerId },
+          status: result.next.currentPickIndex >= result.next.pickOrder.length ? 'complete' : 'open',
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      const localPicked = mergeLivePublicSession(session, result.next);
+      const nextUnavailable = new Set(localPicked.completedPicks.map((pick) => pick.playerId));
+      const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
+        localPicked.pickOrder.slice(localPicked.currentPickIndex).filter((row) => row.teamId === team.id).length,
+      ]));
+      const localResult = reconcileFarmSeatBoards({
+        session: localPicked,
         unavailableProspectIds: nextUnavailable,
         remainingTurnsByTeamId: nextRemainingTurns,
-      }).session;
-    });
-    setSession(saved);
-  }, [currentSlot, currentTeam, deskTeam, farmPool, leagueTeams, session]);
+      });
+      await mirrorFarmSessionLocally({
+        ...localResult.session,
+        correctionSnapshots: result.next.correctionSnapshots,
+      });
+      if (companionIntent) {
+        await host.resolveIntent(companionIntent, 'accepted', `farm-pick-accepted:${companionIntent.id}`)
+          .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION RECEIPT NEEDS A REFRESH.'));
+      }
+    };
+    await publish(false);
+  }, [deskTeam, farmPool, leagueTeams, mirrorFarmSessionLocally, session]);
   const finishFarm = useCallback(() => {
     if (!session || session.currentPickIndex < session.pickOrder.length) return;
     setRecapOpen(true);
@@ -681,6 +880,12 @@ function FarmSnakeRoom() {
       });
       setSession(handedOff);
       await assertSnakeRosterHandoffReady(handedOff, 'FARM');
+      const activeLiveRoom = liveHostRef.current.room;
+      if (activeLiveRoom && activeLiveRoom.status !== 'closed') {
+        await liveHostRef.current.closeRoom(
+          `farm-handoff:${activeLiveRoom.id}:${activeLiveRoom.publicRevision}:${manifest.source.sessionId}`,
+        ).catch(() => undefined);
+      }
       navigate(staffHireRouteForLeague(league));
     } catch {
       setRecapError(RECAP_CONFIRMATION_ERROR);
@@ -747,6 +952,9 @@ function FarmSnakeRoom() {
     onBack={session.draftManifest ? undefined : () => setRecapOpen(false)}
   />;
   const farmDraftComplete = session.currentPickIndex >= session.pickOrder.length;
+  const deskHasApprovedCompanion = Boolean(deskTeam && liveHost.claims.some((claim) => (
+    claim.teamId === deskTeam.id && claim.status === 'approved'
+  )));
   return <SnakeDraftRoomView
     onHome={() => navigate('/')}
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
@@ -756,9 +964,9 @@ function FarmSnakeRoom() {
     rostersByTeamId={rostersByTeamId}
     ownedPicksByTeamId={ownedPicksByTeamId}
     activeSeatId={farmDraftComplete ? null : deskTeam?.id ?? null}
-    canDraftFromActiveSeat={!farmDraftComplete && Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
-    candidate={currentSlot && selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
-    selectedPlayerCard={currentSlot && selected && deskTeam ? <FarmSelectedProspectCard
+    canDraftFromActiveSeat={!farmDraftComplete && !deskHasApprovedCompanion && Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
+    candidate={!deskHasApprovedCompanion && currentSlot && selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
+    selectedPlayerCard={!deskHasApprovedCompanion && currentSlot && selected && deskTeam ? <FarmSelectedProspectCard
       card={selected}
       slotPick={currentSlot.pick}
       slotSalary={farmPickSalary(session, currentSlot.pick)}
@@ -766,12 +974,12 @@ function FarmSnakeRoom() {
       teamName={deskTeam.name}
       teamLogoUrl={deskTeam.logoUrl}
     /> : undefined}
-    selectedFitLabel={selected ? `SCOUT · ${selected.scoutedGrade}` : null}
+    selectedFitLabel={!deskHasApprovedCompanion && selected ? `SCOUT · ${selected.scoutedGrade}` : null}
     draftActionLabel="DRAFT PROSPECT"
     paused={Boolean(session.paused)} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
     hotseatNextName={hotseatPassName(session, currentTeam)}
     practiceMode={false}
-    privateDesk={currentSlot ? <FarmPrivateDesk
+    privateDesk={!deskHasApprovedCompanion && currentSlot ? <FarmPrivateDesk
       key={deskTeam?.id ?? 'none'}
       cards={cards}
       selectedId={selected?.id ?? null}
@@ -792,10 +1000,53 @@ function FarmSnakeRoom() {
         });
       }}
     /> : undefined}
-    roomHelpNotes={['SLOT SALARIES STAY WITH THE PICKS.']}
-    writeNotice={writeNotice}
-    onReloadRoom={async () => { setWriteNotice(null); await loadFarm(); }}
+    roomHelpNotes={deskHasApprovedCompanion ? [] : ['SLOT SALARIES STAY WITH THE PICKS.']}
+    writeNotice={writeNotice ?? liveHost.error}
+    onReloadRoom={async () => { setWriteNotice(null); await liveHost.refresh().catch(() => undefined); await loadFarm(); }}
     onDismissWriteNotice={() => setWriteNotice(null)}
+    companionApproval={<CompanionApprovalCard
+      roomCode={session.snakeCompanions?.roomCode ?? ''}
+      teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+      claims={liveHost.claims}
+      intents={liveHost.intents}
+      ready={liveHost.liveRoomReady}
+      working={liveHost.working}
+      liveError={liveHost.error}
+      playerName={(playerId) => farmPool.prospects.find((prospect) => prospect.id === playerId)
+        ? fullName(
+            farmPool.prospects.find((prospect) => prospect.id === playerId)!.firstName,
+            farmPool.prospects.find((prospect) => prospect.id === playerId)!.lastName,
+          )
+        : 'UNKNOWN PROSPECT'}
+      onResolveClaim={async (claim, status) => {
+        if (status === 'approved') {
+          const board = session.farmSeatBoards?.[claim.teamId];
+          const teamCards = allCardsByTeamId[claim.teamId];
+          if (!board || !teamCards) throw new Error('THE FARM BOARD IS NOT READY.');
+          await liveHost.seedBoard({
+            teamId: claim.teamId,
+            board: buildFarmLivePrivateBoard({
+              board,
+              cards: teamCards,
+              farmBudget: farmBudgets[claim.teamId] ?? 0,
+            }),
+          });
+        }
+        await liveHost.resolveClaim(
+          claim,
+          status,
+          `farm-claim:${claim.id}:${claim.revision}:${status}`,
+        );
+      }}
+      onApprovePick={(intent, request) => recordPick(request.playerId, request, intent)}
+      onRejectPick={async (intent) => {
+        await liveHost.resolveIntent(intent, 'rejected', `farm-pick-rejected:${intent.id}`);
+      }}
+    />}
+    pendingCompanionCount={liveHost.claims.filter((claim) => claim.status === 'pending').length}
+    pendingPickRequestCount={!liveHost.room
+      ? 0
+      : pendingSnakeLivePickIntentCount(liveHost.intents, liveHost.room.publicRevision)}
     onPauseChange={async (paused) => {
       try {
         await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });

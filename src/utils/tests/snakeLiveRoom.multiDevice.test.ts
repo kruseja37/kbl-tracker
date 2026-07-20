@@ -169,6 +169,55 @@ describe('Snake live-room multi-device contract', () => {
     await expect(companion.transport.getCatalog(room.id)).resolves.toEqual(seeded);
   });
 
+  test('shares one FARM catalog and rejects true prospect data at the server boundary', async () => {
+    const server = new SnakeLiveRoomTestServer();
+    const host = device(server, 'farm-hotseat-mac');
+    const teamIds = ['team-1', 'team-2'];
+    const prospectIds = ['prospect-1', 'prospect-2'];
+    const room = await host.transport.createRoom({
+      sessionId: 'farm-live-room',
+      roomCode: '8642',
+      phase: 'FARM',
+      hostDeviceId: host.id,
+      hostToken: host.token,
+      publicState: {
+        session: {
+          snakeSetup: {
+            clubs: teamIds.map((teamId) => ({ teamId })),
+            poolPlayerIds: prospectIds,
+          },
+        },
+      },
+    });
+    const hostAccess = {
+      roomId: room.id,
+      hostDeviceId: host.id,
+      hostToken: host.token,
+    };
+    const catalog = {
+      formatVersion: 'snake-live-farm-catalog-v1',
+      league: { id: 'farm-league', teamIds },
+      teams: teamIds.map((id) => ({ id })),
+      prospects: [
+        { id: 'prospect-1', firstName: 'Mara', lastName: 'Diaz', primaryPosition: 'SS' },
+        { id: 'prospect-2', firstName: 'Jo', lastName: 'Arm', primaryPosition: 'SP' },
+      ],
+      existingFarmRostersByTeamId: { 'team-1': [], 'team-2': [] },
+      farmTarget: 10,
+    };
+
+    await expect(host.transport.seedCatalog({
+      ...hostAccess,
+      catalog: {
+        ...catalog,
+        prospects: [{ ...catalog.prospects[0], trueGrade: 'A+' }, catalog.prospects[1]],
+      },
+    })).rejects.toThrow('invalid or contains private data');
+    const seeded = await host.transport.seedCatalog({ ...hostAccess, catalog });
+    const companion = device(server, 'farm-companion-mac');
+    await expect(companion.transport.getCatalog(room.id)).resolves.toEqual(seeded);
+  });
+
   test.each([
     { eventKind: 'PICK_RECORDED', action: 'pick', status: 'complete' as const },
     { eventKind: 'TRADE_EXECUTED', action: 'trade', status: undefined },

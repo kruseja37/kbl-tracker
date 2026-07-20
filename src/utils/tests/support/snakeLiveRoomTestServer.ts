@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { snakeLiveCatalogForbiddenPath } from '../../snakeLiveCatalog';
 
 type Row = Record<string, unknown>;
 type RpcResponse = Promise<{ data: unknown; error: { message: string } | null }>;
@@ -164,6 +165,7 @@ export class SnakeLiveRoomTestServer {
         case 'kbl_snake_live_get_room': return this.getRoom(args);
         case 'kbl_snake_live_get_room_by_session': return this.getRoomBySession(args);
         case 'kbl_snake_live_find_open_room_by_code': return this.findOpenRoomByCode(args);
+        case 'kbl_snake_live_find_recoverable_room_by_code': return this.findRecoverableRoomByCode(args);
         case 'kbl_snake_live_list_events': return this.listEvents(args);
         case 'kbl_snake_live_seed_catalog': return this.seedCatalog(args);
         case 'kbl_snake_live_get_catalog': return this.getCatalog(args);
@@ -246,6 +248,16 @@ export class SnakeLiveRoomTestServer {
       row.room_code === args.p_room_code && row.status === 'open'
     )) ?? null;
     return Promise.resolve({ data: clone(room), error: null });
+  }
+
+  private findRecoverableRoomByCode(args: Row): RpcResponse {
+    const rooms = [...this.rooms.values()]
+      .filter((row) => row.room_code === args.p_room_code && (row.status === 'open' || row.status === 'complete'))
+      .sort((left, right) => {
+        if (left.status !== right.status) return left.status === 'open' ? -1 : 1;
+        return String(right.updated_at).localeCompare(String(left.updated_at));
+      });
+    return Promise.resolve({ data: clone(rooms[0] ?? null), error: null });
   }
 
   private listEvents(args: Row): RpcResponse {
@@ -835,13 +847,11 @@ function isValidTradePayload(payload: Row, teamId: string): boolean {
 }
 
 function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs: unknown): value is Row {
-  if (!isRow(value) || value.formatVersion !== 'snake-live-catalog-v1'
+  if (!isRow(value) || snakeLiveCatalogForbiddenPath(value)
+    || (value.formatVersion !== 'snake-live-catalog-v1' && value.formatVersion !== 'snake-live-farm-catalog-v1')
     || !isRow(value.league) || !Array.isArray(value.league.teamIds)
-    || !Array.isArray(value.teams) || !Array.isArray(value.players)
-    || !isRow(value.registeredPool) || !Array.isArray(value.registeredPool.players)
-    || value.teams.length === 0 || value.players.length === 0
-    || typeof value.league.id !== 'string' || !value.league.id
-    || value.registeredPool.leagueId !== value.league.id) return false;
+    || !Array.isArray(value.teams) || value.teams.length === 0
+    || typeof value.league.id !== 'string' || !value.league.id) return false;
   const ids = (rows: unknown[]): string[] | null => {
     const result: string[] = [];
     for (const row of rows) {
@@ -850,6 +860,9 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
     }
     return new Set(result).size === result.length ? result : null;
   };
+  const onlyKeys = (row: Row, allowed: readonly string[]): boolean => (
+    Object.keys(row).every((key) => allowed.includes(key))
+  );
   const teamIds = value.league.teamIds.every(isNonEmptyString) ? value.league.teamIds : null;
   const expectedIds = Array.isArray(expectedPoolIds) && expectedPoolIds.every(isNonEmptyString)
     && new Set(expectedPoolIds).size === expectedPoolIds.length
@@ -863,11 +876,45 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
     ? expectedTeamIds
     : null;
   const actualTeamIds = ids(value.teams);
-  const playerIds = ids(value.players);
-  const poolPlayerIds = ids(value.registeredPool.players);
-  return Boolean(teamIds && expectedIds && validExpectedTeamIds && actualTeamIds && playerIds && poolPlayerIds
+  const commonValid = Boolean(teamIds && expectedIds && validExpectedTeamIds && actualTeamIds
     && teamIds.length === actualTeamIds.length && teamIds.every((id) => actualTeamIds.includes(id))
-    && teamIds.length === validExpectedTeamIds.length && validExpectedTeamIds.every((id) => teamIds.includes(id))
-    && playerIds.length === poolPlayerIds.length && playerIds.every((id) => poolPlayerIds.includes(id))
-    && playerIds.length === expectedIds.length && expectedIds.every((id) => playerIds.includes(id)));
+    && teamIds.length === validExpectedTeamIds.length && validExpectedTeamIds.every((id) => teamIds.includes(id)));
+  if (!commonValid || !teamIds || !expectedIds) return false;
+
+  if (value.formatVersion === 'snake-live-catalog-v1') {
+    if (!Array.isArray(value.players) || value.players.length === 0
+      || !isRow(value.registeredPool) || !Array.isArray(value.registeredPool.players)
+      || value.registeredPool.leagueId !== value.league.id) return false;
+    const playerIds = ids(value.players);
+    const poolPlayerIds = ids(value.registeredPool.players);
+    return Boolean(playerIds && poolPlayerIds
+      && playerIds.length === poolPlayerIds.length && playerIds.every((id) => poolPlayerIds.includes(id))
+      && playerIds.length === expectedIds.length && expectedIds.every((id) => playerIds.includes(id)));
+  }
+
+  if (!Array.isArray(value.prospects) || value.prospects.length === 0
+    || !Number.isInteger(value.farmTarget) || Number(value.farmTarget) < 1
+    || !isRow(value.existingFarmRostersByTeamId)) return false;
+  if (!value.prospects.every((prospect) => isRow(prospect)
+    && onlyKeys(prospect, ['id', 'firstName', 'lastName', 'primaryPosition', 'secondaryPosition'])
+    && isNonEmptyString(prospect.id)
+    && isNonEmptyString(prospect.firstName)
+    && isNonEmptyString(prospect.lastName)
+    && isNonEmptyString(prospect.primaryPosition)
+    && (prospect.secondaryPosition === undefined
+      || prospect.secondaryPosition === null
+      || isNonEmptyString(prospect.secondaryPosition)))) return false;
+  const prospectIds = ids(value.prospects);
+  const rosterTeamIds = Object.keys(value.existingFarmRostersByTeamId);
+  if (!prospectIds || rosterTeamIds.length !== teamIds.length
+    || !teamIds.every((teamId) => rosterTeamIds.includes(teamId))) return false;
+  for (const teamId of teamIds) {
+    const roster = value.existingFarmRostersByTeamId[teamId];
+    if (!Array.isArray(roster) || !ids(roster) || !roster.every((player) => isRow(player)
+      && onlyKeys(player, ['id', 'name', 'position'])
+      && isNonEmptyString(player.id)
+      && isNonEmptyString(player.name)
+      && isNonEmptyString(player.position))) return false;
+  }
+  return prospectIds.length === expectedIds.length && expectedIds.every((id) => prospectIds.includes(id));
 }

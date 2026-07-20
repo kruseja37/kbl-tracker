@@ -10,7 +10,7 @@ import {
   readSnakeLivePublicSession,
   snakeLiveRoomRunKey,
 } from '../../../../../utils/snakeLiveRoomSession';
-import { readSnakeLiveCatalog } from '../../../../../utils/snakeLiveCatalog';
+import { readSnakeLiveCatalogForPhase } from '../../../../../utils/snakeLiveCatalog';
 import { createSnakeLiveRoomTransport } from '../../../../../utils/snakeLiveRoomTransport';
 import {
   SnakeLiveTransportError,
@@ -292,7 +292,7 @@ export function useSnakeLiveHostRoom(
           catalog: latestCatalogRef.current,
         });
       }
-      if (!receivedCatalog || !readSnakeLiveCatalog(receivedCatalog.catalog)) {
+      if (!receivedCatalog || !readSnakeLiveCatalogForPhase(receivedCatalog.catalog, phase)) {
         throw new Error('THE LIVE ROOM PLAYER CATALOG IS NOT AVAILABLE. START A NEW DRAFT ROOM.');
       }
       let nextClaims: SnakeLiveClaim[];

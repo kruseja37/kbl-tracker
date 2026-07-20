@@ -40,6 +40,17 @@ function liveCatalogReceipt(): SnakeLiveCatalog {
   };
 }
 
+function farmCatalogPayload(): SnakeLiveJsonObject {
+  return {
+    formatVersion: 'snake-live-farm-catalog-v1',
+    league: { id: 'league', name: 'Test League', teamIds: ['team-a'] },
+    teams: [{ id: 'team-a', name: 'Team A' }],
+    prospects: [{ id: 'p1', firstName: 'Prospect', lastName: 'One', primaryPosition: 'SS' }],
+    existingFarmRostersByTeamId: { 'team-a': [] },
+    farmTarget: 10,
+  };
+}
+
 function session(): LeagueBuilderMlbDraftSession {
   return {
     id: 'league:1:snake', leagueId: 'league', seasonNumber: 1, seed: 'seed',
@@ -52,6 +63,17 @@ function session(): LeagueBuilderMlbDraftSession {
       clubs: [{ teamId: 'team-a', hotseat: true, gmName: 'Host' }],
     },
   } as unknown as LeagueBuilderMlbDraftSession;
+}
+
+function farmSession(): LeagueBuilderMlbDraftSession {
+  return {
+    ...session(),
+    id: 'league:2:snake-farm',
+    seasonNumber: 2,
+    draftPhase: 'FARM',
+    workflowVersion: 'snake-v1-farm',
+    engineMethodVersion: 'snake-s6',
+  };
 }
 
 function completedSession(): LeagueBuilderMlbDraftSession {
@@ -78,6 +100,16 @@ function room(overrides: Partial<SnakeLiveRoom> = {}): SnakeLiveRoom {
     correctionAvailable: false,
     hostDeviceId: 'host-device', createdAt: '2026-07-19T00:00:00.000Z',
     updatedAt: '2026-07-19T00:00:00.000Z', ...overrides,
+  };
+}
+
+function farmRoom(): SnakeLiveRoom {
+  const source = farmSession();
+  return {
+    ...room(),
+    sessionId: snakeLiveRoomRunKey(source),
+    phase: 'FARM',
+    publicState: buildSnakeLivePublicState(source),
   };
 }
 
@@ -225,6 +257,33 @@ describe('useSnakeLiveHostRoom', () => {
     expect(harness.transport.submitIntentAsHost).toHaveBeenCalledWith(expect.objectContaining({
       teamId: 'team-a', kind: 'trade', expectedRoomRevision: 2, idempotencyKey: 'trade-1',
     }));
+  });
+
+  it('creates a FARM room with the FARM public catalog', async () => {
+    const harness = transportHarness();
+    const created = farmRoom();
+    vi.mocked(harness.transport.createRoom).mockResolvedValue(created);
+    vi.mocked(harness.transport.seedCatalog).mockResolvedValue({
+      roomId: created.id,
+      catalogRevision: 1,
+      catalog: farmCatalogPayload(),
+      createdAt: '2026-07-19T00:00:00.000Z',
+    });
+    const { result } = renderHook(() => useSnakeLiveHostRoom({
+      session: farmSession(),
+      hostDeviceId: 'host-device',
+      catalog: farmCatalogPayload(),
+      transport: harness.transport,
+      capabilities,
+    }));
+
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+    expect(harness.transport.createRoom).toHaveBeenCalledWith(expect.objectContaining({ phase: 'FARM' }));
+    expect(harness.transport.seedCatalog).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: created.id,
+      catalog: farmCatalogPayload(),
+    }));
+    expect(result.current.publicSession?.draftPhase).toBe('FARM');
   });
 
   it('uses a live event only as a nudge, then reads scoped claims from the server', async () => {

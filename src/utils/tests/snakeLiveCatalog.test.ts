@@ -2,8 +2,11 @@ import { describe, expect, test } from 'vitest';
 import type { RegisteredPool } from '../../engines/leagueConstruction';
 import type { LeagueTemplate, Player, Team } from '../leagueBuilderStorage';
 import {
+  buildSnakeLiveFarmCatalog,
   buildSnakeLiveCatalog,
+  readSnakeLiveFarmCatalog,
   readSnakeLiveCatalog,
+  readSnakeLiveCatalogForPhase,
   snakeLiveCatalogForbiddenPath,
 } from '../snakeLiveCatalog';
 
@@ -178,5 +181,82 @@ describe('Snake live public catalog', () => {
     expect(readSnakeLiveCatalog({ ...catalog, teams: [catalog.teams[0]] })).toBeNull();
     expect(readSnakeLiveCatalog({ ...catalog, players: [{ id: 'player-1', backstory: 'private' }] })).toBeNull();
     expect(readSnakeLiveCatalog({ ...catalog, teams: [{ id: 'team-1', designSlots: ['private'] }] })).toBeNull();
+  });
+
+  test('builds a FARM catalog with public identity only and no true prospect data', () => {
+    const prospects = [
+      {
+        id: 'prospect-1', firstName: 'Mara', lastName: 'Diaz', primaryPosition: 'SS', secondaryPosition: '2B',
+        trueGrade: 'A+', power: 99, prospectProfile: { private: true },
+      },
+      {
+        id: 'prospect-2', firstName: 'Jo', lastName: 'Arm', primaryPosition: 'SP',
+        trueGrade: 'B', velocity: 98,
+      },
+    ];
+    const catalog = buildSnakeLiveFarmCatalog({
+      league,
+      teams: [team('team-2'), team('team-1')],
+      prospects,
+      activeTeamIds: ['team-1', 'team-2'],
+      activeProspectIds: ['prospect-1', 'prospect-2'],
+      existingFarmRostersByTeamId: {
+        'team-1': [{ id: 'rookie-1', name: 'Existing Rookie', position: 'C' }],
+        'team-2': [],
+      },
+      farmTarget: 10,
+    });
+
+    expect(catalog.formatVersion).toBe('snake-live-farm-catalog-v1');
+    expect(readSnakeLiveFarmCatalog(catalog)).not.toBeNull();
+    expect(readSnakeLiveCatalogForPhase(catalog, 'FARM')).not.toBeNull();
+    expect(readSnakeLiveCatalogForPhase(catalog, 'MLB')).toBeNull();
+    expect(catalog.prospects).toEqual([
+      { id: 'prospect-1', firstName: 'Mara', lastName: 'Diaz', primaryPosition: 'SS', secondaryPosition: '2B' },
+      { id: 'prospect-2', firstName: 'Jo', lastName: 'Arm', primaryPosition: 'SP' },
+    ]);
+    const serialized = JSON.stringify(catalog);
+    expect(serialized).not.toMatch(/"(?:trueGrade|prospectProfile|power|velocity)":/i);
+    expect(readSnakeLiveFarmCatalog({
+      ...catalog,
+      prospects: [{ ...(catalog.prospects as Array<Record<string, unknown>>)[0], trueGrade: 'A+' }],
+    })).toBeNull();
+  });
+
+  test('freezes one public FARM catalog for eight clubs without copying true prospect data', () => {
+    const teamIds = Array.from({ length: 8 }, (_, index) => `farm-team-${index + 1}`);
+    const eightTeamLeague: LeagueTemplate = { ...league, id: 'farm-eight', name: 'Eight Club Farm Draft', teamIds };
+    const teams = teamIds.map((id, index): Team => ({
+      ...team(id),
+      id,
+      name: `Farm Club ${index + 1}`,
+      abbreviation: `F${index + 1}`,
+      leagueIds: [eightTeamLeague.id],
+      farmArchetypeKey: index % 2 === 0 ? 'web-gems' : 'bomba-squad',
+    }));
+    const prospects = Array.from({ length: 96 }, (_, index) => ({
+      id: `farm-prospect-${index + 1}`,
+      firstName: 'Prospect',
+      lastName: String(index + 1),
+      primaryPosition: index % 4 === 0 ? 'SP' : index % 4 === 1 ? 'SS' : index % 4 === 2 ? 'C' : 'CF',
+      trueGrade: 'A+',
+      power: 99,
+      prospectProfile: { private: true },
+    }));
+    const catalog = buildSnakeLiveFarmCatalog({
+      league: eightTeamLeague,
+      teams,
+      prospects,
+      activeTeamIds: teamIds,
+      activeProspectIds: prospects.map((prospect) => prospect.id),
+      existingFarmRostersByTeamId: Object.fromEntries(teamIds.map((id) => [id, []])),
+      farmTarget: 10,
+    });
+    const read = readSnakeLiveFarmCatalog(catalog);
+
+    expect(read?.teams).toHaveLength(8);
+    expect(read?.prospects).toHaveLength(96);
+    expect(Object.keys(read?.existingFarmRostersByTeamId ?? {})).toEqual(teamIds);
+    expect(JSON.stringify(catalog)).not.toMatch(/"(?:trueGrade|prospectProfile|power)":/i);
   });
 });

@@ -8,6 +8,7 @@ import { constructionArchetypeFitMultiplier } from '../../../engines/archetypeId
 import { historicalToSimArchetype } from '../../../engines/draftabilityRanker';
 import { derivePickValueChart } from '../../../engines/leagueConstruction';
 import { evaluateSnakePlan } from '../../../engines/snakeEconomics';
+import { buildFarmMoneyLedger, farmPickSalary } from '../../../engines/snakeFarmSlots';
 import type { SnakeGuidePackage } from '../../../engines/snakeGuideTrade';
 import { applyCanonicalSnakeRiskTriggers, canonicalSnakeRoleDepth } from '../../../engines/snakeRationalRoom';
 import { buildSnakeDraftAlignmentInputs, computeSnakeDraftAlignment, snakeDraftAlignmentRoomRank } from '../../../engines/snakeDraftAlignment';
@@ -25,7 +26,7 @@ import {
 } from '../../../utils/leagueBuilderStorage';
 import type { DesignSlot } from '../../../engines/rosterDesignFeasibility';
 import { legacySnakeCompanionState } from '../../../utils/snakeLiveRoomSession';
-import { readSnakeLiveCatalog } from '../../../utils/snakeLiveCatalog';
+import { readSnakeLiveCatalog, readSnakeLiveFarmCatalog } from '../../../utils/snakeLiveCatalog';
 import type { SnakeLiveJsonObject, SnakeLiveSeatBoard } from '../../../utils/snakeLiveRoomTypes';
 import {
   buildSnakeLiveTradeActionPayload,
@@ -110,6 +111,13 @@ import {
 } from '../components/snake/desk/useSnakePickFinishSafety';
 import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
+import { FarmPrivateDesk, FarmSelectedProspectCard } from '../components/snake/farm/FarmPrivateDesk';
+import {
+  buildFarmLivePrivateBoard,
+  buildFarmScoutPressure,
+  readFarmLivePrivateBoard,
+  reorderFarmBoard,
+} from '../components/snake/farm/farmRoomModel';
 import {
   guideForAskedPick as buildAskedPickGuide,
   prefillGuideForPackage,
@@ -419,12 +427,17 @@ export default function SnakeCompanion() {
     () => liveRoom.catalog ? readSnakeLiveCatalog(liveRoom.catalog.catalog) : null,
     [liveRoom.catalog],
   );
+  const farmCatalog = useMemo(
+    () => liveRoom.catalog ? readSnakeLiveFarmCatalog(liveRoom.catalog.catalog) : null,
+    [liveRoom.catalog],
+  );
+  const sharedCatalog = catalog ?? farmCatalog;
   const { league, leagueTeams, players, pool } = useMemo(() => ({
-    league: catalog?.league ?? null,
-    leagueTeams: catalog?.teams ?? [],
+    league: sharedCatalog?.league ?? null,
+    leagueTeams: sharedCatalog?.teams ?? [],
     players: catalog?.players ?? [],
     pool: catalog?.registeredPool ?? null,
-  }), [catalog]);
+  }), [catalog, sharedCatalog]);
 
   useEffect(() => {
     const syncCover = (covered: boolean) => {
@@ -650,6 +663,109 @@ export default function SnakeCompanion() {
     for (const id of unavailableVersionPlayerIds(session?.versionState)) ids.add(id);
     return ids;
   }, [session]);
+  const farmPrivate = useMemo(
+    () => team ? readFarmLivePrivateBoard(liveRoom.boardsByTeamId[team.id]) : null,
+    [liveRoom.boardsByTeamId, team],
+  );
+  const farmProspectById = useMemo(
+    () => new Map((farmCatalog?.prospects ?? []).map((prospect) => [prospect.id, prospect])),
+    [farmCatalog],
+  );
+  const farmRemainingTurns = useMemo(() => team && session
+    ? session.pickOrder.slice(session.currentPickIndex).filter((slot) => slot.teamId === team.id).length
+    : 0, [session, team]);
+  const farmAvailableCards = useMemo(() => (farmPrivate?.cards ?? []).filter((card) => (
+    !unavailable.has(card.id)
+  )), [farmPrivate, unavailable]);
+  const farmDisplayBoard = useMemo(() => {
+    if (!farmPrivate) return null;
+    return {
+      ...farmPrivate.board,
+      plannedProspectIds: farmPrivate.board.overall
+        .filter((prospectId) => !unavailable.has(prospectId))
+        .slice(0, farmRemainingTurns),
+    };
+  }, [farmPrivate, farmRemainingTurns, unavailable]);
+  const selectedFarmCard = farmAvailableCards.find((card) => card.id === selectedPlayerId)
+    ?? farmAvailableCards[0]
+    ?? null;
+  useEffect(() => {
+    if (!farmCatalog || !team) return;
+    if (!selectedPlayerId || unavailable.has(selectedPlayerId)
+      || !farmAvailableCards.some((card) => card.id === selectedPlayerId)) {
+      setSelectedPlayerId(farmAvailableCards[0]?.id ?? null);
+    }
+  }, [farmAvailableCards, farmCatalog, selectedPlayerId, team, unavailable]);
+  const farmPublicRosters = useMemo(() => {
+    if (!farmCatalog) return {};
+    const rosters = Object.fromEntries(farmCatalog.teams.map((entry) => [
+      entry.id,
+      [...(farmCatalog.existingFarmRostersByTeamId[entry.id] ?? [])],
+    ]));
+    for (const pick of session?.completedPicks ?? []) {
+      const prospect = farmProspectById.get(pick.playerId);
+      if (!prospect) continue;
+      const roster = rosters[pick.teamId] ?? [];
+      if (roster.some((player) => player.id === pick.playerId)) continue;
+      roster.push({
+        id: prospect.id,
+        name: fullName(prospect.firstName, prospect.lastName),
+        position: prospect.primaryPosition,
+      });
+      rosters[pick.teamId] = roster;
+    }
+    return rosters;
+  }, [farmCatalog, farmProspectById, session?.completedPicks]);
+  const farmMoneyLedger = team && session && farmPrivate
+    ? buildFarmMoneyLedger(session, team.id, farmPrivate.farmBudget)
+    : null;
+  const farmPressure = selectedFarmCard && farmCatalog
+    ? buildFarmScoutPressure({
+        card: selectedFarmCard,
+        publicRosters: farmPublicRosters,
+        farmTarget: farmCatalog.farmTarget,
+      })
+    : null;
+  const reorderFarmPrivateBoard = useCallback(async (view: string, orderedIds: string[]) => {
+    if (!session || !team || !farmPrivate) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== team.id) return;
+    try {
+      if (!privateContextIsCurrent(guard)) throw new Error(COMPANION_STALE_COPY);
+      const row = liveRoom.boardsByTeamId[team.id];
+      const authoritative = readFarmLivePrivateBoard(row);
+      if (!row || !authoritative || row.boardRevision !== farmPrivate.board.revision) {
+        throw new Error(COMPANION_STALE_COPY);
+      }
+      const nextBoard = reorderFarmBoard({
+        board: authoritative.board,
+        view,
+        orderedIds,
+        candidates: authoritative.cards.map((card) => ({ id: card.id, eligiblePositions: card.eligiblePositions })),
+        remainingTurns: farmRemainingTurns,
+        unavailableProspectIds: unavailable,
+      });
+      const receipt = await liveRoom.writeBoard({
+        teamId: team.id,
+        board: buildFarmLivePrivateBoard({
+          board: nextBoard,
+          cards: authoritative.cards,
+          farmBudget: authoritative.farmBudget,
+        }),
+        expectedBoardRevision: row.boardRevision,
+        idempotencyKey: `farm-board:${session.id}:${team.id}:${row.boardRevision + 1}`,
+      });
+      if (!privateContextIsCurrent(guard)) return;
+      if (!readFarmLivePrivateBoard(receipt)) throw new Error('MY FARM BOARD COULD NOT BE SAVED.');
+      setMessage('MY FARM BOARD IS SAVED.');
+    } catch (cause) {
+      if (privateContextIsCurrent(guard)) {
+        const copy = cause instanceof Error ? cause.message : 'MY FARM BOARD COULD NOT BE SAVED.';
+        setMessage(copy.toLocaleLowerCase().includes('stale') ? COMPANION_STALE_COPY : copy);
+        await refreshSession();
+      }
+    }
+  }, [capturePrivateContext, farmPrivate, farmRemainingTurns, liveRoom, privateContextIsCurrent, refreshSession, session, team, unavailable]);
   const ownCommittedPlayerIds = useMemo(() => new Set(
     session?.completedPicks.filter((pick) => pick.teamId === team?.id).map((pick) => pick.playerId) ?? [],
   ), [session, team?.id]);
@@ -1454,9 +1570,9 @@ export default function SnakeCompanion() {
     const coveredTeam = leagueTeams.find((entry) => entry.id === activeTeamId);
     return <CompanionCoveredScreen openTeamName={coveredTeam?.name} onReturn={returnToDesk} onSignOut={signOut} onForgetRoom={forgetCurrentRoom} message={message ?? liveRoom.error} />;
   }
-  if (!team || !league || !catalog) return <main className="ballpark-page"><section className="ballpark-panel">
-    <h1 className="ballpark-title">PLAYER DATA IS NOT READY</h1>
-    <p className="mt-3" role="alert">{liveRoom.error ?? 'THE LIVE PLAYER CATALOG IS INVALID.'}</p>
+  if (!team || !league || (!catalog && !farmCatalog)) return <main className="ballpark-page"><section className="ballpark-panel">
+    <h1 className="ballpark-title">DRAFT DATA IS NOT READY</h1>
+    <p className="mt-3" role="alert">{liveRoom.error ?? 'THE LIVE DRAFT CATALOG IS INVALID.'}</p>
     <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
   </section></main>;
   if (isCompanionDraftComplete(session)) {
@@ -1464,6 +1580,90 @@ export default function SnakeCompanion() {
   }
   if (isCompanionPicksComplete(session)) {
     return <CompanionAwaitingCommissionerScreen teamName={team.name} onCover={coverDevice} onSignOut={signOut} />;
+  }
+  if (farmCatalog) {
+    if (!farmPrivate || !farmDisplayBoard || !farmMoneyLedger) return <main className="ballpark-page"><section className="ballpark-panel">
+      <h1 className="ballpark-title">YOUR FARM DESK IS NOT READY</h1>
+      <p className="mt-3">WAIT FOR THE HOST TO OPEN THIS DESK.</p>
+      <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void refreshSession()}>REFRESH LIVE ROOM</button>
+      <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
+    </section></main>;
+    const farmLiveSlot = session.pickOrder[session.currentPickIndex];
+    const farmPickRequest = liveRoom.room
+      ? pendingPickIntent({ intents: liveRoom.intents, teamId: team.id, publicRevision: liveRoom.room.publicRevision })
+      : null;
+    const farmTicker = session.completedPicks.slice(-6).reverse().map((pick) => {
+      const pickTeam = leagueTeams.find((entry) => entry.id === pick.teamId);
+      const prospect = farmProspectById.get(pick.playerId);
+      return `PICK #${pick.pick} · ${(pickTeam?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(prospect ? fullName(prospect.firstName, prospect.lastName) : 'UNKNOWN PROSPECT').toUpperCase()}`;
+    });
+    const teamRoster = farmPublicRosters[team.id] ?? [];
+    const slotSalary = farmLiveSlot ? farmPickSalary(session, farmLiveSlot.pick) : 0;
+    return <SnakeCompanionFrame
+      team={{ id: team.id, name: team.name, abbreviation: team.abbreviation, logoUrl: team.logoUrl, colors: team.colors }}
+      authorizedTeams={approvedClaims.flatMap((claim) => {
+        const entry = leagueTeams.find((candidate) => candidate.id === claim.teamId);
+        return entry ? [{ id: entry.id, name: entry.name }] : [];
+      })}
+      onSwitchTeam={switchActiveTeam}
+      currentPick={farmLiveSlot?.pick ?? session.currentPickIndex + 1}
+      onClockTeam={(() => {
+        const liveTeam = leagueTeams.find((entry) => entry.id === farmLiveSlot?.teamId);
+        return liveTeam ? { name: liveTeam.name, colors: liveTeam.colors } : undefined;
+      })()}
+      order={session.pickOrder.slice(session.currentPickIndex, session.currentPickIndex + 8).map((slot) => ({
+        pick: slot.pick,
+        teamName: leagueTeams.find((entry) => entry.id === slot.teamId)?.name ?? UNKNOWN_TEAM,
+      }))}
+      ticker={farmTicker}
+      message={message ?? liveRoom.error}
+      onCover={coverDevice}
+      helpNotes={['FARM PICKS ARE FINAL. TRADES ARE OFF.']}
+      selectedPlayer={selectedFarmCard && farmLiveSlot ? <>
+        <FarmSelectedProspectCard
+          card={selectedFarmCard}
+          slotPick={farmLiveSlot.pick}
+          slotSalary={slotSalary}
+          farmMoneyLeft={farmMoneyLedger.moneyLeft}
+          teamName={team.name}
+          teamLogoUrl={safeCompanionLogoUrl(team.logoUrl) ?? undefined}
+        />
+        {farmLiveSlot.teamId === team.id ? (
+          farmPickRequest ? (
+            <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-farm-pick-waiting">
+              PICK #{farmLiveSlot.pick} WAITING FOR HOTSEAT
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11"
+              onClick={() => void submitPickRequest(selectedFarmCard.id)}
+            >SEND PICK TO HOTSEAT</button>
+          )
+        ) : null}
+      </> : undefined}
+      draftedTruth={<section className="border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" aria-label="Drafted farm roster">
+        <p className="text-xs font-black text-[var(--ballpark-brass)]">FARM ROSTER · {teamRoster.length}/{farmCatalog.farmTarget}</p>
+        <p className="mt-2 font-bold">{teamRoster.map((player) => `${player.position} · ${player.name}`).join(' · ') || 'NO PICKS RECORDED YET.'}</p>
+      </section>}
+      privateDesk={() => <FarmPrivateDesk
+        cards={farmAvailableCards}
+        selectedId={selectedFarmCard?.id ?? null}
+        slotPick={farmLiveSlot?.pick ?? session.currentPickIndex + 1}
+        slotSalary={slotSalary}
+        farmMoneyLeft={farmMoneyLedger.moneyLeft}
+        advisorLog={farmPressure ? [{
+          key: `farm-pressure:${session.currentPickIndex}:${selectedFarmCard?.id ?? 'none'}`,
+          text: farmPressure,
+          actionable: true,
+        }] : []}
+        board={farmDisplayBoard}
+        remainingTurns={farmRemainingTurns}
+        moneyLedger={farmMoneyLedger}
+        onChoose={setSelectedPlayerId}
+        onReorder={(view, ids) => { void reorderFarmPrivateBoard(view, ids); }}
+      />}
+    />;
   }
   if (!pool || !board || !deskState) return <main className="ballpark-page"><section className="ballpark-panel"><h1 className="ballpark-title">YOUR DESK IS NOT READY</h1><p className="mt-3">WAIT FOR THE HOST TO OPEN THIS DESK.</p><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void refreshSession()}>REFRESH LIVE ROOM</button><button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button></section></main>;
 

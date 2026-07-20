@@ -8282,3 +8282,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   pushed source head, deployment ID, build log, and deployed bundle instead of claiming a false SHA.
 - Remaining product gate: JK runs one new Snake league and one recovered legacy league through
   Scout Reveal and farm transition. Production remains unchanged; no merge or promotion occurred.
+
+## 2026-07-20 — FINDING-249 FARM companion parity builder close
+
+- JK recovered the completed Test Mock MLB draft, reached the generated FARM Snake room, and found
+  that FARM exposed no companion controls. The prior live-room decision explicitly covered MLB
+  only, so this was missing product work rather than a damaged saved league.
+- Extended the phase-aware immutable catalog with a strict FARM format. Public cloud data contains
+  safe prospect identity, team branding, public existing FARM rosters, public session state, and
+  farm targets. Readers reject true grades, ratings, hidden modifiers, private boards, and extra
+  prospect or roster fields.
+- Extended Hotseat authority through FARM. Hotseat creates or rejoins the room, approves team
+  claims, seeds only the approved team's safe scout board, confirms companion pick requests, writes
+  public picks cloud-first, retries one stale public revision, adopts newer public state, and closes
+  the room after the verified FARM handoff. FARM trade controls remain absent.
+- Added the private companion FARM desk: team colors, live order, fogged scout cards, board reorder,
+  scout pressure, farm money, public FARM roster, and pick request. A public pick removes the chosen
+  prospect, advances the pick/revision, and updates the public roster and money.
+- Found a backend deployment gap during verification: installed migration 009 accepts only the MLB
+  catalog format. Added local migration `20260720213000_farm_snake_live_catalog.sql` to accept and
+  strictly validate the complete active FARM pool without weakening MLB validation. It is not
+  applied.
+- Builder gates: 214/214 focused live-room tests, including four/eight-team isolation and the full
+  existing 176-pick scale path; TypeScript through the production build; changed-file ESLint; diff
+  integrity; and a 2,744-module production/PWA build. Separate read-only audit is next. No migration,
+  push, preview, merge, or production promotion is authorized.

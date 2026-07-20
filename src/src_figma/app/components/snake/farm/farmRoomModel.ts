@@ -3,6 +3,10 @@ import type {
   Grade,
   LeagueBuilderMlbDraftSession,
 } from '../../../../../utils/leagueBuilderStorage';
+import type {
+  SnakeLiveJsonObject,
+  SnakeLiveSeatBoard,
+} from '../../../../../utils/snakeLiveRoomTypes';
 import {
   scoutProspect,
   type LeagueBuilderProspectPlayerDto,
@@ -10,6 +14,7 @@ import {
 } from '../../../../../utils/prospectScoutingDraftEngine';
 
 const GRADES: Grade[] = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D'];
+export const FARM_LIVE_PRIVATE_BOARD_FORMAT = 'snake-live-farm-private-board-v1' as const;
 
 export interface FarmFogCardModel {
   id: string;
@@ -26,6 +31,102 @@ export interface FarmFogCardModel {
 export interface FarmBoardCandidate {
   id: string;
   eligiblePositions: readonly string[];
+}
+
+export interface FarmLivePrivateBoardModel {
+  board: FarmSeatBoardRecord;
+  cards: FarmFogCardModel[];
+  farmBudget: number;
+}
+
+function objectValue(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string' && Boolean(entry));
+}
+
+function privateFarmForbiddenKey(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const found = privateFarmForbiddenKey(entry);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!objectValue(value)) return null;
+  const forbidden = new Set([
+    'truegrade', 'prospectprofile', 'hiddenpersonalitymodifiers', 'power', 'contact', 'speed',
+    'fielding', 'arm', 'velocity', 'junk', 'accuracy', 'salary', 'iv', 'potentialgrade',
+  ]);
+  for (const [key, child] of Object.entries(value)) {
+    const normalized = key.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+    if (forbidden.has(normalized)) return key;
+    const found = privateFarmForbiddenKey(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+function validFogCard(value: unknown): value is FarmFogCardModel {
+  if (!objectValue(value)) return false;
+  return typeof value.id === 'string' && Boolean(value.id)
+    && typeof value.name === 'string' && Boolean(value.name)
+    && typeof value.position === 'string' && Boolean(value.position)
+    && GRADES.includes(value.scoutedGrade as Grade)
+    && typeof value.gradeRange === 'string'
+    && ['low', 'medium', 'high'].includes(String(value.confidence))
+    && typeof value.scoutName === 'string'
+    && typeof value.scoutsCall === 'string'
+    && stringArray(value.eligiblePositions);
+}
+
+/** Builds the approved club's scout-only private payload. */
+export function buildFarmLivePrivateBoard(input: FarmLivePrivateBoardModel): SnakeLiveJsonObject {
+  const payload = JSON.parse(JSON.stringify({
+    formatVersion: FARM_LIVE_PRIVATE_BOARD_FORMAT,
+    seatBoard: input.board,
+    cards: input.cards,
+    farmBudget: input.farmBudget,
+  })) as SnakeLiveJsonObject;
+  const forbidden = privateFarmForbiddenKey(payload);
+  if (forbidden) throw new Error(`The FARM private board contains forbidden prospect data at ${forbidden}.`);
+  return payload;
+}
+
+/** Reads one approved club's private board and binds revision to the server row. */
+export function readFarmLivePrivateBoard(row: SnakeLiveSeatBoard | undefined): FarmLivePrivateBoardModel | null {
+  if (!row || !objectValue(row.board) || privateFarmForbiddenKey(row.board)) return null;
+  if (row.board.formatVersion !== FARM_LIVE_PRIVATE_BOARD_FORMAT
+    || !objectValue(row.board.seatBoard)
+    || !Array.isArray(row.board.cards)
+    || typeof row.board.farmBudget !== 'number'
+    || !Number.isFinite(row.board.farmBudget)
+    || row.board.farmBudget < 0) return null;
+  const rawBoard = row.board.seatBoard;
+  if (!stringArray(rawBoard.overall)
+    || !objectValue(rawBoard.byPosition)
+    || !stringArray(rawBoard.frozenProspectIds)
+    || !stringArray(rawBoard.plannedProspectIds)
+    || Object.values(rawBoard.byPosition).some((ids) => !stringArray(ids))
+    || row.board.cards.some((card) => !validFogCard(card))) return null;
+  const cards = row.board.cards as unknown as FarmFogCardModel[];
+  const cardIds = cards.map((card) => card.id);
+  if (new Set(cardIds).size !== cardIds.length
+    || rawBoard.overall.length !== cardIds.length
+    || rawBoard.overall.some((id) => !cardIds.includes(id))) return null;
+  return {
+    board: {
+      overall: [...rawBoard.overall],
+      byPosition: Object.fromEntries(Object.entries(rawBoard.byPosition).map(([position, ids]) => [position, [...ids as string[]]])),
+      frozenProspectIds: [...rawBoard.frozenProspectIds],
+      plannedProspectIds: [...rawBoard.plannedProspectIds],
+      revision: row.boardRevision,
+    },
+    cards: cards.map((card) => ({ ...card, eligiblePositions: [...card.eligiblePositions] })),
+    farmBudget: row.board.farmBudget,
+  };
 }
 
 export interface FarmPublicRosterPlayer {

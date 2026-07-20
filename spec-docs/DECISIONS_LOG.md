@@ -4314,3 +4314,21 @@ freeze the exact registered pool, commit rosters, mark the handoff, and verify t
 navigation. Closing the already-complete live room is cleanup after that commit. A stale or offline
 cleanup RPC may remain retryable, but it cannot convert a completed, verified roster handoff into a
 generic confirmation failure.
+
+## 2026-07-20 — FARM Snake uses the same split live-room authority as MLB Snake
+
+- Hotseat is the only writer of FARM public picks, order, rosters, budget state, and completion.
+- An approved companion owns only its team's private fogged scout board. It can send a pick request;
+  Hotseat must confirm the pick before public state changes.
+- The public FARM catalog can contain team branding, safe prospect identity, public FARM rosters,
+  farm targets, and the public session. It cannot contain true grades, ratings, hidden modifiers,
+  private rankings, or private scout data.
+- The server validates the complete active prospect pool and rejects unknown catalog fields. A UI
+  change without the matching database validator is not a valid deployment.
+- Public and private revisions stay separate. Devices read current server state after subscribe,
+  reconnect, and bounded fallback polling. Drafted prospects leave private boards after the public
+  pick advances.
+- FARM draft-pick trades remain absent. The existing MLB trade contract does not extend to FARM.
+- This is a generic four/eight-team product path. It is not a recovery rule for one saved league.
+- Mac mini/Neo and laptop remain the primary companion layouts. Help text remains behind `?`, and
+  JK's browser walk remains the sole product gate.

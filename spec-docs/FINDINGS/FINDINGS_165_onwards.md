@@ -1265,3 +1265,26 @@ merge is authorized. Preview deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is RE
 `https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Authenticated remote checks returned
 HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chrome loaded the app
 with no console warning or error. JK's new/recovered league walk is the remaining product gate.
+
+### FINDING-249
+**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** BUILT — SEPARATE AUDIT PENDING
+**Files:** `src/utils/snakeLiveCatalog.ts`,
+`src/src_figma/app/components/snake/companion/useSnakeLiveHostRoom.ts`,
+`src/src_figma/app/components/snake/farm/farmRoomModel.ts`,
+`src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/src_figma/app/pages/SnakeCompanion.tsx`,
+`supabase/migrations/20260720213000_farm_snake_live_catalog.sql`, focused tests
+**Evidence:** JK reached the FARM room after a completed and recovered four-team MLB draft. The room
+had no COMPANIONS control. The live-room hook and immutable catalog reader accepted only MLB, and
+the installed catalog validator rejected every FARM catalog format.
+**Impact:** FARM could run only as local Hotseat. The same GMs who controlled private MLB desks
+could not retain private boards, send pick requests, or receive authoritative public FARM updates.
+**Action:** Extend the split-authority live room to FARM without exposing true prospect data and
+without adding FARM trades. Keep public and private revisions independent, validate the exact active
+prospect pool, and prove four/eight-team behavior.
+**Builder result:** Hotseat owns FARM public state; approved companions own only a strict fogged
+team board and send pick intent. The public catalog rejects true grades, ratings, hidden modifiers,
+private board data, and extra fields. Public picks update order, roster, budget, and every companion;
+the drafted prospect leaves each private board. Four/eight-team privacy and scale are covered.
+Focused proof is 214/214. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module
+production/PWA build are green. The required migration is local and unapplied. Separate audit,
+explicit remote authority, and JK's browser walk remain.

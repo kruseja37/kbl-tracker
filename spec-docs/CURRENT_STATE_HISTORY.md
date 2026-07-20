@@ -1603,3 +1603,11 @@ The prior live header recorded independent approval of the farm-identity and pro
 code head `914e35e9`, with preview publication still open. The new live header records READY preview
 `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` and its remote smoke. Only JK's new/recovered league browser walk
 remains. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-249 FARM companion audit
+
+The prior live header recorded the approved farm-identity/prospect repair and its READY preview.
+JK recovered Test Mock, entered its FARM draft, and found no companion machinery. The new live
+header records the generic FARM live-room implementation, strict fog-data boundary, four/eight-team
+proof, and required follow-on migration. Separate audit, remote authorization, and JK's browser walk
+remain. Production is unchanged.
