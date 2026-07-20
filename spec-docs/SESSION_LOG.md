@@ -8232,3 +8232,19 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `build-meta.json` reports exact SHA `29966657`, and the build completed 2,744 modules plus PWA.
   The earlier unlabeled preview is superseded. Production remains unchanged. JK now restores room
   4352 and runs the only remaining completed-draft product gate.
+- JK's signed-in browser then retained the league but lacked the local pool/session. The room hid
+  recovery and incorrectly instructed him to restart the draft. Recovery head `05f7f6b0` exposed
+  the completed-room restore control and removed the destructive restart instruction.
+- The independent auditor rejected `05f7f6b0`, **Major 1 / Minor 0**: if the current URL already
+  named the recovered league, navigation did not change and component pool/session state stayed
+  empty. Repaired head `56d1ab81` explicitly reloads that exact league after the atomic local
+  restore and before navigation. The regression now starts at the same league URL and reaches MLB
+  Draft Recap.
+- Repaired head `56d1ab81` received **APPROVE — Major 0 / Minor 0** from the same auditor. Builder
+  gates are 38/38 focused tests, TypeScript, changed-file ESLint, diff integrity, and the
+  2,744-module production/PWA build. Independent proof is 17/17.
+- Refreshed `origin/main`; it remains `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`. Pushed the
+  approved branch and published one preview from exact source `56d1ab81`. Deployment
+  `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY at
+  `https://kbl-tracker-abdv24x2r-kruseja37s-projects.vercel.app`. Production remains unchanged. JK
+  now restores room 4352 and runs the sole product-acceptance gate.

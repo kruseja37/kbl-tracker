@@ -1217,4 +1217,14 @@ TypeScript, changed-file ESLint, diff integrity, and the production/PWA build ar
 is 37/37. TypeScript, repaired-file ESLint, and full-range diff integrity are green. The auditor
 confirmed no equivalent post-handoff cleanup branch remains. Corrected preview deployment
 `dpl_BrqnbvDrv4McNTKaMkQf7SRRNdiP` is READY and its public build record reports exact source SHA
-`29966657`. Production remains unchanged. JK's room 4352 confirmation walk remains.
+`29966657`. That preview then exposed a separate recovery UI gap: when the local league remained but
+its pool/session were absent, the room showed only `THE ROOM IS NOT READY`. Recovery head
+`05f7f6b0` exposed the restore control but received **REJECT — Major 1 / Minor 0** because a URL that
+already named the recovered league did not trigger component-state reload. Repaired head
+`56d1ab81` calls the exact league reload before navigation. The regression begins at the same
+league URL, restores completed room 4352, and reaches MLB Draft Recap. The same auditor returned
+**APPROVE — Major 0 / Minor 0** after 17/17 independent tests. Builder proof is 38/38 plus
+TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build. Preview
+`dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY at
+`https://kbl-tracker-abdv24x2r-kruseja37s-projects.vercel.app` from source `56d1ab81`. Production
+remains unchanged. JK's room 4352 confirmation walk remains.
