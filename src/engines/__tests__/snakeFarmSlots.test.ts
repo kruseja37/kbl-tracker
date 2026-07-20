@@ -74,6 +74,16 @@ describe('S6 farm slot salaries', () => {
       },
       teams: teams.map(({ id, name }) => ({ id, name })),
     })).toThrow('FARM IDENTITY MISSING');
+    expect(() => resolveFarmArchetypeIdsForSnakeTransition({
+      mlbSession: {
+        ...mlbSession,
+        snakeSetup: {
+          ...mlbSession.snakeSetup,
+          clubs: [mlbSession.snakeSetup.clubs[0], mlbSession.snakeSetup.clubs[0]],
+        },
+      },
+      teams,
+    })).toThrow('FARM IDENTITIES DO NOT MATCH');
   });
 
   test('calibrates a frozen geometric table to 3x endpoints and 75% of league budgets', () => {

@@ -17,8 +17,10 @@ export function resolveFarmArchetypeIdsForSnakeTransition(input: {
 }): Record<string, string> {
   const frozenClubs = input.mlbSession.snakeSetup?.clubs ?? [];
   const teamById = new Map(input.teams.map((team) => [team.id, team]));
+  const frozenClubIds = new Set(frozenClubs.map((club) => club.teamId));
   if (teamById.size !== input.teams.length
     || frozenClubs.length === 0
+    || frozenClubIds.size !== frozenClubs.length
     || frozenClubs.length !== teamById.size
     || frozenClubs.some((club) => !teamById.has(club.teamId))) {
     throw new Error('THE FARM IDENTITIES DO NOT MATCH THE COMPLETED MLB DRAFT CLUBS.');

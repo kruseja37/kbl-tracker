@@ -260,4 +260,19 @@ describe("ScoutHire", () => {
       },
     }));
   });
+
+  test("does not apply the Snake legacy repair gate to an auction scout reveal", async () => {
+    mockLeagueData(
+      makeLeague({ draftFormat: "auction" }),
+      { ...makeTeam("team-a"), farmArchetypeKey: undefined },
+    );
+    render(<ScoutHire />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Confirm Scouts/i })).toBeEnabled();
+    });
+    expect(screen.getByText("GENERALIST")).toBeInTheDocument();
+    expect(screen.queryByText("FARM IDENTITIES MISSING")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "SAVE FARM IDENTITIES" })).not.toBeInTheDocument();
+  });
 });

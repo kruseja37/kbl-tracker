@@ -1251,7 +1251,7 @@ measure the production prospect generator directly against the canonical Standar
 asserting that true grades and ratings stay hidden.
 **Builder result:** The new and recovered flows now transport farm identity end to end and reject
 conflicts or missing club truth. The generic repair path updates the team and completed MLB session
-before scouts are built. The focused production-flow gate is 91/91, including four- and eight-team
+before scouts are built. The focused production-flow gate is 92/92, including four- and eight-team
 farm pools and the eight-team MLB-to-farm season gauntlet. The N=500 measurement matches every
 canonical grade bucket exactly with zero percentage-point deviation. TypeScript, changed-file
 ESLint, the 2,744-module production/PWA build, and diff integrity are green. Independent audit and

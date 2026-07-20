@@ -66,7 +66,9 @@ export function ScoutHire() {
     () => leagueTeams.filter((team) => !team.farmArchetypeKey?.trim()),
     [leagueTeams],
   );
-  const farmIdentitiesReady = leagueTeams.length > 0 && missingFarmIdentityTeams.length === 0;
+  const snakeFarmIdentityRepairRequired = activeLeague?.draftFormat === "snake"
+    && missingFarmIdentityTeams.length > 0;
+  const farmIdentitiesReady = leagueTeams.length > 0 && !snakeFarmIdentityRepairRequired;
   const scoutPool = useMemo<LiveScoutCandidate[]>(
     () => activeLeague && farmIdentitiesReady ? buildLiveScoutPool(activeLeague.id, leagueTeams) : [],
     [activeLeague, farmIdentitiesReady, leagueTeams],
@@ -273,7 +275,7 @@ export function ScoutHire() {
           </div>
         ) : null}
 
-        {!farmIdentitiesReady ? (
+        {snakeFarmIdentityRepairRequired ? (
           <section className="mb-5 border-4 border-[#FFD27A] bg-[#6B3A3A] p-4 text-[#FFE8B0]">
             <h2 className="text-lg font-bold tracking-[0.08em]">FARM IDENTITIES MISSING</h2>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
