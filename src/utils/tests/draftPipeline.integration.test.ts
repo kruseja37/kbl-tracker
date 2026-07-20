@@ -36,6 +36,7 @@ import {
   commitCompletedSnakeFarmSessionToLeagueRosters,
   commitCompletedMlbAuctionSessionToLeagueRosters,
   commitCompletedSnakeSessionToLeagueRosters,
+  finalizeCompletedSnakeSessionToLeagueRosters,
   MLB_AUCTION_SEASON,
   ResetCompletedDraftLinkedFranchiseError,
   resetCompletedDraftArc,
@@ -2516,6 +2517,186 @@ describe('draft pipeline integration', () => {
     expect(immutableReport.committedPlayerIds).toEqual(committedPlayerIds);
     await expect(getPlayer(playerIds[0])).resolves.toMatchObject({ settledSalary: 123_456 });
     await expect(getPlayer(playerIds[1])).resolves.toMatchObject({ settledSalary: 123_457 });
+  });
+
+  test.each([4, 8])('atomically finalizes a complete %i-team MLB snake draft and repeats the same handoff', async (teamCount) => {
+    const leagueId = `atomic-snake-final-${teamCount}`;
+    const teamIds = Array.from({ length: teamCount }, (_, index) => `${leagueId}-team-${index + 1}`);
+    await saveLeagueTemplate({
+      id: leagueId,
+      name: `Atomic ${teamCount}-Team Snake`,
+      teamIds,
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      salaryCap: 10_000_000,
+    });
+    for (const teamId of teamIds) {
+      await saveTeam(makeCommitRegressionTeam(teamId, leagueId, 'human'));
+      // Deliberately do not seed TeamRoster. A restored completed live room
+      // must be sufficient to create the exact target roster.
+    }
+
+    const pickOrder = buildSnakeOrder(teamIds, 22);
+    const teamPickIndex = new Map(teamIds.map((teamId) => [teamId, 0]));
+    const completedPicks = pickOrder.map((slot) => {
+      const rosterIndex = teamPickIndex.get(slot.teamId) ?? 0;
+      teamPickIndex.set(slot.teamId, rosterIndex + 1);
+      return {
+        ...slot,
+        playerId: `${slot.teamId}-player-${rosterIndex + 1}`,
+        settledSalary: 25_000 + slot.pick,
+      };
+    });
+    for (const pick of completedPicks) {
+      const rosterIndex = completedPicks
+        .filter((row) => row.teamId === pick.teamId)
+        .findIndex((row) => row.playerId === pick.playerId);
+      await savePlayer(makeCommitRegressionPlayerAt(
+        pick.playerId,
+        legalMlbPrimaryPosition(rosterIndex),
+        rosterIndex === 8 ? 'C' : undefined,
+      ));
+    }
+    const pool: RegisteredPool = {
+      leagueId,
+      tier: 'standard',
+      balanceMode: 'taxed',
+      players: completedPicks.map((pick) => ({
+        id: pick.playerId,
+        iv: pick.settledSalary,
+        salary: pick.settledSalary,
+      })),
+      tierCap: 10_000_000,
+      luxuryCaps: [],
+      pickValueChart: [],
+      totalSlots: pickOrder.length,
+      poolSurplusWarning: false,
+      locked: true,
+    };
+    await saveRegisteredPool(pool);
+    const session: LeagueBuilderMlbDraftSession = {
+      id: createMlbDraftSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: `atomic-${teamCount}-seed`,
+      workflowVersion: 'snake-v1',
+      engineMethodVersion: 'snake-s1a',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 22,
+      pickOrder,
+      completedPicks,
+      currentPickIndex: pickOrder.length,
+      revision: 0,
+      snakeSetup: {
+        poolPlayerIds: pool.players.map((row) => row.id),
+        versionSelections: {},
+        clubs: teamIds.map((teamId) => ({ teamId, hotseat: true })),
+        orderSeed: `atomic-${teamCount}-seed`,
+      },
+      createdDate: '2026-07-20T12:00:00.000Z',
+      lastModified: '2026-07-20T12:00:00.000Z',
+    };
+    await saveMlbDraftSession(session);
+    const frozen = freezeSnakeDraftSession({
+      session,
+      expectedPhase: 'MLB',
+      poolPlayerIds: pool.players.map((row) => row.id),
+      salaryByPlayerId: new Map(pool.players.map((row) => [row.id, row.iv])),
+      frozenAt: '2026-07-20T12:01:00.000Z',
+    });
+
+    if (teamCount === 4) {
+      const originalPut = IDBObjectStore.prototype.put;
+      let injectFailure = true;
+      const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (value: unknown) {
+        if (this.name === 'teamRosters' && injectFailure) {
+          injectFailure = false;
+          throw new Error('injected MLB finalization write failure');
+        }
+        return originalPut.call(this, value);
+      });
+      await expect(finalizeCompletedSnakeSessionToLeagueRosters({
+        leagueId,
+        session: frozen,
+        pool,
+        expectedRevision: 0,
+        committedAt: '2026-07-20T12:02:00.000Z',
+      })).rejects.toThrow('injected MLB finalization write failure');
+      putSpy.mockRestore();
+      expect((await getMlbDraftSession(leagueId, 1))?.draftManifest).toBeUndefined();
+      for (const teamId of teamIds) await expect(getTeamRoster(teamId)).resolves.toBeNull();
+      for (const pick of completedPicks) {
+        await expect(getPlayer(pick.playerId)).resolves.toEqual(expect.objectContaining({ leagueAssignments: [] }));
+      }
+
+      // Model the old multi-step path: the manifest and part of one roster
+      // landed, but the handoff marker did not. The new finalizer must converge
+      // this state instead of requiring a new draft.
+      await freezeMlbDraftRoomSessionWithRegisteredPool({
+        session: frozen,
+        registeredPool: pool,
+        expectedRevision: 0,
+      });
+      await saveTeamRoster({
+        ...createEmptyTeamRoster(teamIds[0]),
+        mlbRoster: completedPicks.filter((pick) => pick.teamId === teamIds[0]).slice(0, 3).map((pick) => pick.playerId),
+      });
+      const partialPlayer = await getPlayer(completedPicks[0].playerId);
+      if (!partialPlayer) throw new Error('Partial-commit fixture player is missing.');
+      await savePlayer({
+        ...partialPlayer,
+        settledSalary: 1,
+        leagueAssignments: [{ leagueId, teamId: teamIds[1], rosterStatus: 'MLB' }],
+      });
+    }
+
+    const result = await finalizeCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: frozen,
+      pool,
+      expectedRevision: 0,
+      committedAt: '2026-07-20T12:02:00.000Z',
+    });
+    expect(result.committedPlayerIds).toHaveLength(teamCount * 22);
+    expect(result.teamRosterCounts).toEqual(Object.fromEntries(teamIds.map((teamId) => [teamId, 22])));
+    await expect(assertSnakeRosterHandoffReady(result.session, 'MLB')).resolves.toEqual({
+      phase: 'MLB', ready: true, playerCount: teamCount * 22, teamCount,
+    });
+    for (const teamId of teamIds) {
+      const expectedIds = completedPicks.filter((pick) => pick.teamId === teamId).map((pick) => pick.playerId);
+      await expect(getTeamRoster(teamId)).resolves.toEqual(expect.objectContaining({ mlbRoster: expectedIds }));
+    }
+    for (const pick of completedPicks) {
+      await expect(getPlayer(pick.playerId)).resolves.toEqual(expect.objectContaining({
+        salary: pick.settledSalary,
+        settledSalary: pick.settledSalary,
+        leagueAssignments: [{ leagueId, teamId: pick.teamId, rosterStatus: 'MLB' }],
+      }));
+    }
+
+    const beforeRetry = JSON.stringify({
+      session: await getMlbDraftSession(leagueId, 1),
+      rosters: await Promise.all(teamIds.map((teamId) => getTeamRoster(teamId))),
+      players: await Promise.all(completedPicks.map((pick) => getPlayer(pick.playerId))),
+    });
+    const retried = await finalizeCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: result.session,
+      pool,
+      expectedRevision: result.session.revision ?? 0,
+      committedAt: '2026-07-20T12:03:00.000Z',
+    });
+    expect(retried.session.rosterHandoff).toEqual(result.session.rosterHandoff);
+    expect(JSON.stringify({
+      session: await getMlbDraftSession(leagueId, 1),
+      rosters: await Promise.all(teamIds.map((teamId) => getTeamRoster(teamId))),
+      players: await Promise.all(completedPicks.map((pick) => getPlayer(pick.playerId))),
+    })).toBe(beforeRetry);
   });
 
   test('S6 carries real-storage 9+1 and 10+0 clubs through MLB freeze, FARM transition, atomic retry, handoff, and Franchise Setup', async () => {

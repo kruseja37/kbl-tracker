@@ -26,8 +26,10 @@ import type { SnakePoolAssemblyMode } from '../engines/snakePoolAssembly';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
 import type { SnakeBoardSlotId } from '../engines/snakeBoardSlots';
+import { toRosterSlotPlayer } from '../engines/rosterNeed';
 import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import type { TierKey } from '../data/tierParams';
+import { isLegalRoster } from '../data/rosterConstruction';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { ParkDimensions } from '../data/parkLookup';
@@ -4172,6 +4174,263 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
     };
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} freeze was aborted.`));
+  });
+}
+
+export interface MlbSnakeDraftFinalizationResult {
+  session: LeagueBuilderMlbDraftSession;
+  committedPlayerIds: string[];
+  teamRosterCounts: Record<string, number>;
+}
+
+/**
+ * Final MLB Snake boundary. The manifest, pool, private-board rows, team
+ * rosters, player assignments, settled salaries, and handoff marker commit in
+ * one transaction. A retry of the same manifest converges on the same state.
+ */
+export async function finalizeMlbSnakeDraftAtomically(input: {
+  session: LeagueBuilderMlbDraftSession;
+  registeredPool: RegisteredPool;
+  expectedRevision: number;
+  committedAt: string;
+}): Promise<MlbSnakeDraftFinalizationResult> {
+  const candidateTruth = readSnakeDraftTruth(input.session, 'MLB');
+  if (!candidateTruth.manifest) {
+    throw new Error('The completed MLB snake draft has no frozen manifest.');
+  }
+  if (candidateTruth.completedPicks.length !== candidateTruth.pickOrder.length) {
+    throw new Error('Cannot finalize MLB snake rosters until every pick is recorded.');
+  }
+  if (!Number.isFinite(Date.parse(input.committedAt))) {
+    throw new Error('The MLB snake roster handoff time is invalid.');
+  }
+  assertRegisteredPoolMatchesMlbManifest(input.registeredPool, input.session);
+
+  const teamIds = candidateTruth.lockedClubs.map((club) => club.teamId);
+  const teamIdSet = new Set(teamIds);
+  if (teamIds.length === 0 || teamIdSet.size !== teamIds.length) {
+    throw new Error('The MLB snake authority has no canonical frozen clubs.');
+  }
+  const picksByTeamId = new Map<string, typeof candidateTruth.completedPicks>();
+  const pickedPlayerIds = new Set<string>();
+  for (const pick of candidateTruth.completedPicks) {
+    if (!teamIdSet.has(pick.teamId)) {
+      throw new Error(`The completed MLB snake draft contains an unknown team ${pick.teamId}.`);
+    }
+    if (pickedPlayerIds.has(pick.playerId)) {
+      throw new Error(`Snake draft player "${pick.playerId}" appears in more than one completed pick.`);
+    }
+    if (!Number.isFinite(pick.launchSalary) || pick.launchSalary < 0) {
+      throw new Error(`Snake draft player "${pick.playerId}" has no finite frozen salary.`);
+    }
+    pickedPlayerIds.add(pick.playerId);
+    picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
+  }
+
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(input.session.leagueId, input.session.seasonNumber);
+  const now = nowISO();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([
+      STORES.MLB_DRAFT_SESSIONS,
+      STORES.REGISTERED_POOLS,
+      STORES.SNAKE_SEAT_BOARDS,
+      STORES.TEAM_ROSTERS,
+      STORES.GLOBAL_PLAYERS,
+    ], 'readwrite');
+    const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const poolStore = tx.objectStore(STORES.REGISTERED_POOLS);
+    const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
+    const rosterStore = tx.objectStore(STORES.TEAM_ROSTERS);
+    const playerStore = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const sessionRead = sessionStore.get(id);
+    const poolRead = poolStore.get(input.session.leagueId);
+    const boardsRead = boardStore.index('sessionId').getAll(id);
+    const rostersRead = rosterStore.getAll();
+    const playersRead = playerStore.getAll();
+    let reads = 0;
+    let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
+    let sessionWritten = false;
+    let poolWritten = false;
+    let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
+    let rostersWritten: TeamRoster[] = [];
+    let playersWritten: Player[] = [];
+
+    const fail = (cause: unknown) => {
+      reject(cause);
+      try { tx.abort(); } catch { /* the transaction already stopped */ }
+    };
+    const finishRead = () => {
+      reads += 1;
+      if (reads !== 5) return;
+      try {
+        const rawCurrent = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+        const currentPool = poolRead.result as RegisteredPool | undefined;
+        if (!rawCurrent || !currentPool) {
+          throw new Error('The completed snake draft session or RegisteredPool is missing.');
+        }
+        if (!structurallyEqual(currentPool, input.registeredPool)) {
+          throw new Error('The player pool changed before confirmation. Refresh and review the final pool.');
+        }
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(rawCurrent, standaloneRows);
+        let frozenSession: LeagueBuilderMlbDraftSession;
+        if (current.draftManifest) {
+          assertRegisteredPoolMatchesMlbManifest(currentPool, current);
+          const currentTruth = readSnakeDraftTruth(current, 'MLB');
+          if (!structurallyEqual(currentTruth.manifest, candidateTruth.manifest)) {
+            throw new Error('The saved frozen draft does not match this completed live room.');
+          }
+          frozenSession = current;
+        } else {
+          if ((current.revision ?? 0) !== input.expectedRevision) {
+            throw new Error('The draft moved before confirmation could be saved. Refresh and try again.');
+          }
+          frozenSession = {
+            ...input.session,
+            id: current.id,
+            leagueId: current.leagueId,
+            seasonNumber: current.seasonNumber,
+            createdDate: current.createdDate,
+            lastModified: now,
+            snakeCompanions: current.snakeCompanions ?? input.session.snakeCompanions,
+            seatBoards: mergeFreshSeatBoards(current.seatBoards, input.session.seatBoards),
+            farmSeatBoards: mergeFreshFarmSeatBoards(current.farmSeatBoards, input.session.farmSeatBoards),
+            revision: Math.max(input.session.revision ?? 0, (current.revision ?? 0) + 1),
+          };
+          poolStore.put(input.registeredPool);
+          poolWritten = true;
+        }
+
+        const withHandoff = frozenSession.rosterHandoff
+          ? frozenSession
+          : {
+              ...frozenSession,
+              rosterHandoff: buildSnakeRosterHandoff(frozenSession, 'MLB', input.committedAt),
+              lastModified: now,
+              revision: (frozenSession.revision ?? 0) + 1,
+            };
+        validateSnakeRosterHandoff(withHandoff, 'MLB');
+        const prepared = prepareSeatBoardPersistence({
+          preAction: current,
+          proposed: withHandoff,
+          standaloneRows,
+          modifiedAt: now,
+        });
+        saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
+        boardRowsWritten = prepared.rowsToWrite;
+
+        const allPlayers = playersRead.result as Player[];
+        const playerById = new Map(allPlayers.map((player) => [player.id, player]));
+        for (const teamId of teamIds) {
+          const picks = picksByTeamId.get(teamId) ?? [];
+          const rosterPlayers = picks.map((pick) => playerById.get(pick.playerId));
+          if (rosterPlayers.some((player) => !player)) {
+            throw new Error(`The completed MLB snake roster for ${teamId} is missing player data.`);
+          }
+          if (!isLegalRoster(rosterPlayers.map((player) => toRosterSlotPlayer({
+            primaryPosition: player!.primaryPosition,
+            secondaryPosition: player!.secondaryPosition ?? null,
+            traits: [player!.trait1, player!.trait2],
+          })))) {
+            throw new Error(`The completed MLB snake roster for ${teamId} is not a legal 22-player roster.`);
+          }
+        }
+
+        const rosterByTeamId = new Map((rostersRead.result as TeamRoster[]).map((roster) => [roster.teamId, roster]));
+        rostersWritten = teamIds.flatMap((teamId) => {
+          const playerIds = (picksByTeamId.get(teamId) ?? []).map((pick) => pick.playerId);
+          const currentRoster = rosterByTeamId.get(teamId) ?? createEmptyTeamRoster(teamId);
+          const candidateRoster: TeamRoster = { ...currentRoster, mlbRoster: playerIds };
+          return structurallyEqual(currentRoster, candidateRoster)
+            ? []
+            : [{ ...candidateRoster, lastModified: now }];
+        });
+
+        const pickByPlayerId = new Map(candidateTruth.completedPicks.map((pick) => [pick.playerId, pick]));
+        playersWritten = allPlayers.flatMap((player) => {
+          const pick = pickByPlayerId.get(player.id);
+          let candidate: Player | null = null;
+          if (pick) {
+            candidate = {
+              ...player,
+              salary: pick.launchSalary,
+              settledSalary: pick.launchSalary,
+              leagueAssignments: [
+                ...(player.leagueAssignments ?? []).filter((row) => row.leagueId !== input.session.leagueId),
+                { leagueId: input.session.leagueId, teamId: pick.teamId, rosterStatus: 'MLB' },
+              ],
+            };
+          } else if ((player.leagueAssignments ?? []).some((row) => (
+            row.leagueId === input.session.leagueId && row.rosterStatus === 'MLB' && Boolean(row.teamId)
+          ))) {
+            const { settledSalary: _settledSalary, ...withoutSettlement } = player;
+            void _settledSalary;
+            candidate = {
+              ...withoutSettlement,
+              leagueAssignments: (player.leagueAssignments ?? []).map((row) => (
+                row.leagueId === input.session.leagueId && row.rosterStatus === 'MLB'
+                  ? { ...row, teamId: '', rosterStatus: 'FREE_AGENT' as const }
+                  : row
+              )),
+            } as Player;
+          }
+          return candidate && !structurallyEqual(player, candidate)
+            ? [{ ...candidate, lastModified: now }]
+            : [];
+        });
+
+        for (const row of boardRowsWritten) boardStore.put(row);
+        for (const roster of rostersWritten) rosterStore.put(roster);
+        for (const player of playersWritten) playerStore.put(player);
+        sessionWritten = !structurallyEqual(rawCurrent, persistedSaved);
+        if (sessionWritten) sessionStore.put(persistedSaved);
+      } catch (cause) {
+        fail(cause);
+      }
+    };
+
+    for (const request of [sessionRead, poolRead, boardsRead, rostersRead, playersRead]) {
+      request.onsuccess = finishRead;
+      request.onerror = () => fail(request.error ?? new Error('MLB draft finalization read failed.'));
+    }
+    tx.oncomplete = () => {
+      if (!saved || !persistedSaved) {
+        reject(new Error(`MLB draft session ${id} was not finalized.`));
+        return;
+      }
+      if (!syncEngine.isSuppressed()) {
+        void syncEngine.batchMutations(async () => {
+          if (poolWritten) {
+            syncEngine.upsert('kbl-league-builder', 'registeredPools', input.registeredPool.leagueId, input.registeredPool);
+          }
+          for (const row of boardRowsWritten) {
+            syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+          }
+          for (const roster of rostersWritten) {
+            syncEngine.upsert('kbl-league-builder', 'teamRosters', roster.teamId, roster);
+          }
+          for (const player of playersWritten) {
+            syncEngine.upsert('kbl-league-builder', 'globalPlayers', player.id, player);
+          }
+          if (sessionWritten) {
+            syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved!.id, persistedSaved);
+          }
+        }).catch((cause) => {
+          console.error('MLB snake roster handoff backup sync did not queue.', cause);
+        });
+      }
+      resolve({
+        session: saved,
+        committedPlayerIds: candidateTruth.completedPicks.map((pick) => pick.playerId),
+        teamRosterCounts: Object.fromEntries(teamIds.map((teamId) => [teamId, (picksByTeamId.get(teamId) ?? []).length])),
+      });
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} finalization was aborted.`));
   });
 }
 

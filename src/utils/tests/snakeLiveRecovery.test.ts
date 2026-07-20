@@ -2,11 +2,22 @@ import 'fake-indexeddb/auto';
 
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+const syncMocks = vi.hoisted(() => ({
+  suppressed: true,
+  batchMutations: vi.fn(async <T>(work: () => Promise<T>) => work()),
+}));
+
 vi.mock('../syncEngine', () => ({
-  syncEngine: { isSuppressed: () => true, upsert: vi.fn(), remove: vi.fn() },
+  syncEngine: {
+    isSuppressed: () => syncMocks.suppressed,
+    upsert: vi.fn(),
+    remove: vi.fn(),
+    batchMutations: syncMocks.batchMutations,
+  },
 }));
 
 import type { RegisteredPool } from '../../engines/leagueConstruction';
+import { buildSnakeOrder } from '../../engines/leagueConstruction';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
@@ -15,14 +26,19 @@ import {
   getAllTeams,
   getLeagueTemplate,
   getMlbDraftSession,
+  getPlayer,
   getRegisteredPool,
+  getTeamRoster,
   restoreSnakeLiveRoomLocally,
   type LeagueBuilderMlbDraftSession,
   type LeagueTemplate,
   type Player,
   type Team,
 } from '../leagueBuilderStorage';
+import { finalizeCompletedSnakeSessionToLeagueRosters } from '../leagueBuilderAuctionPipeline';
 import { buildSnakeLiveCatalog, readSnakeLiveCatalog } from '../snakeLiveCatalog';
+import { freezeSnakeDraftSession } from '../snakeDraftManifest';
+import { assertSnakeRosterHandoffReady } from '../snakeRosterHandoff';
 
 const league: LeagueTemplate = {
   id: 'recovery-league', name: 'Test Mock', createdDate: '2026-07-20T00:00:00.000Z', lastModified: '2026-07-20T00:00:00.000Z',
@@ -60,7 +76,11 @@ function session(): LeagueBuilderMlbDraftSession {
   };
 }
 
-beforeEach(() => __resetLeagueBuilderDatabaseForTests());
+beforeEach(() => {
+  syncMocks.suppressed = true;
+  syncMocks.batchMutations.mockReset().mockImplementation(async <T>(work: () => Promise<T>) => work());
+  __resetLeagueBuilderDatabaseForTests();
+});
 afterEach(async () => { await clearAllLeagueBuilderData(); __resetLeagueBuilderDatabaseForTests(); });
 
 describe('Snake live-room local recovery', () => {
@@ -84,5 +104,95 @@ describe('Snake live-room local recovery', () => {
       id: session().id,
       liveRoomRecovery: { roomId: 'room-1', roomCode: '4352', publicRevision: 7 },
     });
+  });
+
+  test('finalizes a recovered completed room without pre-existing roster rows', async () => {
+    const pickOrder = buildSnakeOrder(league.teamIds, 22);
+    const legalPositions: Player['primaryPosition'][] = [
+      'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', '1B', '2B', 'SS', 'LF', 'RF',
+      'SP', 'SP', 'SP', 'SP', 'RP', 'RP', 'RP', 'CP', 'RP',
+    ];
+    const pickIndexByTeam = new Map(league.teamIds.map((teamId) => [teamId, 0]));
+    const recoveredPlayers: Player[] = [];
+    const completedPicks = pickOrder.map((slot) => {
+      const index = pickIndexByTeam.get(slot.teamId) ?? 0;
+      pickIndexByTeam.set(slot.teamId, index + 1);
+      const id = `${slot.teamId}-recovered-${index + 1}`;
+      recoveredPlayers.push({
+        ...player(id),
+        primaryPosition: legalPositions[index],
+        secondaryPosition: index === 8 ? 'C' : undefined,
+      });
+      return { ...slot, playerId: id, settledSalary: 40_000 + slot.pick };
+    });
+    const recoveredPool: RegisteredPool = {
+      ...pool,
+      players: completedPicks.map((pick) => ({ id: pick.playerId, iv: pick.settledSalary, salary: pick.settledSalary })),
+      totalSlots: pickOrder.length,
+    };
+    const completed: LeagueBuilderMlbDraftSession = {
+      ...session(),
+      pickOrder,
+      completedPicks,
+      currentPickIndex: pickOrder.length,
+      rounds: 22,
+      revision: 9,
+      snakeSetup: {
+        poolPlayerIds: recoveredPool.players.map((row) => row.id),
+        versionSelections: {},
+        clubs: league.teamIds.map((teamId) => ({ teamId, hotseat: true })),
+        orderSeed: 'recovered-complete-order',
+      },
+    };
+    const catalog = readSnakeLiveCatalog(buildSnakeLiveCatalog({
+      league,
+      teams: league.teamIds.map(team),
+      players: recoveredPlayers,
+      registeredPool: recoveredPool,
+      activeTeamIds: league.teamIds,
+      activePoolPlayerIds: recoveredPool.players.map((entry) => entry.id),
+    }));
+    expect(catalog).not.toBeNull();
+    await restoreSnakeLiveRoomLocally({
+      catalog: catalog!,
+      session: completed,
+      recovery: { roomId: 'room-complete', roomCode: '4352', publicRevision: 89 },
+    });
+    for (const teamId of league.teamIds) await expect(getTeamRoster(teamId)).resolves.toBeNull();
+    const restored = await getMlbDraftSession(league.id, 1);
+    if (!restored) throw new Error('Recovered completed session was not saved.');
+    const frozen = freezeSnakeDraftSession({
+      session: restored,
+      expectedPhase: 'MLB',
+      poolPlayerIds: recoveredPool.players.map((row) => row.id),
+      salaryByPlayerId: new Map(recoveredPool.players.map((row) => [row.id, row.iv])),
+      frozenAt: '2026-07-20T01:00:00.000Z',
+    });
+    syncMocks.suppressed = false;
+    syncMocks.batchMutations.mockRejectedValueOnce(new Error('backup queue quota'));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const finalized = await finalizeCompletedSnakeSessionToLeagueRosters({
+      leagueId: league.id,
+      session: frozen,
+      pool: recoveredPool,
+      expectedRevision: restored.revision ?? 0,
+      committedAt: '2026-07-20T01:01:00.000Z',
+    });
+    await vi.waitFor(() => expect(consoleError).toHaveBeenCalledWith(
+      'MLB snake roster handoff backup sync did not queue.',
+      expect.objectContaining({ message: 'backup queue quota' }),
+    ));
+    await expect(assertSnakeRosterHandoffReady(finalized.session, 'MLB')).resolves.toEqual({
+      phase: 'MLB', ready: true, playerCount: 44, teamCount: 2,
+    });
+    for (const teamId of league.teamIds) {
+      await expect(getTeamRoster(teamId)).resolves.toEqual(expect.objectContaining({
+        mlbRoster: completedPicks.filter((pick) => pick.teamId === teamId).map((pick) => pick.playerId),
+      }));
+    }
+    await expect(getPlayer(completedPicks[0].playerId)).resolves.toEqual(expect.objectContaining({
+      settledSalary: completedPicks[0].settledSalary,
+      leagueAssignments: [{ leagueId: league.id, teamId: completedPicks[0].teamId, rosterStatus: 'MLB' }],
+    }));
   });
 });

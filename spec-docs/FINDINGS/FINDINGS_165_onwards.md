@@ -1172,3 +1172,38 @@ Nerfed pool preset, and a ready Assistant GM on every turn. TypeScript, changed-
 2,744-module production/PWA build, and diff integrity are green. Frozen repair head `70fde7dc`
 received **APPROVE — Major 0 / Minor 0** from the same non-builder auditor after 160/160 independent
 focused tests. An explicitly authorized push and new preview remain before JK's browser re-walk.
+
+### FINDING-247
+**Date:** 2026-07-20 | **Phase:** Snake Draft / completed MLB roster handoff | **Status:** FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/leagueBuilderAuctionPipeline.ts`,
+`src/src_figma/app/pages/SnakeDraftRoom.tsx`, focused storage/pipeline/completion tests
+**Evidence:** JK completed every pick in a four-team live draft and reached the MLB Draft Recap.
+`CONFIRM MLB DRAFT` then failed. The live room retained the complete public draft. The confirmation
+handler used five separate durability steps: freeze session and pool, reset prior player
+assignments one player at a time, save each team roster, save each drafted player, then save the
+roster-handoff marker. Its catch block hid the failed stage behind one generic message. A recovered
+browser can also have the exact live catalog, pool, and session without pre-existing `TeamRoster`
+rows, although a completed draft contains enough truth to create those rows.
+**Impact:** A single storage, quota, missing-roster, or stale-record failure can leave a frozen but
+partly committed draft. Retry behavior then depends on which earlier writes landed. The completed
+draft is safe in the live room, but the user cannot advance to franchise setup.
+**Action:** Replace the recap path with one IndexedDB transaction across the frozen MLB session,
+exact RegisteredPool, standalone seat boards, all target team rosters, and affected player rows.
+Derive every target roster and salary from the immutable completed picks. Create a missing target
+roster as part of that same transaction. Write the valid roster-handoff marker in the transaction.
+If the transaction fails, none of its writes can land. If the same completed draft is confirmed
+again, return the same handoff. Read the pool and player catalog from fresh durable storage instead
+of a React render snapshot. Keep the live room complete until the local handoff succeeds.
+**Gate:** Failure-injection and retry proof; recovered-origin proof; complete four-team and eight-team
+handoffs; focused UI and persistence suites; TypeScript; changed-file lint; production build;
+separate non-builder audit; one preview; then JK's browser walk. No merge or production deploy is
+authorized.
+**Builder result:** One transaction now owns the complete MLB handoff. An injected roster-store
+failure leaves the session unfrozen, all roster rows absent, and all player assignments unchanged.
+The retry also repairs a modeled old partial state with a frozen manifest, three saved roster spots,
+and one wrong player assignment. Exact four-team and eight-team runs finish 88 and 176 picks,
+create missing roster rows, verify every launch salary and assignment, pass roster-handoff
+readiness, and repeat without changing any persisted byte. A recovered-origin test restores the
+live catalog without roster rows and completes all 44 picks even when generic backup queueing fails.
+The affected six-file suite is 112/112; TypeScript, changed-file ESLint, diff integrity, and the
+production/PWA build are green. Freeze, separate audit, one preview, and JK's walk remain.

@@ -34,7 +34,7 @@ vi.mock('../../../utils/leagueBuilderAuctionPipeline', async (importOriginal) =>
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderAuctionPipeline')>();
   return {
     ...actual,
-    commitCompletedSnakeSessionToLeagueRosters: mocks.commitMlb,
+    finalizeCompletedSnakeSessionToLeagueRosters: mocks.commitMlb,
     commitCompletedSnakeFarmSessionToLeagueRosters: mocks.commitFarm,
   };
 });
@@ -48,7 +48,12 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
     ...actual,
     getAllLeagueTemplates: vi.fn(async () => mocks.data.leagues ?? []),
     getAllTeams: vi.fn(async () => mocks.data.teams ?? []),
-    getAllPlayers: vi.fn(async () => mocks.data.players ?? []),
+    getAllPlayers: vi.fn(async () => mocks.data.durablePlayers ?? mocks.data.players ?? []),
+    getRegisteredPool: vi.fn(async () => (
+      mocks.data.durablePool
+        ?? (mocks.data.getRegisteredPool as (() => Promise<unknown>) | undefined)?.()
+        ?? null
+    )),
     getTeamRoster: vi.fn(async (teamId: string) => (
       (mocks.data.getRoster as ((teamId: string) => Promise<unknown>) | undefined)?.(teamId) ?? null
     )),
@@ -196,12 +201,32 @@ function renderRoom(url: string) {
 
 function setMlbData(session = completedSession('MLB')) {
   mocks.data = {
-    leagues: [league], teams, players, isLoading: false, error: null,
+    leagues: [league], teams, players, durablePlayers: players, durablePool: pool, isLoading: false, error: null,
     getRegisteredPool: vi.fn(async () => pool), getMlbDraftSession: vi.fn(async () => mocks.lastSaved ?? session),
     saveMlbDraftSession: vi.fn(async (next) => next), getRoster: vi.fn(async () => ({ teamId: 'a', mlbRoster: [], farmRoster: [] })),
     refresh: mocks.refresh,
   };
   return session;
+}
+
+async function successfulMlbFinalization(input: {
+  leagueId: string;
+  session: LeagueBuilderMlbDraftSession;
+  committedAt: string;
+}) {
+  const finalizedSession = input.session.rosterHandoff
+    ? input.session
+    : {
+        ...input.session,
+        rosterHandoff: buildSnakeRosterHandoff(input.session, 'MLB', input.committedAt),
+      };
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'MLB',
+    committedPlayerIds: finalizedSession.completedPicks.map((pick) => pick.playerId),
+    teamRosterCounts: { a: 1, b: 1 },
+    session: finalizedSession,
+  };
 }
 
 function setFarmData(session = completedSession('FARM')) {
@@ -235,7 +260,7 @@ describe('snake draft durable completion and recap', () => {
   beforeEach(() => {
     mocks.pull.mockReset().mockResolvedValue(undefined);
     mocks.refresh.mockReset().mockResolvedValue(undefined);
-    mocks.commitMlb.mockReset().mockResolvedValue(undefined);
+    mocks.commitMlb.mockReset().mockImplementation(successfulMlbFinalization);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
     mocks.liveSession = null;
     mocks.liveRoomStatus = 'complete';
@@ -276,7 +301,7 @@ describe('snake draft durable completion and recap', () => {
     expect(Object.keys(mlbMorale.playerByPlayerId)).toHaveLength(session.completedPicks.length);
     expect(Object.keys(mlbMorale.fanByTeamId)).toHaveLength(teams.length);
     expect(JSON.stringify(mlbMorale)).not.toMatch(/loyalty|ambition|resilience|charisma/i);
-    expect(mocks.saveRoom.mock.invocationCallOrder[0]).toBeLessThan(mocks.commitMlb.mock.invocationCallOrder[0]);
+    expect(mocks.saveRoom).not.toHaveBeenCalled();
     expect(mocks.commitMlb).toHaveBeenCalledTimes(1);
     expect(mocks.closeRoom).toHaveBeenCalledTimes(1);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent(`/league-builder/scout-hire?leagueId=${league.id}`);
@@ -301,6 +326,17 @@ describe('snake draft durable completion and recap', () => {
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
   });
 
+  test('confirmation reloads the durable player catalog instead of trusting the rendered snapshot', async () => {
+    setMlbData();
+    mocks.data.players = players.map((row) => ({ ...row, morale: 1 }));
+    mocks.data.durablePlayers = players;
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledTimes(1));
+    expect(mocks.commitMlb.mock.calls[0][0].session.draftManifest.morale.playerByPlayerId.p1.startingMorale).toBe(50);
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
+  });
+
   test('authoritative completed picks confirm even if room status lags and room cleanup fails', async () => {
     const completed = setMlbData();
     mocks.liveSession = completed;
@@ -318,10 +354,10 @@ describe('snake draft durable completion and recap', () => {
 
   test('an MLB commit failure stays on recap and retries without premature navigation', async () => {
     setMlbData();
-    mocks.commitMlb.mockRejectedValueOnce(new Error('MLB commit failed')).mockResolvedValueOnce(undefined);
+    mocks.commitMlb.mockRejectedValueOnce(new Error('MLB commit failed')).mockImplementationOnce(successfulMlbFinalization);
     renderRoom(`/snake-room?leagueId=${league.id}`);
     fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE COMPLETED DRAFT IS SAFE. ROSTERS WERE NOT SAVED. TRY AGAIN.');
     expect(screen.queryByTestId('navigation-target')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'CONFIRM MLB DRAFT' }));
     expect(await screen.findByTestId('navigation-target')).toBeInTheDocument();
@@ -389,7 +425,7 @@ describe('snake draft durable completion and recap', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'VIEW DRAFT RECAP' }));
     fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('THE COMPLETED DRAFT IS SAFE. ROSTERS WERE NOT SAVED. TRY AGAIN.');
     expect(document.body).not.toHaveTextContent(missingPlayerId);
     expect(document.body.innerHTML).not.toContain(missingPlayerId);
   });

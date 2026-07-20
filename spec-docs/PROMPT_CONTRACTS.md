@@ -32796,3 +32796,42 @@ public/private-authority repairs. Focused live-room proof is 188 passed / 32 ski
 live/auth proof is 73/73; targeted Snake UI/storage proof is 246/246; TypeScript, changed-file lint,
 production/PWA build, and diff integrity are green. Remote migration 009, deployment, the narrow old
 Snake test-state reset, and JK's real-device walk remain. No merge or deploy is authorized.
+
+## SNAKE-MLB-ATOMIC-FINALIZATION-52
+
+**Goal:** Make `CONFIRM MLB DRAFT` one resumable, all-or-nothing handoff from a completed public
+Snake draft to local league rosters.
+
+**Frozen law:**
+
+- The completed public live-room session and its immutable manifest are the draft authority.
+- One IndexedDB transaction must persist the exact RegisteredPool, frozen MLB session, independent
+  seat-board rows, every target MLB roster, every changed player assignment and settled salary, and
+  the valid MLB roster-handoff marker.
+- A missing target `TeamRoster` is created from the completed picks. A source roster is never used.
+- No player, roster, session, pool, board, or handoff write may survive an aborted transaction.
+- Retrying the same manifest is idempotent. It repairs a pre-contract partial roster/player commit
+  and returns the same durable handoff. It never creates a second draft or changes a completed pick.
+- Confirmation reads the current durable pool and player catalog. It does not trust a prior React
+  render snapshot.
+- The live room stays complete until local finalization and handoff verification succeed. Closing
+  the room is cleanup after success, not part of roster authority.
+- FIT, tax, archetypes, picks, trades, companion boards, farm rules, and Help-button law do not
+  change.
+
+**Allowed implementation files:**
+
+- `src/utils/leagueBuilderStorage.ts`
+- `src/utils/leagueBuilderAuctionPipeline.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/utils/tests/draftPipeline.integration.test.ts`
+- `src/utils/tests/snakeLiveRecovery.test.ts`
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.completion.test.tsx`
+- this contract and the FINDING-247/session/audit records required by the standard ritual
+
+**Required proof:** Inject a write failure after the transaction starts and prove zero partial
+state; retry and double-confirm the same completed manifest; restore a completed live catalog with
+no roster rows and finalize it; complete exact four-team and eight-team 22-player rosters; prove all
+assignments, launch salaries, legality, and handoff readiness; run focused tests, TypeScript,
+changed-file lint, production build, separate non-builder audit, and JK's browser walk. No merge or
+production deploy is authorized.

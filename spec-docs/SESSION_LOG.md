@@ -8191,3 +8191,26 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Frozen repair head `70fde7dc` received **APPROVE — Major 0 / Minor 0** from the same non-builder
   auditor. Independent focused verification is 160/160, and completion hard-gate ordering remains
   unchanged. No push, merge, or deploy is authorized.
+
+## 2026-07-20 — FINDING-247 atomic completed-MLB handoff
+
+- Fetched `origin/main` first; it is `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`. Continued only
+  in `/private/tmp/kbl-snake-live-room-authority` on `codex/snake-live-room-authority`; the dirty
+  root checkout was not touched.
+- Traced `CONFIRM MLB DRAFT` from the recap through freeze, per-player reset, per-roster writes,
+  per-player assignment writes, handoff marker, and readiness assertion. The five durability steps
+  could leave a frozen partial result, while the catch block hid the failed stage.
+- Replaced the product path with one transaction across the session, RegisteredPool, independent
+  board rows, target team rosters, global players, and handoff marker. Missing target rosters are
+  created from frozen picks. Retry repairs the old partial shape and preserves an existing valid
+  handoff byte-for-byte.
+- Confirmation now reloads the durable pool and player catalog. The completed live room stays open
+  until the local handoff proves ready. Generic backup queue failure is reported to diagnostics but
+  cannot reverse or block the completed local transaction.
+- Builder proof: injected write abort with zero partial state; old partial-state repair; exact
+  four-team and eight-team 22-player completion; recovered-origin completion without roster rows;
+  duplicate-confirm byte stability; 112/112 affected tests; TypeScript; changed-file ESLint; diff
+  integrity; production/PWA build.
+- Next: freeze the exact diff, obtain a separate non-builder audit, publish one preview, then give
+  room 4352 back to JK for the sole product-acceptance walk. No merge or production deploy is
+  authorized.

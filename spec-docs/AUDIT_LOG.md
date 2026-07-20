@@ -1841,6 +1841,7 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 |---|---|---|---|---|
 | FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — REMOTE PREVIEW READY — JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are implemented at `fd07bba0` and independently approved at exact branch head `cedf96ee`, Major 0 / Minor 0. Migration 009 is installed and exact deployed head `d2ac79d7` is READY in preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`. |
 | FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |
+| FINDING-247 | 2026-07-20 | FIXED — BUILDER VERIFIED — INDEPENDENT AUDIT PENDING | Snake Draft completed MLB handoff | One transaction now freezes the exact pool/session, creates and saves all target rosters, saves player assignments/salaries and handoff, aborts without partial state, repairs old partial state, and repeats byte-for-byte across proven 4- and 8-team completions. |
 
 ### 2026-07-19 — FINDING-246 first audit block and builder repair
 

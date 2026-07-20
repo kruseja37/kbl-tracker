@@ -14,6 +14,7 @@ import {
   getPlayer,
   getTeamRoster,
   commitFarmDraftRostersAndPlayersAtomically,
+  finalizeMlbSnakeDraftAtomically,
   savePlayer,
   saveTeamRoster,
   resetCompletedDraftArcAtomically,
@@ -55,6 +56,10 @@ export interface AuctionRosterCommitReport {
   rosterStatus: 'MLB' | 'FARM';
   committedPlayerIds: string[];
   teamRosterCounts: Record<string, number>;
+}
+
+export interface SnakeMlbFinalizationReport extends AuctionRosterCommitReport {
+  session: LeagueBuilderMlbDraftSession;
 }
 
 async function assertExclusiveDraftTeamRecords(leagueId: string): Promise<void> {
@@ -447,6 +452,37 @@ export async function commitCompletedSnakeSessionToLeagueRosters(input: {
     rosterStatus: 'MLB',
     committedPlayerIds,
     teamRosterCounts,
+  };
+}
+
+/**
+ * Product confirmation path. Unlike the legacy roster-only helper above, this
+ * commits the frozen session, exact pool, rosters, players, and handoff marker
+ * as one retry-safe storage unit.
+ */
+export async function finalizeCompletedSnakeSessionToLeagueRosters(input: {
+  leagueId: string;
+  session: LeagueBuilderMlbDraftSession;
+  pool: RegisteredPool;
+  expectedRevision: number;
+  committedAt: string;
+}): Promise<SnakeMlbFinalizationReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
+  if (input.session.leagueId !== input.leagueId) {
+    throw new Error('The completed MLB snake draft belongs to a different league.');
+  }
+  const result = await finalizeMlbSnakeDraftAtomically({
+    session: input.session,
+    registeredPool: input.pool,
+    expectedRevision: input.expectedRevision,
+    committedAt: input.committedAt,
+  });
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'MLB',
+    committedPlayerIds: result.committedPlayerIds,
+    teamRosterCounts: result.teamRosterCounts,
+    session: result.session,
   };
 }
 

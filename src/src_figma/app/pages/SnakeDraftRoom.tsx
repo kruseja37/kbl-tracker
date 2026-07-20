@@ -142,7 +142,6 @@ import {
   getAllTeams,
   getScoutProfilesForLeague,
   getTeamRoster,
-  freezeMlbDraftRoomSessionWithRegisteredPool,
   patchMlbDraftSessionFarmSeatBoard,
   patchMlbDraftSessionSeatBoard,
   patchMlbDraftSessionSnakeCompanions,
@@ -157,7 +156,7 @@ import {
   type LeagueBuilderScoutProfile,
 } from '../../../utils/leagueBuilderStorage';
 import type { ProspectScoutDescriptor } from '../../../utils/prospectScoutingDraftEngine';
-import { commitCompletedSnakeFarmSessionToLeagueRosters, commitCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
+import { commitCompletedSnakeFarmSessionToLeagueRosters, finalizeCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
 import { scoutHireRouteForLeague, staffHireRouteForLeague } from '../utils/draftRouting';
 import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snakeSounds';
 import {
@@ -292,6 +291,7 @@ function mergeLivePublicSession(
 const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
 const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 const RECAP_CONFIRMATION_ERROR = 'THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.';
+const MLB_RECAP_CONFIRMATION_ERROR = 'THE COMPLETED DRAFT IS SAFE. ROSTERS WERE NOT SAVED. TRY AGAIN.';
 const NEUTRAL_DRAFT_MODIFIERS = { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 } as const;
 
 function draftFreezeMeta(players: readonly {
@@ -2579,6 +2579,9 @@ function MlbSnakeDraftRoom() {
       }
       const freshSession = await getMlbDraftSession(league.id, sessionSeasonNumber);
       if (!freshSession) throw new Error('THE COMPLETED DRAFT SESSION COULD NOT BE RELOADED.');
+      const freshPool = await getRegisteredPool(league.id);
+      if (!freshPool) throw new Error('THE COMPLETED DRAFT POOL COULD NOT BE RELOADED.');
+      const freshPlayers = await getAllPlayers();
       let liveRoom = practiceMode ? null : liveHostRef.current.room;
       let livePublicSession = practiceMode ? null : liveHostRef.current.publicSession;
       if (!practiceMode && (!liveRoom || !livePublicSession)) {
@@ -2606,7 +2609,7 @@ function MlbSnakeDraftRoom() {
         throw new Error('THE DRAFT IS NOT COMPLETE.');
       }
       const draftedPlayerIds = [...new Set(completionSource.completedPicks.map((pick) => pick.playerId))];
-      const localPlayerById = new Map(localPlayers.map((player) => [player.id, player]));
+      const localPlayerById = new Map(freshPlayers.map((player) => [player.id, player]));
       const canonicalDraftedPlayers = draftedPlayerIds.map((playerId) => {
         const player = localPlayerById.get(playerId);
         if (!player) throw new Error(`THE LOCAL PLAYER RECORD IS MISSING FOR ${playerId}.`);
@@ -2616,7 +2619,7 @@ function MlbSnakeDraftRoom() {
       const mlbInputs = buildDraftFreezeInputs({
         mlbSession: null,
         mlbSnakeSession: completionSource,
-        mlbRegisteredPool: pool,
+        mlbRegisteredPool: freshPool,
         farmSession: null,
         metaByPlayerId: mlbMeta,
       });
@@ -2625,16 +2628,19 @@ function MlbSnakeDraftRoom() {
         playersById: new Map(canonicalDraftedPlayers.map((player) => [player.id, player])),
       });
       const mlbFreeze = computeDraftFreeze(mlbInputs, { snakeFanMoraleAlignment: mlbAlignment });
-      const activeMlbIds = new Set(completionSource.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id));
+      const activeMlbIds = new Set(completionSource.snakeSetup?.poolPlayerIds ?? freshPool.players.map((player) => player.id));
       const mlbExpectedRanks = rankExpectedTalentByIv(
-        pool.players.filter((player) => activeMlbIds.has(player.id)),
+        freshPool.players.filter((player) => activeMlbIds.has(player.id)),
       );
       const frozen = freezeSnakeDraftSession({
         session: completionSource,
         expectedPhase: 'MLB',
-        poolPlayerIds: completionSource.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
-        salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
-        frozenAt: new Date().toISOString(),
+        poolPlayerIds: completionSource.snakeSetup?.poolPlayerIds ?? freshPool.players.map((player) => player.id),
+        salaryByPlayerId: new Map(freshPool.players.map((player) => [player.id, player.iv])),
+        frozenAt: freshSession.draftManifest?.frozenAt
+          ?? (Number.isFinite(Date.parse(completionSource.lastModified))
+            ? completionSource.lastModified
+            : new Date().toISOString()),
         moraleSnapshot: buildSnakeDraftMoraleSnapshot({
           freeze: mlbFreeze,
           expectedTalentRankByPlayerId: mlbExpectedRanks,
@@ -2642,26 +2648,16 @@ function MlbSnakeDraftRoom() {
         }),
       });
       const boundedFrozen = practiceMode ? frozen : mergeLivePublicSession(freshSession, frozen);
-      const persisted = freshSession.draftManifest
-        ? freshSession
-        : await freezeMlbDraftRoomSessionWithRegisteredPool({
-            session: boundedFrozen,
-            registeredPool: pool,
-            expectedRevision: freshSession.revision ?? 0,
-          });
-      setSession(persisted);
-      await commitCompletedSnakeSessionToLeagueRosters({ leagueId: league.id, session: persisted, pool });
-      const manifest = readSnakeDraftTruth(persisted, 'MLB').manifest!;
-      const handedOff = await markSnakeRosterHandoff({
+      const finalized = await finalizeCompletedSnakeSessionToLeagueRosters({
         leagueId: league.id,
-        seasonNumber: sessionSeasonNumber,
-        phase: 'MLB',
-        sourceSessionId: manifest.source.sessionId,
-        manifestPoolIdentity: manifest.pool.identity,
+        session: freshSession.draftManifest ? freshSession : boundedFrozen,
+        pool: freshPool,
+        expectedRevision: freshSession.revision ?? 0,
         committedAt: new Date().toISOString(),
       });
-      setSession(handedOff);
-      await assertSnakeRosterHandoffReady(handedOff, 'MLB');
+      setSession(finalized.session);
+      await assertSnakeRosterHandoffReady(finalized.session, 'MLB');
+      const manifest = readSnakeDraftTruth(finalized.session, 'MLB').manifest!;
       const activeLiveRoom = liveHostRef.current.room;
       if (!practiceMode && activeLiveRoom?.status !== 'closed') {
         if (!activeLiveRoom) throw new Error('THE LIVE ROOM COULD NOT BE CLOSED.');
@@ -2670,13 +2666,14 @@ function MlbSnakeDraftRoom() {
         ).catch(() => undefined);
       }
       navigate(scoutHireRouteForLeague(league));
-    } catch {
-      setRecapError(RECAP_CONFIRMATION_ERROR);
+    } catch (cause) {
+      console.error('MLB snake draft finalization failed.', cause);
+      setRecapError(MLB_RECAP_CONFIRMATION_ERROR);
     } finally {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
     }
-  }, [getMlbDraftSession, league, localPlayers, navigate, pool, practiceMode, session, sessionSeasonNumber]);
+  }, [getMlbDraftSession, getRegisteredPool, league, navigate, pool, practiceMode, session, sessionSeasonNumber]);
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
