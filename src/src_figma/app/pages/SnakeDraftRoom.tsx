@@ -186,7 +186,10 @@ import {
   type SnakeLiveIntent,
   type SnakeLiveJsonObject,
 } from '../../../utils/snakeLiveRoomTypes';
-import { readSnakeLivePublicSession } from '../../../utils/snakeLiveRoomSession';
+import {
+  pendingSnakeLivePickIntentCount,
+  readSnakeLivePublicSession,
+} from '../../../utils/snakeLiveRoomSession';
 import {
   buildSnakeLiveTradeActionPayload,
   buildSnakeLiveTradePostPayload,
@@ -3238,6 +3241,9 @@ function MlbSnakeDraftRoom() {
         }}
       />}
       pendingCompanionCount={practiceMode ? 0 : liveHost.claims.filter((claim) => claim.status === 'pending').length}
+      pendingPickRequestCount={practiceMode || !liveHost.room
+        ? 0
+        : pendingSnakeLivePickIntentCount(liveHost.intents, liveHost.room.publicRevision)}
       onPauseChange={setPaused}
       onPracticeFastForwardChange={setPracticeFastForward}
       onRecordPick={async (playerId) => {

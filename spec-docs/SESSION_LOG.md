@@ -8172,3 +8172,20 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Changed-file ESLint, TypeScript, diff integrity, and the 2,744-module production/PWA build are
   green. Remaining gates: exact diff freeze, separate non-builder audit, then an explicitly
   authorized preview for JK's browser re-walk. No merge or deployment is authorized.
+
+## 2026-07-19 — FINDING-246 first audit rejection and narrow repair
+
+- Frozen `aeeb00a2` received **REJECT — Major 3 / Minor 1**. The auditor approved completed-draft
+  handoff ordering but proved four gaps: risk color followed reason prose, the host cue followed
+  new-device claims, committed depth could take a starting field slot before SWING, and saved legacy
+  caps could lose true Two Way hitter FLD.
+- Repaired the exact seams without changing FIT, salary/IV, tax coefficients, roster law, public
+  authority, or handoff gates. Typed `LIKELY_GONE` now owns the red token; only current pending pick
+  intent cues the host; a legal six-committed-shortstop plus Two Way catcher-depth case keeps the
+  ranked available SS at starter; saved legacy caps keep Two Way FLD in the hitter row and never
+  restore pitcher FLD.
+- Direct focused proof is 148/148. The 93-test production-shape gate completed 88/88 four-team and
+  176/176 eight-team picks, kept every Assistant GM available, passed all Standard/Nerfed pool
+  presets, and classified all 506 visible players. TypeScript, changed-file ESLint, and diff
+  integrity are green. Freeze and same-auditor recheck remain. No push, merge, or deploy is
+  authorized.

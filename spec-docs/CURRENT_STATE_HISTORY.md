@@ -1561,3 +1561,11 @@ starting slot, public picks and companion submissions lacked distinct cues, `LIK
 red, pitcher FLD still entered tax, and the completed MLB recap could fail at roster confirmation.
 The live header now records that bounded browser-feedback repair and keeps a new preview behind
 build, separate audit, and explicit authority. Production remains unchanged.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 first-audit repair
+
+The prior header recorded the five browser-feedback fixes as builder-verified. The separate auditor
+rejected frozen `aeeb00a2` with Major 3 / Minor 1: two UI signals watched display/claim proxies,
+position-first assignment failed a legal depth-heavy Two Way edge, and saved legacy caps dropped
+Two Way hitter FLD. The new header records direct repairs and fresh 4/8-team scale proof, with the
+same-auditor recheck still required. No push, merge, deploy, or product acceptance occurred.

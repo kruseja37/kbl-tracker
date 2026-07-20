@@ -459,11 +459,11 @@ export function refitBoardSlots(input: {
           if (candidate.position === 'CP') return slotId.startsWith('RP') ? 0 : slotId === 'SWING' ? 1 : 2;
           if (candidate.position === 'SP' || candidate.position === 'SP/RP') return slotId.startsWith('SP') ? 0 : slotId.startsWith('RP') ? 1 : 2;
           if (candidate.position === 'RP') return slotId.startsWith('RP') ? 0 : 1;
-          if (slotId === candidate.position) {
-            return availablePositionLeaderBySlot.has(slotId) ? 3 : 0;
-          }
+          if (PRIMARY_FIELD_SLOTS.has(slotId) && availablePositionLeaderBySlot.has(slotId)) return 4;
+          if (slotId === candidate.position) return 0;
           if (slotId === 'BACKUP_C') return 1;
           if (slotId.startsWith('FLEX')) return 2;
+          if (slotId === 'SWING') return 2;
           return 3;
         };
         return preferred(left) - preferred(right)

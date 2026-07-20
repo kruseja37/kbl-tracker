@@ -60,13 +60,18 @@ export function SelectedPlayerCard(props: {
   const ratings = profile.fullRatings
     ? RATINGS.flatMap(([key, label]) => profile.fullRatings![key] !== 0 ? [{ key, label, value: profile.fullRatings![key] }] : [])
     : [];
+  const nextPickRiskReason = props.candidate.riskReason
+    ?? (props.candidate.hasNextPick ? props.candidate.risk.replaceAll('_', ' ') : '—');
   const nextPickRiskText = props.candidate.riskPending
     ? 'CALCULATING'
     : props.candidate.riskUnavailable
       ? 'UNAVAILABLE'
-      : props.candidate.riskReason
-        ?? (props.candidate.hasNextPick ? props.candidate.risk.replaceAll('_', ' ') : '—');
-  const likelyGone = nextPickRiskText.toUpperCase().includes('LIKELY GONE');
+      : props.candidate.risk === 'LIKELY_GONE'
+        ? `LIKELY GONE · ${nextPickRiskReason}`
+        : nextPickRiskReason;
+  const likelyGone = !props.candidate.riskPending
+    && !props.candidate.riskUnavailable
+    && props.candidate.risk === 'LIKELY_GONE';
   const consequence = props.consequence;
   const decision = props.decision?.playerId === props.candidate.id ? props.decision : null;
   const decisionLabel = decision?.kind === 'TAKE_NOW'

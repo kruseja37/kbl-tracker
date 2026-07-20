@@ -4,6 +4,7 @@ import type { LeagueBuilderMlbDraftSession } from '../leagueBuilderStorage';
 import {
   buildSnakeLivePublicState,
   legacySnakeCompanionState,
+  pendingSnakeLivePickIntentCount,
   readSnakeLivePublicSession,
   SNAKE_LIVE_PUBLIC_STATE_FORMAT,
   snakeLiveRoomRunKey,
@@ -106,5 +107,20 @@ describe('Snake live public session boundary', () => {
     };
     const state = legacySnakeCompanionState({ roomCode: '1234', claims: [], intents: [intent] });
     expect(state.pickRequest).toBeUndefined();
+  });
+
+  it('counts only current pending pick requests for the host cue', () => {
+    const base: SnakeLiveIntent = {
+      id: 'current-pick', roomId: 'room', idempotencyKey: 'pick-key', deviceId: 'device', teamId: 'team-a',
+      kind: 'pick', status: 'pending', intentRevision: 1, expectedRoomRevision: 7,
+      payload: { playerId: 'p1', pick: 8, sessionRevision: 7, submittedAt: '2026-07-19T00:00:02.000Z' },
+      createdAt: '2026-07-19T00:00:02.000Z', resolvedAt: null,
+    };
+    expect(pendingSnakeLivePickIntentCount([
+      base,
+      { ...base, id: 'stale-pick', idempotencyKey: 'stale-key', expectedRoomRevision: 6 },
+      { ...base, id: 'accepted-pick', idempotencyKey: 'accepted-key', status: 'accepted' },
+      { ...base, id: 'trade', idempotencyKey: 'trade-key', kind: 'trade' },
+    ], 7)).toBe(1);
   });
 });

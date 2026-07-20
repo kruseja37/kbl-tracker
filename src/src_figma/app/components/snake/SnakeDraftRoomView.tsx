@@ -80,6 +80,7 @@ export interface SnakeDraftRoomViewProps {
   commissionerTrade?: HelpAwareRoomContent;
   companionApproval?: ReactNode;
   pendingCompanionCount?: number;
+  pendingPickRequestCount?: number;
   roomHelpNotes?: readonly string[];
   writeNotice?: string | null;
   onReloadRoom?: () => void | Promise<void>;
@@ -133,7 +134,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
   const priorPublicPickIndex = useRef(props.currentPickIndex);
-  const priorPendingCompanionCount = useRef(Math.max(0, Math.floor(props.pendingCompanionCount ?? 0)));
+  const priorPendingPickRequestCount = useRef(Math.max(0, Math.floor(props.pendingPickRequestCount ?? 0)));
   const soundPlayer = useMemo(() => createSnakeSoundPlayer(props.soundsEnabled), [props.soundsEnabled]);
   const currentOrder = props.order[props.currentPickIndex];
   const currentTeam = props.teams.find((team) => team.id === currentOrder?.teamId);
@@ -145,6 +146,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const activeSeatOnClock = Boolean(props.activeSeatId && currentOrder?.teamId === props.activeSeatId);
   const draftComplete = props.currentPickIndex >= props.order.length;
   const pendingCompanionCount = Math.max(0, Math.floor(props.pendingCompanionCount ?? 0));
+  const pendingPickRequestCount = Math.max(0, Math.floor(props.pendingPickRequestCount ?? 0));
   const orderWindow = useMemo(() => {
     if (props.order.length <= 7) return props.order.map((slot, index) => ({ slot, index }));
     const liveIndex = Math.min(Math.max(props.currentPickIndex, 0), props.order.length - 1);
@@ -233,9 +235,9 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   }, [props.currentPickIndex, soundPlayer]);
 
   useEffect(() => {
-    if (pendingCompanionCount > priorPendingCompanionCount.current) soundPlayer.play('request');
-    priorPendingCompanionCount.current = pendingCompanionCount;
-  }, [pendingCompanionCount, soundPlayer]);
+    if (pendingPickRequestCount > priorPendingPickRequestCount.current) soundPlayer.play('request');
+    priorPendingPickRequestCount.current = pendingPickRequestCount;
+  }, [pendingPickRequestCount, soundPlayer]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;

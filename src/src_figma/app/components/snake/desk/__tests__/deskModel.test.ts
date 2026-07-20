@@ -166,6 +166,39 @@ describe('private desk model', () => {
     expect(refit.slots.SS).not.toBe(draftedShortstop);
   });
 
+  it('uses SWING before displacing an available position leader when committed depth fills every FLEX seat', () => {
+    const availableLeader = 'SS-7';
+    const pool = [
+      ...fullPool().map((row) => row.id === 'SP-1' ? {
+        ...row,
+        eligiblePositions: ['SP', 'C'] as const,
+        rosterShape: { isPitcher: true, position: 'SP', role: 'SP', twoWayVariant: 'C' as const },
+      } : row),
+      candidate(availableLeader, 'SS', 500),
+    ];
+    const board = buildSeededSeatBoard(pool).board!;
+    const committedShortstops = new Set(['SS-1', 'SS-2', 'SS-3', 'SS-4', 'SS-5', 'SS-6']);
+    const rankings = {
+      ...board.rankings,
+      byPosition: {
+        ...board.rankings.byPosition,
+        SS: [...committedShortstops, availableLeader],
+      },
+    };
+
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings,
+      committedPlayerIds: committedShortstops,
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.invalidRoster).toBe(false);
+    expect(refit.slots.SS).toBe(availableLeader);
+    expect([...committedShortstops].every((playerId) => Object.values(refit.slots).includes(playerId))).toBe(true);
+    expect(committedShortstops.has(refit.slots.SWING ?? '')).toBe(true);
+  });
+
   it('immediately refits a unique 22-player plan when a GM reorders a ranking', () => {
     const pool = fullPool();
     const board = buildSeededSeatBoard(pool).board!;

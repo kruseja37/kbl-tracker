@@ -688,7 +688,13 @@ describe('SnakeDraftRoomView', () => {
     const gain = { gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn() };
     const context = { currentTime: 0, destination: {}, createOscillator: vi.fn(() => oscillator), createGain: vi.fn(() => gain) };
     Object.defineProperty(window, 'AudioContext', { configurable: true, value: vi.fn(function MockAudioContext() { return context; }) });
-    const quietProps = props({ activeSeatId: null, candidate: null, candidateProfile: null, pendingCompanionCount: 0 });
+    const quietProps = props({
+      activeSeatId: null,
+      candidate: null,
+      candidateProfile: null,
+      pendingCompanionCount: 0,
+      pendingPickRequestCount: 0,
+    });
     const { rerender } = render(<SnakeDraftRoomView {...quietProps} />);
     expect(oscillator.start).not.toHaveBeenCalled();
 
@@ -696,9 +702,12 @@ describe('SnakeDraftRoomView', () => {
     expect(oscillator.start).toHaveBeenCalledTimes(3);
 
     rerender(<SnakeDraftRoomView {...quietProps} currentPickIndex={1} pendingCompanionCount={1} />);
+    expect(oscillator.start).toHaveBeenCalledTimes(3);
+
+    rerender(<SnakeDraftRoomView {...quietProps} currentPickIndex={1} pendingCompanionCount={1} pendingPickRequestCount={1} />);
     expect(oscillator.start).toHaveBeenCalledTimes(5);
 
-    rerender(<SnakeDraftRoomView {...quietProps} currentPickIndex={1} pendingCompanionCount={1} />);
+    rerender(<SnakeDraftRoomView {...quietProps} currentPickIndex={1} pendingCompanionCount={1} pendingPickRequestCount={1} />);
     expect(oscillator.start).toHaveBeenCalledTimes(5);
   });
 });

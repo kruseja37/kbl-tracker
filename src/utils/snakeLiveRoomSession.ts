@@ -149,3 +149,18 @@ export function legacySnakeCompanionState(input: {
     } : {}),
   };
 }
+
+/**
+ * Count only pick requests that are actionable against the host's current
+ * public revision. Desk claims and stale requests must not trigger the pick cue.
+ */
+export function pendingSnakeLivePickIntentCount(
+  intents: readonly SnakeLiveIntent[],
+  currentPublicRevision: number,
+): number {
+  return intents.filter((intent) => (
+    intent.kind === 'pick'
+    && intent.status === 'pending'
+    && intent.expectedRoomRevision === currentPublicRevision
+  )).length;
+}

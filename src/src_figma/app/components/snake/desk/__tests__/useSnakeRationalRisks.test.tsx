@@ -678,4 +678,25 @@ describe('shared snake rational-risk worker seam', () => {
     expect(screen.queryByText(/RISK UNAVAILABLE/)).not.toBeInTheDocument();
     expect(screen.queryByText(/SAFE TO WAIT|CALCULATING/)).not.toBeInTheDocument();
   });
+
+  test('shows a real LIKELY_GONE row in red without relying on reason copy', () => {
+    cleanup();
+    render(<DeskCandidateRow candidate={{
+      id: 'player-a',
+      name: 'Player A',
+      position: 'C',
+      advisorWorth: 10,
+      iv: 10,
+      marginalTax: 0,
+      trueCost: 10,
+      archetypeChip: 'BALANCED',
+      fitWord: 'SOLID FIT',
+      risk: 'LIKELY_GONE',
+      riskReason: '2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.',
+      legalFinishLine: '',
+      construction: { id: 'player-a', isPitcher: false, bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50 } },
+    }} />);
+
+    expect(screen.getByText('LIKELY GONE')).toHaveClass('text-[var(--ballpark-status-red-bright)]');
+  });
 });

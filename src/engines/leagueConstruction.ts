@@ -286,7 +286,11 @@ export function playerEligibleForLuxuryRow(
   caps: readonly LuxuryCapRow[],
 ): boolean {
   if (!luxuryCapsUsePitcherRoleUsage(caps)) {
-    return row.group === 'hitters' ? !player.isPitcher : player.isPitcher;
+    if (row.group === 'hitters') {
+      return !player.isPitcher || (isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat));
+    }
+    if (!player.isPitcher) return false;
+    return !(isTwoWayPitcher(player) && isPitcherSecondaryBattingStat(row.stat));
   }
   if (row.group === 'hitters') {
     if (!player.isPitcher) return true;

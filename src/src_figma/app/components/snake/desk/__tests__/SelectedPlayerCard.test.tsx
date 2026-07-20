@@ -130,13 +130,13 @@ describe('SelectedPlayerCard', () => {
     const onSetZeroInterest = vi.fn();
     const { rerender } = render(<SelectedPlayerCard
       player={player}
-      candidate={{ ...candidate, hasNextPick: true, risk: 'AT_RISK', riskReason: 'LIKELY GONE BEFORE #9' }}
+      candidate={{ ...candidate, hasNextPick: true, risk: 'LIKELY_GONE', riskReason: '2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.' }}
       consequence={null}
       teamName="Beewolves"
       zeroInterest={false}
       onSetZeroInterest={onSetZeroInterest}
     />);
-    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveTextContent('LIKELY GONE BEFORE #9');
+    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveTextContent('LIKELY GONE · 2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.');
     expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveClass('text-[var(--ballpark-status-red-bright)]');
     fireEvent.click(screen.getByRole('button', { name: 'ZERO INTEREST' }));
     expect(onSetZeroInterest).toHaveBeenCalledWith(true);

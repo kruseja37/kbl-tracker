@@ -338,6 +338,25 @@ describe('leagueConstruction T8a pure engine', () => {
     ]);
   });
 
+  test('saved legacy caps keep Two Way fielding in the hitter row and never restore pitcher-fielding tax', () => {
+    const twoWay = {
+      ...pitcher('legacy-two-way', 'SP', { VEL: 70, JNK: 60, ACC: 50 }, { POW: 0, CON: 0, SPD: 0, FLD: 80, ARM: 99 }),
+      twoWayVariant: 'IF' as const,
+    };
+    const legacyRows: LuxuryCapRow[] = [
+      { group: 'hitters', stat: 'FLD', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+      { group: 'rotation', stat: 'FLD', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+      { group: 'rotation', stat: 'VEL', topN: 1, cap: 0, penaltyCurve: 1, penaltyPer100: 100, minAdder: 0 },
+    ];
+
+    const usage = luxuryRowUsage([twoWay], legacyRows);
+    expect(usage.find((row) => row.group === 'hitters' && row.stat === 'FLD')?.contributors)
+      .toEqual([{ playerId: 'legacy-two-way', points: 80 }]);
+    expect(usage.some((row) => row.group === 'rotation' && row.stat === 'FLD')).toBe(false);
+    expect(usage.find((row) => row.group === 'rotation' && row.stat === 'VEL')?.contributors)
+      .toEqual([{ playerId: 'legacy-two-way', points: 70 }]);
+  });
+
   test('rating-room usage is the exact row ledger consumed by luxuryTax', () => {
     const ordinaryStarter = pitcher(
       'ordinary', 'SP', { VEL: 75, JNK: 55, ACC: 45 },

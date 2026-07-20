@@ -1841,3 +1841,20 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 |---|---|---|---|---|
 | FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — REMOTE PREVIEW READY — JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are implemented at `fd07bba0` and independently approved at exact branch head `cedf96ee`, Major 0 / Minor 0. Migration 009 is installed and exact deployed head `d2ac79d7` is READY in preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`. |
 | FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |
+
+### 2026-07-19 — FINDING-246 first audit block and builder repair
+
+The separate read-only auditor rejected frozen `aeeb00a2` with **REJECT — Major 3 / Minor 1**.
+Production `LIKELY_GONE` state did not drive the red token; the host request cue watched desk claims
+instead of current pick intent; a legal Two Way catcher-depth roster with six committed shortstops
+could use the starting SS slot before SWING; and a saved legacy cap table dropped true Two Way FLD
+from both hitter and pitcher rows. Completion ordering and hard handoff gates were approved.
+
+The builder repaired only those four seams. Risk styling now follows the typed state in both card and
+row, the host cue counts current-revision pending pick intents while claims stay silent, committed
+fielders use legal depth including SWING before a ranked available starter, and legacy Two Way
+secondary ratings use the same hitter/pitcher split while all pitcher-FLD rows remain filtered.
+Direct repair proof is 148/148. The independent 93-test production-shape gate again completes
+88/88 and 176/176 picks, keeps every Assistant GM available, and passes all Standard/Nerfed pool
+presets. TypeScript, changed-file ESLint, and diff integrity are green. Same-auditor re-audit remains;
+no push, merge, deploy, or product acceptance is authorized.

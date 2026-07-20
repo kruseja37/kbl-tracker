@@ -4,15 +4,18 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## BUILDER VERIFIED / SEPARATE AUDIT PENDING (2026-07-19; FINDING-246)
+## FIRST AUDIT REPAIRED / SAME-AUDITOR RECHECK PENDING (2026-07-19; FINDING-246)
 - JK's completed four-team browser walk produced five exact follow-ups: position-first starting
   slots, distinct public-pick and companion-submit sounds, red `LIKELY GONE`, no pitcher-FLD tax,
   and a reliable completed-draft roster handoff.
-- The focused UI/economy/live-room set is green. The full production-shape gate also completed both
+- Frozen `aeeb00a2` was rejected Major 3 / Minor 1. The repair now keys red risk to the real
+  `LIKELY_GONE` state, keys the host cue only to current pending pick intent, preserves a position
+  leader through a legal six-committed-depth edge, and keeps Two Way hitter FLD active under saved
+  legacy caps while pitcher FLD stays retired.
+- The focused repair set is 148/148. The full production-shape gate also completed both
   four- and eight-team rooms, all 176 eight-team picks, all four pool presets at Standard and Nerfed,
-  and a ready Assistant GM on every turn. TypeScript, changed-file lint, and the 2,744-module
-  production/PWA build are green. Diff freeze and a separate non-builder audit remain before JK
-  receives a new preview.
+  and a ready Assistant GM on every turn. TypeScript, changed-file lint, and diff integrity are
+  green. Repair freeze and same-auditor recheck remain before JK receives a new preview.
 - Current tax law has 17 active rows: five hitter rows; rotation POW/CON/SPD plus VEL/JNK/ACC; and
   bullpen POW/CON/SPD plus VEL/JNK/ACC. Ordinary pitcher FLD remains salary/IV value but creates no
   tax. A true Two Way player's position-player FLD still enters the hitter row at full use.

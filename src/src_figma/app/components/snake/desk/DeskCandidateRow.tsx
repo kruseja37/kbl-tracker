@@ -24,6 +24,9 @@ export function DeskCandidateRow(props: {
     : props.candidate.risk !== 'SAFE_TO_WAIT'
     ? props.candidate.risk.replaceAll('_', ' ')
     : null;
+  const riskClass = props.candidate.risk === 'LIKELY_GONE'
+    ? 'text-[var(--ballpark-status-red-bright)]'
+    : '';
   const warning = props.warning && props.warning !== risk ? props.warning : null;
   return (
     <div className="grid min-h-12 w-full min-w-0 grid-cols-1 items-stretch gap-1">
@@ -45,7 +48,7 @@ export function DeskCandidateRow(props: {
         {props.prefix ? <span className="block text-[9px] font-black uppercase tracking-[0.12em] text-[var(--ballpark-brass)]">{props.prefix}</span> : null}
         <span className="block break-words font-black uppercase leading-tight">{props.candidate.name}</span>
         {identity ? <span className="block break-words text-[10px] font-black text-[var(--ballpark-brass)]">{identity}</span> : null}
-        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{!props.candidate.drafted && props.candidate.finishStatus ? ` · ${props.candidate.finishStatus}` : ''}{risk ? ` · ${risk}` : ''}{warning ? ` · ${warning}` : ''}</span>
+        <span className="block break-words text-[11px] font-bold">{props.candidate.position} · <span className={fitClass}>{fit}</span>{!props.candidate.drafted && props.candidate.finishStatus ? ` · ${props.candidate.finishStatus}` : ''}{risk ? <> · <span className={riskClass}>{risk}</span></> : null}{warning ? ` · ${warning}` : ''}</span>
       </span>
       <span className="text-right text-[11px] font-black">
         <span className="block">${Math.round(props.candidate.drafted ? props.candidate.salary ?? props.candidate.iv : props.candidate.trueCost).toLocaleString()}</span>
