@@ -380,7 +380,7 @@ describe('snake draft durable completion and recap', () => {
       };
     });
 
-    renderRoom('/snake-room?roomCode=4352');
+    renderRoom(`/snake-room?leagueId=${league.id}&roomCode=4352`);
 
     expect(await screen.findByRole('heading', { name: 'THE ROOM IS NOT READY' })).toBeInTheDocument();
     expect(screen.getByText('THE SAVED DRAFT POOL AND DRAFT SESSION ARE MISSING.')).toBeInTheDocument();

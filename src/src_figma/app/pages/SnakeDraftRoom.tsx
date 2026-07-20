@@ -1014,7 +1014,7 @@ function MlbSnakeDraftRoom() {
     return () => globalThis.clearTimeout(id);
   }, [privateDeskRevealed]);
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async (leagueIdOverride?: string): Promise<boolean> => {
     setLoadDone(false);
     setActionError(null);
     try {
@@ -1023,11 +1023,12 @@ function MlbSnakeDraftRoom() {
         getAllTeams(),
         getAllPlayers(),
       ]);
-      const freshLeague = requestedLeagueId === null
+      const targetLeagueId = leagueIdOverride ?? requestedLeagueId;
+      const freshLeague = targetLeagueId === null
         ? freshLeagues[0] ?? null
-        : freshLeagues.find((entry) => entry.id === requestedLeagueId) ?? null;
+        : freshLeagues.find((entry) => entry.id === targetLeagueId) ?? null;
       if (!freshLeague) {
-        throw new Error(requestedLeagueId ? 'THE LEAGUE WAS NOT FOUND.' : 'NO LEAGUE IS AVAILABLE FOR THIS DRAFT.');
+        throw new Error(targetLeagueId ? 'THE LEAGUE WAS NOT FOUND.' : 'NO LEAGUE IS AVAILABLE FOR THIS DRAFT.');
       }
       if (freshLeague.draftFormat !== 'snake') throw new Error('THIS LEAGUE IS CONFIGURED FOR AN AUCTION DRAFT.');
       const [nextPool, nextSession] = await Promise.all([
@@ -1047,8 +1048,10 @@ function MlbSnakeDraftRoom() {
       void freshTeams;
       void freshPlayers;
       await refresh();
+      return true;
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setLoadDone(true);
     }
@@ -1081,14 +1084,16 @@ function MlbSnakeDraftRoom() {
         session: publicSession,
         recovery: { roomId: room.id, roomCode, publicRevision: room.publicRevision },
       });
-      await refresh();
+      if (!await loadSession(catalog.league.id)) {
+        throw new Error('THE RESTORED LIVE ROOM COULD NOT OPEN.');
+      }
       navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}`, { replace: true });
     } catch (cause) {
       setRecoveryError(cause instanceof Error ? cause.message : 'THE LIVE ROOM COULD NOT BE RESTORED HERE.');
     } finally {
       setRecoveryWorking(false);
     }
-  }, [navigate, recoveryRoomCode, refresh]);
+  }, [loadSession, navigate, recoveryRoomCode]);
 
   const refreshRoomTruth = useCallback(async () => {
     try {
