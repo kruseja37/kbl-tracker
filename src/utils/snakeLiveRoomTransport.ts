@@ -280,7 +280,7 @@ export function createSnakeLiveRoomTransport(
     },
 
     async findRoomByCode(roomCode: string): Promise<SnakeLiveRoom | null> {
-      const value = await rpc(client, 'kbl_snake_live_find_open_room_by_code', {
+      const value = await rpc(client, 'kbl_snake_live_find_recoverable_room_by_code', {
         p_room_code: roomCode,
       });
       return value === null ? null : asRoom(value);

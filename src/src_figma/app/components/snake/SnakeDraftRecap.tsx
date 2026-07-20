@@ -36,6 +36,7 @@ function moneyOrUnknown(value: number | null): string {
 
 export function SnakeDraftRecap(props: {
   phase: 'MLB' | 'FARM';
+  roomCode?: string;
   teams: readonly SnakeDraftRecapTeam[];
   picks: readonly SnakeDraftRecapPick[];
   committing: boolean;
@@ -50,6 +51,7 @@ export function SnakeDraftRecap(props: {
       <header className="mb-5">
         <p className="text-[11px] font-bold tracking-[0.2em] text-[var(--ballpark-brass)]">DRAFT COMPLETE</p>
         <h1 className="ballpark-title text-3xl">{props.phase} DRAFT RECAP</h1>
+        {props.roomCode ? <p className="mt-2 text-xs font-bold text-[var(--ballpark-brass)]">ROOM CODE {props.roomCode}</p> : null}
       </header>
       <div className="grid gap-4 lg:grid-cols-2">
         {props.teams.map((team) => {

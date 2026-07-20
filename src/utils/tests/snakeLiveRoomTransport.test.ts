@@ -268,6 +268,18 @@ describe('Snake live-room transport', () => {
     expect(sql).toContain("COALESCE(p_payload->>'sessionRevision','') !~ '^(0|[1-9][0-9]*)$'");
   });
 
+  test('recovery migration allows the owner to restore an open or completed room', () => {
+    const sql = readFileSync(
+      'supabase/migrations/20260720143326_recover_completed_snake_live_room.sql',
+      'utf8',
+    );
+    expect(sql).toContain('kbl_snake_live_find_recoverable_room_by_code');
+    expect(sql).toContain("status IN ('open','complete')");
+    expect(sql).toContain('owner_user_id=u');
+    expect(sql).toContain('TO authenticated');
+    expect(sql).toContain('FROM PUBLIC, anon, authenticated');
+  });
+
   test('fails clearly when Supabase is not configured', async () => {
     const transport = createSnakeLiveRoomTransport(null);
     await expect(transport.getRoom('room-1')).rejects.toMatchObject({ code: 'not-configured' });
@@ -282,7 +294,7 @@ describe('Snake live-room transport', () => {
   test('maps public room and event rows', async () => {
     const { client, state } = mockClient({ rpcResults: {
       kbl_snake_live_get_room_by_session: roomRow,
-      kbl_snake_live_find_open_room_by_code: roomRow,
+      kbl_snake_live_find_recoverable_room_by_code: roomRow,
       kbl_snake_live_get_room: roomRow,
       kbl_snake_live_list_events: [eventRow],
     } });
@@ -295,7 +307,7 @@ describe('Snake live-room transport', () => {
     ]);
     expect(state.rpcCalls.map((call) => call.name)).toEqual([
       'kbl_snake_live_get_room_by_session',
-      'kbl_snake_live_find_open_room_by_code',
+      'kbl_snake_live_find_recoverable_room_by_code',
       'kbl_snake_live_get_room',
       'kbl_snake_live_list_events',
     ]);

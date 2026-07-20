@@ -64,7 +64,7 @@ beforeEach(() => __resetLeagueBuilderDatabaseForTests());
 afterEach(async () => { await clearAllLeagueBuilderData(); __resetLeagueBuilderDatabaseForTests(); });
 
 describe('Snake live-room local recovery', () => {
-  test('restores an open room catalog without placing a generic sync write', async () => {
+  test('restores a recoverable room catalog without placing a generic sync write', async () => {
     const catalog = readSnakeLiveCatalog(buildSnakeLiveCatalog({
       league, teams: [team('team-a'), team('team-b')], players: [player('player-a'), player('player-b')], registeredPool: pool,
       activeTeamIds: league.teamIds, activePoolPlayerIds: pool.players.map((entry) => entry.id),
