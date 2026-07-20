@@ -187,11 +187,13 @@ The starters put the ball in play, then a precise bullpen shortens the game. **+
 
 - **Starter batting axes are role-specific.** They shift only the top-four rotation POW/CON tax rows and
   affect only startable pitchers in exact team-fit scoring. They never widen hitter or bullpen caps.
-- **Pitcher secondary tax is usage-adjusted.** Ordinary pitcher POW/CON/SPD/FLD is multiplied by
-  canonical role exposure before entering rotation/bullpen top-four rows. Two Way pitcher batting
-  instead enters hitter POW/CON/SPD/FLD at full use and is omitted from those pitcher-secondary rows;
-  VEL/JNK/ACC stays in the proper pitcher group. SP/RP arms are assigned once from the complete roster
-  by the same pure-starters-first rule used at tax settlement. Pitcher ARM remains excluded.
+- **Pitcher secondary tax is usage-adjusted and excludes pitcher FLD.** Ordinary pitcher POW/CON/SPD
+  is multiplied by canonical role exposure before entering rotation/bullpen top-four rows. Pitcher
+  FLD remains salary/IV value but never enters a rotation or bullpen tax row. A true Two Way player
+  instead enters hitter POW/CON/SPD/FLD at full use for the position-player job and is omitted from
+  pitcher-secondary rows; VEL/JNK/ACC stays in the proper pitcher group. SP/RP arms are assigned once
+  from the complete roster by the same pure-starters-first rule used at tax settlement. Pitcher ARM
+  remains excluded.
 - **2026-07-16 recalibration:** an exact `9e5901d7` versus usage-aware zero-axis ablation showed that
   Bash Brothers' +15% starter POW and Launch & Leather's +10% starter POW/CON still changed their
   selected rotations in both priority tiers, so increasing them would overcorrect. Flamethrowers'
@@ -199,8 +201,9 @@ The starters put the ball in play, then a precise bullpen shortens the game. **+
   tier. The smallest simple multipliers with a visible Standard and Nerfed roster effect are
   Flamethrowers **+30% rotation POW/CON** and HDH **+40% rotation CON**. No other identity lever changed.
 - **Ordinary relief hitting is already discounted, not taxed as everyday offense.** RP exposure is
-  POW/CON/SPD/FLD `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Two Way relievers instead enter hitter
-  POW/CON/SPD/FLD at full use and are excluded from the bullpen secondary rows, preventing double tax.
+  POW/CON/SPD `.08/.08/.16`; CP is `.05/.05/.11`. Pitcher FLD is not taxed. Two Way relievers instead
+  enter hitter POW/CON/SPD/FLD at full use and are excluded from the bullpen secondary rows,
+  preventing double tax.
 - **2026-07-16 measured results after the retune (Juiced / Standard / Nerfed):** Bash Brothers
   **+0.5 / −0.5 / +0.4%**; Launch & Leather **+0.4 / +0.2 / +0.4%**; Flamethrowers
   **+0.4 / +0.3 / −0.1%**; HDH Royals **−0.1 / +0.2 / +0.4%**. Every simulated roster is legal

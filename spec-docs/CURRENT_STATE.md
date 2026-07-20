@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — SNAKE LIVE-ROOM PREVIEW IS READY FOR JK'S REAL-DEVICE GATE (2026-07-19; implementation `fd07bba0`; independently audited head `cedf96ee`; deployed head `d2ac79d7`; branch `codex/snake-live-room-authority`). Migration 009 is installed on Supabase project `vmpvfswmnhpiiontwnjc`. All nine `snake_live_*` tables have RLS, only `snake_live_events` has direct authenticated SELECT and Realtime publication, anonymous RPC execution is off, and rollback-only owner/cross-account checks passed with no rows left behind. The exact branch head is pushed and Vercel preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb` is READY. Build metadata reports `d2ac79d7d58c`; the root and `/snake-companion` return HTTP 200 through the preview access link; the built bundle contains the configured Supabase project. Production remains on `ba7f97d6`; no merge or promotion occurred. **NEXT / OPEN PENDING-JK:** use the preview access link on the Hotseat and companion devices, then run the real Hotseat plus companion walk. JK's walk remains the only product acceptance gate.
+> ## RIGHT NOW — SNAKE BROWSER-FEEDBACK REPAIR IS BUILDER-VERIFIED; SEPARATE AUDIT REMAINS (2026-07-19; branch `codex/snake-live-room-authority`). JK completed the four-team preview draft. The bounded repair makes each position board control its starting slot, adds distinct public-pick and companion-submit cues, renders `LIKELY GONE` in red, removes ordinary pitcher FLD from tax while keeping its salary/IV value, and lets proven public completion finish local roster handoff even if live-room cleanup is late. Focused UI/economy/live-room checks, TypeScript, changed-file lint, the 2,744-module production/PWA build, and the full production-shape gauntlet are green. The scale gate completed both four- and eight-team rooms, all 176 eight-team picks, every Standard/Nerfed pool preset, and a ready Assistant GM on every turn. **NEXT:** freeze the exact diff, obtain a separate non-builder audit, then create one authorized preview for JK's browser re-walk. The prior `d2ac79d7` preview is stale for this repair. Production remains on `ba7f97d6`; no merge or promotion occurred.
 
 ## Current product law
 
@@ -15,12 +15,16 @@
 - One companion device can control more than one team. One Hotseat plus three companions supports an
   eight-team room.
 - Mac mini/Neo and laptop are the primary companion layouts. iPad is a fallback, not this gate.
+- Each field-position ranking controls its starting slot. Overall breaks ties for cross-position
+  flex and depth. Drafted players remain in the projected 22.
+- Ordinary pitcher FLD is not a luxury-tax input. It remains salary/IV value. Hitter FLD remains
+  active, including a true Two Way player's position-player job.
 
 ## Open gates
 
-1. Delete only old Snake live test rooms and retired local sync keys if a device needs a clean start. Do not wipe product data or
-   the account-owned `kbl-sync-outbox`.
-2. Run JK's real-device Hotseat and companion draft walk.
+1. Freeze the exact FINDING-246 diff.
+2. Obtain a separate non-builder audit.
+3. With explicit authority, update one preview and run JK's Hotseat plus companion re-walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the one authorized

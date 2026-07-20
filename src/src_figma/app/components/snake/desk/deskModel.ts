@@ -398,6 +398,24 @@ export function refitBoardSlots(input: {
   const assigned = new Map<SnakeBoardSlotId, string>();
   const usedGroups = new Set<string>();
 
+  // A GM's position board owns the starting field slot. Drafted players stay in
+  // the 22, but they do not hide the first still-available player that the GM
+  // moved to the top of that position. Overall remains the flex/depth tiebreaker.
+  const availablePositionLeaderBySlot = new Map<SnakeBoardSlotId, string>();
+  for (const slotId of PRIMARY_FIELD_SLOTS) {
+    const position = boardSlotPosition(slotId);
+    const leader = position
+      ? (input.rankings.byPosition?.[position] ?? []).find((playerId) => {
+          const candidate = byId.get(playerId);
+          return Boolean(candidate
+            && !unavailable.has(playerId)
+            && !committed.has(playerId)
+            && eligibleForSlot(slotId, candidate, committed));
+        })
+      : undefined;
+    if (leader) availablePositionLeaderBySlot.set(slotId, leader);
+  }
+
   // A drafted player is roster truth, not another recommendation candidate. Match every
   // committed player before filling the future plan. The highest-IV owned closer owns CP;
   // any additional committed closer may use legal relief depth, while undrafted closers may not.
@@ -441,7 +459,9 @@ export function refitBoardSlots(input: {
           if (candidate.position === 'CP') return slotId.startsWith('RP') ? 0 : slotId === 'SWING' ? 1 : 2;
           if (candidate.position === 'SP' || candidate.position === 'SP/RP') return slotId.startsWith('SP') ? 0 : slotId.startsWith('RP') ? 1 : 2;
           if (candidate.position === 'RP') return slotId.startsWith('RP') ? 0 : 1;
-          if (slotId === candidate.position) return 0;
+          if (slotId === candidate.position) {
+            return availablePositionLeaderBySlot.has(slotId) ? 3 : 0;
+          }
           if (slotId === 'BACKUP_C') return 1;
           if (slotId.startsWith('FLEX')) return 2;
           return 3;

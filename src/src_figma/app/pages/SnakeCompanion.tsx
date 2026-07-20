@@ -34,6 +34,7 @@ import {
 } from '../../../utils/snakeLiveTradeIntents';
 import { useAuth } from '../../../hooks/useAuth';
 import { syncEngine } from '../../../utils/syncEngine';
+import { createSnakeSoundPlayer, loadSnakeSoundsEnabled } from '../../utils/snakeSounds';
 import { toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { CompanionClaimScreen } from '../components/snake/companion/CompanionClaimScreen';
 import { CompanionSignInScreen } from '../components/snake/companion/CompanionSignInScreen';
@@ -336,6 +337,8 @@ export default function SnakeCompanion() {
   });
   const { runProof: runSeatingProof } = useSnakeSetupProofClient();
   const ownDeviceId = liveRoom.deviceId ?? '';
+  const soundPlayer = useMemo(() => createSnakeSoundPlayer(loadSnakeSoundsEnabled()), []);
+  const publicPickSoundRef = useRef<{ sessionId: string; index: number } | null>(null);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [deviceCovered, setDeviceCovered] = useState(readDeviceCovered);
   const [selectedPlayerId, setSelectedPlayerId] = useState<string | null>(null);
@@ -404,6 +407,14 @@ export default function SnakeCompanion() {
       }),
     };
   }, [liveRoom.claims, liveRoom.intents, liveRoom.publicSession, liveRoom.room, privateBoards]);
+  useEffect(() => {
+    if (!session) return;
+    const prior = publicPickSoundRef.current;
+    if (prior?.sessionId === session.id && session.currentPickIndex > prior.index) {
+      soundPlayer.play('drafted');
+    }
+    publicPickSoundRef.current = { sessionId: session.id, index: session.currentPickIndex };
+  }, [session, soundPlayer]);
   const catalog = useMemo(
     () => liveRoom.catalog ? readSnakeLiveCatalog(liveRoom.catalog.catalog) : null,
     [liveRoom.catalog],
@@ -1409,6 +1420,7 @@ export default function SnakeCompanion() {
         },
       });
       if (!privateContextIsCurrent(guard)) return;
+      soundPlayer.play('request');
       setMessage('PICK SENT TO HOTSEAT.');
     } catch (cause) {
       if (privateContextIsCurrent(guard)) {
@@ -1416,7 +1428,7 @@ export default function SnakeCompanion() {
         await refreshSession();
       }
     }
-  }, [capturePrivateContext, liveRoom, privateContextIsCurrent, refreshSession, session, team]);
+  }, [capturePrivateContext, liveRoom, privateContextIsCurrent, refreshSession, session, soundPlayer, team]);
 
   if (!snakeEnabled()) return <main className="ballpark-page"><h1 className="ballpark-title">PAGE NOT FOUND</h1></main>;
   if (auth.isLoading) return <main className="ballpark-page"><p>CHECKING YOUR ACCOUNT…</p></main>;

@@ -37,7 +37,7 @@ function usageWeight(role: NonNullable<SimPlayer['role']>, stat: 'POW' | 'CON' |
   const bat = input.startShare * input.paRatio + input.phFloor;
   if (stat === 'POW' || stat === 'CON') return bat;
   if (stat === 'SPD') return Math.min(1, bat + input.prFloor + input.rangeFloor);
-  return Math.max(input.startShare, input.rangeFloor);
+  return 0;
 }
 
 interface OracleEntry {
@@ -278,7 +278,7 @@ describe('SNAKE-PITCHER-HITTING-RECALIBRATION-30', () => {
     const rp = reliefPlayer('rp', 'RP');
     const cp = reliefPlayer('cp', 'CP');
     const secondaryRows = LUXURY_CAP_TABLES.standard.filter(
-      (row) => row.group === 'bullpen' && ['POW', 'CON', 'SPD', 'FLD'].includes(row.stat),
+      (row) => row.group === 'bullpen' && ['POW', 'CON', 'SPD'].includes(row.stat),
     );
     const zeroCapRows = secondaryRows.map((row) => ({
       ...row,
@@ -295,17 +295,18 @@ describe('SNAKE-PITCHER-HITTING-RECALIBRATION-30', () => {
     expect(usageWeight('RP', 'POW')).toBe(0.08);
     expect(usageWeight('RP', 'CON')).toBe(0.08);
     expect(usageWeight('RP', 'SPD')).toBe(0.16);
-    expect(usageWeight('RP', 'FLD')).toBe(0.06);
+    expect(usageWeight('RP', 'FLD')).toBe(0);
     expect(usageWeight('CP', 'POW')).toBe(0.05);
     expect(usageWeight('CP', 'CON')).toBe(0.05);
     expect(usageWeight('CP', 'SPD')).toBeCloseTo(0.11, 12);
-    expect(usageWeight('CP', 'FLD')).toBe(0.05);
-    expect(ratings(rp)).toMatchObject({ POW: 6.4, CON: 6.4, SPD: 12.8, FLD: 4.8 });
+    expect(usageWeight('CP', 'FLD')).toBe(0);
+    expect(ratings(rp)).toMatchObject({ POW: 6.4, CON: 6.4, SPD: 12.8 });
+    expect(ratings(rp)).not.toHaveProperty('FLD');
     const cpRatings = ratings(cp);
     expect(cpRatings.POW).toBe(4);
     expect(cpRatings.CON).toBe(4);
     expect(cpRatings.SPD).toBeCloseTo(8.8, 12);
-    expect(cpRatings.FLD).toBe(4);
+    expect(cpRatings).not.toHaveProperty('FLD');
 
     const settled = luxuryTax([rp, cp], secondaryRows, 'taxed');
     expect(settled.binding.map((row) => ({

@@ -192,6 +192,7 @@ function expectedTax(roster: ConstructionPlayer[], caps: LuxuryCapRow[]) {
   const binding: Array<{ group: string; stat: string; over: number; tax: number }> = [];
   let wouldBeTax = 0;
   for (const row of caps) {
+    if (row.group !== 'hitters' && row.stat === 'FLD') continue;
     const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const vals = group
       .filter((player) => {
@@ -295,7 +296,7 @@ describe('leagueConstruction T8a pure engine', () => {
     expect(actual.wouldBeTax).toBeCloseTo(expected.wouldBeTax, 8);
     expect(actual.binding).toEqual(expected.binding);
     expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'VEL' && row.over > 0)).toBe(true);
-    expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD' && row.over > 0)).toBe(true);
+    expect(actual.binding.some((row) => row.group === 'rotation' && row.stat === 'FLD')).toBe(false);
   });
 
   test('usage-aware tax weights ordinary pitcher secondary ratings by role and preserves legacy rows', () => {
@@ -310,10 +311,11 @@ describe('leagueConstruction T8a pure engine', () => {
     expect(byStat.get('POW')).toBeCloseTo(15.7, 8);
     expect(byStat.get('CON')).toBeCloseTo(15.7, 8);
     expect(byStat.get('SPD')).toBeCloseTo(25.3, 8);
-    expect(byStat.get('FLD')).toBeCloseTo(20, 8);
+    expect(byStat.has('FLD')).toBe(false);
 
     const legacy = luxuryTax([starter], usageRows.map((row) => ({ ...row, ratingBasis: undefined })), 'taxed');
-    expect(legacy.binding.map((entry) => entry.over)).toEqual([80, 80, 80, 80]);
+    expect(legacy.binding.map((entry) => entry.over)).toEqual([80, 80, 80]);
+    expect(luxuryRowUsage([starter], usageRows).some((row) => row.group === 'rotation' && row.stat === 'FLD')).toBe(false);
   });
 
   test('Two Way splits everyday batting and pitching without a duplicate secondary-rating charge', () => {

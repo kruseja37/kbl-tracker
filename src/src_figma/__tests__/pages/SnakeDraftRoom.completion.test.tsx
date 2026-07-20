@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(async () => undefined),
   closeRoom: vi.fn(),
   liveSession: null as LeagueBuilderMlbDraftSession | null,
+  liveRoomStatus: 'complete' as 'open' | 'complete' | 'closed',
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
@@ -80,7 +81,7 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       sessionId: publicSession.id,
       roomCode: publicSession.snakeCompanions?.roomCode ?? '2468',
       phase: publicSession.draftPhase ?? 'MLB',
-      status: 'complete' as const,
+      status: mocks.liveRoomStatus,
       publicRevision: publicSession.revision ?? 0,
       publicState: {},
       correctionAvailable: false,
@@ -237,6 +238,7 @@ describe('snake draft durable completion and recap', () => {
     mocks.commitMlb.mockReset().mockResolvedValue(undefined);
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
     mocks.liveSession = null;
+    mocks.liveRoomStatus = 'complete';
     mocks.closeRoom.mockReset().mockImplementation(async () => ({ status: 'closed' }));
     mocks.lastSaved = null;
     mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
@@ -297,6 +299,21 @@ describe('snake draft durable completion and recap', () => {
     await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalled());
     expect(mocks.commitMlb.mock.calls[0][0].session.draftManifest.source.revision).toBe(3);
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
+  });
+
+  test('authoritative completed picks confirm even if room status lags and room cleanup fails', async () => {
+    const completed = setMlbData();
+    mocks.liveSession = completed;
+    mocks.liveRoomStatus = 'open';
+    mocks.closeRoom.mockRejectedValueOnce(new Error('close transport unavailable'));
+
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledTimes(1));
+    expect(mocks.closeRoom).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   test('an MLB commit failure stays on recap and retries without premature navigation', async () => {

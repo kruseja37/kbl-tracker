@@ -4,6 +4,20 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## BUILDER VERIFIED / SEPARATE AUDIT PENDING (2026-07-19; FINDING-246)
+- JK's completed four-team browser walk produced five exact follow-ups: position-first starting
+  slots, distinct public-pick and companion-submit sounds, red `LIKELY GONE`, no pitcher-FLD tax,
+  and a reliable completed-draft roster handoff.
+- The focused UI/economy/live-room set is green. The full production-shape gate also completed both
+  four- and eight-team rooms, all 176 eight-team picks, all four pool presets at Standard and Nerfed,
+  and a ready Assistant GM on every turn. TypeScript, changed-file lint, and the 2,744-module
+  production/PWA build are green. Diff freeze and a separate non-builder audit remain before JK
+  receives a new preview.
+- Current tax law has 17 active rows: five hitter rows; rotation POW/CON/SPD plus VEL/JNK/ACC; and
+  bullpen POW/CON/SPD plus VEL/JNK/ACC. Ordinary pitcher FLD remains salary/IV value but creates no
+  tax. A true Two Way player's position-player FLD still enters the hitter row at full use.
+- No merge, push, deployment, or product acceptance is authorized by this repair.
+
 ## VERIFIED / JK RE-WALK OPEN (2026-07-16; WALKTHROUGH WAVE 2)
 - The live decision desk now keeps committed roster truth ahead of projections: the highest-IV
   owned closer owns CP, other owned closers remain legal depth, complete saved boards are repaired
@@ -97,7 +111,7 @@
   selection are Flamethrowers +30% rotation POW/CON and HDH +40% rotation CON. Bash Brothers +15%
   rotation POW and Launch & Leather +10% rotation POW/CON already remained visible and are unchanged.
 - Ordinary RP/CP hitting was explicitly checked and is not taxed as everyday offense. RP
-  POW/CON/SPD/FLD exposure is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Two Way relievers are
+  POW/CON/SPD exposure is `.08/.08/.16`; CP is `.05/.05/.11`. Pitcher FLD is not taxed. Two Way relievers are
   full-use hitters but are excluded from bullpen secondary rows, so the same rating is never charged
   twice. No bullpen-hitting archetype axis exists and none was added.
 - The retune changes no base cap, tax coefficient, salary/IV, roster law, optimizer objective,
@@ -110,9 +124,9 @@
 - **Current thread move:** JK walks actual Draft Setup and Snake Room on Mac/iPad. Browser acceptance
   remains JK's gate; no agent visual pass can close it. The Standard/Nerfed archetype presentation
   built from `9e5901d7` is economically stale and must be regenerated from this final tax model.
-- Ordinary pitcher POW/CON/SPD/FLD now enters tax and identity math at canonical role exposure rather
-  than everyday-player strength. Tax FLD follows defensive start/range exposure; salary/IV keeps its
-  separate full pitcher-FLD value. Pitcher ARM remains excluded.
+- Ordinary pitcher POW/CON/SPD now enters tax and identity math at canonical role exposure rather
+  than everyday-player strength. Pitcher FLD remains salary/IV value but does not enter tax.
+  Pitcher ARM remains excluded.
 - A true Two Way pitcher's POW/CON/SPD/FLD enters hitter rows at full use, while VEL/JNK/ACC enters
   exactly one pitching group. The same batting ratings never enter pitcher-secondary rows. SP/RP
   assignment is roster-level and settlement-exact: pure SPs fill the rotation first, only needed
@@ -150,8 +164,8 @@
 - Assistant GM is explicit and enforced: legality/solvency first, archetype identity next, then
   contextual value, while literal frozen IV stays at least 90% of the best-IV legal build. My Board
   remains the GM's own order. Source-player roster/IV edits immediately retire stale advisor reads.
-- Pitcher POW/CON/SPD/FLD are not free bonuses under current canon: the base top-four rotation and
-  bullpen rows tax them. Pitcher ARM is excluded; archetypes shift hitter rows and pitcher
+- Pitcher POW/CON/SPD are not free bonuses under current canon: the base top-four rotation and
+  bullpen rows tax them. Pitcher FLD and ARM are excluded from tax; archetypes shift hitter rows and pitcher
   VEL/JNK/ACC only. The POW/CON rows now use a quadratic ramp instead of a linear cliff at all three
   tiers; caps, top-four grouping, coefficients, adders, and every other tax row are unchanged. New
   or rebuilt pools receive the curve; locked/saved drafts keep their frozen `luxuryCaps`.

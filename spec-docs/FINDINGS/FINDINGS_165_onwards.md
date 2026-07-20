@@ -1135,3 +1135,39 @@ until they are recreated; do not guess which roster data belongs to which league
 target IDs, empty draft rosters, preserved source rosters, and fail-closed legacy handling. This
 repair is included in the final FINDING-244 independent audit. JK's browser walk remains the product
 gate. No merge or deploy is authorized.
+
+### FINDING-246
+**Date:** 2026-07-19 | **Phase:** Snake Draft / completed four-team browser walk | **Status:** BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Files:** `src/src_figma/app/components/snake/desk/deskModel.ts`,
+`src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`,
+`src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`,
+`src/src_figma/app/pages/SnakeCompanion.tsx`, `src/src_figma/utils/snakeSounds.ts`,
+`src/data/tierParams.ts`, `src/data/rosterEngineConstants.ts`,
+`src/engines/leagueConstruction.ts`, `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+**Evidence:** JK completed a four-team live preview draft. The room completed all picks, but the MLB
+recap failed on `CONFIRM MLB DRAFT`. A drafted field player is currently matched into a starting
+slot before the team's position ranking is read, so an available player moved to number one at that
+position can be pushed to flex. The live room has no distinct public-pick or companion-submit cue,
+`LIKELY GONE` uses neutral text, and all three active cap tables still contain rotation and bullpen
+FLD rows.
+**Impact:** The private 22 can disagree with the GM's position board; urgent risk is easy to miss;
+the host can miss a companion request or public pick; pitchers can create fielding tax contrary to
+the ratified product law; and a completed draft can fail to enter roster handoff.
+**Action:** Make each position ranking authoritative for its starting slot while keeping Overall as
+the cross-position flex/depth tie-breaker and keeping committed players on the 22. Add separate,
+small synthesized cues for a public pick and a new companion pick request. Render only the
+`LIKELY GONE` risk in status red. Remove pitcher FLD from new tax tables and ignore any legacy
+rotation/bullpen FLD row at settlement and in the rating-room ledger; hitter FLD, including a true
+Two Way hitter row, remains active. Confirm from refreshed authoritative public completion, freeze
+and commit the exact local registered pool without generic cloud-sync dependence, make the handoff
+idempotent, and close the live room only after roster handoff succeeds.
+**Gate:** Exact regressions first; focused and full affected suites; TypeScript; changed-file lint;
+production build; separate non-builder audit; then JK's real browser walk. No merge or deployment
+is authorized.
+**Result:** Position-rank, status-color, sound, pitcher-FLD, legacy-row, and completed-handoff
+regressions are green. The bounded verification groups passed 145 focused UI/economy/completion
+tests, 43 live-room tests, 153 pipeline/assistant/scale tests, and 60 companion/rating-room tests.
+The scale proof completed four- and eight-team rooms, all 176 eight-team picks, every Standard and
+Nerfed pool preset, and a ready Assistant GM on every turn. TypeScript, changed-file ESLint, the
+2,744-module production/PWA build, and diff integrity are green. The exact diff now requires a
+separate non-builder audit before JK receives a new preview.

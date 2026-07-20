@@ -132,6 +132,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const armedCandidate = useRef<SnakeReviewCandidate | null>(null);
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
+  const priorPublicPickIndex = useRef(props.currentPickIndex);
+  const priorPendingCompanionCount = useRef(Math.max(0, Math.floor(props.pendingCompanionCount ?? 0)));
   const soundPlayer = useMemo(() => createSnakeSoundPlayer(props.soundsEnabled), [props.soundsEnabled]);
   const currentOrder = props.order[props.currentPickIndex];
   const currentTeam = props.teams.find((team) => team.id === currentOrder?.teamId);
@@ -224,6 +226,16 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     }
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
   }, [coverPrivateSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
+
+  useEffect(() => {
+    if (props.currentPickIndex > priorPublicPickIndex.current) soundPlayer.play('drafted');
+    priorPublicPickIndex.current = props.currentPickIndex;
+  }, [props.currentPickIndex, soundPlayer]);
+
+  useEffect(() => {
+    if (pendingCompanionCount > priorPendingCompanionCount.current) soundPlayer.play('request');
+    priorPendingCompanionCount.current = pendingCompanionCount;
+  }, [pendingCompanionCount, soundPlayer]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;

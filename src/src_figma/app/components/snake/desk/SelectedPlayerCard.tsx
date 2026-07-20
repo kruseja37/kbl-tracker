@@ -60,6 +60,13 @@ export function SelectedPlayerCard(props: {
   const ratings = profile.fullRatings
     ? RATINGS.flatMap(([key, label]) => profile.fullRatings![key] !== 0 ? [{ key, label, value: profile.fullRatings![key] }] : [])
     : [];
+  const nextPickRiskText = props.candidate.riskPending
+    ? 'CALCULATING'
+    : props.candidate.riskUnavailable
+      ? 'UNAVAILABLE'
+      : props.candidate.riskReason
+        ?? (props.candidate.hasNextPick ? props.candidate.risk.replaceAll('_', ' ') : '—');
+  const likelyGone = nextPickRiskText.toUpperCase().includes('LIKELY GONE');
   const consequence = props.consequence;
   const decision = props.decision?.playerId === props.candidate.id ? props.decision : null;
   const decisionLabel = decision?.kind === 'TAKE_NOW'
@@ -142,12 +149,8 @@ export function SelectedPlayerCard(props: {
         ))}
       </div>
       {profile.fullRatings?.arsenal.length ? <p className="mt-2 text-xs font-bold">ARSENAL · {profile.fullRatings.arsenal.join(' · ')}</p> : null}
-      <p className="mt-3 border-2 border-[var(--ballpark-panel-border)] p-2 text-[10px] font-black" data-testid="selected-player-next-pick-risk">
-        NEXT PICK · {props.candidate.riskPending
-          ? 'CALCULATING'
-          : props.candidate.riskUnavailable
-            ? 'UNAVAILABLE'
-            : props.candidate.riskReason ?? (props.candidate.hasNextPick ? props.candidate.risk.replaceAll('_', ' ') : '—')}
+      <p className={`mt-3 border-2 border-[var(--ballpark-panel-border)] p-2 text-[10px] font-black ${likelyGone ? 'text-[var(--ballpark-status-red-bright)]' : ''}`} data-testid="selected-player-next-pick-risk">
+        NEXT PICK · {nextPickRiskText}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
         <p><span className="block text-[9px] font-bold">SALARY</span><strong>${Math.round(props.candidate.salary ?? props.candidate.iv).toLocaleString()}</strong></p>

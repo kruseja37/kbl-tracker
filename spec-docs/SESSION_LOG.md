@@ -8148,3 +8148,27 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `vmpvfswmnhpiiontwnjc`.
 - Production remains on `ba7f97d6`. No merge or promotion occurred. JK's browser and real-device
   walk is the only remaining product gate.
+
+## 2026-07-19 — FINDING-246 browser-feedback repair, builder verification
+
+- JK completed the four-team live preview draft and supplied five bounded follow-ups: position-first
+  field slots, distinct drafted/request sounds, red `LIKELY GONE`, no pitcher-FLD tax, and reliable
+  MLB draft confirmation.
+- Position rank one now owns its field starting slot while drafted players stay in the 22 and
+  Overall remains the flex/depth tie-breaker. Existing CP and pitching-depth law is unchanged.
+- Added distinct synthesized cues for public pick completion and companion pick submission. Host
+  receives the companion-request cue; companions also receive the public-pick cue. `LIKELY GONE`
+  alone uses the existing status-red token.
+- Removed rotation/bullpen FLD from all new cap tables and ignored any saved legacy pitcher-FLD row
+  in both settlement and the Rating Room. Salary/IV still values pitcher FLD; true Two Way fielding
+  remains a hitter-row input for the position-player job.
+- Confirmation refreshes public live authority, proves completion there, freezes and commits the
+  exact registered pool, marks and verifies roster handoff, then treats room closure as retryable
+  cleanup rather than a reason to undo a successful handoff.
+- Builder checks so far: 145 focused UI/economy/completion tests; 43 live-room tests; 153 full
+  pipeline/assistant/scale tests; 60 companion/rating-room tests; TypeScript green. The scale run
+  completed four- and eight-team rooms, all 176 eight-team picks, Standard/Nerfed Tight,
+  Competitive, Loose, and Full Sources, and a ready Assistant GM on every turn.
+- Changed-file ESLint, TypeScript, diff integrity, and the 2,744-module production/PWA build are
+  green. Remaining gates: exact diff freeze, separate non-builder audit, then an explicitly
+  authorized preview for JK's browser re-walk. No merge or deployment is authorized.

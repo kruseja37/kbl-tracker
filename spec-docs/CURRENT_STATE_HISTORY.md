@@ -1551,3 +1551,13 @@ RPC allowlist, owner access, and cross-account isolation were checked remotely. 
 pushed at exact head `d2ac79d7`. Vercel preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`
 is READY and reports build SHA `d2ac79d7d58c`. Production remains on `ba7f97d6`. JK's real-device
 walk is still the sole product gate; no merge or production promotion occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 browser-feedback repair
+
+The prior current-state header recorded migration 009, pushed head `d2ac79d7`, and the one READY
+Vercel preview as complete. JK then finished a real four-team draft in that preview. Companion
+authority worked, but his walk found five follow-ups: position rankings did not always control the
+starting slot, public picks and companion submissions lacked distinct cues, `LIKELY GONE` was not
+red, pitcher FLD still entered tax, and the completed MLB recap could fail at roster confirmation.
+The live header now records that bounded browser-feedback repair and keeps a new preview behind
+build, separate audit, and explicit authority. Production remains unchanged.

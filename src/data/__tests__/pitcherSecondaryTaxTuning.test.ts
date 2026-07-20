@@ -64,18 +64,21 @@ describe('pitcher secondary-rating luxury tax tuning', () => {
     }
   });
 
-  test('marks every generated row with the new basis and re-derives all eight pitcher secondary caps', () => {
+  test('marks every generated row with the new basis, re-derives six secondary caps, and excludes pitcher FLD', () => {
     const expectedCaps = {
-      juiced: [17.5, 17.3, 35.3, 64.8, 6.9, 7.0, 22.1, 23.6],
-      standard: [16.7, 16.6, 33.7, 61.9, 6.6, 6.7, 21.1, 22.5],
-      nerfed: [16.0, 15.9, 32.3, 59.3, 6.3, 6.4, 20.2, 21.6],
+      juiced: [17.5, 17.3, 35.3, 6.9, 7.0, 22.1],
+      standard: [16.7, 16.6, 33.7, 6.6, 6.7, 21.1],
+      nerfed: [16.0, 15.9, 32.3, 6.3, 6.4, 20.2],
     } satisfies Record<TierKey, number[]>;
     for (const tier of TIERS) {
       expect(LUXURY_CAP_TABLES[tier].every((row) => row.ratingBasis === 'pitcher-role-usage-v1')).toBe(true);
       expect(LUXURY_CAP_TABLES[tier]
         .filter((row) => (row.group === 'rotation' || row.group === 'bullpen')
-          && ['POW', 'CON', 'SPD', 'FLD'].includes(row.stat))
+          && ['POW', 'CON', 'SPD'].includes(row.stat))
         .map((row) => row.cap)).toEqual(expectedCaps[tier]);
+      expect(LUXURY_CAP_TABLES[tier].some((row) => (
+        (row.group === 'rotation' || row.group === 'bullpen') && row.stat === 'FLD'
+      ))).toBe(false);
     }
   });
 

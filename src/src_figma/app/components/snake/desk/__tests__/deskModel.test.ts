@@ -135,6 +135,37 @@ describe('private desk model', () => {
     expect(new Set(Object.values(position.slots)).size).toBe(22);
   });
 
+  it('uses the first available position rank as the starter and keeps a drafted lower rank in depth', () => {
+    const pool = fullPool();
+    const board = buildSeededSeatBoard(pool).board!;
+    const draftedShortstop = 'SS-1';
+    const availableLeader = 'SS-6';
+    const rankings = {
+      ...board.rankings,
+      byPosition: {
+        ...board.rankings.byPosition,
+        SS: [
+          draftedShortstop,
+          availableLeader,
+          ...(board.rankings.byPosition?.SS ?? []).filter((id) => (
+            id !== draftedShortstop && id !== availableLeader
+          )),
+        ],
+      },
+    };
+
+    const refit = refitBoardSlots({
+      candidates: pool,
+      rankings,
+      committedPlayerIds: new Set([draftedShortstop]),
+    });
+
+    expect(refit.brokenSlots).toEqual([]);
+    expect(refit.slots.SS).toBe(availableLeader);
+    expect(Object.values(refit.slots)).toContain(draftedShortstop);
+    expect(refit.slots.SS).not.toBe(draftedShortstop);
+  });
+
   it('immediately refits a unique 22-player plan when a GM reorders a ranking', () => {
     const pool = fullPool();
     const board = buildSeededSeatBoard(pool).board!;

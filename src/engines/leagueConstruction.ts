@@ -302,6 +302,7 @@ export function luxuryRowPlayerRating(
   caps: readonly LuxuryCapRow[],
 ): number {
   const stat = row.stat;
+  if (row.group !== 'hitters' && stat === 'FLD') return 0;
   if (stat === 'VEL' || stat === 'JNK' || stat === 'ACC') {
     return player.pit?.[stat] ?? 0;
   }
@@ -369,7 +370,7 @@ export function luxuryRowUsage(
   caps: readonly LuxuryCapRow[],
 ): LuxuryRowUsage[] {
   const { rotation, bullpen } = assignLuxuryTaxPitchingGroups(roster);
-  return caps.map((row) => {
+  return caps.filter((row) => row.group === 'hitters' || row.stat !== 'FLD').map((row) => {
     const group = row.group === 'hitters' ? roster : row.group === 'rotation' ? rotation : bullpen;
     const contributors = group
       .filter((player) => playerEligibleForLuxuryRow(player, row, caps))

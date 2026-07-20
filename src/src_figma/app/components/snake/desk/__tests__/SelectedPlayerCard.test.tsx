@@ -137,6 +137,7 @@ describe('SelectedPlayerCard', () => {
       onSetZeroInterest={onSetZeroInterest}
     />);
     expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveTextContent('LIKELY GONE BEFORE #9');
+    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveClass('text-[var(--ballpark-status-red-bright)]');
     fireEvent.click(screen.getByRole('button', { name: 'ZERO INTEREST' }));
     expect(onSetZeroInterest).toHaveBeenCalledWith(true);
 

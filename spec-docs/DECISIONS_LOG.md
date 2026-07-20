@@ -4286,3 +4286,31 @@ not covered by the current local room.
   more than one team.
 - Mac mini/Neo and laptop are the primary companion layouts. Help-button law remains canon. JK's
   real browser and device walk remains the only product acceptance gate.
+
+## 2026-07-19 — Pitcher FLD is salary value, not luxury-tax concentration
+
+Ordinary pitcher FLD does not enter a rotation or bullpen luxury-tax row. New Juiced, Standard,
+and Nerfed tables omit both pitcher-FLD rows. Settlement and the Rating Room also ignore a pitcher
+FLD row found in a saved legacy table, so a stale frozen table cannot charge this retired category.
+This ruling supersedes the earlier defensive-start exposure treatment.
+
+Pitcher FLD remains part of salary/IV and gameplay. Hitter FLD remains an active top-eight tax row.
+A true Two Way player's FLD enters that hitter row when the player fills the position-player job;
+it is not also charged as pitcher FLD. Ordinary pitcher POW/CON/SPD remain usage-weighted tax rows,
+and VEL/JNK/ACC, pitcher-group assignment, archetype shifts, salary caps, and roster law do not
+change. The current active tax ledger has 17 rows.
+
+## 2026-07-19 — Snake position boards own starting field slots
+
+The top still-available player in a field-position ranking owns that starting position in My Board.
+A drafted player at the same position remains in the projected 22 as legal depth. Overall order is
+the tie-breaker for cross-position flex and bench assignments. Existing closer and pitcher-role
+rules remain separate and unchanged.
+
+## 2026-07-19 — Completed public Snake truth outranks late room cleanup at handoff
+
+MLB draft confirmation must prove completion from refreshed Hotseat-owned public session truth,
+freeze the exact registered pool, commit rosters, mark the handoff, and verify that handoff before
+navigation. Closing the already-complete live room is cleanup after that commit. A stale or offline
+cleanup RPC may remain retryable, but it cannot convert a completed, verified roster handoff into a
+generic confirmation failure.

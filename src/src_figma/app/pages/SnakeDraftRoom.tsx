@@ -2528,11 +2528,15 @@ function MlbSnakeDraftRoom() {
     setCommittingRecap(true);
     setRecapError(null);
     try {
+      if (!practiceMode && liveHostRef.current.hostAccessReady) {
+        await liveHostRef.current.refresh().catch(() => undefined);
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      }
       const freshSession = await getMlbDraftSession(league.id, sessionSeasonNumber);
       if (!freshSession) throw new Error('THE COMPLETED DRAFT SESSION COULD NOT BE RELOADED.');
       const liveRoom = practiceMode ? null : liveHostRef.current.room;
       const livePublicSession = practiceMode ? null : liveHostRef.current.publicSession;
-      if (!practiceMode && (!liveRoom || !livePublicSession || liveRoom.status !== 'complete')) {
+      if (!practiceMode && (!liveRoom || !livePublicSession)) {
         throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
       }
       const completionSource = practiceMode
@@ -2604,7 +2608,7 @@ function MlbSnakeDraftRoom() {
         if (!activeLiveRoom) throw new Error('THE LIVE ROOM COULD NOT BE CLOSED.');
         await liveHostRef.current.closeRoom(
           `handoff:${activeLiveRoom.id}:${activeLiveRoom.publicRevision}:${manifest.source.sessionId}`,
-        );
+        ).catch(() => undefined);
       }
       navigate(scoutHireRouteForLeague(league));
     } catch {

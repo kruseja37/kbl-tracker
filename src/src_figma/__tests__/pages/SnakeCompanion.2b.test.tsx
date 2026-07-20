@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   liveIntentSequence: 0,
   liveAutoResumed: false,
   liveBoardDesignSlots: null as Array<Record<string, unknown>> | null,
+  soundEvents: [] as string[],
+  forceOpenFinishSafety: false,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -280,9 +282,9 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async 
   };
 });
 vi.mock('../../utils/snakeSounds', () => ({
-  loadSnakeSoundsEnabled: () => false,
+  loadSnakeSoundsEnabled: () => true,
   saveSnakeSoundsEnabled: vi.fn(),
-  createSnakeSoundPlayer: () => ({ play: vi.fn() }),
+  createSnakeSoundPlayer: () => ({ play: (sound: string) => mocks.soundEvents.push(sound) }),
 }));
 vi.mock('../../app/components/snake/desk/useSnakeSelectedConsequences', async () => {
   const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
@@ -306,6 +308,23 @@ vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (impor
   return {
     ...actual,
     useSnakePickFinishSafety: (request: import('../../app/workers/snakePickFinish.worker').SnakePickFinishWorkerRequest | null) => {
+      if (mocks.forceOpenFinishSafety) {
+        const openRow = (playerId: string) => ({
+          playerId,
+          status: 'OPEN' as const,
+          message: 'FINISH PROOF UNAVAILABLE.',
+          finalSalary: null,
+          finalTax: null,
+          moneyLeft: null,
+        });
+        const rows = new Map((request?.candidatePlayerIds ?? []).map((playerId) => [playerId, openRow(playerId)]));
+        const getKnownRow = rows.get.bind(rows);
+        rows.get = (playerId: string) => getKnownRow(playerId) ?? openRow(playerId);
+        return {
+          status: 'ready',
+          rows,
+        };
+      }
       if (!request) return { status: 'idle', rows: new Map() };
       const rows = seating.createSnakePickFinishSafetyClassifier(request)(request.candidatePlayerIds);
       return { status: 'ready', rows: new Map(rows.map((row) => [row.playerId, row])) };
@@ -619,6 +638,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.liveIntentSequence = 0;
     mocks.liveAutoResumed = false;
     mocks.liveBoardDesignSlots = null;
+    mocks.soundEvents.length = 0;
+    mocks.forceOpenFinishSafety = false;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
@@ -724,6 +745,41 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await waitFor(() => expect(screen.getByText('CLUB B SELECTED DUAL PLAYER')).toBeInTheDocument());
     expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('CLUB A · PICK 2');
     expect(screen.queryByRole('button', { name: /SELECT DUAL PLAYER/ })).not.toBeInTheDocument();
+  });
+
+  test('plays the request cue after sending a pick and the draft cue after the public pick advances', async () => {
+    const source = session();
+    source.completedPicks = [{
+      round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    mocks.forceOpenFinishSafety = true;
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(mocks.soundEvents).toEqual([]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: /SELECT ONE-B PLAYER/ }));
+    const sendPick = await screen.findByRole('button', { name: 'SEND PICK TO HOTSEAT' });
+    await waitFor(() => expect(sendPick).toBeEnabled());
+    fireEvent.click(sendPick);
+
+    await waitFor(() => expect(mocks.liveIntents).toHaveLength(1));
+    expect(mocks.soundEvents).toEqual(['request']);
+
+    mocks.currentSession = {
+      ...source,
+      completedPicks: [
+        ...source.completedPicks,
+        { round: 1, pick: 2, teamId: 'a', playerId: 'one-b', settledSalary: 10_300, marginalTax: 0 },
+      ],
+      currentPickIndex: 2,
+      revision: source.revision + 1,
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(mocks.soundEvents).toEqual(['request', 'drafted']));
   });
 
   test('a rival public pick removes the player from the displayed board without a private write', async () => {

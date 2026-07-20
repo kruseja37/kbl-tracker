@@ -98,14 +98,12 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'rotation', stat: 'POW', topN: 4, cap: 17.5, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2194663, minAdder: 3292, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'CON', topN: 4, cap: 17.3, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1316798, minAdder: 2743, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 35.3, penaltyCurve: 2, penaltyPer100: 1097332, minAdder: 2743, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'rotation', stat: 'FLD', topN: 4, cap: 64.8, penaltyCurve: 2, penaltyPer100: 713266, minAdder: 1097, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 272.9, penaltyCurve: 1.5, penaltyPer100: 1645997, minAdder: 2195, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 264.4, penaltyCurve: 2, penaltyPer100: 438933, minAdder: 1097, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 299.0, penaltyCurve: 1.9, penaltyPer100: 877865, minAdder: 1317, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'POW', topN: 4, cap: 6.9, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2304396, minAdder: 5487, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'CON', topN: 4, cap: 7.0, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1426531, minAdder: 3292, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 22.1, penaltyCurve: 2, penaltyPer100: 1207065, minAdder: 3292, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 23.6, penaltyCurve: 2, penaltyPer100: 822999, minAdder: 1097, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 234.1, penaltyCurve: 1.1, penaltyPer100: 3291995, minAdder: 5487, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'JNK', topN: 3, cap: 235.3, penaltyCurve: 2, penaltyPer100: 548666, minAdder: 1097, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'ACC', topN: 3, cap: 197.8, penaltyCurve: 1.9, penaltyPer100: 1097332, minAdder: 3292, ratingBasis: LUXURY_TAX_RATING_BASIS },
@@ -119,14 +117,12 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'rotation', stat: 'POW', topN: 4, cap: 16.7, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1937221, minAdder: 2906, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'CON', topN: 4, cap: 16.6, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1162333, minAdder: 2422, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 33.7, penaltyCurve: 2, penaltyPer100: 968610, minAdder: 2422, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'rotation', stat: 'FLD', topN: 4, cap: 61.9, penaltyCurve: 2, penaltyPer100: 629597, minAdder: 969, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 260.4, penaltyCurve: 1.5, penaltyPer100: 1452916, minAdder: 1937, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 252.3, penaltyCurve: 2, penaltyPer100: 387444, minAdder: 969, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 285.3, penaltyCurve: 1.9, penaltyPer100: 774888, minAdder: 1162, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'POW', topN: 4, cap: 6.6, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 2034082, minAdder: 4843, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'CON', topN: 4, cap: 6.7, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1259194, minAdder: 2906, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 21.1, penaltyCurve: 2, penaltyPer100: 1065472, minAdder: 2906, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 22.5, penaltyCurve: 2, penaltyPer100: 726458, minAdder: 969, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 223.4, penaltyCurve: 1.1, penaltyPer100: 2905831, minAdder: 4843, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'JNK', topN: 3, cap: 224.6, penaltyCurve: 2, penaltyPer100: 484305, minAdder: 969, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'ACC', topN: 3, cap: 188.7, penaltyCurve: 1.9, penaltyPer100: 968610, minAdder: 2906, ratingBasis: LUXURY_TAX_RATING_BASIS },
@@ -140,22 +136,20 @@ export const LUXURY_CAP_TABLES: Record<TierKey, LuxuryCapRow[]> = {
     { group: 'rotation', stat: 'POW', topN: 4, cap: 16.0, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1737903, minAdder: 2607, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'CON', topN: 4, cap: 15.9, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1042742, minAdder: 2172, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'SPD', topN: 4, cap: 32.3, penaltyCurve: 2, penaltyPer100: 868952, minAdder: 2172, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'rotation', stat: 'FLD', topN: 4, cap: 59.3, penaltyCurve: 2, penaltyPer100: 564818, minAdder: 869, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'VEL', topN: 4, cap: 249.5, penaltyCurve: 1.5, penaltyPer100: 1303427, minAdder: 1738, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'JNK', topN: 4, cap: 241.7, penaltyCurve: 2, penaltyPer100: 347581, minAdder: 869, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'rotation', stat: 'ACC', topN: 4, cap: 273.3, penaltyCurve: 1.9, penaltyPer100: 695161, minAdder: 1043, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'POW', topN: 4, cap: 6.3, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1824798, minAdder: 4345, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'CON', topN: 4, cap: 6.4, penaltyCurve: PITCHER_SECONDARY_BATTING_PENALTY_CURVE, penaltyPer100: 1129637, minAdder: 2607, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'SPD', topN: 4, cap: 20.2, penaltyCurve: 2, penaltyPer100: 955847, minAdder: 2607, ratingBasis: LUXURY_TAX_RATING_BASIS },
-    { group: 'bullpen', stat: 'FLD', topN: 4, cap: 21.6, penaltyCurve: 2, penaltyPer100: 651714, minAdder: 869, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'VEL', topN: 3, cap: 214.0, penaltyCurve: 1.1, penaltyPer100: 2606855, minAdder: 4345, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'JNK', topN: 3, cap: 215.2, penaltyCurve: 2, penaltyPer100: 434476, minAdder: 869, ratingBasis: LUXURY_TAX_RATING_BASIS },
     { group: 'bullpen', stat: 'ACC', topN: 3, cap: 180.8, penaltyCurve: 1.9, penaltyPer100: 868952, minAdder: 2607, ratingBasis: LUXURY_TAX_RATING_BASIS },
   ],
 };
 
-/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD FLD) are ACTIVE after DB1.
- *  The stock pool now has 179/179 pitcher batterRatings, so no v1 luxury rows are disabled.
+/** Pitcher-BATTING luxury rows (rotation/bullpen POW CON SPD) are ACTIVE after DB1.
+ *  Pitcher FLD is salary/IV value only and is never a luxury-tax row.
  *  Kept as an explicit empty registry for callers that check legacy disabled rows. */
 export const DISABLED_LUXURY_ROWS: Array<Omit<LuxuryCapRow, 'cap'> & { xblCap: number; disabledReason: string }> = [
 ];

@@ -83,16 +83,15 @@ export function deriveUsageWeights(role: PitcherRoleKey): Record<UsageAttr, numb
 }
 
 /**
- * Luxury tax measures how often a pitcher's secondary rating can affect games.
- * Salary/IV intentionally keeps full pitcher FLD value; tax instead uses defensive
- * start exposure so a once-per-four-games starter is not treated as an everyday fielder.
+ * Luxury tax measures how often a pitcher's secondary batting or running rating can
+ * affect games. Salary/IV keeps full pitcher FLD value, but pitcher fielding is never
+ * a luxury-tax input.
  */
 export function deriveLuxuryTaxUsageWeights(role: PitcherRoleKey): Record<UsageAttr, number> {
   const usage = deriveUsageWeights(role);
-  const input = USAGE_INPUTS[role];
   return {
     ...usage,
-    FLD: Math.max(input.startShare, input.rangeFloor),
+    FLD: 0,
   };
 }
 
