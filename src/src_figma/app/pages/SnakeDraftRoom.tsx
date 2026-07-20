@@ -2659,8 +2659,7 @@ function MlbSnakeDraftRoom() {
       await assertSnakeRosterHandoffReady(finalized.session, 'MLB');
       const manifest = readSnakeDraftTruth(finalized.session, 'MLB').manifest!;
       const activeLiveRoom = liveHostRef.current.room;
-      if (!practiceMode && activeLiveRoom?.status !== 'closed') {
-        if (!activeLiveRoom) throw new Error('THE LIVE ROOM COULD NOT BE CLOSED.');
+      if (!practiceMode && activeLiveRoom && activeLiveRoom.status !== 'closed') {
         await liveHostRef.current.closeRoom(
           `handoff:${activeLiveRoom.id}:${activeLiveRoom.publicRevision}:${manifest.source.sessionId}`,
         ).catch(() => undefined);

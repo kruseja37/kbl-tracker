@@ -1205,5 +1205,10 @@ and one wrong player assignment. Exact four-team and eight-team runs finish 88 a
 create missing roster rows, verify every launch salary and assignment, pass roster-handoff
 readiness, and repeat without changing any persisted byte. A recovered-origin test restores the
 live catalog without roster rows and completes all 44 picks even when generic backup queueing fails.
-The affected six-file suite is 112/112; TypeScript, changed-file ESLint, diff integrity, and the
-production/PWA build are green. Freeze, separate audit, one preview, and JK's walk remain.
+The first frozen builder commit `a1ffe606` received **REJECT — Major 1 / Minor 0** because a
+recovered completed room that had already disappeared could finish the local handoff, then throw
+during cleanup and falsely remain blocked. The narrow repair treats an absent room as already
+cleaned up after verified handoff; a present room still receives best-effort close. The new direct
+UI proof advances without an active room or an error banner. The affected suite is now 113/113;
+TypeScript, changed-file ESLint, diff integrity, and the production/PWA build are green. Re-audit,
+one preview, and JK's walk remain.

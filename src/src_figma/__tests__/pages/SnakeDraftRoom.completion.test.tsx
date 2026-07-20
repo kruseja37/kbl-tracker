@@ -13,8 +13,10 @@ const mocks = vi.hoisted(() => ({
   flush: vi.fn(async () => undefined),
   refresh: vi.fn(async () => undefined),
   closeRoom: vi.fn(),
+  getLiveRoom: vi.fn(),
   liveSession: null as LeagueBuilderMlbDraftSession | null,
   liveRoomStatus: 'complete' as 'open' | 'complete' | 'closed',
+  forceMissingLiveRoom: false,
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
@@ -73,13 +75,18 @@ vi.mock('../../../utils/snakeLiveCapabilityStore', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/snakeLiveCapabilityStore')>();
   return { ...actual, getOrCreateSnakeLiveDeviceId: vi.fn(async () => 'completion-host-device') };
 });
+vi.mock('../../../utils/snakeLiveRoomTransport', () => ({
+  createSnakeLiveRoomTransport: () => ({ getRoom: mocks.getLiveRoom }),
+}));
 vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
   useSnakeLiveHostRoom: (options: {
     session: LeagueBuilderMlbDraftSession | null;
     enabled?: boolean;
     catalog?: Record<string, unknown> | null;
   }) => {
-    const publicSession = options.enabled ? mocks.liveSession ?? options.session : null;
+    const publicSession = options.enabled && !mocks.forceMissingLiveRoom
+      ? mocks.liveSession ?? options.session
+      : null;
     const room = publicSession ? {
       id: `live:${publicSession.id}`,
       ownerUserId: 'completion-owner',
@@ -264,6 +271,8 @@ describe('snake draft durable completion and recap', () => {
     mocks.commitFarm.mockReset().mockResolvedValue(undefined);
     mocks.liveSession = null;
     mocks.liveRoomStatus = 'complete';
+    mocks.forceMissingLiveRoom = false;
+    mocks.getLiveRoom.mockReset().mockResolvedValue(null);
     mocks.closeRoom.mockReset().mockImplementation(async () => ({ status: 'closed' }));
     mocks.lastSaved = null;
     mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
@@ -348,6 +357,28 @@ describe('snake draft durable completion and recap', () => {
 
     await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledTimes(1));
     expect(mocks.closeRoom).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  test('a recovered completed draft advances when the live room is already unavailable', async () => {
+    const completed = {
+      ...completedSession('MLB'),
+      liveRoomRecovery: {
+        roomId: 'live:missing-complete-room',
+        roomCode: '2468',
+        publicRevision: 2,
+      },
+    };
+    setMlbData(completed);
+    mocks.forceMissingLiveRoom = true;
+
+    renderRoom(`/snake-room?leagueId=${league.id}`);
+    fireEvent.click(await screen.findByRole('button', { name: 'CONFIRM MLB DRAFT' }));
+
+    await waitFor(() => expect(mocks.commitMlb).toHaveBeenCalledTimes(1));
+    expect(mocks.getLiveRoom).toHaveBeenCalledWith('live:missing-complete-room');
+    expect(mocks.closeRoom).not.toHaveBeenCalled();
     expect(await screen.findByTestId('navigation-target')).toHaveTextContent('/league-builder/scout-hire');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

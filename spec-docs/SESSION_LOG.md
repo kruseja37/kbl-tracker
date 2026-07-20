@@ -8214,3 +8214,10 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next: freeze the exact diff, obtain a separate non-builder audit, publish one preview, then give
   room 4352 back to JK for the sole product-acceptance walk. No merge or production deploy is
   authorized.
+- Frozen `a1ffe606` received **REJECT — Major 1 / Minor 0**. The atomic write was correct. The
+  recovered-origin handler could verify local success, find that the live room was already absent,
+  then throw during cleanup and falsely report that rosters were not saved.
+- Narrow repair: after verified handoff, an absent live room is already clean. A present open room
+  still receives best-effort close. Direct UI proof now covers a recovery receipt whose room lookup
+  returns null and confirms navigation with no error. The affected builder gate is 113/113 plus
+  TypeScript, changed-file ESLint, diff integrity, and production/PWA build. Re-audit remains.

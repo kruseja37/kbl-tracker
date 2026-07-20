@@ -32835,3 +32835,10 @@ no roster rows and finalize it; complete exact four-team and eight-team 22-playe
 assignments, launch salaries, legality, and handoff readiness; run focused tests, TypeScript,
 changed-file lint, production build, separate non-builder audit, and JK's browser walk. No merge or
 production deploy is authorized.
+
+**Audit amendment 1:** Frozen builder commit `a1ffe606` was rejected with Major 1 / Minor 0. The
+transaction was correct, but a recovered completed room that was no longer readable could finish
+and verify the local handoff, then enter cleanup with no active room and falsely report failure.
+After a verified handoff, an absent room now means there is nothing left to close. A present open
+room still receives best-effort close. The product must navigate after either result. A focused UI
+test must cover the absent-room recovery receipt directly.
