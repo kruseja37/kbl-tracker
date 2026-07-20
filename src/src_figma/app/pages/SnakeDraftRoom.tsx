@@ -247,6 +247,7 @@ function snakeLivePublicActionSession(
   delete publicSession.openTradeOffers;
   delete publicSession.snakeCompanions;
   delete publicSession.companionRoomPublication;
+  delete publicSession.liveRoomRecovery;
   delete publicSession.correctionSnapshots;
   delete publicSession.farmProspectSnapshot;
   return session.snakeSetup
@@ -1040,7 +1041,11 @@ function MlbSnakeDraftRoom() {
       const catalog = receipt ? readSnakeLiveCatalog(receipt.catalog) : null;
       if (!catalog) throw new Error('THE LIVE ROOM CATALOG IS NOT AVAILABLE.');
       const publicSession = readSnakeLivePublicSession(room);
-      await restoreSnakeLiveRoomLocally({ catalog, session: publicSession });
+      await restoreSnakeLiveRoomLocally({
+        catalog,
+        session: publicSession,
+        recovery: { roomId: room.id, roomCode, publicRevision: room.publicRevision },
+      });
       await refresh();
       navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}`, { replace: true });
     } catch (cause) {
@@ -2569,11 +2574,25 @@ function MlbSnakeDraftRoom() {
       }
       const freshSession = await getMlbDraftSession(league.id, sessionSeasonNumber);
       if (!freshSession) throw new Error('THE COMPLETED DRAFT SESSION COULD NOT BE RELOADED.');
-      const liveRoom = practiceMode ? null : liveHostRef.current.room;
-      const livePublicSession = practiceMode ? null : liveHostRef.current.publicSession;
+      let liveRoom = practiceMode ? null : liveHostRef.current.room;
+      let livePublicSession = practiceMode ? null : liveHostRef.current.publicSession;
       if (!practiceMode && (!liveRoom || !livePublicSession)) {
-        throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
+        const recovery = freshSession.liveRoomRecovery;
+        if (!recovery) throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
+        const recoveredRoom = await createSnakeLiveRoomTransport().getRoom(recovery.roomId);
+        if (recoveredRoom) {
+          const recoveredSession = readSnakeLivePublicSession(recoveredRoom);
+          if (recoveredSession.id !== freshSession.id) throw new Error('THE RECOVERED LIVE ROOM DOES NOT MATCH THIS DRAFT.');
+          liveRoom = recoveredRoom;
+          livePublicSession = recoveredSession;
+        } else {
+          // The recovery receipt was created from the server's immutable public
+          // snapshot. A completed draft can still be finalized when the room is
+          // no longer available for a read-only refresh.
+          livePublicSession = freshSession;
+        }
       }
+      if (!practiceMode && !livePublicSession) throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
       const completionSource = practiceMode
         ? freshSession
         : snakeLivePublicActionSession(livePublicSession!);

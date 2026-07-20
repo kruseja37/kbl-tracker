@@ -54,6 +54,7 @@ export function buildSnakeLivePublicState(
   delete publicSession.openTradeOffers;
   delete publicSession.snakeCompanions;
   delete publicSession.companionRoomPublication;
+  delete publicSession.liveRoomRecovery;
   delete publicSession.correctionSnapshots;
   delete publicSession.farmProspectSnapshot;
   const snakeSetup = publicSession.snakeSetup;

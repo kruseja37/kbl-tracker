@@ -70,12 +70,19 @@ describe('Snake live-room local recovery', () => {
       activeTeamIds: league.teamIds, activePoolPlayerIds: pool.players.map((entry) => entry.id),
     }));
     expect(catalog).not.toBeNull();
-    const result = await restoreSnakeLiveRoomLocally({ catalog: catalog!, session: session() });
+    const result = await restoreSnakeLiveRoomLocally({
+      catalog: catalog!,
+      session: session(),
+      recovery: { roomId: 'room-1', roomCode: '4352', publicRevision: 7 },
+    });
     expect(result).toMatchObject({ leagueId: league.id, restoredLeague: true, restoredTeams: 2, restoredPlayers: 2, restoredPool: true, restoredSession: true });
     expect((await getLeagueTemplate(league.id))?.name).toBe('Test Mock');
     expect((await getAllTeams()).map((entry) => entry.id)).toEqual(['team-a', 'team-b']);
     expect((await getAllPlayers()).map((entry) => entry.id)).toEqual(['player-a', 'player-b']);
     expect((await getRegisteredPool(league.id))?.players).toHaveLength(2);
-    expect((await getMlbDraftSession(league.id, 1))?.id).toBe(session().id);
+    expect(await getMlbDraftSession(league.id, 1)).toMatchObject({
+      id: session().id,
+      liveRoomRecovery: { roomId: 'room-1', roomCode: '4352', publicRevision: 7 },
+    });
   });
 });

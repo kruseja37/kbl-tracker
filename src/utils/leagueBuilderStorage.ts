@@ -667,6 +667,16 @@ export interface LeagueBuilderMlbDraftSession {
   };
   /** Hotseat-issued recovery authority for legacy companion room queues. */
   companionRoomPublication?: SnakeCompanionRoomPublication;
+  /**
+   * One-browser recovery receipt for a cloud-backed room opened from a new
+   * preview origin. It is local-only and never grants host control.
+   */
+  liveRoomRecovery?: {
+    roomId: string;
+    roomCode: string;
+    publicRevision: number;
+    recoveredAt: string;
+  };
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
   /** Monotonic session revision used to reject stale guide packages at execution. */
@@ -1540,11 +1550,20 @@ function sameRecoveryPool(left: RegisteredPool, right: RegisteredPool): boolean 
 export async function restoreSnakeLiveRoomLocally(input: {
   catalog: SnakeLiveCatalogData;
   session: LeagueBuilderMlbDraftSession;
+  recovery: {
+    roomId: string;
+    roomCode: string;
+    publicRevision: number;
+  };
 }): Promise<SnakeLiveRoomLocalRecoveryResult> {
-  const { catalog, session } = input;
+  const { catalog, session, recovery } = input;
   if (catalog.league.id !== session.leagueId
     || session.id !== createMlbDraftSessionId(session.leagueId, session.seasonNumber)
-    || (session.draftPhase && session.draftPhase !== 'MLB')) {
+    || (session.draftPhase && session.draftPhase !== 'MLB')
+    || !recovery.roomId.trim()
+    || !/^\d{4}$/.test(recovery.roomCode)
+    || !Number.isInteger(recovery.publicRevision)
+    || recovery.publicRevision < 0) {
     throw new Error('THE LIVE ROOM CATALOG DOES NOT MATCH ITS MLB DRAFT SESSION.');
   }
   const poolIds = new Set(catalog.registeredPool.players.map((player) => player.id));
@@ -1569,7 +1588,15 @@ export async function restoreSnakeLiveRoomLocally(input: {
     leagueAssignments: [],
   }) as Player);
   const recoveryPool = structuredClone(catalog.registeredPool) as RegisteredPool;
-  const recoverySession = structuredClone(session) as LeagueBuilderMlbDraftSession;
+  const recoverySession: LeagueBuilderMlbDraftSession = {
+    ...(structuredClone(session) as LeagueBuilderMlbDraftSession),
+    liveRoomRecovery: {
+      roomId: recovery.roomId,
+      roomCode: recovery.roomCode,
+      publicRevision: recovery.publicRevision,
+      recoveredAt: nowISO(),
+    },
+  };
   const db = await initLeagueBuilderDatabase();
 
   return new Promise((resolve, reject) => {
