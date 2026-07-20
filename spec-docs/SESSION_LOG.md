@@ -8226,3 +8226,9 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   repaired-file ESLint, full-range diff integrity, and the no-parallel-cleanup search are green.
 - Next: push the approved branch, create one Vercel preview, restore room 4352, and give the recap
   confirmation back to JK as the sole product gate. No merge or production deploy is authorized.
+- Pushed branch source `29966657` and published corrected preview deployment
+  `dpl_BrqnbvDrv4McNTKaMkQf7SRRNdiP` at
+  `https://kbl-tracker-6bupr8pxk-kruseja37s-projects.vercel.app`. Vercel reports READY, the public
+  `build-meta.json` reports exact SHA `29966657`, and the build completed 2,744 modules plus PWA.
+  The earlier unlabeled preview is superseded. Production remains unchanged. JK now restores room
+  4352 and runs the only remaining completed-draft product gate.

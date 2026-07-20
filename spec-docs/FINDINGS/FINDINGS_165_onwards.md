@@ -1174,7 +1174,7 @@ received **APPROVE — Major 0 / Minor 0** from the same non-builder auditor aft
 focused tests. An explicitly authorized push and new preview remain before JK's browser re-walk.
 
 ### FINDING-247
-**Date:** 2026-07-20 | **Phase:** Snake Draft / completed MLB roster handoff | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW + JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** Snake Draft / completed MLB roster handoff | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING
 **Files:** `src/utils/leagueBuilderStorage.ts`, `src/utils/leagueBuilderAuctionPipeline.ts`,
 `src/src_figma/app/pages/SnakeDraftRoom.tsx`, focused storage/pipeline/completion tests
 **Evidence:** JK completed every pick in a four-team live draft and reached the MLB Draft Recap.
@@ -1215,4 +1215,6 @@ TypeScript, changed-file ESLint, diff integrity, and the production/PWA build ar
 **Independent result:** The same auditor rechecked repaired head `6c7b5714` and returned
 **APPROVE — Major 0 / Minor 0**. Independent completion, atomic pipeline, and recovered-origin proof
 is 37/37. TypeScript, repaired-file ESLint, and full-range diff integrity are green. The auditor
-confirmed no equivalent post-handoff cleanup branch remains. One preview and JK's walk remain.
+confirmed no equivalent post-handoff cleanup branch remains. Corrected preview deployment
+`dpl_BrqnbvDrv4McNTKaMkQf7SRRNdiP` is READY and its public build record reports exact source SHA
+`29966657`. Production remains unchanged. JK's room 4352 confirmation walk remains.
