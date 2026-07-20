@@ -4,7 +4,7 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## SECOND AUDIT BLOCKERS REPAIRED / FINAL RE-AUDIT PENDING (2026-07-20; FINDING-249)
+## INDEPENDENTLY APPROVED / REMOTE GATE PENDING (2026-07-20; FINDING-249)
 - FARM now uses the dedicated Snake live-room authority instead of the old Hotseat-only path.
   Hotseat alone writes public picks, order, rosters, and completion. An approved companion writes
   only its private fogged scout board and sends a pick request for Hotseat confirmation.
@@ -16,11 +16,12 @@
   Minor 0: SQL did not require scalar identity values, and `PICK_RECORDED` did not prove one legal
   state transition. The second repair aligns TypeScript, the server model, and SQL. It accepts one
   next pick only and rejects changes to pause, trades, order, version state, or other session facts.
-  The 33-test delta gate and 241-test MLB/FARM gate are green. TypeScript, changed-file lint, diff
-  integrity, and the 2,744-module production/PWA build are green.
+  The final frozen code head `7a44d2b6` received **APPROVE — Major 0 / Minor 0** from the same
+  read-only auditor. Independent proof passed 33/33 focused tests, 227/227 broad Snake live-room
+  tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build.
 - Migration `20260720213000_farm_snake_live_catalog.sql` extends the installed live-room catalog
-  validator to FARM. It is local only. **Next:** same-auditor final read-only recheck, then explicit authority
-  for the migration, push, and one preview. JK's browser walk remains the product gate.
+  validator to FARM. It is local only. **Next:** explicit authority for the migration, push, and one
+  preview. JK's browser walk remains the product gate.
 
 ## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW READY / JK WALK PENDING (2026-07-20; FINDING-248)
 - New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through

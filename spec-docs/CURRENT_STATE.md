@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-249 SECOND AUDIT BLOCKERS ARE REPAIRED; FINAL RE-AUDIT PENDING (2026-07-20; branch `codex/snake-live-room-authority`). JK's recovered four-team league reached the FARM room and proved that FARM had no companion controls. The generic repair now extends the same cloud-authority model through FARM: Hotseat owns public picks and completion; an approved companion owns only its private fogged scout board and can send a pick request for Hotseat confirmation. The first separate audit blocked commit `256962dd` with Major 3 / Minor 0. The same auditor then blocked first repair `1e53eb8f` with Major 2 / Minor 0: SQL still accepted object values in public FARM identity fields, and a raw host could label an arbitrary public-state rewrite as `PICK_RECORDED`. The second repair requires exact JSON scalar types and one exact next-pick transition. It rejects changes to pause, trades, order, version state, or any other immutable session field. A 33-test delta gate and a 241-test MLB/FARM live-room gate are green. TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** freeze this repair and send it to the same read-only auditor. Migration `20260720213000_farm_snake_live_catalog.sql` must be applied with the matching app before a real FARM companion browser walk. It has not been applied. No push, preview, merge, or production promotion is authorized.
+> ## RIGHT NOW — FINDING-249 FARM COMPANION AUTHORITY IS INDEPENDENTLY APPROVED (2026-07-20; branch `codex/snake-live-room-authority`). JK's recovered four-team league reached the FARM room and proved that FARM had no companion controls. The generic repair now extends the same cloud-authority model through FARM: Hotseat owns public picks and completion; an approved companion owns only its private fogged scout board and can send a pick request for Hotseat confirmation. Two separate-audit rounds found and drove closure of five Major findings. The final frozen code head `7a44d2b6` received **APPROVE — Major 0 / Minor 0** from the same read-only auditor. Independent verification passed 33/33 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build. The known live-reconnect result remains identical to the verified base and is not introduced here. **NEXT:** with explicit authority, apply migration `20260720213000_farm_snake_live_catalog.sql`, push the audited branch, and create one matching preview. JK's real FARM companion browser walk remains the product gate. No migration, push, preview, merge, or production promotion is authorized yet.
 
 ## Current product law
 
@@ -22,10 +22,9 @@
 
 ## Open gates
 
-1. Same-auditor final read-only recheck of the frozen FINDING-249 second repair.
-2. With explicit authority, apply the FARM catalog migration, push the audited branch, and create
+1. With explicit authority, apply the FARM catalog migration, push the audited branch, and create
    one matching preview.
-3. JK runs a FARM Hotseat-plus-companion walk, then the broader new-league Snake re-walk.
+2. JK runs a FARM Hotseat-plus-companion walk, then the broader new-league Snake re-walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel

@@ -8338,3 +8338,14 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green.
 - Final same-auditor recheck remains. Migration is local and unapplied. No push, preview, merge, or
   production promotion is authorized.
+
+## 2026-07-20 — FINDING-249 final independent approval
+
+- The same read-only auditor reviewed exact frozen code head `7a44d2b6` and returned **APPROVE —
+  Major 0 / Minor 0**.
+- Independent gates passed: 33/33 focused tests, 227/227 broad Snake live-room tests, TypeScript,
+  changed-file ESLint, both diff-integrity checks, and the 2,744-module production/PWA build.
+- The auditor confirmed scalar-only public FARM catalog data and one exact legal next-pick server
+  transition. The known live-reconnect result remains identical to the verified base.
+- Migration `20260720213000_farm_snake_live_catalog.sql` remains local and unapplied. No push,
+  preview, merge, or production promotion is authorized. JK's browser walk remains the product gate.

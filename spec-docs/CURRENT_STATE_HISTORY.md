@@ -1628,3 +1628,11 @@ Major 2 / Minor 0. It proved that SQL accepted non-scalar public identity values
 could publish an arbitrary FARM state rewrite as a pick. The new header records exact scalar gates
 and an exact one-pick server transition. Final same-auditor recheck remains. No migration, push,
 preview, merge, or production promotion is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-249 final approval
+
+The prior live header recorded the second repair at `7a44d2b6` with final re-audit pending. The same
+read-only auditor returned APPROVE, Major 0 / Minor 0, after independent focused and broad tests,
+TypeScript, lint, build, and diff-integrity checks. The new header records the frozen engineering
+approval and leaves only explicit remote authority plus JK's real FARM companion browser walk. No
+migration, push, preview, merge, or production promotion is authorized.

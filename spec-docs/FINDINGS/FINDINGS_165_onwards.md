@@ -1267,7 +1267,7 @@ HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chr
 with no console warning or error. JK's new/recovered league walk is the remaining product gate.
 
 ### FINDING-249
-**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** SECOND AUDIT BLOCKERS REPAIRED — FINAL RE-AUDIT PENDING
+**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
 **Files:** `src/utils/snakeLiveCatalog.ts`,
 `src/src_figma/app/components/snake/companion/useSnakeLiveHostRoom.ts`,
 `src/src_figma/app/components/snake/farm/farmRoomModel.ts`,
@@ -1300,7 +1300,7 @@ arbitrary FARM public state under a `PICK_RECORDED` label. The second repair req
 scalar type for every allowed public identity field and validates one exact next-pick transition.
 Only `completedPicks`, `currentPickIndex`, `revision`, and `lastModified` can change. The new pick
 must match the frozen slot, public event, pool, slot salary, zero FARM tax, and final/open room
-status. FARM does not retain the MLB version ledger. The 33-test delta gate and a broader 241-test
-MLB/FARM live-room gate pass. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module
-production/PWA build pass. Same-auditor final recheck, explicit remote authority, and JK's browser
-walk remain.
+status. FARM does not retain the MLB version ledger. The final frozen code head `7a44d2b6` received
+**APPROVE — Major 0 / Minor 0** from the same read-only auditor. Independent proof passed 33/33
+focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file ESLint, diff integrity,
+and the 2,744-module production/PWA build. Explicit remote authority and JK's browser walk remain.

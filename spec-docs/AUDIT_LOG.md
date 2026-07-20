@@ -1904,3 +1904,13 @@ pick. The second repair aligns SQL and the test server on exact scalar catalog t
 next-pick transition. Its 33-test delta gate and 241-test MLB/FARM gate pass. TypeScript,
 changed-file ESLint, diff integrity, and the 2,744-module production/PWA build pass. Final
 same-auditor recheck is required before remote work.
+
+### 2026-07-20 — FINDING-249 final independent approval
+
+The same read-only auditor reviewed frozen code head `7a44d2b6` and returned **APPROVE — Major 0 /
+Minor 0**. The auditor confirmed that the strict FARM catalog accepts scalar public identity only
+and that the publish RPC permits one exact legal next-pick transition. Independent gates passed:
+33/33 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file ESLint, both diff
+integrity checks, and the 2,744-module production/PWA build. The known live-reconnect result is
+unchanged from base. The migration is still local and unapplied. No push, preview, merge, or
+production promotion is authorized.
