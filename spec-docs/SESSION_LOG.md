@@ -8187,5 +8187,7 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Direct focused proof is 148/148. The 93-test production-shape gate completed 88/88 four-team and
   176/176 eight-team picks, kept every Assistant GM available, passed all Standard/Nerfed pool
   presets, and classified all 506 visible players. TypeScript, changed-file ESLint, and diff
-  integrity are green. Freeze and same-auditor recheck remain. No push, merge, or deploy is
-  authorized.
+  integrity are green. The 2,744-module production/PWA build is green.
+- Frozen repair head `70fde7dc` received **APPROVE — Major 0 / Minor 0** from the same non-builder
+  auditor. Independent focused verification is 160/160, and completion hard-gate ordering remains
+  unchanged. No push, merge, or deploy is authorized.

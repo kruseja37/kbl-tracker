@@ -1858,3 +1858,9 @@ Direct repair proof is 148/148. The independent 93-test production-shape gate ag
 88/88 and 176/176 picks, keeps every Assistant GM available, and passes all Standard/Nerfed pool
 presets. TypeScript, changed-file ESLint, and diff integrity are green. Same-auditor re-audit remains;
 no push, merge, deploy, or product acceptance is authorized.
+
+The repair was frozen at `70fde7dc`. The same read-only auditor returned **APPROVE — Major 0 /
+Minor 0** after checking the exact `aeeb00a2..70fde7dc` diff. Independent focused verification was
+160/160 with diff integrity green. The auditor confirmed typed risk color, pick-intent-only host
+audio, position-first legal depth, legacy Two Way FLD treatment, and unchanged completion hard-gate
+ordering. No push, merge, deploy, or product acceptance is authorized.

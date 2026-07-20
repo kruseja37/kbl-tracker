@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — SNAKE BROWSER-FEEDBACK FIRST AUDIT REPAIRED; RE-AUDIT REMAINS (2026-07-19; branch `codex/snake-live-room-authority`). JK completed the four-team preview draft. The bounded repair makes each position board control its starting slot, adds distinct public-pick and companion-submit cues, renders `LIKELY GONE` in red, removes ordinary pitcher FLD from tax while keeping its salary/IV value, and lets proven public completion finish local roster handoff even if live-room cleanup is late. The first non-builder audit rejected frozen `aeeb00a2` with Major 3 / Minor 1: risk color followed reason copy, the host cue followed desk claims, a legal depth-heavy board could displace the position leader, and saved legacy caps dropped Two Way hitter FLD. All four now have direct production-shaped regressions. Focused repair proof is 148/148; the 93-test production-shape gate again completed 88/88 and 176/176 picks, kept every Assistant GM available, and passed every Standard/Nerfed pool preset. TypeScript, changed-file lint, and diff integrity are green. **NEXT:** freeze the repair, obtain same-auditor approval, then create one explicitly authorized preview for JK's browser re-walk. The prior `d2ac79d7` preview is stale. Production remains on `ba7f97d6`; no merge or promotion occurred.
+> ## RIGHT NOW — SNAKE BROWSER-FEEDBACK REPAIR INDEPENDENTLY APPROVED; NEW PREVIEW NOT YET AUTHORIZED (2026-07-19; branch `codex/snake-live-room-authority`). JK completed the four-team preview draft. The bounded repair makes each position board control its starting slot, adds distinct public-pick and companion-submit cues, renders `LIKELY GONE` in red, removes ordinary pitcher FLD from tax while keeping its salary/IV value, and lets proven public completion finish local roster handoff even if live-room cleanup is late. The first non-builder audit rejected frozen `aeeb00a2` with Major 3 / Minor 1. The repaired head `70fde7dc` passed the same auditor with **APPROVE — Major 0 / Minor 0** and an independent 160/160 focused gate. Builder proof is 148/148; the 93-test production-shape gate completed 88/88 and 176/176 picks, kept every Assistant GM available, and passed every Standard/Nerfed pool preset. TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** with explicit authority, push the approved head and update one preview for JK's browser re-walk. The prior `d2ac79d7` preview is stale. Production remains on `ba7f97d6`; no merge or promotion occurred.
 
 ## Current product law
 
@@ -22,9 +22,8 @@
 
 ## Open gates
 
-1. Freeze the exact FINDING-246 audit repair.
-2. Obtain the same non-builder re-audit.
-3. With explicit authority, update one preview and run JK's Hotseat plus companion re-walk.
+1. With explicit authority, push exact approved head `70fde7dc` and update one preview.
+2. Run JK's Hotseat plus companion re-walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the one authorized

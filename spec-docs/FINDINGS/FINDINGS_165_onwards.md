@@ -1137,7 +1137,7 @@ repair is included in the final FINDING-244 independent audit. JK's browser walk
 gate. No merge or deploy is authorized.
 
 ### FINDING-246
-**Date:** 2026-07-19 | **Phase:** Snake Draft / completed four-team browser walk | **Status:** BUILDER VERIFIED — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-19 | **Phase:** Snake Draft / completed four-team browser walk | **Status:** FIXED — INDEPENDENTLY APPROVED — JK RE-WALK PENDING
 **Files:** `src/src_figma/app/components/snake/desk/deskModel.ts`,
 `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`,
 `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`,
@@ -1169,5 +1169,6 @@ regressions are green. The bounded verification groups passed 145 focused UI/eco
 tests, 43 live-room tests, 153 pipeline/assistant/scale tests, and 60 companion/rating-room tests.
 The scale proof completed four- and eight-team rooms, all 176 eight-team picks, every Standard and
 Nerfed pool preset, and a ready Assistant GM on every turn. TypeScript, changed-file ESLint, the
-2,744-module production/PWA build, and diff integrity are green. The exact diff now requires a
-separate non-builder audit before JK receives a new preview.
+2,744-module production/PWA build, and diff integrity are green. Frozen repair head `70fde7dc`
+received **APPROVE — Major 0 / Minor 0** from the same non-builder auditor after 160/160 independent
+focused tests. An explicitly authorized push and new preview remain before JK's browser re-walk.

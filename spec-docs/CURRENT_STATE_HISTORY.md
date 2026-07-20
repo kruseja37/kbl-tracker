@@ -1569,3 +1569,10 @@ rejected frozen `aeeb00a2` with Major 3 / Minor 1: two UI signals watched displa
 position-first assignment failed a legal depth-heavy Two Way edge, and saved legacy caps dropped
 Two Way hitter FLD. The new header records direct repairs and fresh 4/8-team scale proof, with the
 same-auditor recheck still required. No push, merge, deploy, or product acceptance occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 audit close
+
+The prior header recorded direct repair proof and left the same-auditor recheck open. The repair was
+frozen at `70fde7dc`; the same auditor returned APPROVE, Major 0 / Minor 0, after 160/160 independent
+focused tests. The live header now leaves only an explicitly authorized push and updated preview,
+then JK's browser re-walk. No push, merge, deploy, or product acceptance occurred.
