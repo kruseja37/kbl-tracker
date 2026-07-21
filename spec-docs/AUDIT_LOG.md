@@ -2038,3 +2038,11 @@ fingerprint, or validator defect. Its live verification passed the 163/163 core 
 exact-440 scheduler calibration. `git diff --check f19ccbb5..1bac2cfe` is clean. The builder and
 auditor gates are closed. One replacement preview and JK's browser walk remain open; production is
 unchanged.
+
+### 2026-07-20 — FINDING-253 replacement preview
+
+Vercel preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY at
+`https://kbl-tracker-5fekcs1al-kruseja37s-projects.vercel.app`. It was built from source commit
+`5a3d4031`; the remote build passed TypeScript, transformed 2,744 modules, and generated 224 PWA
+entries. An authenticated Vercel smoke test returned the KBL app title `Super Mega Baseball`.
+Production is unchanged. JK's browser walk is the only remaining gate.

@@ -1415,7 +1415,7 @@ import and setup-to-room coverage is 72/72. TypeScript, changed-file ESLint, dif
 unchanged from the base branch. Independent audit and JK's replacement-preview walk remain open.
 
 ### FINDING-253
-**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW/JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING
 **Files:** `src/engines/poolFromDemand.ts`, `src/engines/snakeSeatingProof.ts`,
 `src/src_figma/app/engines/leaguePlayerAdapter.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused tests.
@@ -1453,4 +1453,5 @@ independent validator remains the only SUCCESS authority.
 APPROVE, Major 0 / Minor 0. Its live gate passed 163/163 core tests and 4/4 exact-440 calibration
 tests. The auditor confirmed that all floor, quota, cap, band, diagnostic, named-acceptance,
 shape-first, scheduler, fingerprint, and final-validator paths obey the repaired one-person law.
-One replacement preview and JK's browser walk remain open.
+Preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY from source commit `5a3d4031` and
+serves the KBL app. JK's browser walk remains open.

@@ -8519,3 +8519,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   diff check is clean.
 - Next: push the approved branch and publish one replacement preview for JK's four/eight-team
   Legends-source browser walk. Production remains unchanged.
+
+## 2026-07-20 — FINDING-253 replacement preview ready
+
+- Pushed approved branch source commit `5a3d4031`.
+- Created the single authorized preview. Deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY
+  at `https://kbl-tracker-5fekcs1al-kruseja37s-projects.vercel.app`.
+- The remote build passed TypeScript, transformed 2,744 modules, and generated 224 PWA entries.
+  An authenticated Vercel smoke test served the KBL app title `Super Mega Baseball`.
+- Production is unchanged. JK's browser walk is the only remaining gate.
