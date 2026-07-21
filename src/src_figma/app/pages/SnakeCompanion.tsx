@@ -1010,9 +1010,11 @@ export default function SnakeCompanion() {
           : rationalRiskState.status === 'unavailable'
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
-        legalFinishLine: completedPick ? '' : finish?.message
-          ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'),
-        finishStatus: completedPick ? undefined : finish?.status ?? 'OPEN',
+        legalFinishLine: completedPick ? '' : finish?.status === 'OPEN'
+          ? 'HOTSEAT WILL CHECK THIS PICK.'
+          : finish?.message
+            ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'HOTSEAT WILL CHECK THIS PICK.'),
+        finishStatus: completedPick || finish?.status === 'OPEN' ? undefined : finish?.status,
         construction: entry.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -1783,7 +1785,9 @@ export default function SnakeCompanion() {
       onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
       actionConsequence={selectedFinishSafety?.status === 'DRAFTABLE'
         ? `LEGAL 22 · $${Math.round(selectedFinishSafety.finalSalary ?? 0).toLocaleString()} SALARY · $${Math.round(selectedFinishSafety.finalTax ?? 0).toLocaleString()} TAX · $${Math.round(selectedFinishSafety.moneyLeft ?? 0).toLocaleString()} LEFT.`
-        : selectedFinishSafety?.status === 'OPEN' ? selectedFinishSafety.message : null}
+        : selectedFinishSafety?.status === 'OPEN'
+          ? 'HOTSEAT WILL CHECK THIS PICK.'
+          : selectedFinishSafety?.message ?? null}
       blockReason={selectedFinishSafety?.status === 'BLOCKED'
         ? selectedFinishSafety.message
         : !selectedFinishSafety ? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.') : null}
@@ -1791,7 +1795,7 @@ export default function SnakeCompanion() {
         pickRequest ? (
           <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{liveSlot.pick} WAITING FOR HOTSEAT</span>
         ) : (
-          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || selectedFinishSafety?.status === 'BLOCKED'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused)} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
         )
       ) : undefined}
       decision={draftDecision}

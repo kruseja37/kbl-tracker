@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   liveBoardDesignSlots: null as Array<Record<string, unknown>> | null,
   soundEvents: [] as string[],
   forceOpenFinishSafety: false,
+  forceBlockedFinishSafety: false,
   holdFinishSafety: false,
 }));
 
@@ -326,6 +327,20 @@ vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (impor
           status: 'ready',
           rows,
         };
+      }
+      if (mocks.forceBlockedFinishSafety) {
+        const blockedRow = (playerId: string) => ({
+          playerId,
+          status: 'BLOCKED' as const,
+          message: 'LOCAL FINISH CHECK WOULD BLOCK THIS PICK.',
+          finalSalary: null,
+          finalTax: null,
+          moneyLeft: null,
+        });
+        const rows = new Map((request?.candidatePlayerIds ?? []).map((playerId) => [playerId, blockedRow(playerId)]));
+        const getKnownRow = rows.get.bind(rows);
+        rows.get = (playerId: string) => getKnownRow(playerId) ?? blockedRow(playerId);
+        return { status: 'ready', rows };
       }
       if (!request) return { status: 'idle', rows: new Map() };
       const rows = seating.createSnakePickFinishSafetyClassifier(request)(request.candidatePlayerIds);
@@ -652,6 +667,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.liveBoardDesignSlots = null;
     mocks.soundEvents.length = 0;
     mocks.forceOpenFinishSafety = false;
+    mocks.forceBlockedFinishSafety = false;
     mocks.holdFinishSafety = false;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
@@ -822,6 +838,34 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
       teamId: 'b',
       kind: 'pick',
       payload: { playerId: 'dual', pick: 1, sessionRevision: 4 },
+    });
+  });
+
+  test('a local blocked forecast warns the companion but leaves the Hotseat request available', async () => {
+    const source = session();
+    source.completedPicks = [{
+      round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    source.revision += 1;
+    mocks.forceBlockedFinishSafety = true;
+    prepare(source);
+
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: /SELECT ONE-B PLAYER/ }));
+
+    expect(screen.getByText('LOCAL FINISH CHECK WOULD BLOCK THIS PICK.')).toBeInTheDocument();
+    const sendPick = screen.getByRole('button', { name: 'SEND PICK TO HOTSEAT' });
+    expect(sendPick).toBeEnabled();
+    fireEvent.click(sendPick);
+
+    await waitFor(() => expect(mocks.liveIntents).toHaveLength(1));
+    expect(mocks.liveIntents[0]).toMatchObject({
+      teamId: 'a',
+      kind: 'pick',
+      payload: { playerId: 'one-b', pick: 2, sessionRevision: 5 },
     });
   });
 
