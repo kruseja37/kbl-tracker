@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   liveBoardDesignSlots: null as Array<Record<string, unknown>> | null,
   soundEvents: [] as string[],
   forceOpenFinishSafety: false,
+  holdFinishSafety: false,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -308,6 +309,7 @@ vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (impor
   return {
     ...actual,
     useSnakePickFinishSafety: (request: import('../../app/workers/snakePickFinish.worker').SnakePickFinishWorkerRequest | null) => {
+      if (mocks.holdFinishSafety) return { status: 'pending', rows: new Map() };
       if (mocks.forceOpenFinishSafety) {
         const openRow = (playerId: string) => ({
           playerId,
@@ -650,6 +652,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.liveBoardDesignSlots = null;
     mocks.soundEvents.length = 0;
     mocks.forceOpenFinishSafety = false;
+    mocks.holdFinishSafety = false;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
@@ -719,7 +722,11 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
 
     await act(async () => { await mocks.companionFreshnessRefresh?.(); });
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    const firstMove = screen.getAllByRole('button', { name: /^Move .* down$/ })[0].getAttribute('aria-label');
     fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    expect(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]).not.toHaveAttribute('aria-label', firstMove);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
 
     await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
     expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({
@@ -790,6 +797,32 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await act(async () => { await mocks.companionFreshnessRefresh?.(); });
 
     await waitFor(() => expect(mocks.soundEvents).toEqual(['request', 'drafted']));
+  });
+
+  test('the first club can send pick one while its local finish check is still calculating', async () => {
+    const source = session();
+    source.snakeCompanions = {
+      roomCode: '4821',
+      claims: [{ deviceId: 'ipad-a', gmName: 'Blair', teamId: 'b', status: 'approved' }],
+    };
+    mocks.holdFinishSafety = true;
+    prepare(source);
+
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: /SELECT DUAL PLAYER/ }));
+
+    const sendPick = await screen.findByRole('button', { name: 'SEND PICK TO HOTSEAT' });
+    expect(sendPick).toBeEnabled();
+    fireEvent.click(sendPick);
+
+    await waitFor(() => expect(mocks.liveIntents).toHaveLength(1));
+    expect(mocks.liveIntents[0]).toMatchObject({
+      teamId: 'b',
+      kind: 'pick',
+      payload: { playerId: 'dual', pick: 1, sessionRevision: 4 },
+    });
   });
 
   test('a rival public pick removes the player from the displayed board without a private write', async () => {

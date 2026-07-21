@@ -148,6 +148,14 @@ interface CompanionPrivateGuard {
   identity: CompanionPrivateIdentity;
 }
 
+interface CompanionRankingSave {
+  board: SnakeSeatBoardRecord;
+  priorBoard: SnakeSeatBoardRecord;
+  guard: CompanionPrivateGuard;
+  changedSlotCount: number;
+  sequence: number;
+}
+
 function sameCompanionPrivateIdentity(
   left: CompanionPrivateIdentity | null,
   right: CompanionPrivateIdentity | null,
@@ -365,6 +373,11 @@ export default function SnakeCompanion() {
     identity: CompanionPrivateIdentity;
     changedSlotCount: number;
   } | null>(null);
+  const [rankingPreview, setRankingPreview] = useState<{
+    scopeKey: string;
+    board: SnakeSeatBoardRecord;
+    sequence: number;
+  } | null>(null);
   const [undoWorking, setUndoWorking] = useState(false);
   const privacyEpochRef = useRef(0);
   const deviceCoveredRef = useRef(deviceCovered);
@@ -374,6 +387,13 @@ export default function SnakeCompanion() {
   const returnAttemptRef = useRef<object | null>(null);
   const autoResumeCoverRef = useRef<string | null>(null);
   const undoOperationRef = useRef<object | null>(null);
+  const rankingSaveRef = useRef<{
+    timer: number | null;
+    inFlight: boolean;
+    pending: CompanionRankingSave | null;
+    sequence: number;
+  }>({ timer: null, inFlight: false, pending: null, sequence: 0 });
+  const flushRankingSaveRef = useRef<() => void>(() => undefined);
   deviceCoveredRef.current = deviceCovered;
   const invalidatePrivateContext = useCallback(() => {
     privacyEpochRef.current += 1;
@@ -383,6 +403,12 @@ export default function SnakeCompanion() {
     setAssistantOptimizeRevision(0);
     setGuidePrefillState(null);
     setBoardUndo(null);
+    setRankingPreview(null);
+    const rankingSave = rankingSaveRef.current;
+    if (rankingSave.timer !== null) globalThis.clearTimeout(rankingSave.timer);
+    rankingSave.timer = null;
+    rankingSave.pending = null;
+    rankingSave.sequence += 1;
     undoOperationRef.current = null;
     setUndoWorking(false);
   }, []);
@@ -782,7 +808,10 @@ export default function SnakeCompanion() {
     unavailablePlayerIds: unavailable,
   }) : null, [boardEligibilityCandidates, session, unavailable]);
   const storedBoard = team ? session?.seatBoards?.[team.id] ?? null : null;
-  const board = team ? displaySession?.seatBoards?.[team.id] ?? null : null;
+  const projectedBoard = team ? displaySession?.seatBoards?.[team.id] ?? null : null;
+  const board = rankingPreview?.scopeKey === currentPrivateScopeKey
+    ? rankingPreview.board
+    : projectedBoard;
   const designSlots = team ? privateBoardDesignSlots(liveRoom.boardsByTeamId[team.id]) : undefined;
   const seatingProofInput = useMemo<SimultaneousSnakeSeatingInput | null>(() => {
     if (!session || !pool) return null;
@@ -1227,7 +1256,7 @@ export default function SnakeCompanion() {
     successMessage: string | null,
     guard: CompanionPrivateGuard,
   ): Promise<{ savedBoard: SnakeSeatBoardRecord; privateContextStillCurrent: boolean } | null> => {
-    if (!session || !board || !storedBoard || !team) return null;
+    if (!session || !projectedBoard || !storedBoard || !team) return null;
     if (!isCanonicalSnakeBoard({ slots: nextBoard.slots, candidates: boardEligibilityCandidates })) {
       if (privateContextIsCurrent(guard)) {
         setMessage('MY BOARD COULD NOT BE SAVED — THE RESULT IS NOT A LEGAL 22-PLAYER ROSTER.');
@@ -1245,7 +1274,7 @@ export default function SnakeCompanion() {
       }
       const baseEdit = mergeSnakeCompanionDisplayEdit({
         savedBoard: authoritativeBoard,
-        projectedBoard: board,
+        projectedBoard,
         editedBoard: nextBoard,
         publicUnavailablePlayerIds: unavailable,
       });
@@ -1285,13 +1314,49 @@ export default function SnakeCompanion() {
       }
       return null;
     }
-  }, [board, boardEligibilityCandidates, liveRoom, privateContextIsCurrent, refreshSession, session, storedBoard, team, unavailable]);
+  }, [boardEligibilityCandidates, liveRoom, privateContextIsCurrent, projectedBoard, refreshSession, session, storedBoard, team, unavailable]);
 
-  const reorder = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
+  const flushRankingSave = useCallback(async () => {
+    const state = rankingSaveRef.current;
+    if (state.inFlight || !state.pending) return;
+    const pending = state.pending;
+    state.pending = null;
+    state.inFlight = true;
+    const outcome = await saveBoard(pending.board, null, pending.guard);
+    state.inFlight = false;
+
+    if (outcome?.privateContextStillCurrent && privateContextIsCurrent(pending.guard)) {
+      setBoardUndo({
+        board: pending.priorBoard,
+        expectedBoardRevision: outcome.savedBoard.revision,
+        identity: pending.guard.identity,
+        changedSlotCount: pending.changedSlotCount,
+      });
+    }
+    if (state.pending) {
+      state.timer = globalThis.setTimeout(() => {
+        state.timer = null;
+        flushRankingSaveRef.current();
+      }, 0);
+      return;
+    }
+    setRankingPreview((current) => current?.sequence === pending.sequence ? null : current);
+  }, [privateContextIsCurrent, saveBoard]);
+  flushRankingSaveRef.current = () => { void flushRankingSave(); };
+
+  useEffect(() => () => {
+    const state = rankingSaveRef.current;
+    if (state.timer !== null) globalThis.clearTimeout(state.timer);
+    state.timer = null;
+    state.pending = null;
+  }, []);
+
+  const reorder = useCallback((view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!board || !deskState) return;
     const guard = capturePrivateContext();
-    if (!guard || guard.identity.teamId !== team?.id) return;
-    const priorBoard = structuredClone(board);
+    if (!guard || guard.identity.teamId !== team?.id || !currentPrivateScopeKey) return;
+    const saveState = rankingSaveRef.current;
+    const priorBoard = structuredClone(saveState.pending?.priorBoard ?? board);
     const reordered = reorderSeatBoardRankings({
       board,
       view,
@@ -1306,16 +1371,22 @@ export default function SnakeCompanion() {
         : `MY BOARD COULD NOT REFIT — ${reordered.brokenSlots.join(', ')} HAS NO AVAILABLE PLAYER.`);
       return;
     }
-    const outcome = await saveBoard(reordered.board, null, guard);
-    const savedBoard = outcome?.savedBoard;
-    if (!outcome?.privateContextStillCurrent || !savedBoard || !privateContextIsCurrent(guard)) return;
-    setBoardUndo({
-      board: priorBoard,
-      expectedBoardRevision: savedBoard.revision,
-      identity: guard.identity,
+    const sequence = saveState.sequence + 1;
+    saveState.sequence = sequence;
+    saveState.pending = {
+      board: reordered.board,
+      priorBoard,
+      guard,
       changedSlotCount: reordered.changedSlotCount,
-    });
-  }, [board, boardUnavailable, capturePrivateContext, deskState, ownCommittedPlayerIds, privateContextIsCurrent, saveBoard, team?.id]);
+      sequence,
+    };
+    setRankingPreview({ scopeKey: currentPrivateScopeKey, board: reordered.board, sequence });
+    if (saveState.timer !== null) globalThis.clearTimeout(saveState.timer);
+    saveState.timer = globalThis.setTimeout(() => {
+      saveState.timer = null;
+      flushRankingSaveRef.current();
+    }, 180);
+  }, [board, boardUnavailable, capturePrivateContext, currentPrivateScopeKey, deskState, ownCommittedPlayerIds, team?.id]);
 
   const undoBoardUpdate = useCallback(async () => {
     if (!board || !boardUndo || undoOperationRef.current) return;
@@ -1720,7 +1791,7 @@ export default function SnakeCompanion() {
         pickRequest ? (
           <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="companion-pick-waiting">PICK #{liveSlot.pick} WAITING FOR HOTSEAT</span>
         ) : (
-          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || !selectedFinishSafety || selectedFinishSafety.status === 'BLOCKED'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
+          <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" disabled={Boolean(session.paused) || selectedFinishSafety?.status === 'BLOCKED'} onClick={() => void submitPickRequest(selectedCandidate.id)}>SEND PICK TO HOTSEAT</button>
         )
       ) : undefined}
       decision={draftDecision}
