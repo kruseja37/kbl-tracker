@@ -164,6 +164,108 @@ function registerProductionPool(input: {
   });
 }
 
+function buildIdentitySupportedLegendsPool(
+  identityIds: readonly string[],
+  leagueId: string,
+) {
+  const teams = buildTeams(identityIds, leagueId);
+  const players = historicalLegendsSourcePlayers();
+  const selectedArchetypes = identityIds.map((archetypeId) => (
+    HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === archetypeId)!
+  ));
+  const fullSourcePool = registerProductionPool({ leagueId: `${leagueId}-full`, teams, players });
+  const demandUniverse = demandUniverseFromPlayers(players);
+  const bootstrapResult = extractPoolFromDemand(
+    demandUniverse,
+    [],
+    selectedArchetypes,
+    'standard',
+    {
+      teams: teams.length,
+      shills: 0,
+      budgetPerTeam: TIER_CAPS.standard.tierCap,
+      poolBalancePreset: 'balanced',
+      poolQualityCenter: 68,
+      poolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.loose.multiplier,
+      poolSourceMode: 'full-pool',
+      preserveSelectedIdentityClaims: false,
+      deferIdentityToFinalProof: true,
+    },
+  );
+  const bootstrapPool = registerProductionPool({
+    leagueId: `${leagueId}-bootstrap`,
+    teams,
+    players: players.filter((player) => (
+      bootstrapResult.players.some((candidate) => candidate.id === player.id)
+    )),
+  });
+  const bootstrapInput = buildSnakeSetupProofInput({
+    teams,
+    players,
+    pool: bootstrapPool,
+  });
+  let certificatePool = bootstrapPool;
+  let certificateInput = bootstrapInput;
+  let certificateProof = proveSimultaneousSnakeSeating(bootstrapInput);
+  if (!certificateProof.feasible && teams.length <= 4) {
+    certificatePool = fullSourcePool;
+    certificateInput = buildSnakeSetupProofInput({ teams, players, pool: fullSourcePool });
+    certificateProof = proveSimultaneousSnakeSeating(certificateInput);
+  }
+  if (!certificateProof.feasible) {
+    throw new Error(`Neither Loose nor Full Legends certified ${leagueId}: ${certificateProof.message}`);
+  }
+  const supportCertificate = createSnakeIdentitySupportCertificate(certificateInput, certificateProof);
+  if (!supportCertificate) throw new Error(`Validated Legends source did not mint support for ${leagueId}.`);
+  const supportIds = [...new Set(certificateProof.assignments.flatMap((assignment) => assignment.playerIds))];
+  const supportReceipt = createPoolIdentitySupportReceipt({
+    universe: demandUniverse,
+    selectedArchetypes,
+    tier: 'standard',
+    teams: teams.length,
+    budgetPerTeam: TIER_CAPS.standard.tierCap,
+    playerIds: supportIds,
+    authorityFingerprint: `${supportCertificate.sourceFingerprint}:${supportCertificate.assignmentFingerprint}`,
+  });
+  const result = extractPoolFromDemand(
+    demandUniverse,
+    [],
+    selectedArchetypes,
+    'standard',
+    {
+      teams: teams.length,
+      shills: 0,
+      budgetPerTeam: TIER_CAPS.standard.tierCap,
+      poolBalancePreset: 'balanced',
+      poolQualityCenter: 68,
+      poolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.loose.multiplier,
+      poolSourceMode: 'full-pool',
+      identitySupportIds: supportIds,
+      identitySupportReceipt: supportReceipt,
+      preserveSelectedIdentityClaims: false,
+    },
+  );
+  const pool = registerProductionPool({
+    leagueId,
+    teams,
+    players: players.filter((player) => result.players.some((candidate) => candidate.id === player.id)),
+  });
+  const input = buildSnakeSetupProofInput({
+    teams,
+    players,
+    pool,
+    identityReferencePool: certificatePool,
+    identitySupportCertificate: supportCertificate,
+  });
+  return {
+    teams,
+    result,
+    input,
+    proof: proveSimultaneousSnakeSeating(input),
+    supportIds,
+  };
+}
+
 function buildFourClubFullSourceRoom() {
   if (cachedFourRoom) return cachedFourRoom;
   const leagueId = 'four-club-large-source-room';
@@ -349,7 +451,10 @@ describe('eight-club Snake setup on combined production sources', () => {
       const input = buildSnakeSetupProofInput({ teams, players: sourcePlayers, pool });
       const proof = proveSimultaneousSnakeSeating(input);
 
-      expect(proof.feasible, `${roomIdentityIds.join(', ')}: ${proof.message}`).toBe(true);
+      expect(
+        proof.feasible,
+        `${roomIdentityIds.join(', ')}: ${JSON.stringify({ message: proof.message, shortfall: proof.shortfall })}`,
+      ).toBe(true);
       expect(proof.assignments).toHaveLength(8);
       expect(new Set(proof.assignments.flatMap((assignment) => assignment.playerIds))).toHaveLength(176);
       expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
@@ -433,7 +538,7 @@ describe('four-club Snake setup on combined production sources', () => {
     });
     const looseProof = proveSimultaneousSnakeSeating(input);
 
-    expect(result.players).toHaveLength(snakePoolSizeGuide(teams.length).targets.loose);
+    expect(result.players, JSON.stringify(result.sizing?.messages ?? [])).toHaveLength(snakePoolSizeGuide(teams.length).targets.loose);
     expect(result.players).toHaveLength(132);
     expect(supportIds.every((playerId) => result.players.some((player) => player.id === playerId))).toBe(true);
     expect(looseProof.feasible, looseProof.message).toBe(true);
@@ -637,103 +742,99 @@ describe('four-club Snake setup on Historical Legends sources only', () => {
       requiredRosterDemand: 88,
       targetSize: 132,
     });
-    expect(result.numericShape!.middleMassShare).toBeGreaterThanOrEqual(0.70 - 1e-9);
-    expect(result.numericShape!.highTailShare).toBeLessThanOrEqual(0.15 + 1e-9);
-    expect(result.numericShape!.superstarTailShare).toBeLessThanOrEqual(0.04 + 1e-9);
-    expect(result.numericShape!.lowTailShare).toBeLessThanOrEqual(0.18 + 1e-9);
+    expect(result.numericShape!.middleMassShare).toBeGreaterThanOrEqual(Math.floor(0.70 * 132) / 132 - 1e-9);
+    expect(
+      result.numericShape!.highTailShare,
+      JSON.stringify({ messages: result.sizing?.messages ?? [], swaps: result.numericShape?.g1Swaps ?? [] }),
+    ).toBeLessThanOrEqual(Math.ceil(0.15 * 132) / 132 + 1e-9);
+    expect(result.numericShape!.superstarTailShare).toBeLessThanOrEqual(Math.ceil(0.04 * 132) / 132 + 1e-9);
+    expect(result.numericShape!.lowTailShare).toBeLessThanOrEqual(Math.ceil(0.18 * 132) / 132 + 1e-9);
     expect(result.numericShape!.curveViolations ?? []).toEqual([]);
     expect(looseProof.feasible, looseProof.message).toBe(true);
     expect(validateConstructiveSnakeSeatingProof(looseInput, looseProof)).toBe(true);
   }, 300_000);
 });
 
+describe('two-club Snake setup on Historical Legends sources only', () => {
+  test('keeps ordinary and swing relief depth proportional to roster demand', () => {
+    const leagueId = 'two-club-legends-bullpen-room';
+    const identityIds = ['nasty-boys', 'flamethrowers'] as const;
+    const { result, input, proof, supportIds } = buildIdentitySupportedLegendsPool(identityIds, leagueId);
+    const counts = Object.fromEntries(['SP', 'SP/RP', 'RP', 'CP'].map((position) => [
+      position,
+      result.players.filter((player) => player.position === position).length,
+    ]));
+    const supportCounts = Object.fromEntries(['SP', 'SP/RP', 'RP', 'CP'].map((position) => [
+      position,
+      input.pool.filter((player) => supportIds.includes(player.playerId) && player.shape.role === position).length,
+    ]));
+
+    expect(result.players).toHaveLength(66);
+    expect(supportIds).toHaveLength(identityIds.length * LEGAL_ROSTER.size);
+    expect(supportIds.every((id) => result.players.some((player) => player.id === id))).toBe(true);
+    const roleEvidence = JSON.stringify({ counts, supportCounts, messages: result.poolShape?.messages ?? [] });
+    expect(counts.RP, roleEvidence).toBeGreaterThanOrEqual(6);
+    expect(counts['SP/RP'], roleEvidence).toBeGreaterThanOrEqual(2);
+    expect(counts.RP + counts['SP/RP'], roleEvidence).toBeGreaterThanOrEqual(8);
+    expect(counts.CP, roleEvidence).toBeGreaterThanOrEqual(3);
+    if (counts.CP > 4) {
+      expect(result.numericShape?.messages.join(' '), roleEvidence)
+        .toMatch(/Remove \d+ CP.*to balance rosters\./);
+    }
+    expect(proof.feasible, JSON.stringify({ proof, counts, sizing: result.sizing?.messages ?? [] })).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
+  }, 300_000);
+});
+
 describe('eight-club Snake setup on Historical Legends sources only', () => {
   test('shapes and certifies 264 distinct people from the same 835-card shelf', () => {
     const leagueId = 'eight-club-legends-only-room';
-    const teams = buildTeams(archetypeIds, leagueId);
-    const players = historicalLegendsSourcePlayers();
-    const selectedArchetypes = archetypeIds.map((archetypeId) => (
-      HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === archetypeId)!
-    ));
-    const result = extractPoolFromDemand(
-      demandUniverseFromPlayers(players),
-      [],
-      selectedArchetypes,
-      'standard',
-      {
-        teams: teams.length,
-        shills: 0,
-        budgetPerTeam: TIER_CAPS.standard.tierCap,
-        poolBalancePreset: 'balanced',
-        poolQualityCenter: 68,
-        poolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.loose.multiplier,
-        poolSourceMode: 'full-pool',
-        preserveSelectedIdentityClaims: false,
-        deferIdentityToFinalProof: true,
-      },
-    );
-    const pool = registerProductionPool({ leagueId, teams, players: players.filter((player) => (
-      result.players.some((candidate) => candidate.id === player.id)
-    )) });
-    expect(result.players).toHaveLength(snakePoolSizeGuide(teams.length).targets.loose);
-    expect(result.players).toHaveLength(264);
+    const { teams, result, input, proof, supportIds } = buildIdentitySupportedLegendsPool(archetypeIds, leagueId);
+    const sizingEvidence = JSON.stringify(result.sizing?.messages ?? []);
+    expect(result.players, sizingEvidence).toHaveLength(snakePoolSizeGuide(teams.length).targets.loose);
+    expect(result.players, sizingEvidence).toHaveLength(264);
     expect(new Set(result.players.map((player) => player.versionGroupId))).toHaveLength(264);
     expect(result.numericShape?.targetSize).toBe(264);
-    expect(result.numericShape!.middleMassShare).toBeGreaterThanOrEqual(0.70 - 1e-9);
-    expect(result.numericShape!.highTailShare).toBeLessThanOrEqual(0.15 + 1e-9);
-    expect(result.numericShape!.superstarTailShare).toBeLessThanOrEqual(0.04 + 1e-9);
-    expect(result.numericShape!.lowTailShare).toBeLessThanOrEqual(0.18 + 1e-9);
+    expect(result.numericShape!.middleMassShare).toBeGreaterThanOrEqual(Math.floor(0.70 * 264) / 264 - 1e-9);
+    expect(
+      result.numericShape!.highTailShare,
+      JSON.stringify({ messages: result.sizing?.messages ?? [], swaps: result.numericShape?.g1Swaps ?? [] }),
+    ).toBeLessThanOrEqual(Math.ceil(0.15 * 264) / 264 + 1e-9);
+    expect(result.numericShape!.superstarTailShare).toBeLessThanOrEqual(Math.ceil(0.04 * 264) / 264 + 1e-9);
+    expect(result.numericShape!.lowTailShare).toBeLessThanOrEqual(Math.ceil(0.18 * 264) / 264 + 1e-9);
     expect(result.numericShape?.curveViolations ?? []).toEqual([]);
-    const input = buildSnakeSetupProofInput({ teams, players, pool });
-    const proof = proveSimultaneousSnakeSeating(input);
+    expect(supportIds).toHaveLength(teams.length * LEGAL_ROSTER.size);
+    expect(supportIds.every((id) => result.players.some((player) => player.id === id))).toBe(true);
     expect(proof.feasible, proof.message).toBe(true);
     expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
   }, 300_000);
 
-  test('certifies all 24 selectable identities in normal eight-club Legends pools', () => {
-    const players = historicalLegendsSourcePlayers();
-    const demandUniverse = demandUniverseFromPlayers(players);
+  test.each([0, 1, 2])('certifies selectable identities in normal eight-club Legends pool room %i', (roomIndex) => {
     const allIdentityIds = HISTORICAL_ARCHETYPES.map((archetype) => archetype.id);
 
     expect(allIdentityIds).toHaveLength(24);
-    for (let roomIndex = 0; roomIndex < 3; roomIndex += 1) {
-      const roomIdentityIds = allIdentityIds.slice(roomIndex * 8, (roomIndex + 1) * 8);
-      const leagueId = `eight-club-legends-identity-room-${roomIndex + 1}`;
-      const teams = buildTeams(roomIdentityIds, leagueId);
-      const selectedArchetypes = roomIdentityIds.map((archetypeId) => (
-        HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === archetypeId)!
-      ));
-      const result = extractPoolFromDemand(
-        demandUniverse,
-        [],
-        selectedArchetypes,
-        'standard',
-        {
-          teams: teams.length,
-          shills: 0,
-          budgetPerTeam: TIER_CAPS.standard.tierCap,
-          poolBalancePreset: 'balanced',
-          poolQualityCenter: 68,
-          poolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.loose.multiplier,
-          poolSourceMode: 'full-pool',
-          preserveSelectedIdentityClaims: false,
-          deferIdentityToFinalProof: true,
-        },
-      );
-      const pool = registerProductionPool({
-        leagueId,
-        teams,
-        players: players.filter((player) => result.players.some((candidate) => candidate.id === player.id)),
-      });
-      const input = buildSnakeSetupProofInput({ teams, players, pool });
-      const proof = proveSimultaneousSnakeSeating(input);
-
-      expect(result.players, `room ${roomIndex + 1} count`).toHaveLength(264);
-      expect(new Set(result.players.map((player) => player.versionGroupId)), `room ${roomIndex + 1} people`)
-        .toHaveLength(264);
-      expect(result.numericShape?.curveViolations ?? [], `room ${roomIndex + 1} curve`).toEqual([]);
-      expect(proof.feasible, `${roomIdentityIds.join(', ')}: ${proof.message}`).toBe(true);
-      expect(validateConstructiveSnakeSeatingProof(input, proof), `room ${roomIndex + 1} validation`).toBe(true);
-    }
+    const roomIdentityIds = allIdentityIds.slice(roomIndex * 8, (roomIndex + 1) * 8);
+    const leagueId = `eight-club-legends-identity-room-${roomIndex + 1}`;
+    const { teams, result, input, proof, supportIds } = buildIdentitySupportedLegendsPool(
+      roomIdentityIds,
+      leagueId,
+    );
+    expect(result.players, `room ${roomIndex + 1} count: ${JSON.stringify(result.sizing?.messages ?? [])}`).toHaveLength(264);
+    expect(new Set(result.players.map((player) => player.versionGroupId)), `room ${roomIndex + 1} people`)
+      .toHaveLength(264);
+    expect(
+      result.numericShape?.curveViolations ?? [],
+      `room ${roomIndex + 1} curve: ${JSON.stringify({ highTailShare: result.numericShape?.highTailShare, messages: result.sizing?.messages ?? [], swaps: result.numericShape?.g1Swaps ?? [] })}`,
+    ).toEqual([]);
+    expect(supportIds, `room ${roomIndex + 1} support count`).toHaveLength(teams.length * LEGAL_ROSTER.size);
+    expect(
+      supportIds.every((id) => result.players.some((player) => player.id === id)),
+      `room ${roomIndex + 1} support retention`,
+    ).toBe(true);
+    expect(
+      proof.feasible,
+      `${roomIdentityIds.join(', ')}: ${JSON.stringify({ message: proof.message, shortfall: proof.shortfall })}`,
+    ).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof(input, proof), `room ${roomIndex + 1} validation`).toBe(true);
   }, 300_000);
 });

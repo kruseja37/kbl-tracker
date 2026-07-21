@@ -133,7 +133,7 @@ export function buildLockedSnakeSeatingPlayers(input: {
   pool: RegisteredPool;
 }): SnakeSeatingPlayer[] {
   const playerById = new Map(input.players.map((player) => [player.id, player]));
-  return input.pool.players.map((priced) => {
+  return [...input.pool.players].sort((left, right) => left.id.localeCompare(right.id)).map((priced) => {
     const player = playerById.get(priced.id);
     if (!player) throw new Error(`Locked snake pool player ${priced.id} is missing from the player database.`);
     if (!Number.isFinite(priced.iv)) throw new Error(`Locked snake pool player ${priced.id} has no frozen IV.`);

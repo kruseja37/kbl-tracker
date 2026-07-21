@@ -1455,3 +1455,31 @@ tests. The auditor confirmed that all floor, quota, cap, band, diagnostic, named
 shape-first, scheduler, fingerprint, and final-validator paths obey the repaired one-person law.
 Preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY from source commit `5a3d4031` and
 serves the KBL app. JK's browser walk remains open.
+
+### FINDING-254
+**Date:** 2026-07-21 | **Phase:** Snake Draft Setup browser acceptance | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Files:** `src/engines/poolFromDemand.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused engine, page, and browser tests.
+**Evidence:** JK's replacement-preview walk found that Lock Pool never enabled after a build,
+including Full Sources. In a two-team named build, the result contained two RP, zero SP/RP, and
+nine CP. The exact Legends payload contains 117 CP cards, 33 RP cards, and seven SP/RP cards; by
+distinct person-position pairs it contains 47 CP, 14 RP, and three SP/RP. `targetCountsByRoleBucket`
+derives the named-pool role targets directly from those source counts.
+**Impact:** A certified source cannot enter a Snake room, and a normal-sized pool can offer far too
+many closers while ordinary and swing relievers have almost no competitive depth.
+**Root cause:** Bullpen distortion was direct: source-relative role quotas treated an archive's
+historical position mix as the desired roster mix. The Lock seam had a second mismatch: proof input
+preserved registered-pool row order. The same accepted membership could return in another storage
+order and start another proof instead of reusing the accepted result.
+**Action:** Keep the ratified version law. Named pools select one card per person; Full Sources keeps
+all selected versions; hand-added siblings remain protected. Named pitcher targets use the legal
+nine-arm roster shape, bounded by real source supply. Position repair swaps at the named people-count
+boundary. Role proportions are advisory after shaping; Draft Setup names the exact remove/add
+correction and lets the user amend the pool. Whole-player curve caps use discrete rounding. Proof
+input sorts pool rows by stable player id while all stale-source rejection remains.
+**Builder proof:** Two-team Legends Loose is exactly 66 people with adequate ordinary and swing
+relief depth. Eight-team Legends Loose is exactly 264 distinct people. All 24 selectable identities
+certify in three independent eight-team rooms. The exact 264-person gate and the three identity
+rooms pass the unchanged independent validator. Engine 72/72 and focused page/proof regressions
+pass. TypeScript is green. Build, browser journey, separate re-audit, and JK's browser walk remain
+open for this repaired diff.

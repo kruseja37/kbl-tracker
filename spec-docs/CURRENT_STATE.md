@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-253 INDEPENDENTLY APPROVED; REPLACEMENT PREVIEW READY (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview showed 835 valid Career, Draft, and Peak cards for 345 people, but every normal four-team build widened to unresolved Full Sources and could not Lock. Named pools now count one person once, shape first, and certify the exact finished membership. The first non-builder audit blocked frozen commit `7960b043`, Major 1 / Minor 1: protected sibling cards still counted twice in position floors and curve accounting, and the contract had trailing whitespace. Repaired commit `1bac2cfe` closes both findings. A separate calibration also exposed a proof-scheduler boundary that made a safe four-team 440-player room use bounded search; the generic scheduler now selects exact or bounded search from source-by-club work. Exact production data proves 132 distinct people for four-team Loose, 264 for eight-team Loose, balanced curve limits, independent final validation, all 24 Legends identities, and all 24 four-team SMB4 identities. The same auditor returned **APPROVE — Major 0 / Minor 0** after an independent 163/163 core gate and 4/4 exact-440 calibration. Builder TypeScript, lint, diff integrity, and the 2,744-module production/PWA build are green. Preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY from source commit `5a3d4031` and serves the KBL app. FINDING-249 FARM companion authority and FINDING-250/252 remain integrated. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** JK runs the browser walk. Production is unchanged.
+> ## RIGHT NOW — FINDING-254 BUILDER GATE GREEN; FINAL RE-AUDIT NEXT (2026-07-21; branch `codex/snake-live-room-authority`). JK's replacement-preview walk found that Lock could remain disabled and a two-team Legends pool could inherit the archive's closer-heavy role mix. Named pools now target the legal roster role shape but treat an imperfect role ratio as advice, not a second Lock law. The page gives an exact `Remove X ... and add Y ... to balance rosters.` note and still lets the user add or remove players. Hard gates remain legal 22-player completion, distinct people, chosen identities, money, tax, and true position floors. When a small Legend sample cannot prove every identity directly, Draft Setup now proves the full source authority, protects those exact legal assignments, and reshapes the requested named pool instead of stopping at Full Sources. Exact builder proof passes two-team 66, four-team 132, and eight-team 264 distinct-person Legends rooms; all 24 identities pass across three eight-team rooms. The live Mac path reaches 66 people, shows the role note, enables Lock, and enters the room. Mac and fallback iPad frame gaps remain below 250 ms after limiting the first pool-list paint to 50 rows. The page gate is 82/82, the browser gate is 3/3, TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build with 224 entries are green. `origin/main` is verified at `ba7f97d6`. **NEXT:** the same non-builder auditor rechecks the frozen repair; after APPROVE, publish one replacement preview for JK's browser walk. Production is unchanged.
 
 ## Current product law
 
@@ -22,8 +22,10 @@
 
 ## Open gates
 
-1. JK runs the Legends-source, four/eight-team setup, and FARM Hotseat-plus-companion walks on
-   `https://kbl-tracker-5fekcs1al-kruseja37s-projects.vercel.app`.
+1. The same non-builder auditor rechecks FINDING-254 after the two-stage named-pool and advisory
+   repair.
+2. After APPROVE, publish one replacement preview. JK then runs the Legends-source, four/eight-team
+   setup, and FARM Hotseat-plus-companion walks. The prior preview is superseded for this gate.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel

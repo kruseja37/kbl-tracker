@@ -135,7 +135,7 @@ for (const viewport of [
 
     const helpClickStarted = performance.now();
     await page.getByRole('button', { name: 'HELP' }).click();
-    await expect(page.getByText('Tight, Competitive, and Loose shape the selected sources')).toBeVisible({ timeout: 1_000 });
+    await expect(page.getByText(/Tight, Competitive, and Loose first shape the selected sources/)).toBeVisible({ timeout: 1_000 });
     expect(performance.now() - helpClickStarted).toBeLessThan(1_000);
     const fullProbe = await readResponsivenessProbe(page);
     expect(fullProbe.animationFrames).toBeGreaterThanOrEqual(30);
@@ -173,3 +173,106 @@ for (const viewport of [
     expect(pageErrors).toEqual([]);
   });
 }
+
+test('Mac: two-club Legends Full Sources reaches Lock without a second unresolved gate', async ({ page }) => {
+  test.setTimeout(180_000);
+  const leagueId = 'e2e-snake-legends-lock';
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  await page.evaluate(async () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    const databases = await indexedDB.databases();
+    await Promise.all(databases.map((database) => new Promise<void>((resolve) => {
+      if (!database.name) return resolve();
+      const request = indexedDB.deleteDatabase(database.name);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+      request.onblocked = () => resolve();
+    })));
+  });
+  await page.evaluate(async ({ targetLeagueId }) => {
+    const storage = await import('/src/utils/leagueBuilderStorage.ts');
+    const legends = await import('/src/utils/historicalLegendsImport.ts');
+    const tiers = await import('/src/data/tierParams.ts');
+    await storage.seedFromSMB4Database(true);
+    await legends.seedHistoricalLegendsDatabase();
+    const stock = await storage.getLeagueTemplate('sml');
+    if (!stock) throw new Error('SMB4 source league did not seed.');
+    const stockTeams = await storage.getAllTeams();
+    const identities = ['nasty-boys', 'flamethrowers'];
+    const teamIds: string[] = [];
+    for (const [index, stockTeamId] of stock.teamIds.slice(0, 2).entries()) {
+      const stockTeam = stockTeams.find((team) => team.id === stockTeamId);
+      if (!stockTeam) throw new Error(`Seeded team ${stockTeamId} is missing.`);
+      const teamId = `${targetLeagueId}-team-${index + 1}`;
+      teamIds.push(teamId);
+      await storage.saveTeam({
+        ...stockTeam,
+        id: teamId,
+        name: `Legends Lock Club ${index + 1}`,
+        leagueIds: [targetLeagueId],
+        mlbArchetypeKey: identities[index],
+        farmArchetypeKey: identities[(index + 1) % identities.length],
+      });
+    }
+    await storage.saveLeagueTemplate({
+      id: targetLeagueId,
+      name: 'Legends Lock Journey',
+      teamIds,
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+      draftPoolMode: 'pool-first',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      salaryCap: tiers.TIER_CAPS.standard.tierCap,
+      sourceLeagueIds: [
+        'legends-library-draft',
+        'legends-library-career',
+        'legends-library-peak',
+      ],
+      snakeIncludeUnassignedSourcePlayers: false,
+      poolAssemblyMode: 'full-sources',
+      snakePoolSizeMultiplier: 1.5,
+    });
+  }, { targetLeagueId: leagueId });
+
+  await page.goto(`/league-builder/draft-setup?leagueId=${leagueId}`);
+  const assembly = page.getByTestId('snake-pool-assembly');
+  await expect(assembly.getByRole('button', { name: /FULL SOURCES.*835/s })).toBeVisible();
+  await page.getByRole('button', { name: 'BUILD FULL SOURCES' }).click();
+  await expect(assembly.getByText(/^BUILT FULL SELECTED SOURCES/)).toBeVisible({ timeout: 120_000 });
+  await expect(assembly).toContainText('835 IN POOL');
+  await expect(page.getByRole('button', { name: 'LOCK POOL' })).toBeEnabled({ timeout: 60_000 });
+
+  await assembly.getByRole('button', { name: /LOOSE.*66/s }).click();
+  await page.getByRole('button', { name: 'BUILD LOOSE POOL' }).click();
+  await expect(assembly).toContainText(/BUILT (LOOSE SHAPED BUILD|FULL SELECTED SOURCES · AUTO-WIDENED FROM LOOSE)/, {
+    timeout: 120_000,
+  });
+  const inPoolPanel = page.getByText('IN THE POOL (66)').locator('..');
+  const positionFilter = inPoolPanel.getByRole('combobox');
+  await positionFilter.selectOption('RP');
+  const ordinaryRelieverCount = await inPoolPanel.getByRole('button', { name: / RP \$[\d,]+$/ }).count();
+  await positionFilter.selectOption('SP/RP');
+  const swingRelieverCount = await inPoolPanel.getByRole('button', { name: / SP\/RP \$[\d,]+$/ }).count();
+  await positionFilter.selectOption('CP');
+  const closerCount = await inPoolPanel.getByRole('button', { name: / CP \$[\d,]+$/ }).count();
+  expect(ordinaryRelieverCount + swingRelieverCount).toBeGreaterThanOrEqual(8);
+  expect(closerCount).toBeGreaterThanOrEqual(3);
+  await expect(assembly.getByText(/Remove \d+ CP.*to balance rosters\./)).toBeVisible();
+  const lockButton = page.getByRole('button', { name: 'LOCK POOL' });
+  await expect(lockButton).toBeEnabled({ timeout: 60_000 });
+  const gmInputs = page.getByLabel(/GM NAME$/);
+  for (let index = 0; index < await gmInputs.count(); index += 1) {
+    await gmInputs.nth(index).fill(`Legends GM ${index + 1}`);
+  }
+  await lockButton.click();
+  await expect(page.getByRole('button', { name: 'UNLOCK POOL' })).toBeVisible();
+  const enterDraftButton = page.getByRole('button', { name: 'ENTER SNAKE DRAFT' });
+  await expect(enterDraftButton).toBeEnabled({ timeout: 60_000 });
+  await enterDraftButton.click();
+  await expect(page).toHaveURL(/\/snake-room(?:\?|$)/, { timeout: 60_000 });
+});

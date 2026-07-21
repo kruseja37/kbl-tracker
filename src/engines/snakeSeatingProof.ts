@@ -195,12 +195,12 @@ function identityCertificateAssignmentFingerprint(
   })}`;
 }
 
-/** Mint support only after the exact Full Sources proof passes the independent setup validator. */
+/** Mint support only after a proof passes against the exact fingerprinted authority pool. */
 export function createSnakeIdentitySupportCertificate(
   input: SimultaneousSnakeSeatingInput,
   proof: SnakeSeatingProof,
 ): SnakeIdentitySupportCertificate | null {
-  if (input.identityReferencePool || input.identitySupportCertificate) return null;
+  if (input.identitySupportCertificate) return null;
   if (!validateConstructiveSnakeSeatingProof(input, proof)) return null;
   const sourceFingerprint = identityCertificateSourceFingerprint(input);
   const assignments = proof.assignments.map((assignment) => ({
@@ -2457,7 +2457,11 @@ function proveIdentitySetupFromDisjointBuilds(
       const groupId = deriveVersionGroupId(player);
       if (!repairRepresentativeByGroup.has(groupId)) repairRepresentativeByGroup.set(groupId, player);
     }
-    const assignments = repairMatchedRosters(input, [...repairRepresentativeByGroup.values()], rosters);
+    const assignments = repairMatchedRosters(
+      input,
+      [...repairRepresentativeByGroup.values()],
+      rosters,
+    );
     if (!assignments) continue;
     const proof: SnakeSeatingProof = {
       feasible: true,
@@ -2646,7 +2650,11 @@ function proveIdentitySetupConstructively(
           const groupId = deriveVersionGroupId(player);
           if (!repairRepresentativeByGroup.has(groupId)) repairRepresentativeByGroup.set(groupId, player);
         }
-        const assignments = repairMatchedRosters(input, [...repairRepresentativeByGroup.values()], rosters);
+        const assignments = repairMatchedRosters(
+          input,
+          [...repairRepresentativeByGroup.values()],
+          rosters,
+        );
         if (!assignments) continue;
         const proof: SnakeSeatingProof = {
           feasible: true,

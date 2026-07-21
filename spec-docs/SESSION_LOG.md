@@ -8528,3 +8528,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - The remote build passed TypeScript, transformed 2,744 modules, and generated 224 PWA entries.
   An authenticated Vercel smoke test served the KBL app title `Super Mega Baseball`.
 - Production is unchanged. JK's browser walk is the only remaining gate.
+
+## 2026-07-21 — FINDING-254 named-role advice and live Lock repair
+
+- Fetched first. `origin/main` remains `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
+- JK ruled that named-pool role proportions are advisory. Hard Lock law remains legal completion,
+  distinct people, chosen identities, money, tax, and true position floors.
+- Named shaping targets four SP, one SP/RP, three RP, and one CP per legal roster. If protected
+  identity assignments or source supply leave a different mix, the accepted build now shows an
+  exact `Remove X ... and add Y ... to balance rosters.` note and keeps manual add/remove open.
+- The live page now completes the same two-stage path as the engine: prove the full source authority,
+  use its validated assignments as protected input, and reshape the requested named size. A small
+  Legend sample no longer widens to Full only because its first sample missed simultaneous identity
+  support.
+- Exact engine proof is green for two-team 66, four-team 132, and eight-team 264 Legends pools and
+  every one of all 24 identities across three eight-team rooms. The page gate passes 82/82.
+- The Mac browser path builds 66 people, shows the correction note, enables Lock, and enters the
+  Snake room. Mac and fallback iPad performance gates pass 3/3 with frame gaps below 250 ms after
+  limiting the first pool-list paint to 50 rows.
+- TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build with
+  224 entries pass. Next: freeze this diff and return it to the same non-builder auditor. No merge or
+  production deploy is authorized; JK's browser walk remains the product gate.

@@ -2046,3 +2046,26 @@ Vercel preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY at
 `5a3d4031`; the remote build passed TypeScript, transformed 2,744 modules, and generated 224 PWA
 entries. An authenticated Vercel smoke test returned the KBL app title `Super Mega Baseball`.
 Production is unchanged. JK's browser walk is the only remaining gate.
+
+### 2026-07-21 — FINDING-254 Snake Lock and bullpen-source browser failures
+
+JK's replacement-preview walk found two release-blocking setup failures after the approved
+Legends certification repair. First, Lock Pool remained disabled after a build, including Full
+Sources, so no room could start. Second, a two-team named pool contained two RP, zero SP/RP, and
+nine CP. Source inspection proves the combined Legends shelf itself has 117 CP cards, 33 RP cards,
+and seven SP/RP cards. The named shaper currently copies source-library role percentages, so its
+66-person target reproduces that closer-heavy mix even though roster construction needs starter,
+general-relief, and closer supply in different proportions. The Build proof and Lock proof also
+preserved pool-row arrival order, so the same membership could create a second proof fingerprint
+after storage returned the rows in another order. The repair uses stable player-id order, derives
+named pitcher roles from legal roster demand, and swaps at the named count boundary. Two-, four-,
+and eight-team exact checks are green. A separate read-only audit and JK's browser walk remain open.
+
+### 2026-07-21 — FINDING-254 role-balance acceptance amendment
+
+JK ruled that the ideal position mix must not become a second hard Lock gate. The repaired shaper
+uses the legal roster mix as its target, keeps true position floors and final proof mandatory, and
+reports an exact `Remove X ... and add Y ...` correction when the source or protected edits leave a
+different mix. Whole-player curve rounding prevents fractional caps from rejecting one unavoidable
+card. The exact 264-person eight-team Legends gate and all 24 identities across three eight-team
+rooms pass the unchanged independent validator. Separate re-audit and JK browser acceptance remain.

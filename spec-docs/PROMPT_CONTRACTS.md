@@ -32992,3 +32992,44 @@ that version-group people count once through floors, protected quotas, tail caps
 and named acceptance; that shape-first and wider-preset order remains intact; and that the unchanged
 independent validator still owns SUCCESS. This approval permits one replacement preview for JK. It
 does not authorize merge or production promotion.
+
+## SNAKE-NAMED-POOL-ROLE-LOCK-56
+
+**Route:** Codex 5.6 Sol xhigh builder; separate read-only auditor.
+
+**Goal:** Repair FINDING-254. A named Snake pool must keep its promised people count, use legal
+roster demand instead of archive percentages for pitcher roles, and carry one accepted proof from
+Build through Lock without a row-order mismatch. Full Sources must keep every selected card.
+
+**Frozen law:**
+
+- Tight, Competitive, and Loose normally select one card per version-group person. Full Sources
+  keeps all selected cards. A manual add can keep an additional sibling card.
+- Named pitcher targets use the legal nine-arm roster shape: four SP, one SP/RP, three RP, and one
+  CP. Real selected-source supply is a hard bound. This mix guides shaping; it is not a second hard
+  Lock law. When protected/source supply leaves a different mix, show the exact remove/add counts
+  and let the user amend the pool. Position floors and the final validator remain authoritative.
+- A named preset keeps its displayed target count. A position-floor repair swaps one unprotected
+  person for another at the count boundary; it does not silently grow the pool.
+- Numeric curve limits round to whole people: maximum shares use `ceil(cap × people)` and minimum
+  shares use `floor(target × people)`. Display the exact achieved percentage. This tolerance cannot
+  override legal roster, salary, tax, identity, distinct-person, or position-floor failures.
+- The accepted proof fingerprint and the Lock proof fingerprint use the same stable player order.
+  Source, club, identity, preset, mode, content, or membership changes still reject stale work.
+- FIT, tax, caps, archetype thresholds, roster law, source selection, widening order, and honest
+  UNKNOWN meaning do not change. JK's browser walk remains the product gate.
+
+**Allowed files:** `src/engines/poolFromDemand.ts`,
+`src/engines/__tests__/snakeLargeSourceSetup.test.ts`,
+`src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`,
+`src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx`,
+`src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`,
+`test-utils/journeys/15-snake-pool-performance.spec.ts`, and the FINDING-254 contract, finding,
+decision, audit, session, and current-state records required by the session ritual.
+
+**Required proof:** Exact 66-person two-team Legends Loose role counts; exact 132-person four-team
+Legends Loose; exact 264-person eight-team Legends Loose; all 24 identities in three eight-team
+rooms; all 835 cards in Full Sources; Build to Lock to Enter Draft in a real Mac browser; stable
+proof ordering and stale rejection; focused engine, adapter, worker, universe, and pool-lock tests;
+TypeScript; changed-file ESLint; production/PWA build; diff integrity; then a separate read-only
+audit. No merge or production promotion is authorized.

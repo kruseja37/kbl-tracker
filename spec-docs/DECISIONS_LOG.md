@@ -4380,3 +4380,31 @@ generic confirmation failure.
   input and cannot make an otherwise unchanged accepted receipt stale.
 - This applies to all source types, every identity, and four- and eight-team rooms. It contains no
   Legend, league, club, or room special case.
+
+## 2026-07-21 — Named Snake pools use roster demand for pitcher roles
+
+- A source library describes available players. Its historical position percentages do not define
+  the desired draft-pool position mix.
+- Tight, Competitive, and Loose preserve their named people count and divide pitcher seats from the
+  legal nine-arm roster shape: four SP, one SP/RP, three RP, and one CP. Selected-source supply is a
+  hard bound, and the existing competitive position floors remain active.
+- If a named pool is short at a legal position after shaping, the engine swaps an unprotected person
+  at the target boundary. It does not silently grow the named pool.
+- Full Sources keeps the exact selected card union, including alternate versions of one person.
+  Manual adds can keep additional sibling versions in a named pool.
+- The exact final proof still owns legality, money, tax, identity, and one-person capacity. This
+  ruling does not change FIT, tax, caps, archetype thresholds, or honest UNKNOWN behavior.
+
+## 2026-07-21 — Named-pool role balance is advice, not a second roster law
+
+- The legal 22-player roster, salary, tax, identity, and distinct-person proof remain hard Lock
+  requirements.
+- The ideal position mix is a shaping target. A source shelf or a protected hand edit can leave a
+  named pool above or below that target without making every legal draft impossible.
+- Draft Setup reports the exact correction in player counts, such as `Remove 3 CP and add 2 RP + 1
+  SP/RP to balance rosters.` The user can add or remove players and Build again.
+- Percentage curve limits use whole-player rounding. A 264-person pool can contain 40 high-tail
+  players because 15% of 264 is 39.6; the engine does not reject the 40th player as a fractional
+  violation. The displayed actual percentage remains unchanged.
+- Position supply floors and the final independent proof remain authoritative. Advice cannot turn
+  an illegal, insolvent, duplicate-person, tax-failing, or identity-failing pool into SUCCESS.

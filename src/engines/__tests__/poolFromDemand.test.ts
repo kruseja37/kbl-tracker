@@ -474,6 +474,33 @@ describe('extractPoolFromDemand', () => {
     expect(result.players.map((player) => player.id)).toEqual(beforeIds);
   });
 
+  it('does not grow an exact named pool when no safe position-floor swap exists', () => {
+    const teamCount = 1;
+    const source = hardFloorUniverse(teamCount);
+    const missingCloser = source.find((player) => isCloser(player))!;
+    const selected = source.filter((player) => player.id !== missingCloser.id);
+    const replacementBody = arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000);
+    replacementBody.id = 'floor-protected-extra-sp';
+    selected.push(replacementBody);
+
+    const result = enforcePositionSupplyFloors({
+      universe: [...source, replacementBody],
+      players: selected,
+      teams: teamCount,
+      fitOf: () => 0,
+      protectedIds: new Set(selected.map((player) => player.id)),
+      maxPeople: selected.length,
+    });
+
+    expect(result.players).toHaveLength(selected.length);
+    expect(result.injectedIds).toEqual([]);
+    expect(result.evictedIds).toEqual([]);
+    expect(result.floors.find((floor) => floor.position === 'CP')?.missing).toBe(1);
+    expect(result.shortfalls.find((shortfall) => shortfall.position === 'CP')).toBeDefined();
+    expect(result.messages.some((message) => message.includes('without growing the exact named pool'))).toBe(true);
+    expect(result.messages.some((message) => message.includes('position supply floor added'))).toBe(false);
+  });
+
   it('is deterministic: identical inputs produce the identical pool', () => {
     const designs = [designAsking('team-a', 'SS', 'Defensive-Wizard')];
     const first = extractPoolFromDemand(universe(), designs, archetypes, 'standard', { teams: 4 });
@@ -1760,7 +1787,7 @@ describe('extractPoolFromDemand', () => {
   });
 
   it('force-includes pins, protects them from trim, and withholds excludes', () => {
-    const source = [...universe(), ...shapedHitters('manual-headroom', 100, MIDDLE_CORE)];
+    const source = [...universe(), ...shapedHitters('manual-headroom', 30, MIDDLE_CORE)];
     // Keep source headroom in this pin/exclude fixture; the production 1.50 default deliberately
     // consumes its entire tiny universe and would leave no outside player to pin.
     const fixtureMultiplier = 1.25;
@@ -1769,15 +1796,11 @@ describe('extractPoolFromDemand', () => {
       budgetPerTeam: 5_000_000,
       poolSizeMultiplier: fixtureMultiplier,
     });
-    const excluded = baseline.players.find((candidate) => {
-      const trial = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
-        teams: 4,
-        budgetPerTeam: 5_000_000,
-        poolSizeMultiplier: fixtureMultiplier,
-        excludedIds: [candidate.id],
-      });
-      return !trial.players.some((player) => player.id === candidate.id);
-    })?.id;
+    // Use ordinary middle-band headroom. The former search reran full shaping once per player and
+    // made this amendment assertion scale with the fixture size instead of testing one edit.
+    const excluded = [...baseline.players]
+      .reverse()
+      .find((candidate) => candidate.id.startsWith('manual-headroom-'))?.id;
     expect(excluded).toBeDefined();
     const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(pinned).toBeDefined();

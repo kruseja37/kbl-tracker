@@ -48,6 +48,16 @@ function rosterLocalTaxFixture(players: Player[]): Player[] {
 }
 
 describe('SnakeDraftSetupAdapter', () => {
+  test('builds one stable proof input when the same pool arrives in a different row order', () => {
+    const players = rosterLocalTaxFixture(makeLegalRosterPlayers());
+    const team = makeTeam('team-a', { mlbArchetypeKey: undefined, capIdentity: undefined });
+    const forward = pool(players);
+    const reverse = { ...forward, players: [...forward.players].reverse() };
+
+    expect(buildSnakeSetupProofInput({ teams: [team], players, pool: reverse }))
+      .toEqual(buildSnakeSetupProofInput({ teams: [team], players, pool: forward }));
+  });
+
   test('names the exact club only for the proven zero-variance identity cause', () => {
     const team = makeTeam('team-a', { name: 'Beewolves' });
     const proof: SnakeSeatingProof = {

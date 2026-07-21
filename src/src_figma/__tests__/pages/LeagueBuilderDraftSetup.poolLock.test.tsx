@@ -350,10 +350,9 @@ describe("LeagueBuilderDraftSetup", () => {
     };
     expect(options.poolBalancePreset).toBe("grounded");
     expect(options.poolSizeMultiplier).toBe(1.2);
-    // CONTRACT_FIXTUREFIX_2026-07-09: re-pinned to real observed output -- POOLFLOOR's position
-    // supply floors (CONTRACT_POOLFLOOR_2026-07-09.md) top this pool up past the count-only target
-    // (106) to 115 to clear derivePositionSupplyFloorTargets(4).
-    expect(await screen.findByText(/Sized to 115 \(1\.31×\)/i)).toBeInTheDocument();
+    // FINDING-254: named presets keep their promised people count. Position-floor repair swaps a
+    // player at the boundary instead of silently growing the Grounded pool beyond its 106 target.
+    expect(await screen.findByText(/Sized to 106 \(1\.20×\)/i)).toBeInTheDocument();
   });
 
   test("pool-first regeneration carries the selected pool quality center without saving salary cap", async () => {
