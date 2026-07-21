@@ -2086,3 +2086,9 @@ Minor 0. It independently passed 74/74 engine tests and exact 66/132/264-person 
 confirmed that exact final membership owns the only role note, all maximum-tail seams use ceiling
 counts, and manual controls and hard-gate authority remain unchanged. One replacement preview is
 permitted for JK's browser walk. Merge and production promotion remain unauthorized.
+
+### 2026-07-21 — FINDING-254 replacement preview
+
+Preview deployment `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY from source commit `ca512ba2`.
+The 2,744-module build and PWA generation with 224 entries passed in Vercel. JK's browser walk is
+the remaining product gate. Production is unchanged.

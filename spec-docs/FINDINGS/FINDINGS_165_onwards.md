@@ -1457,7 +1457,7 @@ Preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY from source commi
 serves the KBL app. JK's browser walk remains open.
 
 ### FINDING-254
-**Date:** 2026-07-21 | **Phase:** Snake Draft Setup browser acceptance | **Status:** INDEPENDENTLY APPROVED — PREVIEW NEXT
+**Date:** 2026-07-21 | **Phase:** Snake Draft Setup browser acceptance | **Status:** PREVIEW READY — JK WALK PENDING
 **Files:** `src/engines/poolFromDemand.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused engine, page, and browser tests.
 **Evidence:** JK's replacement-preview walk found that Lock Pool never enabled after a build,
@@ -1495,3 +1495,6 @@ Major 0 / Minor 0. It independently passed 74/74 engine tests and exact 66/132/2
 cases, confirmed final-membership advice and ceiling-rounded maximum counts, and found no change to
 manual controls or hard-gate authority. One replacement preview is allowed for JK's browser walk.
 Merge and production promotion remain unauthorized.
+**Preview close:** Deployment `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY from source commit
+`ca512ba2` at `https://kbl-tracker-jnueqzhqd-kruseja37s-projects.vercel.app`. JK's browser walk is
+the remaining product gate. Production is unchanged.

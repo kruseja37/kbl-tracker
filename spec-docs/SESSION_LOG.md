@@ -8571,3 +8571,12 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   controls, and unchanged hard-gate authority.
 - Next: push the approved branch and publish one replacement preview for JK's browser walk. Merge
   and production promotion remain unauthorized.
+
+## 2026-07-21 — FINDING-254 replacement preview ready
+
+- Pushed `codex/snake-live-room-authority` through documentation head `ca512ba2`; approved code is
+  repair commit `8960a4c1`.
+- Preview deployment `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY at
+  `https://kbl-tracker-jnueqzhqd-kruseja37s-projects.vercel.app`.
+- Vercel passed the 2,744-module production build and PWA generation with 224 entries.
+- Next: JK runs the Legends named-pool browser walk. Production is unchanged.
