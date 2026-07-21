@@ -185,6 +185,44 @@ export function buildSnakeSetupProofInput(input: {
   };
 }
 
+function shortfallNumber(value: number): string {
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/** Compact blocker copy for the always-visible setup state. Longer proof law stays behind Help. */
+export function snakeSetupProofFailureLine(
+  proof: SnakeSeatingProof,
+  teams: readonly Pick<Team, 'id' | 'name'>[],
+): string | null {
+  const shortfall = proof.shortfall;
+  if (proof.feasible || !shortfall) return null;
+  const team = shortfall.teamId
+    ? teams.find((candidate) => candidate.id === shortfall.teamId)
+    : null;
+  const owner = team?.name.toUpperCase() ?? `ALL ${teams.length} CLUBS`;
+  const identity = shortfall.identityName?.toUpperCase();
+  const prefix = identity ? `${owner} · ${identity}` : owner;
+
+  if (shortfall.reason === 'identity-proof-unknown') {
+    // A bounded constructive search may fail without proving that any one club caused the stop.
+    // Name a club only for the separate zero-variance necessary-condition check.
+    if (shortfall.detail === 'identity-embodiment' && shortfall.teamId) {
+      return `${prefix} · IDENTITY FIT: SELECTED SOURCE HAS NO BOOST VARIANCE.`;
+    }
+    return `ALL ${teams.length} CLUBS · IDENTITY CHECK: UNRESOLVED.`;
+  }
+  if (shortfall.detail === 'identity-legal-roster') {
+    return `${prefix} · LEGAL 22: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)} SLOTS.`;
+  }
+  if (shortfall.detail === 'identity-affordability') {
+    return `${prefix} · BUDGET ROOM: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}.`;
+  }
+  if (shortfall.detail === 'identity-value-floor') {
+    return `${prefix} · VALUE FLOOR: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}.`;
+  }
+  return `${owner} · ${shortfall.label}: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}, SHORT ${shortfallNumber(shortfall.shortBy)}.`;
+}
+
 /** Rebuild Practice boards from a fresh, worker-backed setup certificate. */
 export async function rebuildPracticeSnakeSeatBoards(input: {
   teams: readonly Team[];

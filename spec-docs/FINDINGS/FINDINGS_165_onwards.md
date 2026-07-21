@@ -1304,3 +1304,65 @@ status. FARM does not retain the MLB version ledger. The final frozen code head 
 **APPROVE — Major 0 / Minor 0** from the same read-only auditor. Independent proof passed 33/33
 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file ESLint, diff integrity,
 and the 2,744-module production/PWA build. Explicit remote authority and JK's browser walk remain.
+
+### FINDING-250
+**Date:** 2026-07-20 | **Phase:** Snake Draft / four-team and eight-team setup certification | **Status:** FIXED — INDEPENDENTLY APPROVED — LOCAL PREVIEW READY — JK WALK PENDING
+**Files:** `src/engines/snakeSeatingProof.ts`,
+`src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused engine, adapter, worker, setup,
+room, and browser tests.
+**Evidence:** The failing Vercel preview is deployment
+`dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` from commit
+`3f2b30cdc50bc6c9a7f9d9129b69228fe6c522d3`. Its certification files are byte-identical to source
+commit `db8a6426314cef35f1aca15662bf736c8cc28244`. The exact selected SMB4 and Legends sources contain
+1,341 cards for 851 distinct people. The old large-source path kept 242 cards for 232 people. Its
+Murderers' Row seed was legal, solvent, and above its value floor, but the pruned source produced
+identity boost z `-0.0501598`. The other three selected identities were positive.
+**Impact:** A valid four-club room could not lock or start even though the selected sources had
+enough distinct people and more than 800 cards. The same sources could appear valid in an
+eight-club room because eight selected identities happened to build a wider shortlist. The failure
+did not prove a position, roster-slot, closer, swing, money, or source shortage.
+**Root cause:** The engine used card rows, not distinct people, to choose its large-source pruning
+path. It then retained only six cards per identity-role fit lens. Several cards can represent one
+person, and four identities supplied fewer independent lenses than eight identities. The bounded
+candidate union therefore under-sampled one valid identity. The proof correctly refused to turn
+that uncertainty into SUCCESS.
+**Action:** Count distinct version-group people at the large-source cutoff. Keep at least half of a
+legal 22 per identity-role fit lens before the shared matcher resolves overlap. Keep the independent
+legal, money, value, and identity validator as the only SUCCESS authority. Add necessary position-
+player and pitcher SWING supply floors without changing roster law. A proven supply, money, or zero-
+variance identity cause names its exact resource and club when known. Ordinary bounded UNKNOWN
+stays club-neutral. Bind the accepted build to the exact source content, clubs, identities, requested
+and accepted mode/preset, extracted basis, membership, provenance, and design pins. Lock requires
+that same fingerprint and saves the accepted basis and IDs. Cancel or reject stale work after a
+source, club, identity, preset, mode, or content change. Keep named widening and Start Draft meaning
+unchanged.
+**Builder result:** Production-adapter proof is 12/12. It covers exact four-club Full Sources and
+Loose, exact eight-club Full Sources and every named preset, every selected identity, duplicate
+version capacity, and true C, SP, RP, CP, SWING, identity, and money failures. The focused engine,
+worker, setup, adapter, and room gate is 100/100. A Career pick retires the same person's Peak and
+Draft Pool cards and removes them from the next club's selectable live pool. TypeScript,
+changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green.
+The final exact four-club browser path completed the 1,341-card proof in 9.06 seconds, Help in 69 ms,
+maximum main-thread delay 328 ms, one worker for the stable Full Sources fingerprint, no Help-render
+rerun, then Lock and Start. The 2,001-card eight-club path also passed; Full Sources took 24.77
+seconds after the click, Tight took 4.44 seconds, and maximum main-thread delay was 412 ms.
+**First audit:** The separate auditor returned BLOCK, Major 2 / Minor 1. It found that Lock could use
+old membership after source or control changes, bounded UNKNOWN could name an unproven club cause,
+and one adapter edit was outside the allowlist. The repaired diff binds accepted build state through
+Lock, keeps target-pool assignments from changing selected-source truth, makes bounded UNKNOWN
+club-neutral, and removes the adapter edit. Same-auditor re-audit is required. Only APPROVE permits
+one local preview for JK. No merge, push, or deployment is authorized.
+**Second audit:** The same auditor returned BLOCK, Major 1 / Minor 0. The source-content key omitted
+`sourceId`, `versionGroupId`, and legacy `historicalSourceId`, so a grouping-only metadata change
+could retain an old accepted Build at Lock. The key now includes all three normalized fields. Three
+direct tests change each field after Build and prove that Lock disables and no old pool locks. The
+affected gate is 112/112. At that point, same-auditor re-audit remained required before a local
+preview.
+**Independent close:** The same auditor approved frozen diff hash
+`be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, **Major 0 / Minor 0**,
+and closed both prior audit blocks. It independently passed the earlier 109-test full gate and the
+final 3/3 metadata delta, plus TypeScript, focused lint, hash, status, and diff integrity. After
+approval, one local production preview started at `http://127.0.0.1:4173/` and returned HTTP 200.
+JK's browser walk remains the sole product gate. No push, merge, Vercel deploy, or production
+promotion occurred in the isolated certification lane.

@@ -31,7 +31,7 @@ import {
 } from '../../utils/leagueBuilderStorage';
 import { computePlayerIv } from '../../utils/leagueBuilderPoolBuilder';
 import { snakePlayerVersionGroupId } from '../../utils/snakePlayerIdentity';
-import { isLegalRoster } from '../../data/rosterConstruction';
+import { isLegalRoster, LEGAL_ROSTER } from '../../data/rosterConstruction';
 import {
   buildSnakeOrder,
   luxuryTax,
@@ -45,11 +45,20 @@ import {
   proveSimultaneousSnakeSeating,
   validateConstructiveSnakeSeatingProof,
 } from '../snakeSeatingProof';
+import { deriveVersionGroupId } from '../snakeVersioning';
 import { snakeLuxuryCaps } from '../snakeLuxuryTax';
-import { createPoolIdentitySupportReceipt, extractPoolFromDemand } from '../poolFromDemand';
+import {
+  createPoolIdentitySupportReceipt,
+  deriveHardPositionSupplyFloorTargets,
+  extractPoolFromDemand,
+  matchesPositionSupplyFloor,
+} from '../poolFromDemand';
 import { SNAKE_POOL_COMPETITION_PRESETS, snakePoolSizeGuide } from '../snakePoolAssembly';
 import { demandUniverseFromPlayers } from '../../src_figma/app/engines/leaguePlayerAdapter';
-import { buildSnakeSetupProofInput } from '../../src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import {
+  buildInitialSnakeSeatBoards,
+  buildSnakeSetupProofInput,
+} from '../../src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
 
 const legendsPayload = JSON.parse(
   readFileSync(resolve('public/data/historical-legends-app-data.json'), 'utf8'),
@@ -73,6 +82,7 @@ let cachedRoom: {
   input: ReturnType<typeof buildSnakeSetupProofInput>;
   proof: ReturnType<typeof proveSimultaneousSnakeSeating>;
 } | null = null;
+let cachedFourRoom: typeof cachedRoom = null;
 
 function buildTeams(
   ids: readonly string[] = archetypeIds,
@@ -117,6 +127,49 @@ function buildLargeSourceRoom() {
   return cachedRoom;
 }
 
+const fourClubIdentityIds = [
+  'murderers-row',
+  'the-oriole-way',
+  'go-go-small-ball',
+  'wheels-and-cannons',
+] as const;
+
+function browserSelectedSourcePlayers(): Player[] {
+  // Exact source union from the failing production page: SMB4 plus Historical Legends, no MLB.
+  return sourcePlayers.filter((player) => player.sourceDatabase !== 'MLB');
+}
+
+function registerProductionPool(input: {
+  leagueId: string;
+  teams: readonly Team[];
+  players: readonly Player[];
+}) {
+  return registerPool({
+    leagueId: input.leagueId,
+    tier: 'standard',
+    balanceMode: 'taxed',
+    totalSlots: input.teams.length * LEGAL_ROSTER.size,
+    teamCount: input.teams.length,
+    salaryCap: TIER_CAPS.standard.tierCap,
+    players: input.players.map((player) => ({
+      id: player.id,
+      iv: computePlayerIv(player),
+      salary: player.salary ?? 0,
+    })),
+  });
+}
+
+function buildFourClubFullSourceRoom() {
+  if (cachedFourRoom) return cachedFourRoom;
+  const leagueId = 'four-club-large-source-room';
+  const teams = buildTeams(fourClubIdentityIds, leagueId);
+  const players = browserSelectedSourcePlayers();
+  const pool = registerProductionPool({ leagueId, teams, players });
+  const input = buildSnakeSetupProofInput({ teams, players, pool });
+  cachedFourRoom = { teams, players, pool, input, proof: proveSimultaneousSnakeSeating(input) };
+  return cachedFourRoom;
+}
+
 beforeAll(async () => {
   await clearAllLeagueBuilderData();
   await seedFromSMB4Database(false);
@@ -130,6 +183,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   cachedRoom = null;
+  cachedFourRoom = null;
   await clearAllLeagueBuilderData();
   __resetLeagueBuilderDatabaseForTests();
 });
@@ -295,5 +349,237 @@ describe('eight-club Snake setup on combined production sources', () => {
       expect(new Set(proof.assignments.flatMap((assignment) => assignment.playerIds))).toHaveLength(176);
       expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
     }
+  }, 300_000);
+});
+
+describe('four-club Snake setup on combined production sources', () => {
+  test('certifies and materializes Full Sources with the exact 800-card browser source and identities', () => {
+    const { teams, players, pool, input, proof } = buildFourClubFullSourceRoom();
+
+    expect(players).toHaveLength(1_341);
+    expect(new Set(players.map(snakePlayerVersionGroupId))).toHaveLength(851);
+    expect(proof.feasible, proof.message).toBe(true);
+    expect(proof.assignments).toHaveLength(4);
+    const assignedIds = proof.assignments.flatMap((assignment) => assignment.playerIds);
+    expect(assignedIds).toHaveLength(88);
+    expect(new Set(assignedIds.map((playerId) => (
+      snakePlayerVersionGroupId(players.find((player) => player.id === playerId)!)
+    )))).toHaveLength(88);
+    expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
+
+    const boards = buildInitialSnakeSeatBoards({ teams, players, pool, certificate: proof });
+    expect(Object.keys(boards)).toHaveLength(4);
+    for (const team of teams) {
+      expect(Object.values(boards[team.id].slots)).toHaveLength(LEGAL_ROSTER.size);
+    }
+  }, 300_000);
+
+  test('certifies the four-club Loose named preset against the same Full Sources identity truth', () => {
+    const { teams, players, pool: fullSourcePool, input: fullSourceInput, proof } = buildFourClubFullSourceRoom();
+    const supportCertificate = createSnakeIdentitySupportCertificate(fullSourceInput, proof);
+    expect(supportCertificate).not.toBeNull();
+    const supportIds = [...new Set(proof.assignments.flatMap((assignment) => assignment.playerIds))];
+    const selectedArchetypes = fourClubIdentityIds.map((archetypeId) => (
+      HISTORICAL_ARCHETYPES.find((archetype) => archetype.id === archetypeId)!
+    ));
+    const demandUniverse = demandUniverseFromPlayers(players);
+    const supportReceipt = createPoolIdentitySupportReceipt({
+      universe: demandUniverse,
+      selectedArchetypes,
+      tier: 'standard',
+      teams: teams.length,
+      budgetPerTeam: TIER_CAPS.standard.tierCap,
+      playerIds: supportIds,
+      authorityFingerprint: supportCertificate!.sourceFingerprint,
+    });
+    const result = extractPoolFromDemand(
+      demandUniverse,
+      [],
+      selectedArchetypes,
+      'standard',
+      {
+        teams: teams.length,
+        shills: 0,
+        budgetPerTeam: TIER_CAPS.standard.tierCap,
+        poolBalancePreset: 'balanced',
+        poolQualityCenter: 68,
+        poolSizeMultiplier: SNAKE_POOL_COMPETITION_PRESETS.loose.multiplier,
+        poolSourceMode: 'full-pool',
+        identitySupportIds: supportIds,
+        identitySupportReceipt: supportReceipt,
+        preserveSelectedIdentityClaims: false,
+      },
+    );
+    const loosePool = registerPool({
+      leagueId: 'four-club-loose-room',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      totalSlots: teams.length * LEGAL_ROSTER.size,
+      teamCount: teams.length,
+      salaryCap: TIER_CAPS.standard.tierCap,
+      players: result.players.map((player) => ({ id: player.id, iv: player.iv, salary: player.salary })),
+    });
+    const input = buildSnakeSetupProofInput({
+      teams,
+      players,
+      pool: loosePool,
+      identityReferencePool: fullSourcePool,
+      identitySupportCertificate: supportCertificate!,
+    });
+    const looseProof = proveSimultaneousSnakeSeating(input);
+
+    expect(result.players).toHaveLength(snakePoolSizeGuide(teams.length).targets.loose);
+    expect(result.players).toHaveLength(132);
+    expect(supportIds.every((playerId) => result.players.some((player) => player.id === playerId))).toBe(true);
+    expect(looseProof.feasible, looseProof.message).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof(input, looseProof)).toBe(true);
+  }, 300_000);
+
+  test('counts duplicate cards for one person as one unit of legal draft capacity', () => {
+    const selectedSourcePlayers = browserSelectedSourcePlayers();
+    const cardsByPerson = new Map<string, Player[]>();
+    for (const player of selectedSourcePlayers) {
+      const groupId = snakePlayerVersionGroupId(player);
+      cardsByPerson.set(groupId, [...(cardsByPerson.get(groupId) ?? []), player]);
+    }
+    const chosenGroups = [...cardsByPerson.entries()].filter(([, cards]) => cards.length > 1).slice(0, 30);
+    const versionedCards = chosenGroups.flatMap(([, cards]) => cards);
+    const teams = buildTeams(fourClubIdentityIds, 'duplicate-capacity-room').map((team) => ({
+      ...team,
+      mlbArchetypeKey: undefined,
+      capIdentity: undefined,
+    }));
+    const pool = registerProductionPool({ leagueId: 'duplicate-capacity-room', teams, players: versionedCards });
+    const proof = proveSimultaneousSnakeSeating(buildSnakeSetupProofInput({ teams, players: versionedCards, pool }));
+
+    expect(chosenGroups).toHaveLength(30);
+    expect(versionedCards.length).toBeGreaterThan(30);
+    expect(proof.feasible).toBe(false);
+    expect(proof.shortfall).toMatchObject({
+      reason: 'body-count',
+      available: 30,
+      needed: 102,
+    });
+  });
+
+  test.each(['C', 'SP', 'RP', 'CP'] as const)(
+    'still blocks genuinely insufficient %s supply',
+    (position) => {
+      const full = buildFourClubFullSourceRoom();
+      const target = deriveHardPositionSupplyFloorTargets(full.teams.length)
+        .find((candidate) => candidate.position === position)!;
+      const protectedCloserPeople = position === 'RP'
+        ? new Set(full.input.pool
+            .filter((player) => matchesPositionSupplyFloor(
+              player.shape,
+              deriveHardPositionSupplyFloorTargets(full.teams.length)
+                .find((candidate) => candidate.position === 'CP')!,
+            ))
+            .map(deriveVersionGroupId)
+            .filter((groupId, index, all) => all.indexOf(groupId) === index)
+            .slice(0, full.teams.length))
+        : new Set<string>();
+      const removedPeople = new Set(full.input.pool
+        .filter((player) => (
+          matchesPositionSupplyFloor(player.shape, target)
+          && !protectedCloserPeople.has(deriveVersionGroupId(player))
+        ))
+        .map(deriveVersionGroupId));
+      const remainingPlayers = full.players.filter((player) => (
+        !removedPeople.has(snakePlayerVersionGroupId(player))
+      ));
+      const teams = full.teams.map((team) => ({ ...team, mlbArchetypeKey: undefined, capIdentity: undefined }));
+      const pool = registerProductionPool({ leagueId: `short-${position}`, teams, players: remainingPlayers });
+      const proof = proveSimultaneousSnakeSeating(buildSnakeSetupProofInput({ teams, players: remainingPlayers, pool }));
+
+      expect(removedPeople.size).toBeGreaterThan(0);
+      expect(proof.feasible).toBe(false);
+      expect(proof.shortfall).toMatchObject({
+        reason: 'position-floor',
+        position,
+        available: position === 'RP' ? full.teams.length : 0,
+      });
+    },
+    30_000,
+  );
+
+  test('names a genuine SWING composition shortage after every hard position floor passes', () => {
+    const full = buildFourClubFullSourceRoom();
+    const representativeByPerson = new Map<string, (typeof full.input.pool)[number]>();
+    for (const player of full.input.pool) {
+      const groupId = deriveVersionGroupId(player);
+      if (!representativeByPerson.has(groupId)) {
+        representativeByPerson.set(groupId, player);
+      }
+    }
+    const representatives = [...representativeByPerson.values()];
+    const chosen = new Set<string>();
+    const addForTarget = (target: ReturnType<typeof deriveHardPositionSupplyFloorTargets>[number]) => {
+      const matching = () => [...chosen].filter((groupId) => {
+        const player = representativeByPerson.get(groupId);
+        return player ? matchesPositionSupplyFloor(player.shape, target) : false;
+      }).length;
+      for (const player of representatives) {
+        if (matching() >= target.needed) break;
+        if (matchesPositionSupplyFloor(player.shape, target)) chosen.add(deriveVersionGroupId(player));
+      }
+      expect(matching(), target.position).toBeGreaterThanOrEqual(target.needed);
+    };
+    const targets = deriveHardPositionSupplyFloorTargets(full.teams.length);
+    for (const target of targets.filter((candidate) => (
+      candidate.kind === 'field-position' || candidate.kind === 'catcher-depth'
+    ))) addForTarget(target);
+    for (const player of representatives.filter((candidate) => !candidate.shape.isPitcher)) {
+      if ([...chosen].filter((groupId) => !representativeByPerson.get(groupId)!.shape.isPitcher).length >= 48) break;
+      chosen.add(deriveVersionGroupId(player));
+    }
+    for (const target of targets.filter((candidate) => (
+      candidate.kind === 'starter' || candidate.kind === 'reliever' || candidate.kind === 'closer'
+    ))) addForTarget(target);
+    for (const player of representatives.filter((candidate) => candidate.shape.isPitcher)) {
+      if ([...chosen].filter((groupId) => representativeByPerson.get(groupId)!.shape.isPitcher).length >= 54) break;
+      chosen.add(deriveVersionGroupId(player));
+    }
+    const chosenCardIds = new Set([...chosen].map((groupId) => representativeByPerson.get(groupId)!.playerId));
+    const selectedPlayers = full.players.filter((player) => chosenCardIds.has(player.id));
+    const teams = full.teams.map((team) => ({ ...team, mlbArchetypeKey: undefined, capIdentity: undefined }));
+    const pool = registerProductionPool({ leagueId: 'short-swing', teams, players: selectedPlayers });
+    const proof = proveSimultaneousSnakeSeating(buildSnakeSetupProofInput({ teams, players: selectedPlayers, pool }));
+
+    expect(selectedPlayers).toHaveLength(102);
+    expect(proof.feasible).toBe(false);
+    expect(proof.shortfall).toMatchObject({
+      reason: 'joint-assignment',
+      position: 'SWING',
+      label: 'BENCH / SWING HITTERS',
+      available: 48,
+      needed: 52,
+      detail: 'roster-composition',
+    });
+  });
+
+  test('blocks a true selected-source identity shortage and names the affected club', () => {
+    const players = browserSelectedSourcePlayers().map((player) => ({
+      ...player,
+      power: 50,
+      contact: 50,
+      speed: 50,
+      fielding: 50,
+      arm: 50,
+      velocity: 50,
+      junk: 50,
+      accuracy: 50,
+    }));
+    const teams = buildTeams(fourClubIdentityIds, 'identity-short-room');
+    const pool = registerProductionPool({ leagueId: 'identity-short-room', teams, players });
+    const proof = proveSimultaneousSnakeSeating(buildSnakeSetupProofInput({ teams, players, pool }));
+
+    expect(proof.feasible).toBe(false);
+    expect(proof.shortfall).toMatchObject({
+      reason: 'identity-proof-unknown',
+      teamId: teams[0].id,
+      identityName: "Murderers' Row",
+      detail: 'identity-embodiment',
+    });
   }, 300_000);
 });

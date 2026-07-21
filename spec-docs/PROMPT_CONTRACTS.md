@@ -32887,3 +32887,80 @@ and no-A+ assertions; four-team and eight-team pool sizing; new-session identity
 recovery; mismatch/missing fail-closed tests; Scout Reveal repair; MLB-to-FARM transition; eight-team
 season gauntlet; affected companion/completion regressions; TypeScript; changed-file ESLint;
 production/PWA build; diff integrity; separate non-builder audit. Use high reasoning effort.
+
+## SNAKE-FOUR-EIGHT-CERTIFICATION-54
+
+**Route:** Codex 5.6 Sol | max builder; separate Codex 5.6 Sol | max read-only auditor.
+
+**Goal:** Repair the false Snake Draft Setup identity-certificate failure for valid four-team and
+eight-team rooms. Use one production rule. Do not add a league-name, Test Mock, or room special case.
+
+**Exact red evidence:** The failing preview is deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9`
+from commit `3f2b30cdc50bc6c9a7f9d9129b69228fe6c522d3`. Its certification code is byte-identical to source
+commit `db8a6426314cef35f1aca15662bf736c8cc28244`. The production Test Mock source has 1,341 cards,
+851 distinct people, and four chosen MLB identities. The bounded union kept 242 cards. The
+Beewolves' Murderers' Row candidate was legal, solvent, and above its IV floor, but its identity
+embodiment was `-0.05`; SUCCESS requires a value greater than `0`.
+
+**Frozen law:**
+
+- FIT is identity-only. Tax remains separate.
+- Full Sources is the exact selected source union after overrides and hard keeps.
+- One person supplies at most one drafted version. Several cards for one person add no draft
+  capacity.
+- Named bounds, widening order, legal-finish meaning, readiness meaning, and actual-mode
+  persistence do not change.
+- Honest UNKNOWN cannot become SUCCESS. The independent validator remains the only SUCCESS
+  authority.
+- Four-team and eight-team rooms use the same proof with different inputs.
+- Proof work stays off the main thread. One stable fingerprint starts one job. A changed source,
+  club, identity, pool mode, or preset cancels stale work and rejects a late stale result.
+- A failure line names the exact club and missing resource only when the proof establishes that
+  cause. Bounded UNKNOWN stays club-neutral. Method details remain behind the ratified Help control.
+- JK's browser walk is the only product gate. The builder does not audit the builder diff.
+
+**Allowed implementation files:**
+
+- `src/engines/snakeSeatingProof.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- focused engine, adapter, worker-client, Draft Setup, and browser tests for this contract
+- this contract and the FINDING-250 session, audit, and state records required by the session ritual
+
+**Forbidden:** FARM companion code or its active worktree; FIT, tax, cap, archetype, roster, pool
+bound, widening, source-selection, version-capacity, readiness, lock, or Start Draft law changes;
+merge; push; deploy; production promotion.
+
+**Required proof:** production-adapter four-team Full Sources and named-preset start; production-
+adapter eight-team Loose and Full Sources; duplicate-person capacity; true C, SP, RP, CP, SWING,
+identity, and money blockers; exact selected-source binding; accepted-preset persistence; complete
+fingerprint and cancellation coverage; no duplicate proof loop; TypeScript; changed-file ESLint;
+production/PWA build; real browser responsiveness and timing; diff integrity; then the separate
+read-only audit.
+
+**Audit route:** After the builder freezes the diff, use a separate Codex 5.6 Sol | max agent in
+read-only mode. It must cite every finding by file and line. It must return `APPROVE` or `BLOCK`.
+Only an `APPROVE` verdict permits one local preview for JK. It does not permit merge or deploy.
+
+**First audit repair:** The separate auditor returned BLOCK, Major 2 / Minor 1. Lock was not bound
+to the accepted source, controls, and membership; bounded UNKNOWN could name the first club and a
+seed-search detail as a proven cause; and one adapter component edit was outside the allowlist. The
+repair removes that component edit. Build acceptance now fingerprints exact source IDs and content,
+clubs and identities, requested and accepted mode/preset, extracted basis, membership IDs,
+provenance, and design pins. Lock requires that exact current fingerprint and saves the accepted
+basis and IDs. Source, club, identity, preset, mode, or content changes cancel stale work and clear
+acceptance. Target-pool free-agent membership does not remove a selected unassigned player from the
+source universe. Only a proven zero-variance identity cause may name a club; other bounded UNKNOWN
+results remain unresolved and club-neutral. Same-auditor re-audit is required.
+
+**Second audit repair:** The same auditor returned BLOCK, Major 1 / Minor 0. The accepted source-
+content key omitted `sourceId`, `versionGroupId`, and legacy `historicalSourceId`, although those
+fields define distinct-person grouping and sibling retirement. The key now includes all three
+normalized fields. Direct tests change each field after Build and prove that acceptance becomes
+stale, Lock stays disabled, no old pool locks, and the UI requires a new Build. Same-auditor re-audit
+was still required before a local preview.
+
+**Independent close:** The same non-builder auditor approved frozen diff hash
+`be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, Major 0 / Minor 0. It
+closed both prior audit blocks. One local production preview may serve JK's browser walk. This close
+does not authorize push, merge, Vercel deployment, or production promotion.

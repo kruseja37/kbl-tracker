@@ -1843,6 +1843,7 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 | FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |
 | FINDING-247 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — NEW PREVIEW READY — JK WALK PENDING | Snake Draft completed MLB handoff and completed-room recovery | One transaction now freezes the exact pool/session, creates and saves all target rosters, saves player assignments/salaries and handoff, aborts without partial state, repairs old partial state, and repeats byte-for-byte across proven 4- and 8-team completions. Recovery now appears when a signed-in browser has the league but lacks its local pool/session and explicitly reloads the restored state even when the URL already names that league. Recovery head `05f7f6b0` was rejected Major 1 / Minor 0 for a same-URL dead end; repaired head `56d1ab81` received APPROVE, Major 0 / Minor 0. Preview `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY from source `56d1ab81`; production is unchanged. |
 | FINDING-248 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING | Snake Draft MLB-to-farm identity and prospect generation | New and recovered Snake drafts now carry each club's farm identity through setup, live catalog, recovery, Scout Reveal, and farm-session creation. Missing legacy identity fails closed with a generic repair control. Production farm pools use the exact Standard prospect distribution and keep true ratings hidden. Exact head `914e35e9` is approved, Major 0 / Minor 0; preview `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY. |
+| FINDING-250 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — INTEGRATION GATE PENDING — JK WALK PENDING | Snake Draft Setup four/eight-team certification | The large-source identity shortlist used card count to enter pruning, then kept only six fit cards per identity-role lens. The generic repair counts distinct people and keeps at least half a legal roster per fit lens. Two audit BLOCKs repaired exact Build-to-Lock binding, bounded UNKNOWN attribution, scope, and person-group metadata. The same auditor approved frozen hash `be166c0e`, Major 0 / Minor 0. Its approved code is integrated locally with FINDING-249; combined verification and audit remain. |
 
 ### 2026-07-20 — FINDING-248 audit close
 
@@ -1859,6 +1860,52 @@ Preview deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY at
 HTTP 200. The deployed Scout Reveal bundle contains `FARM IDENTITIES MISSING` and
 `SAVE FARM IDENTITIES`; Chrome loaded the app home page with no warning or error in the console.
 Production remains unchanged. JK's new/recovered league walk is the remaining product gate.
+
+### 2026-07-20 — FINDING-250 first independent audit block and builder repair
+
+The separate read-only auditor returned **BLOCK — Major 2 / Minor 1**. First, a completed build was
+not bound to the source, pool mode, preset, club identity, and membership state used by Lock. A
+change after Build could therefore lock old IDs under new controls. Second, a bounded UNKNOWN could
+name the first club and a seed-search detail as if they were proven causes. The minor finding was
+one edit to `SnakeDraftSetupAdapter.tsx` outside the contract allowlist.
+
+The builder removed the adapter edit. Lock now requires an accepted fingerprint over the exact
+source people and content, clubs and identities, requested and accepted mode/preset, extracted
+basis, membership IDs, provenance, and design pins. A changed source, team, identity, preset, mode,
+or content cancels work and invalidates acceptance. Lock saves the accepted basis and exact IDs.
+Target-league free-agent pool assignments no longer remove selected unassigned players from the
+source universe. Only a proven zero-variance identity cause may name a club; ordinary bounded
+UNKNOWN now says that the all-club identity check is unresolved. The final browser path builds,
+locks, and starts the exact four-club room. Same-auditor re-audit remains required before a local
+preview. No push, merge, or deploy is authorized.
+
+### 2026-07-20 — FINDING-250 second independent audit block and builder repair
+
+The same auditor returned **BLOCK — Major 1 / Minor 0**. The accepted source-content key included
+ratings, positions, traits, salary, and card IDs, but omitted `sourceId`, `versionGroupId`, and
+legacy `historicalSourceId`. Those fields decide whether several cards are one person. A metadata-
+only grouping change could therefore leave an old Build receipt accepted at Lock.
+
+The source-content key now includes all three normalized grouping fields. Three direct regressions
+change each field after Build and prove that Lock disables, no old pool locks, and the UI requires a
+new Build. Builder proof is 12/12 production-input plus 100/100 other focused tests, for 112/112
+affected tests. TypeScript, changed-file ESLint, the production/PWA build, and four/eight-team
+browser paths are green. Same-auditor re-audit remains required before a local preview. No push,
+merge, or deploy is authorized.
+
+### 2026-07-20 — FINDING-250 final independent approval and local preview
+
+The same non-builder auditor approved frozen diff hash
+`be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, **Major 0 / Minor 0**.
+It closed both prior audit blocks. It verified all three person-group fields in accepted source
+content, the Lock recheck, the three direct stale-Lock regressions, club-neutral bounded UNKNOWN,
+and the clean adapter component scope. The prior independent full gate passed 109/109; the final
+delta passed 3/3, TypeScript, focused ESLint, hash, status, and diff integrity. Builder proof is
+112/112 with the production/PWA build and both browser paths green.
+
+After approval, one local production preview started at `http://127.0.0.1:4173/` and returned HTTP
+200. This is not a Vercel or production deployment. JK's browser walk is the sole product gate. No
+push, merge, deploy, or product acceptance occurred.
 
 ### 2026-07-19 — FINDING-246 first audit block and builder repair
 

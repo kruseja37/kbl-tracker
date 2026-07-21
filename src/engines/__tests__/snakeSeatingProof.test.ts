@@ -489,6 +489,24 @@ describe('simultaneous snake seating proof', () => {
     expect(result.assignments.every((assignment) => assignment.allInCost <= 660)).toBe(true);
   });
 
+  test('keeps a genuine budget shortage blocked and names the affected club', () => {
+    const result = proveSimultaneousSnakeSeating({
+      clubs: [{ teamId: 'cash-short', roster: [], budgetRemaining: 100 }],
+      pool: [...oneClubPool('cash-short'), ...floorSlackExtras('cash-slack')],
+      baseCaps: [],
+      realTeamCount: 1,
+    });
+
+    expect(result.feasible).toBe(false);
+    expect(result.shortfall).toMatchObject({
+      reason: 'affordability',
+      teamId: 'cash-short',
+      available: 100,
+      needed: 220,
+      shortBy: 120,
+    });
+  });
+
   test('keeps arbitrary legal picks available by globally rebalancing every partial roster', () => {
     const priced = (players: SnakeSeatingPlayer[], price: number) => players.map((player) => ({ ...player, price }));
     const cheap = priced(oneClubPool('cheap'), 10);

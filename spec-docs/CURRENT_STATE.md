@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-249 FARM COMPANION AUTHORITY IS INDEPENDENTLY APPROVED (2026-07-20; branch `codex/snake-live-room-authority`). JK's recovered four-team league reached the FARM room and proved that FARM had no companion controls. The generic repair now extends the same cloud-authority model through FARM: Hotseat owns public picks and completion; an approved companion owns only its private fogged scout board and can send a pick request for Hotseat confirmation. Two separate-audit rounds found and drove closure of five Major findings. The final frozen code head `7a44d2b6` received **APPROVE — Major 0 / Minor 0** from the same read-only auditor. Independent verification passed 33/33 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build. The known live-reconnect result remains identical to the verified base and is not introduced here. **NEXT:** with explicit authority, apply migration `20260720213000_farm_snake_live_catalog.sql`, push the audited branch, and create one matching preview. JK's real FARM companion browser walk remains the product gate. No migration, push, preview, merge, or production promotion is authorized yet.
+> ## RIGHT NOW — FINDING-249 FARM COMPANION AUTHORITY AND FINDING-250 FOUR/EIGHT-TEAM SETUP CERTIFICATION ARE INTEGRATED LOCALLY (2026-07-20; branch `codex/snake-live-room-authority`). Both source lanes received separate **APPROVE — Major 0 / Minor 0** verdicts before integration. FARM companions now use the cloud-authority model without trades or private-data leakage. Large Snake sources now certify by distinct people, preserve adequate identity-role depth, bind Build through Lock to exact source and person-group truth, reject stale work, and keep bounded UNKNOWN honest. The integration is not yet independently approved. **NEXT:** run the combined FARM/setup gates, obtain a separate integration audit, apply migration `20260720213000_farm_snake_live_catalog.sql`, push one branch, and create one matching Vercel preview. JK's browser walk remains the sole product gate. Production remains unchanged.
 
 ## Current product law
 
@@ -22,12 +22,14 @@
 
 ## Open gates
 
-1. With explicit authority, apply the FARM catalog migration, push the audited branch, and create
-   one matching preview.
-2. JK runs a FARM Hotseat-plus-companion walk, then the broader new-league Snake re-walk.
+1. Run the combined FARM companion and four/eight-team setup verification.
+2. Obtain a separate read-only integration audit.
+3. Apply the FARM catalog migration, push the integrated branch, and create one matching preview.
+4. JK runs the four/eight-team setup walk and FARM Hotseat-plus-companion walk.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel
 preview are complete for MLB. The current farm-identity preview is
 `https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Vercel production remains on
-`ba7f97d6`. That preview does not contain FINDING-249 or its required FARM catalog migration.
+`ba7f97d6`. That preview does not contain FINDING-249, FINDING-250, or the required FARM catalog
+migration.

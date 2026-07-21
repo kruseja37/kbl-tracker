@@ -20,8 +20,34 @@
   read-only auditor. Independent proof passed 33/33 focused tests, 227/227 broad Snake live-room
   tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build.
 - Migration `20260720213000_farm_snake_live_catalog.sql` extends the installed live-room catalog
-  validator to FARM. It is local only. **Next:** explicit authority for the migration, push, and one
-  preview. JK's browser walk remains the product gate.
+  validator to FARM. It is local only. **Next:** integrate and audit the combined branch, then apply
+  the migration, push, and create one preview. JK's browser walk remains the product gate.
+
+## INDEPENDENTLY APPROVED / INTEGRATION GATE PENDING (2026-07-20; FINDING-250)
+- The exact failing preview is commit `3f2b30cd`; its certification code matches isolated source
+  `db8a6426`. The valid four-club room has 1,341 cards and 851 distinct people.
+- Root cause: card count selected the large-source pruning path, then a six-card identity-role fit
+  depth under-sampled Murderers' Row. The proof correctly refused to change UNKNOWN to SUCCESS.
+- The generic repair counts people at the cutoff and keeps at least half a legal roster per fit
+  lens. Four-team and eight-team rooms still use the same proof. FIT, tax, sources, named bounds,
+  roster law, and Start Draft meaning did not change.
+- The first auditor returned BLOCK, Major 2 / Minor 1. The repaired diff binds Lock to the exact
+  accepted source, club, preset, basis, and membership fingerprint; keeps bounded UNKNOWN club-
+  neutral; and removes one out-of-contract adapter edit. Target-pool free-agent assignments no
+  longer change the selected source universe.
+- The same auditor next returned BLOCK, Major 1 / Minor 0. The accepted source key now includes
+  `sourceId`, `versionGroupId`, and legacy `historicalSourceId`. Changing any one after Build blocks
+  Lock until a new Build succeeds.
+- Production-input proof is 12/12 and other focused proof is 100/100, for 112/112 affected tests.
+  Career, Peak, and Draft cards count as
+  one person; choosing one retires the other two in the live room. TypeScript, changed-file lint,
+  production/PWA build, diff integrity, exact four/eight-team browser paths, and four-team Lock and
+  Start are green.
+- The same auditor approved frozen diff hash `be166c0e`, **Major 0 / Minor 0**, and closed both prior
+  audit blocks. One local production preview is live at `http://127.0.0.1:4173/` and returned HTTP
+  200.
+- **Next:** complete the combined integration audit, then JK runs the four-team and eight-team
+  browser walk. JK's browser walk remains the sole product gate.
 
 ## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW READY / JK WALK PENDING (2026-07-20; FINDING-248)
 - New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through

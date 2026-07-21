@@ -13,6 +13,7 @@ import {
   lockedSnakeVersionSelections,
   rebuildPracticeSnakeSeatBoards,
   selectedSnakePoolIds,
+  snakeSetupProofFailureLine,
   validateSnakeCompanionSeats,
 } from '../../app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
 import { SnakeDraftSetupPanels } from '../../app/components/snake/setup/SnakeDraftSetupAdapter';
@@ -47,6 +48,88 @@ function rosterLocalTaxFixture(players: Player[]): Player[] {
 }
 
 describe('SnakeDraftSetupAdapter', () => {
+  test('names the exact club only for the proven zero-variance identity cause', () => {
+    const team = makeTeam('team-a', { name: 'Beewolves' });
+    const proof: SnakeSeatingProof = {
+      feasible: false,
+      assignments: [],
+      shortfall: {
+        kind: 'identity-proof-unknown',
+        position: 'IDENTITY',
+        label: 'IDENTITY FIT',
+        minimumPerTeam: 0,
+        teams: 4,
+        slack: 0,
+        needed: 0,
+        available: 0,
+        missing: 0,
+        reason: 'identity-proof-unknown',
+        shortBy: 0,
+        affectedClubs: 1,
+        teamId: team.id,
+        identityName: "Murderers' Row",
+        detail: 'identity-embodiment',
+      },
+      message: 'UNKNOWN',
+    };
+
+    expect(snakeSetupProofFailureLine(proof, [team])).toBe(
+      "BEEWOLVES · MURDERERS' ROW · IDENTITY FIT: SELECTED SOURCE HAS NO BOOST VARIANCE.",
+    );
+  });
+
+  test('does not assign a club or resource cause to a bounded UNKNOWN result', () => {
+    const proof: SnakeSeatingProof = {
+      feasible: false,
+      assignments: [],
+      shortfall: {
+        kind: 'identity-proof-unknown',
+        position: 'IDENTITY',
+        label: 'SHARED IDENTITY SUPPORT',
+        minimumPerTeam: 0,
+        teams: 4,
+        slack: 0,
+        needed: 4,
+        available: 0,
+        missing: 4,
+        reason: 'identity-proof-unknown',
+        shortBy: 0,
+        affectedClubs: 4,
+        detail: 'identity-joint-assignment',
+      },
+      message: 'UNKNOWN',
+    };
+
+    expect(snakeSetupProofFailureLine(proof, [
+      makeTeam('a'), makeTeam('b'), makeTeam('c'), makeTeam('d'),
+    ])).toBe('ALL 4 CLUBS · IDENTITY CHECK: UNRESOLVED.');
+  });
+
+  test('reports exact shared supply counts when no single club owns the shortage', () => {
+    const proof: SnakeSeatingProof = {
+      feasible: false,
+      assignments: [],
+      shortfall: {
+        kind: 'starter',
+        position: 'SP',
+        label: 'STARTERS',
+        minimumPerTeam: 4,
+        teams: 4,
+        slack: 0,
+        needed: 16,
+        available: 13,
+        missing: 3,
+        reason: 'position-floor',
+        shortBy: 3,
+        affectedClubs: 4,
+      },
+      message: 'SHORT',
+    };
+
+    expect(snakeSetupProofFailureLine(proof, [makeTeam('a'), makeTeam('b'), makeTeam('c'), makeTeam('d')]))
+      .toBe('ALL 4 CLUBS · STARTERS: 13/16, SHORT 3.');
+  });
+
   test('fails closed when production board construction has no seating certificate', () => {
     const players = rosterLocalTaxFixture(makeLegalRosterPlayers());
     expect(() => buildInitialSnakeSeatBoards({

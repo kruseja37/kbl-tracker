@@ -1636,3 +1636,38 @@ read-only auditor returned APPROVE, Major 0 / Minor 0, after independent focused
 TypeScript, lint, build, and diff-integrity checks. The new header records the frozen engineering
 approval and leaves only explicit remote authority plus JK's real FARM companion browser walk. No
 migration, push, preview, merge, or production promotion is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-250 first certification audit
+
+The prior live header recorded FINDING-248 farm-identity approval and its remote preview. JK then
+reported that a valid four-team Snake setup could not certify with more than 800 cards. The exact
+preview was commit `3f2b30cd`, whose certification code matches isolated source `db8a6426`. The
+builder reproduced a false bounded identity UNKNOWN, repaired the generic distinct-person and fit-
+depth rules, added exact blocker detail, and passed production-input, static, build, and browser
+gates. The new live header leaves the separate read-only audit, one local preview, and JK's browser
+walk open. The FARM companion worktree is separate and unchanged. No push, merge, deploy, or
+product acceptance occurred.
+
+## 2026-07-20 — Outgoing before FINDING-250 certification re-audit
+
+The first auditor blocked the builder diff, Major 2 / Minor 1. It found stale accepted membership at
+Lock, false club attribution for bounded UNKNOWN, and one out-of-contract adapter edit. The builder
+removed the adapter edit, bound Lock to the exact accepted fingerprint and basis, made bounded
+UNKNOWN club-neutral, and stabilized selected-source truth after target-pool assignment. Production
+tests, static gates, build, and four/eight-team browser paths are green. The new live header leaves
+same-auditor re-audit, one local preview, and JK's browser walk open.
+
+## 2026-07-20 — Outgoing before FINDING-250 second certification re-audit
+
+The same auditor blocked the repaired diff, Major 1 / Minor 0. Accepted source content omitted the
+three fields that group Career, Peak, and Draft cards into one person. The builder added `sourceId`,
+`versionGroupId`, and legacy `historicalSourceId` to the acceptance key and added one stale-Lock
+regression for each field. The new live header leaves same-auditor re-audit, one local preview, and
+JK's browser walk open.
+
+## 2026-07-20 — Outgoing before FINDING-250 approved local preview
+
+The same auditor approved frozen diff hash `be166c0e`, Major 0 / Minor 0, and closed both prior audit
+blocks. Builder evidence is 112/112 affected tests plus static, build, and browser gates. The new
+live header records the one authorized local production preview at `http://127.0.0.1:4173/`. Only
+JK's browser walk remains. No Vercel deployment, push, merge, or production promotion occurred.

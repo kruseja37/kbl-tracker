@@ -15,7 +15,7 @@ import { evaluateRosterDesign } from "../../../engines/rosterDesignFeasibility";
 import { buildDefaultDesignSlots } from "../../../engines/rosterDesignFeasibility";
 import { teamRosterNeed, toRosterSlotPlayer, type RosterPositionMap } from "../../../engines/rosterNeed";
 import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate } from "../../../utils/leagueBuilderStorage";
-import { addPlayersToLeaguePool, removePlayersFromLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
+import { addPlayersToLeaguePool, lockLeaguePool, removePlayersFromLeaguePool } from "../../../utils/leagueBuilderPoolBuilder";
 import { resetCompletedDraftArc } from "../../../utils/leagueBuilderAuctionPipeline";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 
@@ -189,15 +189,19 @@ function certifiedSnakeProof(teamIds: readonly string[], supportIds: readonly st
   };
 }
 
-function unknownSnakeProof(teams: number, available: number) {
+function unknownSnakeProof(
+  teams: number,
+  available: number,
+  owner?: { teamId: string; identityName: string },
+) {
   return {
     feasible: false,
     assignments: [],
     shortfall: {
       kind: "identity-proof-unknown" as const,
       position: "IDENTITY",
-      label: "chosen club identities",
-      minimumPerTeam: 22,
+      label: owner ? "IDENTITY FIT" : "SHARED IDENTITY SUPPORT",
+      minimumPerTeam: 0,
       teams,
       slack: 0,
       needed: teams * 22,
@@ -205,10 +209,63 @@ function unknownSnakeProof(teams: number, available: number) {
       missing: 0,
       reason: "identity-proof-unknown" as const,
       shortBy: 0,
-      affectedClubs: teams,
+      affectedClubs: owner ? 1 : teams,
+      ...(owner ? {
+        teamId: owner.teamId,
+        identityName: owner.identityName,
+        detail: "identity-embodiment" as const,
+      } : { detail: "identity-joint-assignment" as const }),
     },
     message: "Chosen identities are not yet certified together.",
   };
+}
+
+function mockAcceptedFullSourceSetup(prefix: string) {
+  const teamIds = ["team-a", "team-b"];
+  const teams = teamIds.map((id, index) => makeTeam(id, {
+    name: `Club ${index + 1}`,
+    controlledBy: "ai",
+  }));
+  const players = makePositionDiversePlayers(80, 2, prefix).map((player) => ({
+    ...player,
+    leagueAssignments: [
+      { leagueId: "source-league", teamId: "", rosterStatus: "FREE_AGENT" as const },
+      { leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const },
+    ],
+  }));
+  const league = makeLeague({
+    teamIds,
+    draftFormat: "snake",
+    draftPoolMode: "pool-first",
+    poolAssemblyMode: "full-sources",
+    sourceLeagueIds: ["source-league"],
+    snakeIncludeUnassignedSourcePlayers: false,
+    salaryCap: 10_000_000,
+  });
+  const sourceLeague = makeLeague({
+    id: "source-league",
+    name: "Source Library",
+    teamIds: [],
+    sourceLibrary: { kind: "historical-legends", profileType: "Career" },
+  });
+  const unlockedPool = makePool({
+    locked: false,
+    players: players.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    totalSlots: 44,
+  });
+  const leagueData = mockLeagueData({
+    league,
+    leagues: [league, sourceLeague],
+    teams,
+    players,
+    pool: unlockedPool,
+  });
+  vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(certifiedSnakeProof(
+    teamIds,
+    players.slice(0, 44).map((player) => player.id),
+  ));
+  vi.mocked(lockLeaguePool).mockResolvedValue({ ...unlockedPool, locked: true });
+  return { leagueData, players, teams };
 }
 
 describe("LeagueBuilderDraftSetup", () => {
@@ -222,6 +279,7 @@ describe("LeagueBuilderDraftSetup", () => {
     vi.mocked(resetCompletedDraftArc).mockResolvedValue(undefined);
     vi.mocked(addPlayersToLeaguePool).mockResolvedValue([]);
     vi.mocked(removePlayersFromLeaguePool).mockResolvedValue([]);
+    vi.mocked(lockLeaguePool).mockResolvedValue(undefined as never);
     vi.mocked(saveLeagueTemplate).mockImplementation(async (league) => league);
     vi.mocked(buildBest22Target).mockReturnValue(makeBest22Target());
     vi.mocked(rankAllArchetypesForPool).mockReturnValue([]);
@@ -304,6 +362,95 @@ describe("LeagueBuilderDraftSetup", () => {
     }));
   }, 20_000);
 
+  test("accepted Full Sources membership and source basis are the exact values saved at Lock", async () => {
+    const { players } = mockAcceptedFullSourceSetup("accepted-lock");
+    render(<LeagueBuilderDraftSetup />);
+
+    await clickDraftSetupButton("BUILD FULL SOURCES");
+    const snakeSetup = await screen.findByTestId("snake-setup-adapter");
+    const lockButton = within(snakeSetup).getByRole("button", { name: "LOCK POOL" });
+    await waitFor(() => expect(lockButton).toBeEnabled());
+    fireEvent.click(lockButton);
+
+    const expectedIds = players.map((player) => player.id).sort((left, right) => left.localeCompare(right));
+    await waitFor(() => expect(lockLeaguePool).toHaveBeenCalledWith("league-page", {
+      expectedPlayerIds: expectedIds,
+    }));
+    expect(vi.mocked(saveLeagueTemplate).mock.calls.some(([saved]) =>
+      saved.poolExtractedBasis?.poolAssemblyMode === "full-sources"
+      && saved.poolExtractedBasis.sourceLeagueIds?.join("|") === "source-league"
+      && saved.poolExtractedBasis.includeUnassignedSourcePlayers === false)).toBe(true);
+  }, 20_000);
+
+  test.each([
+    ["source", async () => {
+      fireEvent.click(await screen.findByLabelText(/Source Library/i));
+    }],
+    ["preset", async () => {
+      const assembly = await screen.findByTestId("snake-pool-assembly");
+      fireEvent.click(within(assembly).getByRole("button", { name: /LOOSE/i }));
+    }],
+  ] as const)("changing the %s after a build invalidates acceptance and blocks Lock", async (_change, change) => {
+    mockAcceptedFullSourceSetup(`accepted-${_change}`);
+    render(<LeagueBuilderDraftSetup />);
+
+    await clickDraftSetupButton("BUILD FULL SOURCES");
+    const snakeSetup = await screen.findByTestId("snake-setup-adapter");
+    const lockButton = within(snakeSetup).getByRole("button", { name: "LOCK POOL" });
+    await waitFor(() => expect(lockButton).toBeEnabled());
+
+    await change();
+    await waitFor(() => expect(lockButton).toBeDisabled());
+    fireEvent.click(lockButton);
+
+    expect(lockLeaguePool).not.toHaveBeenCalled();
+    expect(await screen.findByText("BUILD THE SELECTED POOL")).toBeInTheDocument();
+  }, 20_000);
+
+  test("changing a club archetype after a build makes the accepted fingerprint stale", async () => {
+    const { leagueData, teams } = mockAcceptedFullSourceSetup("accepted-identity");
+    const view = render(<LeagueBuilderDraftSetup />);
+
+    await clickDraftSetupButton("BUILD FULL SOURCES");
+    const snakeSetup = await screen.findByTestId("snake-setup-adapter");
+    const lockButton = within(snakeSetup).getByRole("button", { name: "LOCK POOL" });
+    await waitFor(() => expect(lockButton).toBeEnabled());
+
+    leagueData.teams = teams.map((team, index) => (
+      index === 0 ? { ...team, mlbArchetypeKey: "go-go-small-ball" } : team
+    ));
+    view.rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => expect(lockButton).toBeDisabled());
+    fireEvent.click(lockButton);
+    expect(lockLeaguePool).not.toHaveBeenCalled();
+    expect(await screen.findByText("POOL SETTINGS CHANGED · BUILD AGAIN")).toBeInTheDocument();
+  }, 20_000);
+
+  test.each([
+    ["sourceId", { sourceId: "historical:changed-source" }],
+    ["versionGroupId", { versionGroupId: "historical:changed-group" }],
+    ["historicalSourceId", { historicalSourceId: "historical:changed-legacy-source" }],
+  ] as const)("changing player %s after a build invalidates acceptance and blocks Lock", async (_field, change) => {
+    const { leagueData, players } = mockAcceptedFullSourceSetup(`accepted-${_field}`);
+    const view = render(<LeagueBuilderDraftSetup />);
+
+    await clickDraftSetupButton("BUILD FULL SOURCES");
+    const snakeSetup = await screen.findByTestId("snake-setup-adapter");
+    const lockButton = within(snakeSetup).getByRole("button", { name: "LOCK POOL" });
+    await waitFor(() => expect(lockButton).toBeEnabled());
+
+    leagueData.players = players.map((player, index) => (
+      index === 0 ? { ...player, ...change } : player
+    ));
+    view.rerender(<LeagueBuilderDraftSetup />);
+
+    await waitFor(() => expect(lockButton).toBeDisabled());
+    fireEvent.click(lockButton);
+    expect(lockLeaguePool).not.toHaveBeenCalled();
+    expect(await screen.findByText("POOL SETTINGS CHANGED · BUILD AGAIN")).toBeInTheDocument();
+  }, 20_000);
+
   test("SNAKE POOL GUIDE: over-bound Competitive persists Loose, then RESET EDITS rebuilds Loose through a fresh certificate", async () => {
     const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((id, index) => makeTeam(id, {
@@ -377,9 +524,12 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(leagueData.refresh).not.toHaveBeenCalled();
   }, 20_000);
 
-  test("SNAKE POOL GUIDE: an uncertified full source truth loads Full Sources and names the blocker", async () => {
+  test("SNAKE POOL GUIDE: an uncertified full source truth loads Full Sources", async () => {
     const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
-    const teams = teamIds.map((id) => makeTeam(id, { controlledBy: "ai" }));
+    const teams = teamIds.map((id, index) => makeTeam(id, {
+      name: `Club ${index + 1}`,
+      controlledBy: "ai",
+    }));
     const players = makePositionDiversePlayers(300, 8, "snake-unknown").map((player) => ({
       ...player,
       leagueAssignments: [],
@@ -397,7 +547,10 @@ describe("LeagueBuilderDraftSetup", () => {
       players,
       pool: makePool({ locked: false, players: [], totalSlots: 176 }),
     });
-    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(unknownSnakeProof(teamIds.length, players.length));
+    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(unknownSnakeProof(
+      teamIds.length,
+      players.length,
+    ));
 
     render(<LeagueBuilderDraftSetup />);
     await clickDraftSetupButton("BUILD COMPETITIVE POOL");
@@ -672,18 +825,19 @@ describe("LeagueBuilderDraftSetup", () => {
         totalSlots: 44,
       }),
     });
+    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(unknownSnakeProof(2, players.length));
 
     render(<LeagueBuilderDraftSetup />);
 
-    const fullSourceUnknown = /FULL SOURCES IDENTITY CERTIFICATE UNRESOLVED.*CHANGE ONE CLUB IDENTITY OR SOURCE/i;
+    const fullSourceUnknown = /ALL 2 CLUBS · IDENTITY CHECK: UNRESOLVED.*CHANGE A CLUB IDENTITY OR SELECTED SOURCE/i;
     expect(await screen.findByText(fullSourceUnknown)).toBeInTheDocument();
-    expect(screen.queryByText(/THIS SHAPED POOL COULD NOT CERTIFY/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CANNOT CERTIFY|COULD NOT CERTIFY/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole("button", { name: /^Select /i })[0]);
     await clickDraftSetupButton("Remove");
 
     expect(await screen.findByText(fullSourceUnknown)).toBeInTheDocument();
-    expect(screen.queryByText(/THIS SHAPED POOL COULD NOT CERTIFY/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/CANNOT CERTIFY|COULD NOT CERTIFY/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/^BUILT /i)).not.toBeInTheDocument();
   }, 20_000);
 
@@ -1587,12 +1741,17 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: /Reroll generated players/i })).toBeDisabled();
   });
 
-  test("UNIVERSE: explicit zero leagues checked but free agents present keeps extraction enabled with an honest info line", async () => {
+  test("UNIVERSE: target-pool membership does not remove unassigned players from the selected source", async () => {
     // Audit Finding 3 honesty tweak (captain 2026-07-08): warn-don't-block stands — never-claimed
-    // free agents keep the universe alive, so extraction stays enabled, but the UI says so plainly.
+    // free agents keep the universe alive. Writing this target's pool assignment must not make the
+    // same people disappear from that source on the next render or reload.
     const freeAgents = makeLegalRosterPlayerSet("fa", 10_000).map((player) => ({
       ...player,
-      leagueAssignments: [],
+      leagueAssignments: [{
+        leagueId: "league-page",
+        teamId: "",
+        rosterStatus: "FREE_AGENT" as const,
+      }],
     }));
     const league = makeLeague({ sourceLeagueIds: [] });
     mockLeagueData({
@@ -1610,6 +1769,12 @@ describe("LeagueBuilderDraftSetup", () => {
       expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).toBeEnabled();
     });
     expect(screen.getByRole("button", { name: /Reroll generated players/i })).toBeEnabled();
+    await clickDraftSetupButton(/Regenerate production-shaped pool/i);
+    await waitForExtractPoolOptions(() => true);
+    const extractedIds = vi.mocked(extractPoolFromDemand).mock.calls.at(-1)?.[0] as Array<{ id: string }>;
+    expect(extractedIds.map((player) => player.id).sort()).toEqual(
+      freeAgents.map((player) => player.id).sort(),
+    );
   });
 
   test("UNIVERSE: thin universe surfaces a plain engine-generated count instead of a bare number", async () => {

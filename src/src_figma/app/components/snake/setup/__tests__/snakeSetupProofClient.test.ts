@@ -19,10 +19,37 @@ const READY_PROOF: SnakeSeatingProof = {
   message: 'READY',
 };
 
-function proofInput(teamId = 'team-a'): SimultaneousSnakeSeatingInput {
+function proofPlayer(id: string) {
   return {
-    clubs: [{ teamId, roster: [], budgetRemaining: 1_000_000 }],
-    pool: [],
+    playerId: id,
+    sourceId: `source:${id}`,
+    versionGroupId: `person:${id}`,
+    price: 10_000,
+    shape: { isPitcher: false, position: 'C' },
+    construction: {
+      id,
+      isPitcher: false,
+      bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50 },
+    },
+  } satisfies SimultaneousSnakeSeatingInput['pool'][number];
+}
+
+function proofInput(teamId = 'team-a', options: {
+  poolIds?: readonly string[];
+  referenceIds?: readonly string[];
+  identityName?: string;
+} = {}): SimultaneousSnakeSeatingInput {
+  return {
+    clubs: [{
+      teamId,
+      roster: [],
+      budgetRemaining: 1_000_000,
+      ...(options.identityName
+        ? { identityArchetype: { name: options.identityName, rawShift: { 'hitters/POW': 0.1 } } }
+        : {}),
+    }],
+    pool: (options.poolIds ?? ['base-card']).map(proofPlayer),
+    ...(options.referenceIds ? { identityReferencePool: options.referenceIds.map(proofPlayer) } : {}),
     baseCaps: [],
     realTeamCount: 1,
     tier: 'standard',
@@ -76,6 +103,21 @@ describe('SnakeSetupProofClient', () => {
     expect(fingerprintSnakeSetupProofInput(left)).toBe(fingerprintSnakeSetupProofInput(right));
     expect(fingerprintSnakeSetupProofInput(proofInput('team-b')))
       .not.toBe(fingerprintSnakeSetupProofInput(left));
+  });
+
+  it('fingerprints source, team, archetype, and resolved preset membership as semantic proof inputs', () => {
+    const base = fingerprintSnakeSetupProofInput(proofInput());
+    const changed = {
+      source: proofInput('team-a', { referenceIds: ['source-card'] }),
+      team: proofInput('team-b'),
+      archetype: proofInput('team-a', { identityName: "Murderers' Row" }),
+      preset: proofInput('team-a', { poolIds: ['base-card', 'wider-preset-card'] }),
+    };
+
+    for (const [name, input] of Object.entries(changed)) {
+      expect(fingerprintSnakeSetupProofInput(input), name).not.toBe(base);
+    }
+    expect(new Set(Object.values(changed).map(fingerprintSnakeSetupProofInput))).toHaveLength(4);
   });
 
   it('shares one in-flight worker and reuses the resolved proof for the same fingerprint', async () => {
@@ -148,6 +190,29 @@ describe('SnakeSetupProofClient', () => {
     expect(workers[0].terminated).toBe(true);
     expect(workers[1].terminated).toBe(false);
     workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
+    await staleRejected;
+    await expect(current).resolves.toBe(READY_PROOF);
+  });
+
+  it.each([
+    ['source', () => proofInput('team-a', { referenceIds: ['source-card'] })],
+    ['team', () => proofInput('team-b')],
+    ['archetype', () => proofInput('team-a', { identityName: "Murderers' Row" })],
+    ['preset', () => proofInput('team-a', { poolIds: ['base-card', 'wider-preset-card'] })],
+  ] as const)('cancels stale %s work and ignores its late result', async (_name, currentInput) => {
+    const { client, workers } = clientHarness();
+    const stale = client.run(proofInput());
+    const current = client.run(currentInput());
+    const staleRejected = expect(stale).rejects.toMatchObject({ name: 'AbortError' });
+    const currentKey = fingerprintSnakeSetupProofInput(currentInput());
+
+    client.cancelPending(currentKey);
+    expect(workers).toHaveLength(2);
+    expect(workers[0].terminated).toBe(true);
+    expect(workers[1].terminated).toBe(false);
+    workers[0].emit({ key: workers[0].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
+    workers[1].emit({ key: workers[1].messages[0].key, ok: true, proof: READY_PROOF, identitySupportCertificate: null });
+
     await staleRejected;
     await expect(current).resolves.toBe(READY_PROOF);
   });

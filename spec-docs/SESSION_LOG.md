@@ -8349,3 +8349,67 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   transition. The known live-reconnect result remains identical to the verified base.
 - Migration `20260720213000_farm_snake_live_catalog.sql` remains local and unapplied. No push,
   preview, merge, or production promotion is authorized. JK's browser walk remains the product gate.
+
+## 2026-07-20 — FINDING-250 four/eight-team Snake setup certification second-audit repair
+
+- Fetched first. `origin/main` was `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
+- Created branch `codex/four-team-snake-certification` and worktree
+  `/private/tmp/kbl-four-team-snake-certification` from exact source
+  `db8a6426314cef35f1aca15662bf736c8cc28244`. The active FARM companion worktree was not opened or
+  changed.
+- Identified the failing preview before changing code. Deployment
+  `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` uses commit
+  `3f2b30cdc50bc6c9a7f9d9129b69228fe6c522d3`; its certification code is byte-identical to the
+  isolated source commit.
+- Reproduced the exact selected-source case: 1,341 cards, 851 people, and four selected identities.
+  The old bounded path kept 242 cards for 232 people. Murderers' Row was legal, solvent, and above
+  its value floor but missed positive identity expression at z `-0.0501598`.
+- Root cause: card count selected large-source pruning, then the six-card identity-role fit depth
+  under-sampled one identity in the four-club mix. Eight identities happened to create a wider
+  union. There was no inherited eight-team law and no true position, closer, swing, slot, or money
+  shortage in the reproduced room.
+- Generic repair: choose the large-source path by distinct people and keep at least half a legal
+  roster per identity-role fit lens. The independent validator still owns SUCCESS. UNKNOWN remains
+  UNKNOWN. Source truth, named bounds, auto-widen order, FIT, tax, roster law, and Start Draft
+  meaning did not change.
+- Added necessary aggregate SWING hitter and arm supply checks. Proven supply, money, and zero-
+  variance identity causes may name the club and resource. Ordinary bounded UNKNOWN stays club-
+  neutral. Full proof fingerprints, cancellation, late-result rejection, accepted-preset
+  persistence, and one-job caching have direct tests.
+- The first separate read-only audit returned **BLOCK — Major 2 / Minor 1**. Lock could use old
+  membership after a source or control change. Bounded UNKNOWN could report the first club and a
+  seed-search detail as a proven cause. One adapter component edit was outside the contract.
+- Removed the adapter edit. Build acceptance now binds the exact source IDs and content, clubs and
+  identities, requested and accepted mode/preset, extracted basis, membership IDs, provenance, and
+  design pins. Lock requires the current fingerprint and saves the accepted basis and IDs. A source,
+  team, identity, preset, mode, or content change cancels work and invalidates acceptance. Target-
+  league free-agent pool assignments no longer remove selected unassigned players from the source
+  universe.
+- The same auditor returned **BLOCK — Major 1 / Minor 0** on re-audit. The accepted source-content
+  key omitted `sourceId`, `versionGroupId`, and legacy `historicalSourceId`. Those fields define
+  which cards are one person, so a grouping-only metadata change could retain an old Build receipt
+  at Lock.
+- Added all three normalized person-group fields to the accepted source-content key. Three direct
+  tests change each field after Build and prove that Lock disables, no old pool locks, and the UI
+  requires a new Build.
+- Confirmed version wiring in both engine and real-room integration. Drafting a Career card retires
+  that person's Peak and Draft Pool cards, keeps the chosen Career card, and removes the retired
+  siblings from the next club's selectable live pool.
+- Builder proof: 12/12 production-input matrix plus 100/100 other focused tests, for 112/112
+  affected tests; TypeScript; changed-file ESLint; diff integrity; 2,744-module production/PWA
+  build. The final exact four-club browser proof
+  took 9.06 seconds; Help took 69 ms; maximum main-thread delay was 328 ms; one stable fingerprint
+  started one worker; an unrelated Help render did not restart it; and Lock and Start passed. The
+  2,001-card eight-club browser path also passed. Full Sources took 24.77 seconds after the click,
+  Tight took 4.44 seconds, and maximum main-thread delay was 412 ms.
+- Next: freeze this repaired diff and obtain same-auditor max-effort read-only re-audit. Only APPROVE permits one
+  local preview for JK. JK's browser walk remains the sole product gate. No merge, push, or deploy
+  is authorized.
+- Final same-auditor verdict: **APPROVE — Major 0 / Minor 0** on frozen diff hash
+  `be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`. Both prior audit blocks are
+  closed. Independent evidence is the earlier full 109/109 gate plus the final 3/3 grouping-field
+  delta, TypeScript, focused ESLint, hash, status, and diff integrity.
+- After approval, started the one authorized local production preview at
+  `http://127.0.0.1:4173/`; a read-only HTTP smoke returned 200. No Vercel deployment, push, merge,
+  or production promotion occurred. JK's four-team and eight-team browser walk is the only open
+  product gate.

@@ -165,8 +165,10 @@ import { LeagueBuilderDraftSetup } from '../../app/pages/LeagueBuilderDraftSetup
 const LEAGUE_ID = 'roomfix-snake-league';
 const SOURCE_LEAGUE_ID = 'roomfix-legends';
 const TEAM_IDS = Array.from({ length: 2 }, (_, index) => `roomfix-team-${index + 1}`);
-const PICKED_LEGEND_ID = 'roomfix-ruth-yankees';
-const UNPICKED_LEGEND_ID = 'roomfix-ruth-red-sox';
+const PICKED_LEGEND_ID = 'roomfix-ruth-career';
+const UNPICKED_LEGEND_ID = 'roomfix-ruth-peak';
+const DRAFT_LEGEND_ID = 'roomfix-ruth-draft';
+const LEGEND_VERSION_GROUP_ID = 'historical:ruthba01';
 
 const LEGAL_POSITIONS = [
   'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF',
@@ -276,24 +278,37 @@ async function seedLeagueFormOutput(): Promise<void> {
     for (const [positionIndex, position] of LEGAL_POSITIONS.entries()) {
       const isLegend = setIndex === 0 && positionIndex === 0;
       const isHitter = positionIndex < 14;
-      players.push(player(
+      const nextPlayer = player(
         isLegend ? UNPICKED_LEGEND_ID : `roomfix-player-${setIndex + 1}-${positionIndex + 1}`,
         position,
         isLegend ? { first: 'Babe', last: 'Ruth' } : undefined,
         isLegend ? 'lahman:ruthba01' : undefined,
         positionIndex === 8 ? 'C' : undefined,
         isHitter ? { power: 60 } : undefined,
-      ));
+      );
+      players.push(isLegend ? {
+        ...nextPlayer,
+        versionGroupId: LEGEND_VERSION_GROUP_ID,
+        historicalProfileType: 'Peak',
+      } : nextPlayer);
     }
   }
-  players.push(player(
+  players.push({ ...player(
     PICKED_LEGEND_ID,
     'C',
     { first: 'Babe', last: 'Ruth' },
     'lahman:ruthba01',
     undefined,
     { power: 60 },
-  ));
+  ), versionGroupId: LEGEND_VERSION_GROUP_ID, historicalProfileType: 'Career' });
+  players.push({ ...player(
+    DRAFT_LEGEND_ID,
+    'C',
+    { first: 'Babe', last: 'Ruth' },
+    'lahman:ruthba01',
+    undefined,
+    { power: 60 },
+  ), versionGroupId: LEGEND_VERSION_GROUP_ID, historicalProfileType: 'Draft Pool' });
   for (let index = 0; index < TEAM_IDS.length; index += 1) {
     players.push(player(`roomfix-extra-first-baseman-${index + 1}`, '1B'));
     players.push(player(`roomfix-extra-catcher-${index + 1}`, 'C'));
@@ -367,8 +382,14 @@ describe('ROOMFIX setup to playable snake room', () => {
 
     expect(await screen.findByTestId('snake-version-count')).toHaveTextContent(/CARDS · .* PEOPLE/);
     expect(screen.queryByLabelText('PICK A BABE RUTH CARD')).not.toBeInTheDocument();
+    await waitFor(() => {
+      const liveBuildButton = screen.getByRole('button', { name: 'BUILD FULL SOURCES' });
+      expect(liveBuildButton).toBeEnabled();
+      fireEvent.click(liveBuildButton);
+    }, { timeout: 30_000 });
+    await screen.findByText(/BUILT FULL SELECTED SOURCES/, {}, { timeout: 30_000 });
     await screen.findByRole('button', { name: 'LOCK POOL' }, { timeout: 30_000 });
-    // The initial Full Sources proof replaces the setup control when BUSY clears. Resolve and
+    // The accepted Full Sources proof replaces the setup control when BUSY clears. Resolve and
     // click the same live enabled node, just as the relock and GO seams below already do.
     await waitFor(() => {
       const liveLockButton = screen.getByRole('button', { name: 'LOCK POOL' });
@@ -446,6 +467,7 @@ describe('ROOMFIX setup to playable snake room', () => {
     expect(new Set(legs.pool!.players.map((row) => row.id))).toEqual(new Set(pickedIds));
     expect(pickedIds).toContain(PICKED_LEGEND_ID);
     expect(pickedIds).toContain(UNPICKED_LEGEND_ID);
+    expect(pickedIds).toContain(DRAFT_LEGEND_ID);
     expect(legs.session!.snakeSetup!.versionSelections).toEqual({});
     expect(legs.pool!.players.every((row) => Number.isFinite(row.iv) && row.iv > 0)).toBe(true);
     expect(legs.pool).toMatchObject({ locked: true });
@@ -496,16 +518,14 @@ describe('ROOMFIX setup to playable snake room', () => {
     await waitFor(() => expect(screen.getByRole('region', { name: 'TRADE PICKS' }).textContent).toMatch(/PICK|NO LEGAL GUIDE TRADE/i));
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
 
-    const defaultName = screen.getByTestId('selected-player-card').querySelector('h2')?.textContent;
-    expect(defaultName).toBeTruthy();
-    const alternate = screen.getAllByRole('button', { name: /^SELECT / })
-      .find((button) => !button.getAttribute('aria-label')?.endsWith(defaultName!.toUpperCase()));
-    expect(alternate).toBeTruthy();
-    const selectedId = alternate!.getAttribute('data-player-id');
+    const careerCard = screen.getAllByRole('button', { name: /^SELECT / })
+      .find((button) => button.getAttribute('data-player-id') === PICKED_LEGEND_ID);
+    expect(careerCard).toBeTruthy();
+    const selectedId = careerCard!.getAttribute('data-player-id');
     const selectedPlayer = (await getAllPlayers()).find((row) => row.id === selectedId)!;
     const selectedName = `${selectedPlayer.firstName} ${selectedPlayer.lastName}`;
     const selectedFrozenIv = legs.pool!.players.find((row) => row.id === selectedId)!.iv;
-    fireEvent.click(alternate!);
+    fireEvent.click(careerCard!);
     expect(screen.getByTestId('selected-player-card').querySelector('h2')).toHaveTextContent(selectedName);
     expect(screen.getByRole('region', { name: 'Private seat' })).toHaveTextContent(selectedName);
     fireEvent.click(screen.getByRole('button', { name: 'DRAFT PLAYER' }));
@@ -540,6 +560,11 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(stored?.correctionSnapshots?.[0]?.priorSession.currentPickIndex).toBe(0);
       expect(stored?.correctionSnapshots?.[0]?.priorSession.completedPicks).toHaveLength(0);
       expect(stored?.currentPickIndex).toBe(1);
+      expect(stored?.versionState?.draftedPlayerIdByGroupId[LEGEND_VERSION_GROUP_ID]).toBe(PICKED_LEGEND_ID);
+      expect(stored?.versionState?.retiredPlayerIdsByGroupId[LEGEND_VERSION_GROUP_ID]).toEqual([
+        DRAFT_LEGEND_ID,
+        UNPICKED_LEGEND_ID,
+      ]);
     });
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL ROOMFIX CLUB 2 SEAT' }));
     await waitFor(() => {
@@ -547,6 +572,12 @@ describe('ROOMFIX setup to playable snake room', () => {
       expect(nextName).toBeTruthy();
       expect(nextName).not.toBe(selectedName);
     });
+    fireEvent.click(screen.getByRole('button', { name: 'I HAVE THE ROOM' }));
+    await waitFor(() => expect(document.querySelectorAll('[data-player-id]').length).toBeGreaterThan(0));
+    const remainingPlayerIds = [...document.querySelectorAll('[data-player-id]')]
+      .map((element) => element.getAttribute('data-player-id'));
+    expect(remainingPlayerIds).not.toContain(UNPICKED_LEGEND_ID);
+    expect(remainingPlayerIds).not.toContain(DRAFT_LEGEND_ID);
     const fallbackBoard = (await getMlbDraftSession(LEAGUE_ID, 1))!.seatBoards![TEAM_IDS[1]];
     fireEvent.click(screen.getByRole('button', { name: /^COMPANIONS/ }));
     fireEvent.click(await screen.findByRole('button', { name: 'APPROVE ROOMFIX CLUB 2' }));
