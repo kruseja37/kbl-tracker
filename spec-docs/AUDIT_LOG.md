@@ -2106,3 +2106,11 @@ and Snake desk eligibility. The source generator now keeps only each pitcher's a
 SP/RP, RP, or CP primary role; invalid source roles fail closed; import validation prevents future
 bad assets from persisting; live desk eligibility no longer converts two-way traits into displayed
 secondary positions. Focused verification and an independent read-only audit remain required.
+
+### 2026-07-21 — FINDING-255 independent close
+
+The separate read-only auditor approved frozen commit `f6f94e9c`, Major 0 / Minor 0. Its exhaustive
+comparison found exactly the intended 197 field removals and no other card-data changes; all 835 IV
+values were unchanged. Focused tests passed 28/28, TypeScript and changed-file ESLint passed, and
+mutation probes proved the old asset still leaks the prohibited fields. JK's browser walk remains
+the product gate; merge and deployment remain unauthorized.

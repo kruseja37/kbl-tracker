@@ -33079,3 +33079,9 @@ remains trait-derived; focused tests, TypeScript, changed-file ESLint, and diff 
 persistence, draft catalog, roster eligibility, and displayed card models. Try to falsify protected
 data preservation and two-way behavior. Cite every finding by file and line and return `APPROVE` or
 `BLOCK` with major/minor counts. Do not edit files. Use xhigh reasoning effort.
+
+**Independent close:** The non-builder auditor reviewed frozen commit `f6f94e9c` and returned
+APPROVE, Major 0 / Minor 0. It independently compared all 835 parent/target cards, confirmed that
+exactly 197 pitcher secondary fields were removed, recomputed unchanged IV for all 835 cards, ran
+the 28/28 focused gate plus TypeScript and changed-file ESLint, and verified that the four two-way
+rows remain trait-driven. No merge, preview, deploy, or production promotion is authorized.

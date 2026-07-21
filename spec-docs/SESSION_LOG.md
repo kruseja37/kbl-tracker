@@ -8586,3 +8586,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - JK confirmed that Draft Setup worked in the replacement preview and authorized the merge.
 - PR 116 is clean against current `origin/main` at `ba7f97d6`; both Vercel checks pass.
 - Next: merge PR 116. The normal app URL becomes the long-term entry point after deployment.
+
+## 2026-07-21 — FINDING-255 Historical Legends pitcher-position repair
+
+- Fetched `origin/main` first and isolated the lane at `/private/tmp/kbl-legends-pitcher-position`
+  on `codex/legends-pitcher-position`, based on merged main `c8130052`. No Snake Draft worktree was
+  touched.
+- Traced the pinned 835-card asset through generation, hash validation, import persistence, source
+  libraries, draft catalog/profile models, roster legality, desk eligibility, and displayed cards.
+- Found 197 of 326 pitcher cards carrying a root secondary position. The generator now preserves
+  only the authored SP, SP/RP, RP, or CP primary role and fails closed on invalid pitcher roles.
+  Import validation rejects future pitcher secondary eligibility before persistence.
+- Regenerated the derived app asset by removing only those 197 fields and repinned its SHA-256.
+  Non-pitcher positions and every protected rating, salary/IV input, trait, personality, hidden
+  modifier, name, and version-identity field remain unchanged.
+- Desk catalogs now keep pitcher `eligiblePositions` primary-only. The canonical roster shape still
+  derives Two Way (OF) behavior from traits; all four two-way Legend rows are unchanged.
+- Builder gate: 28/28 focused Legends/import/catalog tests, TypeScript, changed-file ESLint, and
+  diff integrity pass. Frozen code commit is `f6f94e9c`.
+- A separate xhigh read-only auditor returned APPROVE, Major 0 / Minor 0. It independently proved
+  all 835 IV values unchanged and mutation-proved the old behavior. No merge, preview, deploy, or
+  production promotion occurred. JK's browser walk remains the product gate.
