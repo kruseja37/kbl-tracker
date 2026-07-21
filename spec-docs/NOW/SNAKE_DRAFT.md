@@ -4,7 +4,7 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## INDEPENDENTLY APPROVED / REMOTE GATE PENDING (2026-07-20; FINDING-249)
+## INDEPENDENTLY APPROVED / MIGRATION APPLIED / PREVIEW PENDING (2026-07-20; FINDING-249)
 - FARM now uses the dedicated Snake live-room authority instead of the old Hotseat-only path.
   Hotseat alone writes public picks, order, rosters, and completion. An approved companion writes
   only its private fogged scout board and sends a pick request for Hotseat confirmation.
@@ -20,10 +20,12 @@
   read-only auditor. Independent proof passed 33/33 focused tests, 227/227 broad Snake live-room
   tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build.
 - Migration `20260720213000_farm_snake_live_catalog.sql` extends the installed live-room catalog
-  validator to FARM. It is local only. **Next:** integrate and audit the combined branch, then apply
-  the migration, push, and create one preview. JK's browser walk remains the product gate.
+  validator to FARM. It is applied; local and remote histories match and linked-schema lint reports
+  no errors. The combined FINDING-249/250 code head `e8c7ee59` received a separate **APPROVE — Major
+  0 / Minor 0** verdict. **Next:** push the integrated branch and create one preview. JK's browser
+  walk remains the product gate.
 
-## INDEPENDENTLY APPROVED / INTEGRATION GATE PENDING (2026-07-20; FINDING-250)
+## INDEPENDENTLY APPROVED / PREVIEW PENDING (2026-07-20; FINDING-250)
 - The exact failing preview is commit `3f2b30cd`; its certification code matches isolated source
   `db8a6426`. The valid four-club room has 1,341 cards and 851 distinct people.
 - Root cause: card count selected the large-source pruning path, then a six-card identity-role fit
@@ -46,8 +48,11 @@
 - The same auditor approved frozen diff hash `be166c0e`, **Major 0 / Minor 0**, and closed both prior
   audit blocks. One local production preview is live at `http://127.0.0.1:4173/` and returned HTTP
   200.
-- **Next:** complete the combined integration audit, then JK runs the four-team and eight-team
-  browser walk. JK's browser walk remains the sole product gate.
+- The combined FINDING-249/250 integration auditor approved exact code head `e8c7ee59`, **Major 0 /
+  Minor 0**. Combined proof passed 187/187 focused tests, TypeScript, changed-file lint, the
+  2,744-module production/PWA build, and all four browser journeys. **Next:** push one integrated
+  branch, create one matching preview, then JK runs the four-team, eight-team, and FARM companion
+  walk. JK's browser walk remains the sole product gate.
 
 ## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW READY / JK WALK PENDING (2026-07-20; FINDING-248)
 - New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through

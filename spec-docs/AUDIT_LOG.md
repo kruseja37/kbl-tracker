@@ -1961,3 +1961,20 @@ and that the publish RPC permits one exact legal next-pick transition. Independe
 integrity checks, and the 2,744-module production/PWA build. The known live-reconnect result is
 unchanged from base. The migration is still local and unapplied. No push, preview, merge, or
 production promotion is authorized.
+
+### 2026-07-20 — FINDING-249/250 combined integration approval and database gate
+
+A separate read-only integration auditor reviewed exact code head `e8c7ee59` over base `db8a6426`
+and returned **APPROVE — Major 0 / Minor 0**. It confirmed that every FARM runtime blob remains
+byte-identical to approved head `7a44d2b6`, every certification blob remains byte-identical to
+approved isolated commit `5abc1c19`, and the two lanes share no production-code file. It verified
+FARM pick-only server authority and scalar public catalog law, exact Build-to-Lock source and
+person-group binding, stale-work rejection, club-neutral bounded UNKNOWN, and conflict-free
+FINDING-249/250 records.
+
+Independent proof passed 187/187 focused tests, TypeScript, changed-file ESLint, diff integrity,
+and the 2,744-module production/PWA build. Builder browser proof passed 4/4, including the exact
+1,341-card four-team and 2,001-card eight-team source journeys. After approval, migration
+`20260720213000_farm_snake_live_catalog.sql` was applied to the linked Supabase project. Local and
+remote migration histories match and linked-schema lint reports no errors. One integrated branch
+push and one Vercel preview remain. Production is unchanged; JK's browser walk is the product gate.

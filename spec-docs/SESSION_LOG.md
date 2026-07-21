@@ -8413,3 +8413,28 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `http://127.0.0.1:4173/`; a read-only HTTP smoke returned 200. No Vercel deployment, push, merge,
   or production promotion occurred. JK's four-team and eight-team browser walk is the only open
   product gate.
+
+## 2026-07-20 — FINDING-249/250 combined integration approval and migration
+
+- Fetched first. `origin/main` remains `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
+- Committed the approved certification lane as isolated commit `5abc1c19`, then integrated it onto
+  the approved FARM branch. The only conflicts were session records because both source lanes had
+  used FINDING-249. FARM remains FINDING-249; setup certification is FINDING-250. Product code did
+  not conflict.
+- Combined builder gates passed: 14 files and 187/187 focused tests, TypeScript, changed-file
+  ESLint, diff integrity, and a 2,744-module production/PWA build with 224 precache entries.
+- Playwright passed 4/4. Mac and iPad shaped-pool paths passed. The four-team 1,341-card path used
+  one stable proof worker, responded to Help in 129 ms, and kept maximum main-thread delay below
+  363 ms. The eight-team 2,001-card path passed Full Sources and Tight with maximum main-thread
+  delay below 376 ms.
+- A separate read-only integration auditor reviewed exact code head `e8c7ee59` and returned
+  **APPROVE — Major 0 / Minor 0**. It independently passed 187/187 focused tests, TypeScript,
+  changed-file lint, and the 2,744-module production/PWA build. It confirmed byte-identical source
+  lane blobs, empty production-code overlap, FARM pick-only authority, scalar public catalog law,
+  exact Build-to-Lock binding, and honest bounded UNKNOWN.
+- Supabase dry-run showed exactly one pending migration. Applied
+  `20260720213000_farm_snake_live_catalog.sql`. Local and remote histories now match; linked-schema
+  lint reports no errors.
+- Next: commit these state records, push `codex/snake-live-room-authority`, create one matching
+  Vercel preview, and smoke it. No merge or production promotion is authorized. JK's browser walk
+  remains the sole product gate.

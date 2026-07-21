@@ -1671,3 +1671,14 @@ The same auditor approved frozen diff hash `be166c0e`, Major 0 / Minor 0, and cl
 blocks. Builder evidence is 112/112 affected tests plus static, build, and browser gates. The new
 live header records the one authorized local production preview at `http://127.0.0.1:4173/`. Only
 JK's browser walk remains. No Vercel deployment, push, merge, or production promotion occurred.
+
+## 2026-07-20 — Outgoing before FINDING-249/250 combined integration approval
+
+The prior live header recorded both independently approved source lanes after their local
+integration and left combined verification, integration audit, migration, push, and preview open.
+The combined builder gate passed 187/187 focused tests, TypeScript, changed-file lint, a
+2,744-module production/PWA build, and four real browser journeys. A separate read-only auditor
+approved exact code head `e8c7ee59`, Major 0 / Minor 0. Migration
+`20260720213000_farm_snake_live_catalog.sql` was then applied; local and remote migration histories
+match and linked-schema lint reports no errors. The new live header leaves one branch push, one
+matching Vercel preview, and JK's browser walk open. Production remains unchanged.

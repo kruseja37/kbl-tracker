@@ -1267,7 +1267,7 @@ HTTP 200, the deployed Scout Reveal bundle contains the repair controls, and Chr
 with no console warning or error. JK's new/recovered league walk is the remaining product gate.
 
 ### FINDING-249
-**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** FARM Snake / companion live room | **Status:** FIXED — INDEPENDENTLY APPROVED — MIGRATION APPLIED — PREVIEW/JK WALK PENDING
 **Files:** `src/utils/snakeLiveCatalog.ts`,
 `src/src_figma/app/components/snake/companion/useSnakeLiveHostRoom.ts`,
 `src/src_figma/app/components/snake/farm/farmRoomModel.ts`,
@@ -1303,10 +1303,13 @@ must match the frozen slot, public event, pool, slot salary, zero FARM tax, and 
 status. FARM does not retain the MLB version ledger. The final frozen code head `7a44d2b6` received
 **APPROVE — Major 0 / Minor 0** from the same read-only auditor. Independent proof passed 33/33
 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file ESLint, diff integrity,
-and the 2,744-module production/PWA build. Explicit remote authority and JK's browser walk remain.
+and the 2,744-module production/PWA build. The combined FINDING-249/250 auditor then approved exact
+code head `e8c7ee59`, Major 0 / Minor 0. Migration `20260720213000_farm_snake_live_catalog.sql` is
+applied; local and remote histories match and linked-schema lint reports no errors. The integrated
+preview and JK's browser walk remain.
 
 ### FINDING-250
-**Date:** 2026-07-20 | **Phase:** Snake Draft / four-team and eight-team setup certification | **Status:** FIXED — INDEPENDENTLY APPROVED — LOCAL PREVIEW READY — JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** Snake Draft / four-team and eight-team setup certification | **Status:** FIXED — INDEPENDENTLY APPROVED — INTEGRATED PREVIEW/JK WALK PENDING
 **Files:** `src/engines/snakeSeatingProof.ts`,
 `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused engine, adapter, worker, setup,
@@ -1366,3 +1369,7 @@ final 3/3 metadata delta, plus TypeScript, focused lint, hash, status, and diff 
 approval, one local production preview started at `http://127.0.0.1:4173/` and returned HTTP 200.
 JK's browser walk remains the sole product gate. No push, merge, Vercel deploy, or production
 promotion occurred in the isolated certification lane.
+The combined FINDING-249/250 auditor approved exact integrated code head `e8c7ee59`, **Major 0 /
+Minor 0**. Combined proof passed 187/187 focused tests, TypeScript, changed-file lint, a 2,744-module
+production/PWA build, and all four real browser journeys. One integrated Vercel preview and JK's
+browser walk remain.
