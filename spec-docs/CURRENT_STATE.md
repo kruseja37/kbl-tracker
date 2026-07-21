@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-254 JK BROWSER VERIFIED; PR 116 MERGE AUTHORIZED (2026-07-21; branch `codex/snake-live-room-authority`). JK confirmed that the replacement-preview Draft Setup worked. Named pools target the legal roster role shape but treat an imperfect role ratio as advice, not a second Lock law. The page gives an exact `Remove X ... and add Y ... to balance rosters.` note and still lets the user add or remove players. Hard gates remain legal 22-player completion, distinct people, chosen identities, money, tax, and true position floors. The same auditor approved repair commit `8960a4c1`, Major 0 / Minor 0. Exact 66-, 132-, and 264-person Legends pools pass. Engine 74/74, page and room 99/99, browser 3/3, TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build with 224 entries are green. Preview `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY from source `ca512ba2`. PR 116 is clean and both Vercel checks pass against `origin/main` at `ba7f97d6`. **NEXT:** merge PR 116. Production remains unchanged until the normal deployment completes.
+> ## RIGHT NOW — FINDING-255 HISTORICAL LEGENDS PITCHER POSITIONS FIXED AND INDEPENDENTLY APPROVED (2026-07-21; branch `codex/legends-pitcher-position`). Current `origin/main` is `c8130052`, including the accepted FINDING-254 merge. The isolated Legends repair removes the 197 prohibited pitcher secondary fields from the pinned 835-card asset while preserving all 326 authored SP, SP/RP, RP, or CP primary roles. Future generation and import fail closed on invalid pitcher roles or secondary eligibility. Live draft catalogs carry only the primary pitching role; Two Way behavior remains trait-driven. Frozen code commit `f6f94e9c` passed 28/28 focused tests, TypeScript, changed-file ESLint, and diff integrity. A separate read-only auditor returned APPROVE, Major 0 / Minor 0, and independently proved all 835 IV values unchanged. **NEXT:** JK reviews/browser-walks the branch after choosing a preview or merge path. No merge, preview, deploy, or production promotion is authorized in this lane.
 
 ## Current product law
 
@@ -19,17 +19,12 @@
   flex and depth. Drafted players remain in the projected 22.
 - Ordinary pitcher FLD is not a luxury-tax input. It remains salary/IV value. Hitter FLD remains
   active, including a true Two Way player's position-player job.
+- Every Historical Legend pitcher card has exactly one stored baseball position: SP, SP/RP, RP, or
+  CP. It has no secondary position. Two-way field coverage comes only from the Two Way trait and
+  canonical roster engine.
 
 ## Open gates
 
-1. The same non-builder auditor rechecks FINDING-254 after the two-stage named-pool and advisory
-   repair.
-2. After APPROVE, publish one replacement preview. JK then runs the Legends-source, four/eight-team
-   setup, and FARM Hotseat-plus-companion walks. The prior preview is superseded for this gate.
-
-The exact remote sequence and rollback boundary are in
-`spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel
-preview are complete for MLB. The previous farm-identity preview is
-`https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Vercel production remains on
-`ba7f97d6`. That older preview does not contain FINDING-249 or FINDING-250; the required FARM catalog
-migration is now installed for the next integrated preview.
+1. JK browser-walks the Historical Legends Draft/Career/Peak cards after choosing a later preview
+   or merge path. Engineering approval does not close this product gate.
+2. Merge and deployment remain explicitly unauthorized for FINDING-255.

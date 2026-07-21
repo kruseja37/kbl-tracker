@@ -1724,3 +1724,12 @@ The repaired head `1bac2cfe` closed the first audit's Major 1 / Minor 1 findings
 non-builder auditor returned APPROVE, Major 0 / Minor 0, after an independent 163/163 core gate and
 4/4 exact-440 calibration. The new header leaves only one replacement preview and JK's browser walk
 open. Production is unchanged.
+
+## 2026-07-21 — Outgoing before FINDING-255 independently approved branch
+
+The prior live header recorded FINDING-254 browser acceptance and PR 116 merge authorization before
+that merge reached current `origin/main` at `c8130052`. The new isolated Historical Legends lane
+repairs a separate source-data defect: 197 of 326 pitcher cards carried secondary positions. The
+frozen repair preserves every primary role and all protected card data, removes only those fields,
+keeps two-way behavior trait-driven, and has independent APPROVE with zero findings. The new header
+leaves merge/deploy untouched and JK's browser walk as the product gate.

@@ -1502,7 +1502,7 @@ the remaining product gate. Production is unchanged.
 the merge. PR 116 is clean against current `origin/main`, and both Vercel checks pass.
 
 ### FINDING-255
-**Date:** 2026-07-21 | **Phase:** Historical Legends import and draft catalog | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-21 | **Phase:** Historical Legends import and draft catalog | **Status:** FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING
 **Files:** `scripts/build-historical-legends-app-data.mjs`,
 `public/data/historical-legends-app-data.json`, `src/data/historicalLegendsAppData.ts`,
 `src/utils/historicalLegendsImport.ts`, Snake desk/setup eligibility adapters, and focused tests.
@@ -1525,4 +1525,12 @@ pitchers. A protected-player SHA-256 pins every field except the removed pitcher
 the exact four two-way trait rows are pinned. The full hash-pinned import provisions all three
 libraries, and the live draft catalog proves pitcher profile, roster shape, and desk eligibility
 seams. Focused tests are 28/28; TypeScript, changed-file ESLint, and diff integrity pass. A separate
-read-only audit is required before push.
+read-only audit was required before push and is recorded below.
+**Independent close:** The separate non-builder auditor reviewed frozen commit `f6f94e9c` and
+returned APPROVE, Major 0 / Minor 0. Its parent/target comparison found all 835 ids and metadata
+unchanged and exactly 197 intended `secondaryPosition` removals. It recomputed identical IV for all
+835 cards, confirmed four unchanged two-way trait rows, passed the 28/28 focused gate, TypeScript,
+changed-file ESLint, and diff integrity, and mutation-proved the prior asset leaked 197 fields and
+195 desk multi-role rows. The remaining risk is that the external source-profile artifact is not
+stored in this worktree; the unchanged pinned source hash, generator probes, exhaustive comparison,
+and new app-asset pin contain that risk. Merge and deployment remain unauthorized.
