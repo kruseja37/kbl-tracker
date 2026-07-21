@@ -8580,3 +8580,9 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   `https://kbl-tracker-jnueqzhqd-kruseja37s-projects.vercel.app`.
 - Vercel passed the 2,744-module production build and PWA generation with 224 entries.
 - Next: JK runs the Legends named-pool browser walk. Production is unchanged.
+
+## 2026-07-21 — FINDING-254 JK browser acceptance
+
+- JK confirmed that Draft Setup worked in the replacement preview and authorized the merge.
+- PR 116 is clean against current `origin/main` at `ba7f97d6`; both Vercel checks pass.
+- Next: merge PR 116. The normal app URL becomes the long-term entry point after deployment.

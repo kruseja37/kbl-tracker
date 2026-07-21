@@ -2092,3 +2092,8 @@ permitted for JK's browser walk. Merge and production promotion remain unauthori
 Preview deployment `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY from source commit `ca512ba2`.
 The 2,744-module build and PWA generation with 224 entries passed in Vercel. JK's browser walk is
 the remaining product gate. Production is unchanged.
+
+### 2026-07-21 — FINDING-254 product acceptance
+
+JK confirmed that Draft Setup worked in the replacement preview and authorized the merge. PR 116
+is clean against current `origin/main` at `ba7f97d6`, and both Vercel checks pass.
