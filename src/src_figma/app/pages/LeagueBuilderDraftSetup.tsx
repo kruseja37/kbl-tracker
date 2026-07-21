@@ -4597,7 +4597,9 @@ export function LeagueBuilderDraftSetup() {
     <>
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-4 mb-6">
         <Pane
-          title={"IN THE POOL (" + inPoolPlayers.length + ")"}
+          title={(isSnakeFormat && snakeBuildAcceptanceBlocked
+            ? "PREVIOUS POOL (" + inPoolPlayers.length + ")"
+            : "IN THE POOL (" + inPoolPlayers.length + ")")}
           accent="var(--ballpark-action-green-hover)"
           search={inSearch}
           onSearch={setInSearch}
@@ -5322,7 +5324,7 @@ export function LeagueBuilderDraftSetup() {
                   ? ` · ${poolFirstShapeReport.sizing.finalSize - poolFirstShapeReport.sizing.effectiveTarget} EXTRA PLAYERS KEPT SO EVERY CLUB CAN BUILD`
                   : ""}
               </div>
-              {snakeBuildReceipt ? (
+              {snakeBuildReceipt && snakePoolBuildAccepted ? (
                 <div className="mt-2 text-xs font-bold text-[var(--ballpark-brass)]" role="status">
                   BUILT {snakeBuildReceipt.label} · {snakeBuildReceipt.count} PLAYERS · {snakeBuildReceipt.identityProof === 'success'
                     ? 'EVERY CHOSEN IDENTITY CERTIFIED TOGETHER'

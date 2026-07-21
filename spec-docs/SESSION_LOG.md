@@ -8438,3 +8438,14 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - Next: commit these state records, push `codex/snake-live-room-authority`, create one matching
   Vercel preview, and smoke it. No merge or production promotion is authorized. JK's browser walk
   remains the sole product gate.
+
+## 2026-07-20 — FINDING-251 stale source-build display repair
+
+- JK's live preview exposed an interface contradiction, not a missing Legends merge: selected
+  Legends and SMB4 sources totaled 1,275 cards, while the pre-existing 835-card pool was still
+  displayed as current after a settings change.
+- The existing acceptance fingerprint already blocked Lock. The repair makes that state honest:
+  it labels the membership as the previous pool and removes the old build receipt until the user
+  rebuilds.
+- Focused source-change and real setup-to-room registration tests pass. A replacement preview and
+  JK's browser check remain required.

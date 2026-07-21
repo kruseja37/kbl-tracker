@@ -405,6 +405,8 @@ describe("LeagueBuilderDraftSetup", () => {
 
     expect(lockLeaguePool).not.toHaveBeenCalled();
     expect(await screen.findByText("BUILD THE SELECTED POOL")).toBeInTheDocument();
+    expect(screen.queryByText(/BUILT FULL SELECTED SOURCES/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/PREVIOUS POOL \(/i)).toBeInTheDocument();
   }, 20_000);
 
   test("changing a club archetype after a build makes the accepted fingerprint stale", async () => {

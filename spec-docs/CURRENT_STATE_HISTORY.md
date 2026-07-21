@@ -1682,3 +1682,11 @@ approved exact code head `e8c7ee59`, Major 0 / Minor 0. Migration
 `20260720213000_farm_snake_live_catalog.sql` was then applied; local and remote migration histories
 match and linked-schema lint reports no errors. The new live header leaves one branch push, one
 matching Vercel preview, and JK's browser walk open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-251 source-build display repair
+
+The integrated branch was pushed and deployed to a Vercel preview after independent approval and the
+database migration. JK's browser walk then found that a source-setting change could leave the previous
+Snake pool labelled as current beside a stale build receipt, even though Lock correctly required a
+fresh build. The new live header records the narrow display repair and leaves its replacement preview
+plus JK's Legends-source and four/eight-team checks open. Production remains unchanged.

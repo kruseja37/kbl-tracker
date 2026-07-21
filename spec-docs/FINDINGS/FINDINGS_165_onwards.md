@@ -1373,3 +1373,19 @@ The combined FINDING-249/250 auditor approved exact integrated code head `e8c7ee
 Minor 0**. Combined proof passed 187/187 focused tests, TypeScript, changed-file lint, a 2,744-module
 production/PWA build, and all four real browser journeys. One integrated Vercel preview and JK's
 browser walk remain.
+
+### FINDING-251
+**Date:** 2026-07-20 | **Phase:** Snake Draft Setup source selection | **Status:** FIXED — PREVIEW/JK WALK PENDING
+**Files:** `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx` and
+`src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.universe.test.tsx`.
+**Evidence:** JK's preview showed a selected-source union of 1,275 cards while the active pool still
+contained 835 cards. The existing fingerprint law correctly blocked Lock, but the UI displayed both
+the old pool as active and a stale `BUILT FULL SELECTED SOURCES` receipt.
+**Impact:** A GM could reasonably believe that newly selected Legends sources were already in the
+active draft pool when they were not.
+**Action:** Keep the existing explicit rebuild law. When a current Snake build is no longer accepted,
+label the displayed membership `PREVIOUS POOL` and hide the stale build receipt. The rebuild button
+then remains the one clear action that replaces the old pool with the selected sources.
+**Verification:** The direct source-change regression proves that Lock disables, the stale receipt
+disappears, and the old membership is labelled as previous. The real setup-to-room registration
+integration test proves that Full Sources writes the selected memberships through the draft room.

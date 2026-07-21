@@ -1978,3 +1978,13 @@ and the 2,744-module production/PWA build. Builder browser proof passed 4/4, inc
 `20260720213000_farm_snake_live_catalog.sql` was applied to the linked Supabase project. Local and
 remote migration histories match and linked-schema lint reports no errors. One integrated branch
 push and one Vercel preview remain. Production is unchanged; JK's browser walk is the product gate.
+
+### 2026-07-20 — FINDING-251 stale Snake source-build receipt
+
+JK's Vercel browser walk exposed a contradictory Draft Setup state: after the selected source union
+changed, the screen could continue to label the prior membership as `IN THE POOL` and show the old
+`BUILT` receipt, while Lock correctly refused the stale build. The source and membership laws were
+not changed. The UI now labels that membership `PREVIOUS POOL` and suppresses the stale receipt.
+The existing required rebuild action remains the only way to replace membership. Focused source-change
+regression and the real setup-to-room registration regression pass; the replacement preview remains
+subject to JK's browser walk.
