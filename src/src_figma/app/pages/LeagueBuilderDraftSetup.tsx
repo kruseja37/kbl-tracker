@@ -100,7 +100,8 @@ import {
   foldHandEditLedger,
   importRosteredPlayersToLeaguePool,
   isPlayerInLeaguePool,
-  isPlayerInSourceUniverse,
+  isPlayerInExternalDraftSourceUniverse,
+  resolveExternalDraftSourceLeagueIds,
   resolveIncludeUnassignedSourcePlayers,
   resolveSourceLeagueIds,
   computePlayerIv,
@@ -492,22 +493,6 @@ function isUnassignedForDraftSource(player: Player, targetLeagueId: string): boo
   ));
 }
 
-function isPlayerInSelectedDraftSource(input: {
-  player: Player;
-  sourceLeagueIds: readonly string[];
-  includeUnassignedSourcePlayers: boolean;
-  targetLeagueId: string;
-}): boolean {
-  return isPlayerInSourceUniverse(
-    input.player,
-    input.sourceLeagueIds,
-    input.includeUnassignedSourcePlayers,
-  ) || (
-    input.includeUnassignedSourcePlayers
-    && isUnassignedForDraftSource(input.player, input.targetLeagueId)
-  );
-}
-
 /** Exact build truth that must still match when Pool Lock runs. */
 function snakePoolBuildFingerprint(input: {
   league: Pick<LeagueTemplate, 'id' | 'tier' | 'balanceMode' | 'draftPoolMode'>;
@@ -887,7 +872,7 @@ function modeAReportFromResult(result: PoolFromDemandResult, designPinCount: num
 }
 
 function buildPoolExtractedBasis(
-  league: Pick<LeagueTemplate, "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds" | "includeUnassignedSourcePlayers" | "poolAssemblyMode">,
+  league: Pick<LeagueTemplate, "id" | "teamIds" | "poolSizeMultiplier" | "sourceLeagueIds" | "includeUnassignedSourcePlayers" | "poolAssemblyMode">,
   leagueTeams: readonly Team[],
   cap: number,
   shills: number,
@@ -902,6 +887,13 @@ function buildPoolExtractedBasis(
     identityByTeamId[teamId] = teamsById.get(teamId)?.mlbArchetypeKey ?? null;
   }
   const resolvedSources = resolveSourceLeagueIds(league);
+  const externalSources = resolvedSources === null
+    ? null
+    : resolveExternalDraftSourceLeagueIds({
+        configuredSourceLeagueIds: resolvedSources,
+        availableLeagueIds: resolvedSources,
+        targetLeagueId: league.id,
+      });
   return {
     cap,
     poolSizeMultiplier: league.poolSizeMultiplier ?? DEFAULT_POOL_SIZE_MULTIPLIER,
@@ -912,9 +904,9 @@ function buildPoolExtractedBasis(
     ...(league.poolAssemblyMode ? { poolAssemblyMode: league.poolAssemblyMode } : {}),
     // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8: the draft pool sources are a basis input like cap/
     // dial/shills/identity — a change here must trip the same "re-extract" staleness signal.
-    // Absent (unfiltered) stays absent here too, so a pre-feature record and an untouched
-    // post-feature record are indistinguishable — both mean "drawn from everything".
-    ...(resolvedSources !== null ? { sourceLeagueIds: sortedIds(resolvedSources) } : {}),
+    // Absent stays absent here. It means every known external source, while an explicit set records
+    // the exact external sources. The target league is never part of either state.
+    ...(externalSources !== null ? { sourceLeagueIds: externalSources } : {}),
     includeUnassignedSourcePlayers: resolveIncludeUnassignedSourcePlayers(league),
   };
 }
@@ -947,10 +939,8 @@ function poolBasisStaleLines(
   if (extractedBasis.poolAssemblyMode !== undefined && extractedBasis.poolAssemblyMode !== liveBasis.poolAssemblyMode) {
     lines.push("THE POOL BUILD CHANGED — REBUILD THE SELECTED POOL.");
   }
-  // Sources comparison is null-aware: absent = unfiltered (all leagues), which is both the
-  // pre-feature meaning and the untouched-default meaning, so legacy records never retro-nag.
-  // A move between unfiltered and any explicit curated set IS a real universe change and trips
-  // the line, as does any change between two explicit sets.
+  // Sources comparison is null-aware: absent is the untouched all-external default. A move between
+  // that state and an explicit set is a real source change, as is a change between explicit sets.
   {
     const previousSources = extractedBasis.sourceLeagueIds ? sortedIds(extractedBasis.sourceLeagueIds).join("|") : null;
     const currentSources = liveBasis.sourceLeagueIds ? sortedIds(liveBasis.sourceLeagueIds).join("|") : null;
@@ -2034,19 +2024,50 @@ export function LeagueBuilderDraftSetup() {
   );
 
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7). Coarse selection:
-  // which leagues' player pools feed THIS league's draft extraction. Absent sourceLeagueIds
-  // resolves to null = UNFILTERED (all leagues checked) — the filter below is skipped entirely,
-  // provably byte-identical to pre-feature behavior (captain correction 2026-07-08 post-audit:
-  // the earlier own-league-only default was a contract framing error that silently excluded every
-  // other league's players from a new league's first extraction). Only an explicit array (written
-  // on the first user toggle) narrows the universe. NOTE: the narrowing only applies to the
+  // which external leagues' player pools feed THIS league's draft extraction. Absent
+  // sourceLeagueIds means every external source league. The current target is always excluded:
+  // its league assignments are pool output written by this page, not source ownership. Only an
+  // explicit array (written on the first user toggle) narrows the external universe further.
+  // NOTE: the narrowing only applies to the
   // automatic extraction universe (demandUniverseFromPlayers below) — the manual pool shuttle
   // (§6, poolShuttle further down) intentionally still offers every player in the app via
   // availablePlayers above, so fine curation (add/remove five specific guys) is unrestricted by
   // the checkbox list.
+  const sourceLeagues = useMemo(
+    () => leagues.filter((candidate) => candidate.id !== activeLeagueId),
+    [activeLeagueId, leagues],
+  );
+  const targetLeagueId = league?.id ?? null;
+  const availableSourceLeagueIdsKey = sortedIds(sourceLeagues.map((candidate) => candidate.id)).join("\u0000");
+  const availableSourceLeagueIds = useMemo(
+    () => (availableSourceLeagueIdsKey ? availableSourceLeagueIdsKey.split("\u0000") : []),
+    [availableSourceLeagueIdsKey],
+  );
+  const configuredSourceLeagueIds = league ? resolveSourceLeagueIds(league) : null;
+  const configuredSourceLeagueIdsKey = configuredSourceLeagueIds === null
+    ? null
+    : sortedIds(configuredSourceLeagueIds).join("\u0000");
   const explicitSourceLeagueIds = useMemo(
-    () => (league ? resolveSourceLeagueIds(league) : null),
-    [league],
+    () => (targetLeagueId && configuredSourceLeagueIdsKey !== null
+      ? resolveExternalDraftSourceLeagueIds({
+          configuredSourceLeagueIds: configuredSourceLeagueIdsKey
+            ? configuredSourceLeagueIdsKey.split("\u0000")
+            : [],
+          availableLeagueIds: availableSourceLeagueIds,
+          targetLeagueId,
+        })
+      : null),
+    [availableSourceLeagueIds, configuredSourceLeagueIdsKey, targetLeagueId],
+  );
+  const effectiveSourceLeagueIds = useMemo(
+    () => (targetLeagueId
+      ? resolveExternalDraftSourceLeagueIds({
+          configuredSourceLeagueIds: explicitSourceLeagueIds,
+          availableLeagueIds: availableSourceLeagueIds,
+          targetLeagueId,
+        })
+      : []),
+    [availableSourceLeagueIds, explicitSourceLeagueIds, targetLeagueId],
   );
   const includeUnassignedSourcePlayers = useMemo(
     () => (league
@@ -2057,15 +2078,15 @@ export function LeagueBuilderDraftSetup() {
     [isSnakeFormat, league],
   );
   const universePlayers = useMemo(
-    () => (league && explicitSourceLeagueIds !== null
-      ? players.filter((player) => isPlayerInSelectedDraftSource({
+    () => (targetLeagueId
+      ? players.filter((player) => isPlayerInExternalDraftSourceUniverse({
           player,
-          sourceLeagueIds: explicitSourceLeagueIds,
+          sourceLeagueIds: effectiveSourceLeagueIds,
           includeUnassignedSourcePlayers,
-          targetLeagueId: league.id,
+          targetLeagueId,
         }))
-      : players),
-    [players, league, explicitSourceLeagueIds, includeUnassignedSourcePlayers],
+      : []),
+    [players, targetLeagueId, effectiveSourceLeagueIds, includeUnassignedSourcePlayers],
   );
   const universePlayerIdList = useMemo(
     () => sortedIds(universePlayers.map((player) => player.id)),
@@ -2106,18 +2127,18 @@ export function LeagueBuilderDraftSetup() {
     ),
     [universePlayers],
   );
-  // New warn-don't-block gating exists ONLY for the explicitly curated state — the unfiltered
-  // default must not introduce any behavior change vs pre-feature (even for a zero-player app).
-  const universeEmpty = Boolean(league) && explicitSourceLeagueIds !== null && universePlayers.length === 0;
-  const universeEmptyHint = (explicitSourceLeagueIds?.length ?? 0) === 0
-    ? "No draft pool sources are checked — check at least one league below to enable extraction."
+  // Empty-source gating uses the effective external source set, including the untouched default.
+  const universeEmpty = Boolean(league) && universePlayers.length === 0;
+  const universeEmptyHint = effectiveSourceLeagueIds.length === 0
+    ? (sourceLeagues.length === 0
+      ? "No source leagues are available — import or create a source league first."
+      : "No draft pool sources are checked — check at least one league below to enable extraction.")
     : "The checked league(s) have no players yet — check a league that has players, or add players to one of them.";
   // Audit Finding 3 honesty tweak (captain 2026-07-08): explicitly zero leagues checked, but
   // never-claimed free agents keep the universe alive — extraction stays enabled (warn-don't-block)
   // with an honest info line instead of silence.
   const universeFreeAgentsOnly = Boolean(league)
-    && explicitSourceLeagueIds !== null
-    && explicitSourceLeagueIds.length === 0
+    && effectiveSourceLeagueIds.length === 0
     && includeUnassignedSourcePlayers
     && universePlayers.length > 0;
   const unassignedPlayerCount = useMemo(
@@ -2126,11 +2147,10 @@ export function LeagueBuilderDraftSetup() {
       : 0),
     [league, players],
   );
-  // Player-pool count per league, for the checkbox list (ruling 2026-07-08 #2: show every league
-  // in the app with its count). Computed once over players+leagues, not per-row.
+  // Player-pool count per external source league. The target is output and is not counted here.
   const leaguePlayerCounts = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const candidate of leagues) {
+    for (const candidate of sourceLeagues) {
       let count = 0;
       for (const player of players) {
         if (isPlayerInLeaguePool(player, candidate.id)) count += 1;
@@ -2138,7 +2158,7 @@ export function LeagueBuilderDraftSetup() {
       counts.set(candidate.id, count);
     }
     return counts;
-  }, [leagues, players]);
+  }, [players, sourceLeagues]);
   const inPoolClassifiedDemandPlayers = useMemo<ClassifiedDemandPlayer[]>(() => {
     return demandUniverseFromPlayers(inPoolPlayers).map((player) => ({
       player,
@@ -2854,17 +2874,14 @@ export function LeagueBuilderDraftSetup() {
     }, { refreshData: false, refreshPool: false });
 
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): toggle one league
-  // in/out of this league's draft-pool source set. Own league IS un-checkable (JK ruling
-  // 2026-07-08 #1) — no special-case guard here. Persists the FULL next set on the league record
-  // (ruling #3), not sessionStorage. While the field is absent (unfiltered default) every league
-  // renders checked; the FIRST toggle materializes the explicit full list minus/plus the toggled
-  // league — from then on the record carries an explicit array. No write-back happens on load,
-  // only on this user action.
+  // in/out of this league's external source set. The target is never rendered or accepted as a
+  // source. The full next set persists on the league record. While the field is absent, every
+  // external league renders checked. The first toggle materializes that set. Load is read-only.
   const handleToggleSourceLeague = (leagueId: string) =>
     runAction(async () => {
       if (!league) return;
       if (isSnakeFormat) invalidateSnakeBuildAcceptance();
-      const current = new Set(explicitSourceLeagueIds ?? leagues.map((candidate) => candidate.id));
+      const current = new Set(effectiveSourceLeagueIds);
       if (current.has(leagueId)) {
         current.delete(leagueId);
       } else {
@@ -2883,7 +2900,7 @@ export function LeagueBuilderDraftSetup() {
           ? { snakeIncludeUnassignedSourcePlayers: !includeUnassignedSourcePlayers }
           : { includeUnassignedSourcePlayers: !includeUnassignedSourcePlayers }),
         ...(explicitSourceLeagueIds === null
-          ? { sourceLeagueIds: sortedIds(leagues.map((candidate) => candidate.id)) }
+          ? { sourceLeagueIds: sortedIds(sourceLeagues.map((candidate) => candidate.id)) }
           : {}),
       });
       if (!isSnakeFormat) setPoolFirstShapeReport(null);
@@ -5143,9 +5160,8 @@ export function LeagueBuilderDraftSetup() {
   ) : null;
 
   // Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §7): the league checkbox
-  // list. Flat list of EVERY league in the app (JK ruling 2026-07-08 #2), own league included and
-  // NOT locked (ruling #1) — default state (nothing ever touched) is own-league-only, byte-
-  // identical to today. Rendered in BOTH pool modes, at every sub-state, per the spec.
+  // list. The current league is the output pool, so it is deliberately absent from this source
+  // list. Showing it here made every build feed itself on the next render.
   const fullSourcePoolCount = useMemo(() => assembleFullSourcePoolIds({
     sourceIds: universePlayerIdList,
     handAdds: [...poolProvenance.userAddedIds],
@@ -5161,8 +5177,8 @@ export function LeagueBuilderDraftSetup() {
       </div>
       {showHelp ? (
         <HelpNote>
-          Which leagues' player pools feed this league's draft. Uncheck your own league to keep its
-          branded rosters without drafting from them.
+          Which external leagues' player pools feed this draft. The current draft pool is output,
+          so it is not listed as one of its own sources.
         </HelpNote>
       ) : null}
       <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
@@ -5179,9 +5195,9 @@ export function LeagueBuilderDraftSetup() {
             {unassignedPlayerCount} player{unassignedPlayerCount === 1 ? "" : "s"}
           </span>
         </label>
-        {leagues.map((candidate) => {
-          // Absent field (unfiltered default) renders every league checked — the on-screen
-          // truth of "drawn from everything". An explicit array renders exactly its members.
+        {sourceLeagues.map((candidate) => {
+          // Absent field renders every external source checked. An explicit array renders exactly
+          // its valid external members.
           const checked = explicitSourceLeagueIds === null || explicitSourceLeagueIds.includes(candidate.id);
           const count = leaguePlayerCounts.get(candidate.id) ?? 0;
           return (
@@ -5198,7 +5214,6 @@ export function LeagueBuilderDraftSetup() {
               />
               <span className="flex-1">
                 {candidate.name}
-                {candidate.id === activeLeagueId ? " (this league)" : ""}
               </span>
               <span className="text-[var(--ballpark-chalk)]/55">{count} player{count === 1 ? "" : "s"}</span>
             </label>

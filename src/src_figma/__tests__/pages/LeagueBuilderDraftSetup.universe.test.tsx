@@ -961,7 +961,7 @@ describe("LeagueBuilderDraftSetup", () => {
     }
   });
 
-  test("UNIVERSE-FIX1: absent sourceLeagueIds stays unfiltered — identity-critical auto-fit sees the same candidates as pre-fix", async () => {
+  test("UNIVERSE-FIX1: absent sourceLeagueIds includes every known external source", async () => {
     const outsideCloser = makePlayer(999, {
       id: "outside-cp",
       firstName: "Kay",
@@ -975,13 +975,16 @@ describe("LeagueBuilderDraftSetup", () => {
       ...makeLegalRosterPlayerSet("beta", 10_000),
       outsideCloser,
     ];
-    mockLeagueData({
-      // No sourceLeagueIds field at all — the default, back-compat unfiltered case.
-      league: makeLeague({
+    const league = makeLeague({
         teamIds: ["team-a", "team-b"],
         draftPoolMode: "design-first",
         salaryCap: 1_000_000,
-      }),
+      });
+    const otherLeague = makeLeague({ id: "other-league", name: "Other Source", teamIds: [] });
+    mockLeagueData({
+      // No sourceLeagueIds field at all — every known external source is selected.
+      league,
+      leagues: [league, otherLeague],
       teams: [
         makeTeam("team-a", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
         makeTeam("team-b", { rosterDesign: makeLockedRosterDesign("2026-01-01T00:00:00.000Z") }),
@@ -999,8 +1002,7 @@ describe("LeagueBuilderDraftSetup", () => {
     const simPools = vi.mocked(buildBest22Target).mock.calls.map(
       (call) => call[1] as Array<{ id: string }>,
     );
-    // Unfiltered default: the "other-league" closer is exactly as visible to the auto-fit as it
-    // was pre-feature — proves the fix didn't silently narrow the default (no-op) case.
+    // Untouched default: the known external source remains visible to auto-fit.
     expect(simPools.some((pool) => pool.some((player) => player.id === "outside-cp"))).toBe(true);
   });
 
@@ -1553,7 +1555,7 @@ describe("LeagueBuilderDraftSetup", () => {
   // DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 — draft-available player universe.
   // -----------------------------------------------------------------------------------------
 
-  test("UNIVERSE renders every league with a player count; ALL leagues checked by default (unfiltered), none locked", async () => {
+  test("UNIVERSE renders external source leagues with counts and never lists the draft target as its own source", async () => {
     const nativePlayers = makePlayers(5);
     const otherLeaguePlayers = Array.from({ length: 3 }, (_, index) =>
       makePlayer(100 + index, {
@@ -1572,19 +1574,55 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    const ownCheckbox = await screen.findByLabelText(/Page League/i);
-    const otherCheckbox = screen.getByLabelText(/Legends League/i);
+    const otherCheckbox = await screen.findByLabelText(/Legends League/i);
     const unassignedCheckbox = screen.getByLabelText(/Unassigned Players/i);
-    // Captain rework 2026-07-08: absent field = unfiltered = every league renders checked.
-    expect(ownCheckbox).toBeChecked();
+    expect(screen.queryByLabelText(/Page League/i)).not.toBeInTheDocument();
     expect(otherCheckbox).toBeChecked();
     expect(unassignedCheckbox).toBeChecked();
-    expect(ownCheckbox.closest("label")?.textContent).toContain(`${nativePlayers.length} player`);
     expect(otherCheckbox.closest("label")?.textContent).toContain(`${otherLeaguePlayers.length} player`);
     // Enablement settles once the pool-lock status and saved-auction check both resolve (async on mount).
     await waitFor(() => {
-      expect(ownCheckbox).toBeEnabled();
+      expect(otherCheckbox).toBeEnabled();
     });
+  });
+
+  test("UNIVERSE: a legacy target-only source selection cannot feed the built pool back into itself", async () => {
+    const legends = makeLegalRosterPlayerSet("legend", 10_000).map((player) => ({
+      ...player,
+      leagueAssignments: [
+        { leagueId: "legends-library-draft", teamId: "", rosterStatus: "FREE_AGENT" as const },
+        { leagueId: "league-page", teamId: "", rosterStatus: "FREE_AGENT" as const },
+      ],
+    }));
+    const league = makeLeague({
+      sourceLeagueIds: ["league-page"],
+      snakeIncludeUnassignedSourcePlayers: false,
+    });
+    const sourceLibrary = makeLeague({
+      id: "legends-library-draft",
+      name: "Legends Library — Draft",
+      teamIds: [],
+      sourceLibrary: { kind: "historical-legends", profileType: "Draft Pool" },
+    });
+    mockLeagueData({
+      league,
+      leagues: [league, sourceLibrary],
+      players: legends,
+      pool: makePool({ locked: false, players: [], totalSlots: 0 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(screen.queryByLabelText(/Page League/i)).not.toBeInTheDocument();
+    const libraryCheckbox = await screen.findByLabelText(/Legends Library — Draft/i);
+    expect(libraryCheckbox).not.toBeChecked();
+    expect(libraryCheckbox.closest("label")?.textContent).toContain(`${legends.length} player`);
+    expect(screen.getByText(/No draft pool sources are checked/i)).toBeInTheDocument();
+
+    fireEvent.click(libraryCheckbox);
+    await waitFor(() => expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+      sourceLeagueIds: ["legends-library-draft"],
+    })));
   });
 
   test("UNIVERSE: source libraries feed the pool but cannot become the draft target", async () => {
@@ -1639,7 +1677,7 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(await screen.findByLabelText(/Unassigned Players/i));
     await waitFor(() => expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
       includeUnassignedSourcePlayers: false,
-      sourceLeagueIds: ["league-page", "legends-library-career"],
+      sourceLeagueIds: ["legends-library-career"],
     })));
 
     const exactLeague = {
@@ -1699,12 +1737,12 @@ describe("LeagueBuilderDraftSetup", () => {
     fireEvent.click(otherCheckbox);
     await waitFor(() => {
       expect(saveLeagueTemplate).toHaveBeenCalledWith(
-        expect.objectContaining({ sourceLeagueIds: ["league-page"] }),
+        expect.objectContaining({ sourceLeagueIds: [] }),
       );
     });
 
     vi.mocked(extractPoolFromDemand).mockClear();
-    const nextLeague = { ...league, sourceLeagueIds: ["league-page"] };
+    const nextLeague = { ...league, sourceLeagueIds: [] };
     mockLeagueData({
       league: nextLeague,
       leagues: [nextLeague, otherLeague],
@@ -1738,7 +1776,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     render(<LeagueBuilderDraftSetup />);
 
-    expect(await screen.findByText(/No draft pool sources are checked/i)).toBeInTheDocument();
+    expect(await screen.findByText(/No source leagues are available/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Regenerate production-shaped pool/i })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Reroll generated players/i })).toBeDisabled();
   });
@@ -1837,8 +1875,8 @@ describe("LeagueBuilderDraftSetup", () => {
     // Phase 2 — explicit-and-matching: extracted with an explicit set, live set unchanged → quiet.
     const matchedLeague = {
       ...legacyLeague,
-      poolExtractedBasis: { ...legacyLeague.poolExtractedBasis!, sourceLeagueIds: ["league-page"] },
-      sourceLeagueIds: ["league-page"],
+      poolExtractedBasis: { ...legacyLeague.poolExtractedBasis!, sourceLeagueIds: [] },
+      sourceLeagueIds: [],
     };
     mockLeagueData({ league: matchedLeague, leagues: [matchedLeague, otherLeague], teams, pool: makePool() });
     rerender(<LeagueBuilderDraftSetup />);
@@ -1847,7 +1885,7 @@ describe("LeagueBuilderDraftSetup", () => {
     });
 
     // Phase 3 — the live set moves off the extracted set → staleness line + start blocked.
-    const changedLeague = { ...matchedLeague, sourceLeagueIds: ["league-page", "other-league"] };
+    const changedLeague = { ...matchedLeague, sourceLeagueIds: ["other-league"] };
     mockLeagueData({ league: changedLeague, leagues: [changedLeague, otherLeague], teams, pool: makePool() });
     rerender(<LeagueBuilderDraftSetup />);
 

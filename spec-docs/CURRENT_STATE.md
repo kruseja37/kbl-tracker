@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-249 FARM COMPANION AUTHORITY AND FINDING-250 FOUR/EIGHT-TEAM SETUP CERTIFICATION ARE INTEGRATED, INDEPENDENTLY APPROVED, AND DEPLOYED TO A VERCEL PREVIEW (2026-07-20; branch `codex/snake-live-room-authority`). JK's real browser walk found FINDING-251: when source settings changed after a valid Snake build, Draft Setup still called the old membership current and repeated a stale build receipt. The source law and build-to-lock gate were correct; the display repair is local and awaiting one replacement preview. FARM companions use cloud authority without trades or private-data leakage. Large Snake sources certify by distinct people, preserve adequate identity-role depth, bind Build through Lock to exact source and person-group truth, reject stale work, and keep bounded UNKNOWN honest. Migration `20260720213000_farm_snake_live_catalog.sql` is applied; local and remote histories match and linked-schema lint reports no errors. **NEXT:** deploy the FINDING-251 display repair, then JK rechecks Legends source selection and the four/eight-team setup paths. Production remains unchanged.
+> ## RIGHT NOW — FINDING-252 REPAIRS THE DRAFT SETUP SOURCE/OUTPUT LOOP (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview proved that the active target league could read its own generated pool back as a source: `test` reported 835 source players, all 835 were already in the pool, and zero were available. The target is now output-only. Draft Setup lists external source leagues, ignores the target id in legacy selections, strips target assignments from source membership, and keeps the expensive proof stable across unrelated team edits. FINDING-249 FARM companion authority and FINDING-250 four/eight-team certification remain integrated and independently approved. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** publish one exact replacement preview, then JK rechecks Legends source selection and the four/eight-team setup paths. Independent audit remains separate. Production is unchanged.
 
 ## Current product law
 
@@ -22,8 +22,9 @@
 
 ## Open gates
 
-1. Deploy the small FINDING-251 display repair to a replacement branch preview.
-2. JK runs the Legends-source, four/eight-team setup, and FARM Hotseat-plus-companion walks.
+1. Publish the exact FINDING-251/252 repair to one replacement branch preview.
+2. Independent read-only audit checks the frozen source/output repair.
+3. JK runs the Legends-source, four/eight-team setup, and FARM Hotseat-plus-companion walks.
 
 The exact remote sequence and rollback boundary are in
 `spec-docs/SNAKE_LIVE_ROOM_PREVIEW_RUNBOOK_2026-07-19.md`. Migration 009 and the corrected Vercel

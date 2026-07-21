@@ -1988,3 +1988,13 @@ not changed. The UI now labels that membership `PREVIOUS POOL` and suppresses th
 The existing required rebuild action remains the only way to replace membership. Focused source-change
 regression and the real setup-to-room registration regression pass; the replacement preview remains
 subject to JK's browser walk.
+
+### 2026-07-20 — FINDING-252 target/source authority audit
+
+JK's next preview proved that FINDING-251 was only the display symptom. The active target league
+still appeared as a source, and the pool rows written to that target were counted as source rows on
+reload. The source pipeline audit traced league selection, player assignments, build replacement,
+fingerprint acceptance, lock, and reload. The repair makes the target output-only and external
+assignments source-only. Exact unit and page regressions prove the circular 835-in/zero-available
+state cannot form from target assignments. Builder gates pass. Independent audit and JK's browser
+walk remain open.

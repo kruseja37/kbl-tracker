@@ -171,11 +171,9 @@ export interface LeagueTemplate {
     poolSizeMultiplier: number;
     shills?: number;
     identityByTeamId: Record<string, string | null>;
-    /** Sorted sourceLeagueIds at extraction time (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8) — feeds
-     * poolBasisStaleLines so a source-league change is flagged the same way a cap/dial/shill/
-     * identity change already is. Absent = extracted from the unfiltered universe (a pre-feature
-     * record or an untouched post-feature default — the two are equivalent, so legacy records
-     * never retro-nag). */
+    /** Sorted external sourceLeagueIds at extraction time. The target league is never stored here.
+     * This feeds poolBasisStaleLines so a source change is flagged like a cap/dial/shill/identity
+     * change. Absent means the untouched default of every known external source. */
     sourceLeagueIds?: string[];
     /** Whether globally unassigned players were part of the extracted source universe. */
     includeUnassignedSourcePlayers?: boolean;
@@ -204,15 +202,11 @@ export interface LeagueTemplate {
   poolFirstGenerationNonce?: number;
   /** Full reversible card set captured before snake version trimming at lock. */
   snakeVersionSourcePlayerIds?: string[];
-  /** Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08): which leagues' player
-   * pools feed this league's draft extraction. Absent field = UNFILTERED — all leagues checked, the
-   * universe filter skipped entirely, byte-identical to pre-feature behavior (see
-   * resolveSourceLeagueIds in leagueBuilderPoolBuilder.ts; captain correction 2026-07-08
-   * post-audit — an earlier own-league-only default was a contract framing error, not a JK
-   * ruling). The field becomes an explicit array on the first user toggle and is filtered from
-   * then on. An explicit empty array is a real, distinct state (the user unchecked every league,
-   * including their own — resolves to unclaimed free agents only) and must NOT be treated as
-   * "absent" / defaulted back. */
+  /** External leagues whose player pools feed this league's draft extraction. The current target
+   * league is pool output and is always excluded at read time, including from older saved arrays.
+   * An absent field means every known external source. The first user toggle writes an explicit
+   * array. An explicit empty array stays empty and uses only the separate unassigned source when
+   * that switch is on. */
   sourceLeagueIds?: string[];
   /** Backward-compatible default true; false makes checked source leagues exact. */
   includeUnassignedSourcePlayers?: boolean;

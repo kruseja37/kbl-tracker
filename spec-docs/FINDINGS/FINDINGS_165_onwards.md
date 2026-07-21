@@ -1389,3 +1389,27 @@ then remains the one clear action that replaces the old pool with the selected s
 **Verification:** The direct source-change regression proves that Lock disables, the stale receipt
 disappears, and the old membership is labelled as previous. The real setup-to-room registration
 integration test proves that Full Sources writes the selected memberships through the draft room.
+
+### FINDING-252
+**Date:** 2026-07-20 | **Phase:** Draft Setup source authority | **Status:** BUILT — JK WALK PENDING
+**Files:** `src/utils/leagueBuilderPoolBuilder.ts`, `src/utils/leagueBuilderStorage.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and their focused tests.
+**Evidence:** JK's replacement preview showed the active target `test (this league)` as the only
+checked source with 835 players. The same 835 cards were already in the target pool, so the page
+showed zero available players. The three Legends libraries remained separate and unchecked.
+**Impact:** A completed output pool could become its own source on reload. Source counts, source
+selection, proof input, and the pool shuttle then described one circular data set instead of the
+external libraries that supplied it.
+**Root cause:** `leagueAssignments` carried both external source ownership and the target
+`FREE_AGENT` rows written by Draft Setup. The page listed the active target as a source and used
+the same broad membership predicate for both meanings.
+**Action:** The active target is output-only. List external leagues only. Remove the target id from
+older saved source arrays without a write-on-load migration. Strip the target assignment before
+source membership is calculated. Keep absent, explicit, and unassigned source states distinct.
+Use stable source-id keys so unrelated team edits do not restart the proof.
+**Builder verification:** Target/source unit coverage is 19/19. The exact reload regression proves
+that target output cannot feed itself and that selecting the external Legends library saves only
+that library id. The focused Draft Setup source/universe and recalculation gate is 12/12. Legends
+import and setup-to-room coverage is 72/72. TypeScript, changed-file ESLint, diff integrity, and the
+2,744-module production build pass. Three pre-existing long SNAKE POOL GUIDE receipt timeouts remain
+unchanged from the base branch. Independent audit and JK's replacement-preview walk remain open.

@@ -8449,3 +8449,20 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   rebuilds.
 - Focused source-change and real setup-to-room registration tests pass. A replacement preview and
   JK's browser check remain required.
+
+## 2026-07-20 — FINDING-252 Draft Setup source/output repair
+
+- Fetched first. `origin/main` remains `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
+- JK's next preview showed the active target as its own 835-player source. The earlier display fix
+  did not remove the circular data path.
+- Traced source selection through league records, global player assignments, build replacement,
+  fingerprint acceptance, lock, and reload. The target assignment was both output and source.
+- The repair lists external sources only, strips the target id from legacy source arrays at read
+  time, ignores target assignments in source membership, and keeps source ids stable across
+  unrelated team renders.
+- Target/source tests pass 19/19. The focused Draft Setup source/universe and recalculation gate is
+  12/12. Legends import and setup-to-room tests pass 72/72. TypeScript, changed-file ESLint, diff
+  integrity, and the 2,744-module production/PWA build pass. Three unchanged long SNAKE POOL GUIDE
+  receipt timeouts remain on the base branch.
+- Next: freeze the exact diff, publish one replacement preview, and give it to JK. Independent audit
+  remains separate; JK's browser walk is the sole product gate. Production remains unchanged.

@@ -1690,3 +1690,11 @@ database migration. JK's browser walk then found that a source-setting change co
 Snake pool labelled as current beside a stale build receipt, even though Lock correctly required a
 fresh build. The new live header records the narrow display repair and leaves its replacement preview
 plus JK's Legends-source and four/eight-team checks open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-252 target/source authority repair
+
+The prior header treated the 835-card contradiction as stale display only. JK's replacement preview
+proved a deeper loop: the active target's pool-output assignments were still counted as source
+membership after reload. The new header records the target/output boundary repair and leaves one
+replacement preview, independent audit, and JK's source/setup walk open. Production remains
+unchanged.

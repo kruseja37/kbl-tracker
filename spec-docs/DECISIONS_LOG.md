@@ -4349,3 +4349,19 @@ generic confirmation failure.
 - A FARM `PICK_RECORDED` publish is one exact transition. It appends the next frozen slot and can
   change only completed picks, current index, revision, and modification time. It cannot alter
   pause, trades, order, version state, or other session facts.
+
+## 2026-07-20 — Draft Setup target leagues are output, not sources
+
+- The active draft league is the target pool. Draft Setup does not list it as one of its own
+  sources and does not accept its id as source evidence.
+- External leagues and source libraries own source membership. A player can keep an external
+  source assignment while Draft Setup adds or removes the active target-pool assignment.
+- An absent `sourceLeagueIds` field means all known external sources. An explicit array means its
+  valid external members. An explicit empty array means no external sources. Unassigned Players is
+  a separate switch.
+- Older saved arrays that contain the target id remain readable. The target id is ignored at read
+  time. Draft Setup does not rewrite the league merely because the page loaded.
+- Build can replace target membership, but those output rows cannot change source counts,
+  selection, proof input, or the next build after reload.
+- This ruling supersedes the 2026-07-08 active-own-league checkbox rule. That model could not
+  distinguish a source assignment from a pool-output assignment written to the same league id.
