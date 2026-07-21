@@ -1415,7 +1415,7 @@ import and setup-to-room coverage is 72/72. TypeScript, changed-file ESLint, dif
 unchanged from the base branch. Independent audit and JK's replacement-preview walk remain open.
 
 ### FINDING-253
-**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** REPAIRED — RE-AUDIT/JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** FIXED — INDEPENDENTLY APPROVED — PREVIEW/JK WALK PENDING
 **Files:** `src/engines/poolFromDemand.ts`, `src/engines/snakeSeatingProof.ts`,
 `src/src_figma/app/engines/leaguePlayerAdapter.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused tests.
@@ -1448,4 +1448,9 @@ card. Direct tests cover all affected seams.
 SMB4 people used the bounded constructor and returned UNKNOWN for Bomba Squad. A generic
 source-by-club work budget now chooses exact search for safe workloads and bounded search for larger
 ones. All 24 four-club SMB4 identities pass; eight-team Competitive and Loose remain bounded; the
-independent validator remains the only SUCCESS authority. Same-auditor approval is still required.
+independent validator remains the only SUCCESS authority.
+**Independent close:** The same non-builder auditor reviewed repaired commit `1bac2cfe` and returned
+APPROVE, Major 0 / Minor 0. Its live gate passed 163/163 core tests and 4/4 exact-440 calibration
+tests. The auditor confirmed that all floor, quota, cap, band, diagnostic, named-acceptance,
+shape-first, scheduler, fingerprint, and final-validator paths obey the repaired one-person law.
+One replacement preview and JK's browser walk remain open.

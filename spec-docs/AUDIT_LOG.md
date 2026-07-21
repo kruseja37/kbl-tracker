@@ -2029,3 +2029,12 @@ use exact search; larger inputs use the bounded constructor; the unchanged indep
 still owns SUCCESS. The repaired evidence is 163/163 core tests, 31/31 adjacent unchanged-path
 tests, the final 4/4 calibration, TypeScript, changed-file ESLint, diff integrity, and the
 2,744-module production/PWA build. Same-auditor re-audit is required before preview.
+
+### 2026-07-20 — FINDING-253 independent close
+
+The same non-builder auditor reviewed repaired commit `1bac2cfe` and returned **APPROVE — Major 0 /
+Minor 0**. It found no residual floor, quota, cap, band, diagnostic, named-acceptance, scheduler,
+fingerprint, or validator defect. Its live verification passed the 163/163 core gate and 4/4
+exact-440 scheduler calibration. `git diff --check f19ccbb5..1bac2cfe` is clean. The builder and
+auditor gates are closed. One replacement preview and JK's browser walk remain open; production is
+unchanged.

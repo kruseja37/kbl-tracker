@@ -32985,3 +32985,10 @@ floor shortfalls, protected quotas, tail caps, and diagnostics while preserving 
 card. The wider gate also repaired a generic exact-versus-bounded scheduler boundary found by the
 four-team 440-player all-identity calibration. The same auditor must review the repaired frozen
 commit. Only APPROVE permits one replacement preview.
+
+**Independent close:** The same non-builder auditor approved repaired commit `1bac2cfe`, Major 0 /
+Minor 0. Its live gate passed 163/163 core tests and 4/4 exact-440 calibration tests. It confirmed
+that version-group people count once through floors, protected quotas, tail caps, bands, diagnostics,
+and named acceptance; that shape-first and wider-preset order remains intact; and that the unchanged
+independent validator still owns SUCCESS. This approval permits one replacement preview for JK. It
+does not authorize merge or production promotion.

@@ -1717,3 +1717,10 @@ exact-versus-bounded proof scheduler boundary for safe four-club 440-player work
 adjacent, calibration, TypeScript, lint, build, and diff-integrity gates are green. The new header
 leaves same-auditor approval, one replacement preview, and JK's browser walk open. Production is
 unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 replacement preview
+
+The repaired head `1bac2cfe` closed the first audit's Major 1 / Minor 1 findings. The same
+non-builder auditor returned APPROVE, Major 0 / Minor 0, after an independent 163/163 core gate and
+4/4 exact-440 calibration. The new header leaves only one replacement preview and JK's browser walk
+open. Production is unchanged.

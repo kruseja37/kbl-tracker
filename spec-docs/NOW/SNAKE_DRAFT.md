@@ -4,7 +4,7 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
-## REPAIRED / SAME-AUDITOR RECHECK PENDING (2026-07-20; FINDING-253)
+## INDEPENDENTLY APPROVED / REPLACEMENT PREVIEW PENDING (2026-07-20; FINDING-253)
 - Three Legends libraries contain 835 cards for 345 people. Tight, Competitive, and Loose now count
   one person once, shape the named pool before proof, and use Full Sources only as a final fallback.
 - Four-team Loose is 132 people. Eight-team Loose is 264 people. Both pass the independent final
@@ -13,7 +13,8 @@
   inflated floors and curve counts. That path is repaired and directly tested.
 - A separate calibration boundary is also repaired: safe source-by-club workloads use exact search;
   larger workloads use bounded search; the independent validator still owns SUCCESS.
-- Builder gates are green. **Next:** same-auditor approval, one replacement preview, then JK's
+- The same auditor approved repaired commit `1bac2cfe`, Major 0 / Minor 0, after an independent
+  163/163 core gate and 4/4 exact-440 calibration. **Next:** one replacement preview, then JK's
   four-team and eight-team Legends-source browser walk. Production is unchanged.
 
 ## INDEPENDENTLY APPROVED / MIGRATION APPLIED / PREVIEW PENDING (2026-07-20; FINDING-249)

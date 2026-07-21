@@ -8505,3 +8505,17 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   with 224 precache entries.
 - Next: freeze this repair and return it to the same read-only auditor. No push, preview, merge, or
   production promotion is authorized before APPROVE.
+
+## 2026-07-20 — FINDING-253 independently approved
+
+- The same non-builder auditor reviewed repaired commit `1bac2cfe` and returned APPROVE, Major 0 /
+  Minor 0.
+- It confirmed that alternate Legend cards count as one person through floors, protected quotas,
+  tail caps, bands, diagnostics, and named acceptance while manually protected sibling cards remain
+  in membership.
+- It confirmed the shape-first order, wider named-preset fallback, generic source-by-club scheduler,
+  stable acceptance fingerprint, and unchanged independent SUCCESS validator.
+- Its live gate passed 163/163 core tests and 4/4 exact-440 calibration tests. The parent-to-repair
+  diff check is clean.
+- Next: push the approved branch and publish one replacement preview for JK's four/eight-team
+  Legends-source browser walk. Production remains unchanged.
