@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   pull: vi.fn(),
   init: vi.fn(),
   flush: vi.fn(),
+  recoverQuotaBlockedQueue: vi.fn(),
   auth: {
     user: { email: "scorekeeper@example.com" } as { email: string } | null,
     isAuthenticated: true,
@@ -22,6 +23,8 @@ const mocks = vi.hoisted(() => ({
     lastPullAt: 0,
     pendingCount: 0,
     error: null,
+    quotaRecoveryAvailable: false,
+    protectedConflictCount: 0,
     pull: vi.fn(),
     replaceCloudWithLocal: vi.fn(),
     replaceLocalWithCloud: vi.fn(),
@@ -48,6 +51,7 @@ vi.mock("../../../utils/syncEngine", () => ({
     getDiagnostics: mocks.getDiagnostics,
     init: mocks.init,
     flush: mocks.flush,
+    recoverQuotaBlockedQueue: mocks.recoverQuotaBlockedQueue,
   },
 }));
 
@@ -80,11 +84,14 @@ describe("SyncModal diagnostics status", () => {
   beforeEach(() => {
     vi.useRealTimers();
     mocks.getDiagnostics.mockReset();
+    mocks.signIn.mockReset();
     mocks.init.mockReset();
     mocks.flush.mockReset();
+    mocks.recoverQuotaBlockedQueue.mockReset();
     mocks.pull.mockReset();
     mocks.init.mockResolvedValue(undefined);
     mocks.flush.mockResolvedValue(undefined);
+    mocks.recoverQuotaBlockedQueue.mockResolvedValue(undefined);
     mocks.pull.mockResolvedValue(undefined);
     mocks.auth.user = { email: "scorekeeper@example.com" };
     mocks.auth.isAuthenticated = true;
@@ -92,6 +99,7 @@ describe("SyncModal diagnostics status", () => {
     mocks.syncStatus.state = "idle";
     mocks.syncStatus.pendingCount = 0;
     mocks.syncStatus.error = null;
+    mocks.syncStatus.quotaRecoveryAvailable = false;
     mocks.syncStatus.lastPullAt = 0;
     mocks.syncStatus.pull = mocks.pull;
     mocks.syncStatus.replaceCloudWithLocal = mocks.replaceCloudWithLocal;
@@ -149,6 +157,55 @@ describe("SyncModal diagnostics status", () => {
       expect(mocks.flush).toHaveBeenCalled();
       expect(mocks.pull).toHaveBeenCalled();
     });
+  });
+
+  test("recovers a quota-blocked queue without invoking destructive upload or download", async () => {
+    mocks.syncStatus.pendingCount = 1398;
+    mocks.syncStatus.error = "Sync queue persistence failed: Setting the value exceeded the quota.";
+    mocks.syncStatus.quotaRecoveryAvailable = true;
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "FREE SPACE + SYNC" }));
+
+    await waitFor(() => {
+      expect(mocks.recoverQuotaBlockedQueue).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.pull).not.toHaveBeenCalled();
+    expect(mocks.flush).not.toHaveBeenCalled();
+    expect(mocks.replaceCloudWithLocal).not.toHaveBeenCalled();
+    expect(mocks.replaceLocalWithCloud).not.toHaveBeenCalled();
+  });
+
+  test("does not offer storage recovery for an unrelated service quota error", async () => {
+    mocks.syncStatus.pendingCount = 1;
+    mocks.syncStatus.error = "Supabase API quota exceeded for this project.";
+    mocks.syncStatus.quotaRecoveryAvailable = false;
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "FREE SPACE + SYNC" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SYNC NOW" }));
+
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledTimes(1));
+    expect(mocks.recoverQuotaBlockedQueue).not.toHaveBeenCalled();
+  });
+
+  test("does not offer storage recovery when persistence wording is only embedded", async () => {
+    mocks.syncStatus.pendingCount = 1;
+    mocks.syncStatus.error =
+      "Supabase rejected request: sync queue persistence failed because API quota exceeded.";
+    mocks.syncStatus.quotaRecoveryAvailable = false;
+    mocks.getDiagnostics.mockResolvedValue(matchedDiagnostics());
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "FREE SPACE + SYNC" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SYNC NOW" }));
+
+    await waitFor(() => expect(mocks.flush).toHaveBeenCalledTimes(1));
+    expect(mocks.recoverQuotaBlockedQueue).not.toHaveBeenCalled();
   });
 
   test("confirmed upload replaces the existing cloud snapshot", async () => {
@@ -244,5 +301,41 @@ describe("SyncModal diagnostics status", () => {
     fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
 
     await waitFor(() => expect(mocks.signIn).toHaveBeenCalledWith("scorekeeper@example.com", "secret"));
+  });
+
+  test("shows the existing account-service copy when home sign in rejects at the network boundary", async () => {
+    mocks.auth.user = null;
+    mocks.auth.isAuthenticated = false;
+    mocks.signIn.mockRejectedValue(new TypeError("Load failed"));
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "scorekeeper@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "AUTH SERVICE UNREACHABLE — CHECK PROJECT CONNECTION.",
+    );
+    expect(screen.getByRole("button", { name: "SIGN IN" })).toBeEnabled();
+  });
+
+  test("ends a stalled home sign in with a retryable timeout", async () => {
+    vi.useFakeTimers();
+    mocks.auth.user = null;
+    mocks.auth.isAuthenticated = false;
+    mocks.signIn.mockReturnValue(new Promise(() => undefined));
+
+    render(<SyncModal isOpen onClose={vi.fn()} />);
+    fireEvent.change(screen.getByPlaceholderText("Email"), { target: { value: "scorekeeper@example.com" } });
+    fireEvent.change(screen.getByPlaceholderText("Password"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "SIGN IN" }));
+    expect(screen.getByRole("button", { name: "SIGNING IN..." })).toBeDisabled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("SIGN IN TIMED OUT — TRY AGAIN.");
+    expect(screen.getByRole("button", { name: "SIGN IN" })).toBeEnabled();
   });
 });

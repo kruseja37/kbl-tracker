@@ -74,6 +74,7 @@ export function SnakeCompanionFrame(props: {
   authorizedTeams?: readonly { id: string; name: string }[];
   onSwitchTeam?: (teamId: string) => void;
   currentPick: number;
+  onClockTeam?: { name: string; colors?: { primary?: string; secondary?: string; accent?: string } };
   order: readonly { pick: number; teamName: string }[];
   ticker: readonly string[];
   selectedPlayer?: ReactNode;
@@ -85,6 +86,7 @@ export function SnakeCompanionFrame(props: {
 }) {
   const logoUrl = safeCompanionLogoUrl(props.team.logoUrl);
   const branding = buildCompanionBranding(props.team.colors);
+  const liveBranding = buildCompanionBranding(props.onClockTeam?.colors);
   const [showHelp, setShowHelp] = useState(false);
   const privateDesk = typeof props.privateDesk === 'function' ? props.privateDesk(showHelp) : props.privateDesk;
   return (
@@ -124,16 +126,21 @@ export function SnakeCompanionFrame(props: {
         {props.helpNotes?.map((note) => <p className="mt-1" key={note}>{note}</p>)}
       </section> : null}
       {props.message ? <p className="mb-4 border-4 border-[var(--ballpark-panel-border)] p-3 font-bold" role="status">{props.message}</p> : null}
-      <section className="ballpark-panel mb-4 min-w-0 overflow-hidden" aria-label="Live draft strip" data-testid="companion-live-strip">
+      <section
+        className="ballpark-panel mb-4 min-w-0 overflow-hidden"
+        aria-label="Live draft strip"
+        data-testid="companion-live-strip"
+        style={{ backgroundColor: liveBranding.background, color: liveBranding.foreground, borderColor: liveBranding.border }}
+      >
         <div className="flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto pb-1">
-          <strong className="shrink-0 whitespace-nowrap text-[var(--ballpark-brass)]">PICK {props.currentPick}</strong>
+          <strong className="shrink-0 whitespace-nowrap">{props.onClockTeam?.name.toUpperCase() ?? 'ON CLOCK'} · PICK {props.currentPick}</strong>
           {props.order.map((slot) => <span key={slot.pick} className="shrink-0 whitespace-nowrap border-2 border-[var(--ballpark-panel-border)] px-2 py-1 text-sm">#{slot.pick} {slot.teamName.toUpperCase()}</span>)}
           <span className="h-7 shrink-0 border-l-2 border-[var(--ballpark-brass)]" aria-hidden="true" />
           {props.ticker.length ? props.ticker.map((line) => <span key={line} className="shrink-0 whitespace-nowrap text-sm font-bold">{line}</span>) : <span className="shrink-0 whitespace-nowrap text-sm">BOARD OPEN</span>}
         </div>
       </section>
       <div
-        className="snake-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(300px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+        className="snake-private-workspace snake-companion-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(300px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
         data-testid="companion-private-workspace-layout"
       >
         <div className="snake-selected-pane sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:max-h-[calc(100vh-18rem)]" data-testid="companion-selected-player-pane">

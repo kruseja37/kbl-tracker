@@ -21,6 +21,7 @@ export interface ChemistryStripRow {
   family: ChemistryCode;
   word: (typeof CHEMISTRY_CODE_TO_WORD)[ChemistryCode];
   count: number | null;
+  traitCount: number | null;
   tier: 'L1' | 'L2' | 'L3' | null;
 }
 
@@ -88,6 +89,7 @@ export function buildChemistryStrip(players: readonly Player[] | null): Chemistr
       family,
       word: CHEMISTRY_CODE_TO_WORD[family],
       count: players ? row?.count ?? 0 : null,
+      traitCount: players ? row?.traitCount ?? 0 : null,
       tier: players ? row?.tier ?? 'L1' : null,
     };
   });

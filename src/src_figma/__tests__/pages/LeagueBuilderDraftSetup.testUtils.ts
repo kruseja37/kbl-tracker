@@ -442,6 +442,7 @@ export function mockLeagueData({
     error: null,
     getRegisteredPool: vi.fn(async () => pool),
     updatePlayer: vi.fn(async (player: Player) => player),
+    replacePlayersLocal: vi.fn(() => undefined),
     replaceTeamsLocal: vi.fn(() => undefined),
     refresh: vi.fn(async () => undefined),
   } as unknown as UseLeagueBuilderDataReturn;

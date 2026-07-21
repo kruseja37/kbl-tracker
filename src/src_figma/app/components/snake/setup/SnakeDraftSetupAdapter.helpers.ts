@@ -1,12 +1,13 @@
 /* Pure snake setup calculations shared by setup UI, room recovery, and focused tests. */
 import { HISTORICAL_ARCHETYPES } from '../../../../../data/historicalArchetypes';
 import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxonomy';
-import { isLegalRoster, twoWayVariantFromTraits } from '../../../../../data/rosterConstruction';
+import { canCover, isLegalRoster, twoWayVariantFromTraits } from '../../../../../data/rosterConstruction';
 import { BANDS, luxuryTax, shiftLuxuryCaps, type BandPriorities, type RegisteredPool, type TeamCapIdentity } from '../../../../../engines/leagueConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import { archetypeToCapIdentity, constructionArchetypeFitMultiplier, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
 import { rosterNeedBreakdown, toRosterSlotPlayer } from '../../../../../engines/rosterNeed';
 import { computeOwnValue } from '../../../../../engines/auctionMarketModel';
+import { historicalToSimArchetype } from '../../../../../engines/draftabilityRanker';
 import {
   auctionSinglePlayerTaxWithShiftedCaps,
 } from '../../../../../engines/auctionLuxuryTax';
@@ -15,6 +16,7 @@ import { snakeMoneyAffordable } from '../../../../../engines/snakeMoney';
 import {
   proveSimultaneousSnakeSeating,
   type SimultaneousSnakeSeatingInput,
+  type SnakeIdentitySupportCertificate,
   type SnakeSeatingPlayer,
   type SnakeSeatingProof,
 } from '../../../../../engines/snakeSeatingProof';
@@ -25,14 +27,19 @@ import {
   type SnakeSeatBoardRecord,
   type Team,
 } from '../../../../../utils/leagueBuilderStorage';
-import { buildSeededSeatBoard, type DeskCandidate } from '../desk/deskModel';
+import {
+  buildCertifiedSeatBoard,
+  seedBoardRankings,
+  type DeskCandidate,
+} from '../desk/deskModel';
 import { buildDeskRoomPlayer, fitWord as deskFitWord, type DeskRoomPlayer } from '../desk/deskRoomModel';
 import {
   snakePlayerSourceId,
   snakePlayerVersionGroupId,
 } from '../../../../../utils/snakePlayerIdentity';
+import type { SnakeSetupProofRunner } from './snakeSetupProofClient';
 
-export type ProofRunner = (input: SimultaneousSnakeSeatingInput) => SnakeSeatingProof | Promise<SnakeSeatingProof>;
+export type ProofRunner = SnakeSetupProofRunner;
 
 export const MAX_SNAKE_COMPANION_PACKAGES = 3;
 
@@ -48,12 +55,14 @@ export interface SnakeSetupAdapterInput {
   poolPlayers: Player[];
   pool: RegisteredPool | null;
   hasSavedDraft: boolean;
+  /** Unsaved one-card legacy pool is being restored and re-proved before it may enter a room. */
+  legacyMigrationPending?: boolean;
   savedDraftChecked: boolean;
   savedDraftLookupError: string | null;
   flushBoardRankings: () => Promise<Team[]>;
   navigateToRoom: (leagueId: string) => void;
   navigateToPracticeRoom?: (leagueId: string) => void;
-  runProof?: ProofRunner;
+  runProof: ProofRunner;
 }
 
 function fullName(player: Player): string {
@@ -90,24 +99,19 @@ export function deriveSnakeVersionGroups(poolPlayers: readonly Player[]): SnakeV
 
 export function selectedSnakePoolIds(
   groups: readonly SnakeVersionGroup[],
-  selections: Readonly<Record<string, string>>,
+  _selections: Readonly<Record<string, string>> = {},
 ): string[] {
-  return groups.map(({ groupId, cards }) => (
-    cards.find((card) => card.id === selections[groupId])?.id ?? cards[0].id
-  ));
+  void _selections;
+  return groups.flatMap(({ cards }) => cards.map((card) => card.id));
 }
 
 export function lockedSnakeVersionSelections(
-  groups: readonly SnakeVersionGroup[],
-  lockedPlayerIds: readonly string[],
+  _groups: readonly SnakeVersionGroup[],
+  _lockedPlayerIds: readonly string[],
 ): Record<string, string> {
-  const locked = new Set(lockedPlayerIds);
-  return Object.fromEntries(groups
-    .filter(({ cards }) => cards.length > 1)
-    .map(({ groupId, cards }) => [
-      groupId,
-      cards.find((card) => locked.has(card.id))?.id ?? cards[0].id,
-    ]));
+  void _groups;
+  void _lockedPlayerIds;
+  return {};
 }
 
 function capIdentityForTeam(team: Team) {
@@ -117,12 +121,19 @@ function capIdentityForTeam(team: Team) {
   return archetype ? archetypeToCapIdentity(archetype) : team.capIdentity;
 }
 
+function identityArchetypeForTeam(team: Team) {
+  const archetype = team.mlbArchetypeKey
+    ? HISTORICAL_ARCHETYPES.find((candidate) => candidate.id === team.mlbArchetypeKey)
+    : undefined;
+  return archetype ? historicalToSimArchetype(archetype) : undefined;
+}
+
 export function buildLockedSnakeSeatingPlayers(input: {
   players: readonly Player[];
   pool: RegisteredPool;
 }): SnakeSeatingPlayer[] {
   const playerById = new Map(input.players.map((player) => [player.id, player]));
-  return input.pool.players.map((priced) => {
+  return [...input.pool.players].sort((left, right) => left.id.localeCompare(right.id)).map((priced) => {
     const player = playerById.get(priced.id);
     if (!player) throw new Error(`Locked snake pool player ${priced.id} is missing from the player database.`);
     if (!Number.isFinite(priced.iv)) throw new Error(`Locked snake pool player ${priced.id} has no frozen IV.`);
@@ -145,6 +156,8 @@ export function buildSnakeSetupProofInput(input: {
   teams: readonly Team[];
   players: readonly Player[];
   pool: RegisteredPool;
+  identityReferencePool?: RegisteredPool;
+  identitySupportCertificate?: SnakeIdentitySupportCertificate;
 }): SimultaneousSnakeSeatingInput {
   return {
     clubs: input.teams.map((team) => ({
@@ -152,11 +165,79 @@ export function buildSnakeSetupProofInput(input: {
       roster: [],
       budgetRemaining: input.pool.tierCap,
       capIdentity: capIdentityForTeam(team),
+      identityArchetype: identityArchetypeForTeam(team),
     })),
     pool: buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }),
+    ...(input.identityReferencePool
+      ? {
+          identityReferencePool: buildLockedSnakeSeatingPlayers({
+            players: input.players,
+            pool: input.identityReferencePool,
+          }),
+        }
+      : {}),
+    ...(input.identitySupportCertificate
+      ? { identitySupportCertificate: input.identitySupportCertificate }
+      : {}),
     baseCaps: input.pool.luxuryCaps,
     realTeamCount: input.teams.length,
+    tier: input.pool.tier,
   };
+}
+
+function shortfallNumber(value: number): string {
+  return Math.round(value).toLocaleString('en-US');
+}
+
+/** Compact blocker copy for the always-visible setup state. Longer proof law stays behind Help. */
+export function snakeSetupProofFailureLine(
+  proof: SnakeSeatingProof,
+  teams: readonly Pick<Team, 'id' | 'name'>[],
+): string | null {
+  const shortfall = proof.shortfall;
+  if (proof.feasible || !shortfall) return null;
+  const team = shortfall.teamId
+    ? teams.find((candidate) => candidate.id === shortfall.teamId)
+    : null;
+  const owner = team?.name.toUpperCase() ?? `ALL ${teams.length} CLUBS`;
+  const identity = shortfall.identityName?.toUpperCase();
+  const prefix = identity ? `${owner} · ${identity}` : owner;
+
+  if (shortfall.reason === 'identity-proof-unknown') {
+    // A bounded constructive search may fail without proving that any one club caused the stop.
+    // Name a club only for the separate zero-variance necessary-condition check.
+    if (shortfall.detail === 'identity-embodiment' && shortfall.teamId) {
+      return `${prefix} · IDENTITY FIT: SELECTED SOURCE HAS NO BOOST VARIANCE.`;
+    }
+    return `ALL ${teams.length} CLUBS · IDENTITY CHECK: UNRESOLVED.`;
+  }
+  if (shortfall.detail === 'identity-legal-roster') {
+    return `${prefix} · LEGAL 22: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)} SLOTS.`;
+  }
+  if (shortfall.detail === 'identity-affordability') {
+    return `${prefix} · BUDGET ROOM: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}.`;
+  }
+  if (shortfall.detail === 'identity-value-floor') {
+    return `${prefix} · VALUE FLOOR: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}.`;
+  }
+  return `${owner} · ${shortfall.label}: ${shortfallNumber(shortfall.available)}/${shortfallNumber(shortfall.needed)}, SHORT ${shortfallNumber(shortfall.shortBy)}.`;
+}
+
+/** Rebuild Practice boards from a fresh, worker-backed setup certificate. */
+export async function rebuildPracticeSnakeSeatBoards(input: {
+  teams: readonly Team[];
+  players: readonly Player[];
+  pool: RegisteredPool;
+  runProof: ProofRunner;
+}): Promise<Record<string, SnakeSeatBoardRecord>> {
+  const certificate = await input.runProof(buildSnakeSetupProofInput(input));
+  if (!certificate.feasible) throw new Error(certificate.message);
+  return buildInitialSnakeSeatBoards({
+    teams: input.teams,
+    players: input.players,
+    pool: input.pool,
+    certificate,
+  });
 }
 
 function materializeOrder(natural: readonly string[], explicit: readonly string[] | undefined): string[] {
@@ -186,6 +267,14 @@ function boardCandidate(input: {
     id: input.player.id,
     name: fullName(input.player).toUpperCase(),
     position: input.player.primaryPosition,
+    eligiblePositions: [...new Set([
+      ...input.roomPlayer.eligiblePositions,
+      ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+        .filter((position) => canCover(input.roomPlayer.shape, position)),
+    ])],
+    rosterShape: input.roomPlayer.shape,
+    sourceId: input.roomPlayer.sourceId,
+    versionGroupId: input.roomPlayer.versionGroupId,
     advisorWorth: computeOwnValue({
       iv: input.iv,
       archetypeWeights: input.roomPlayer.archetypeWeights,
@@ -221,6 +310,8 @@ export function buildInitialSnakeSeatBoards(input: {
   players: readonly Player[];
   pool: RegisteredPool;
   certificate?: SnakeSeatingProof | null;
+  /** Focused legacy tests only. Production callers must inject a worker-backed certificate. */
+  allowSynchronousProof?: boolean;
 }): Record<string, SnakeSeatBoardRecord> {
   const playerById = new Map(input.players.map((player) => [player.id, player]));
   const seatingById = new Map(buildLockedSnakeSeatingPlayers({ players: input.players, pool: input.pool }).map((player) => [player.playerId, player]));
@@ -260,6 +351,9 @@ export function buildInitialSnakeSeatBoards(input: {
     const certifiedAssignment = input.certificate?.feasible
       ? input.certificate.assignments.find((assignment) => assignment.teamId === team.id)
       : null;
+    if (!certifiedAssignment && input.allowSynchronousProof !== true) {
+      throw new Error(`Could not seed ${team.name}'s board without a valid seating certificate.`);
+    }
     const completion: SnakeSeatingProof = certifiedAssignment ? {
       feasible: true,
       assignments: [certifiedAssignment],
@@ -287,21 +381,18 @@ export function buildInitialSnakeSeatBoards(input: {
       const tax = luxuryTax(selected.map((row) => row.construction), shiftedCaps, 'taxed').charged;
       return snakeMoneyAffordable(salary + tax, input.pool.tierCap);
     };
-    let seeded = buildSeededSeatBoard(completionCandidates);
-    if (!affordable(seeded.board)) {
-      const extras = candidates
-        .filter((candidate) => !completionIds.has(candidate.id))
-        .sort((left, right) => left.trueCost - right.trueCost || left.id.localeCompare(right.id));
-      for (const extra of extras) {
-        const trial = buildSeededSeatBoard([...completionCandidates, extra]);
-        if (!affordable(trial.board)) continue;
-        seeded = trial;
-        break;
-      }
+    const seeded = buildCertifiedSeatBoard(completionCandidates);
+    const fullRankings = seedBoardRankings(candidates);
+    if (!completion.feasible) {
+      throw new Error(`Could not prove ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
     }
-    const fullRankings = buildSeededSeatBoard(candidates).board?.rankings;
-    if (!completion.feasible || !seeded.board || !affordable(seeded.board) || !fullRankings) {
-      throw new Error(`Could not seed ${team.name}'s legal, affordable 22-slot snake board: ${completion.message}`);
+    if (!seeded.board || !affordable(seeded.board)) {
+      const state = seeded.brokenSlots.length > 0
+        ? `broken slots ${seeded.brokenSlots.join(', ')}`
+        : !seeded.board
+          ? 'no canonical 22-slot assignment'
+          : 'the materialized board is not affordable under the certified cap identity';
+      throw new Error(`Snake board seeding disagreed with the legal-finish certificate for ${team.name}: ${state}.`);
     }
     const overrides = team.boardRankOverrides;
     const plannedIds = SNAKE_BOARD_SLOT_IDS.flatMap((slotId) => seeded.board?.slots[slotId] ?? []);

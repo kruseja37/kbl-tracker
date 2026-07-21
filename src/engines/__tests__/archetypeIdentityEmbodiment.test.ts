@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import {
   buildIdentityRoster,
+  buildIdentityValueBaseline,
   POSTURE_PARAMS,
   type RosterPosture,
   type SimArchetype,
@@ -64,6 +65,20 @@ describe('identity-first builder — embodiment across the locked 24 (standard t
   const pool = loadPool();
   const budget = computePoolTierCap(pool.map((p) => p.iv), 'standard');
 
+  it('uses one canonical Full Sources value baseline in the baseline-only and identity builders', () => {
+    for (const arch of SIM_SET.filter((candidate) => (
+      ['murderers-row', 'whiteyball', 'flamethrowers'].includes(candidate.id)
+    ))) {
+      const options = { realTeamCount: 20, posture: 'optimal' as const };
+      const baseline = buildIdentityValueBaseline(pool, arch, 'standard', budget, options);
+      const identity = buildIdentityRoster(pool, arch, 'standard', budget, options);
+
+      expect(baseline.baselineIv, `${arch.id} baseline`).toBe(identity.baselineIv);
+      expect(baseline.valueFloor, `${arch.id} floor`).toBe(identity.valueFloor);
+      expect(baseline.optimizationComplete, `${arch.id} completion`).toBe(identity.optimizationComplete);
+    }
+  }, 60_000);
+
   it('builds a LEGAL, SOLVENT, floor-respecting roster with boostZ > 0 for all 24', () => {
     const rows: { name: string; boostZ: number; beforeZ: number; ivShare: number }[] = [];
     for (const arch of SIM_SET) {
@@ -84,7 +99,6 @@ describe('identity-first builder — embodiment across the locked 24 (standard t
     }
 
     const meanGain = rows.reduce((s, r) => s + (r.boostZ - r.beforeZ), 0) / rows.length;
-    // eslint-disable-next-line no-console
     console.log(
       '\n[embodiment, standard] mean boostZ gain (identity vs value-objective): ' + meanGain.toFixed(2) + '\n  ' +
         rows.map((r) => `${r.name}: ${r.beforeZ.toFixed(2)}→${r.boostZ.toFixed(2)} (iv ${(r.ivShare * 100).toFixed(0)}%)`).join('\n  '),

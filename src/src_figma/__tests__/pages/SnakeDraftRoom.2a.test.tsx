@@ -9,8 +9,16 @@ const mocks = vi.hoisted(() => ({
   patchBoard: vi.fn(),
   guideAsk: vi.fn(),
   pull: vi.fn(async () => undefined),
+  flush: vi.fn(async () => undefined),
   refresh: vi.fn(async () => undefined),
   freshData: null as null | Record<string, unknown>,
+  executeTradeResult: null as null | {
+    valid: boolean;
+    message: string;
+    session: unknown;
+    livePickMoved: boolean;
+    receipts: Array<{ teamId: string; text: string }>;
+  },
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -18,12 +26,40 @@ vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
   return { ...actual, useLeagueBuilderData: () => mocks.data };
 });
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
-vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
+vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull, flush: mocks.flush } }));
 vi.mock('../../utils/snakeSounds', () => ({
   loadSnakeSoundsEnabled: () => false,
   saveSnakeSoundsEnabled: vi.fn(),
   createSnakeSoundPlayer: () => ({ play: vi.fn() }),
 }));
+vi.mock('../../app/components/snake/desk/useSnakeSelectedConsequences', async () => {
+  const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
+  return {
+    useSnakeSelectedConsequences: (request: import('../../app/workers/snakeSelectedConsequences.worker').SnakeSelectedConsequencesWorkerRequest | null) => {
+      if (!request) return { status: 'idle', consequenceByPlayerId: new Map() };
+      const results = request.selectedPlayerIds.map((selectedPlayerId) => model.buildSelectedPlayerConsequence({
+        ...request.input,
+        selectedPlayerId,
+      }));
+      return {
+        status: 'ready',
+        consequenceByPlayerId: new Map(results.map((result) => [result.selectedPlayerId, result])),
+      };
+    },
+  };
+});
+vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/desk/useSnakePickFinishSafety')>();
+  const seating = await import('../../../engines/snakeSeatingProof');
+  return {
+    ...actual,
+    useSnakePickFinishSafety: (request: import('../../app/workers/snakePickFinish.worker').SnakePickFinishWorkerRequest | null) => {
+      if (!request) return { status: 'idle', rows: new Map() };
+      const rows = seating.createSnakePickFinishSafetyClassifier(request)(request.candidatePlayerIds);
+      return { status: 'ready', rows: new Map(rows.map((row) => [row.playerId, row])) };
+    },
+  };
+});
 vi.mock('../../../engines/snakeGuideTrade', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../engines/snakeGuideTrade')>();
   return {
@@ -41,6 +77,11 @@ vi.mock('../../app/components/snake/trade/tradeGuideModel', async (importOrigina
       mocks.guideAsk(input);
       return actual.guideForAskedPick(input);
     },
+    executeAskedPickTrade: (input: Parameters<typeof actual.executeAskedPickTrade>[0]) => (
+      mocks.executeTradeResult
+        ? mocks.executeTradeResult as ReturnType<typeof actual.executeAskedPickTrade>
+        : actual.executeAskedPickTrade(input)
+    ),
   };
 });
 vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
@@ -214,6 +255,40 @@ function session(withCompletedPick: boolean): LeagueBuilderMlbDraftSession {
   };
 }
 
+function sessionWithReadyTrade(): {
+  source: LeagueBuilderMlbDraftSession;
+  traded: LeagueBuilderMlbDraftSession;
+} {
+  const source = session(false);
+  source.openTradeOffers = [{
+    id: 'offer-a-b',
+    phase: 'MLB',
+    buyerTeamId: 'b',
+    sellerTeamId: 'a',
+    targetPick: 1,
+    offerPickNumbers: [2],
+    receivePickNumbers: [1],
+    offerValue: 100,
+    receiveValue: 100,
+    sellerPremium: 0,
+    postedSessionRevision: source.revision ?? 0,
+    buyerNod: true,
+    sellerNod: true,
+    postedAt: '2026-07-17T00:00:00.000Z',
+  }];
+  return {
+    source,
+    traded: {
+      ...source,
+      pickOrder: source.pickOrder.map((slot) => slot.pick === 1
+        ? { ...slot, teamId: 'b' }
+        : slot.pick === 2 ? { ...slot, teamId: 'a' } : slot),
+      openTradeOffers: [],
+      revision: (source.revision ?? 0) + 1,
+    },
+  };
+}
+
 function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: Team[]; pool?: RegisteredPool; players?: Player[] } = {}) {
   mocks.roomState = source;
   mocks.data = {
@@ -222,7 +297,7 @@ function renderRoom(source: LeagueBuilderMlbDraftSession, overrides: { teams?: T
     saveMlbDraftSession: vi.fn(async (next) => next),
     refresh: mocks.refresh,
   };
-  return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+  return render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
 }
 
 async function revealSeatAndSettle(teamName: string): Promise<void> {
@@ -238,7 +313,7 @@ function selectTeam(teamId: string): void {
 }
 
 describe('SNAKE-MOCK-2A real page persistence seam', () => {
-  test('derives the room from authority re-read after pull instead of the stale hook snapshot', async () => {
+  test('derives the room from the storage authority instead of the stale hook snapshot', async () => {
     const freshPlayers = players.map((row) => row.id === 'a-replacement'
       ? { ...row, firstName: 'Fresh', lastName: 'Authority' }
       : row);
@@ -256,10 +331,11 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     };
     mocks.freshData = { leagues: [league], teams, players: freshPlayers };
 
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
 
     await screen.findByTestId('snake-draft-room');
-    expect(mocks.pull.mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(readAllPlayers).mock.invocationCallOrder[0]);
+    expect(mocks.pull).not.toHaveBeenCalled();
+    expect(vi.mocked(readAllPlayers)).toHaveBeenCalled();
     selectTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     expect(await screen.findAllByText(/Fresh Authority/i)).not.toHaveLength(0);
@@ -306,6 +382,8 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     });
     mocks.guideAsk.mockReset();
     mocks.pull.mockClear();
+    mocks.flush.mockClear();
+    mocks.executeTradeResult = null;
     mocks.freshData = null;
     mocks.refresh.mockReset().mockImplementation(async () => {
       if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
@@ -355,9 +433,10 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ARCHETYPE ALIGNMENT · (STRONG|SOLID|WEAK)/);
     expect(screen.getByTestId('private-roster-alignment')).toHaveTextContent(/ROOM \d+\/\d+ · FAN [+-]?\d+/);
     const committed = screen.getByRole('button', { name: /SELECT GONE-C PLAYER/ });
-    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'COMMITTED');
-    expect(committed).toHaveTextContent('$10,700');
-    expect(committed).toHaveTextContent('TAX +$700');
+    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'ROSTER');
+    expect(committed).toHaveTextContent('$10,000');
+    expect(committed).toHaveTextContent('SALARY');
+    expect(committed).not.toHaveTextContent('TAX +$700');
     fireEvent.click(committed);
     expect(screen.getByText('COMMITTED TO YOUR 22-MAN ROSTER.')).toBeInTheDocument();
     expect(document.body).not.toHaveTextContent('GONE-C PLAYER GONE');
@@ -465,8 +544,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
-    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
@@ -565,7 +643,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.queryByRole('button', { name: 'UNDO BOARD UPDATE' })).not.toBeInTheDocument();
   }, 10_000);
 
-  test('assistant viewing and optimize never invent Revert; stale Keep fails closed', async () => {
+  test('assistant viewing and optimize never invent Revert; a stale board Keep fails closed', async () => {
     const source = session(false);
     renderRoom(source);
     await screen.findByTestId('snake-draft-room');
@@ -584,14 +662,19 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
     const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
     const current = mocks.roomState!;
-    mocks.roomState = { ...current, revision: (current.revision ?? 0) + 1 };
-    const pullCountBeforeKeep = mocks.pull.mock.calls.length;
+    mocks.roomState = {
+      ...current,
+      seatBoards: {
+        ...current.seatBoards,
+        a: { ...current.seatBoards!.a, revision: current.seatBoards!.a.revision + 1 },
+      },
+    };
     fireEvent.click(keep);
 
-    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('THE DRAFT MOVED BEFORE THIS BOARD CHANGE COULD BE SAVED');
-    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('room-write-notice')).toHaveTextContent('BOARD REVISION CHANGED');
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.saveRoom).not.toHaveBeenCalled();
-    expect(mocks.pull.mock.calls.length).toBeGreaterThan(pullCountBeforeKeep);
+    expect(mocks.pull).not.toHaveBeenCalled();
   });
 
   test('successful guarded Keep persists the exact preview and reloads as already on My Board', async () => {
@@ -615,6 +698,38 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(write.board.revision).toBe(source.seatBoards!.a.revision + 1);
     expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  test('stores zero-interest only on the active private seat and can restore it revision-safely', async () => {
+    const source = session(false);
+    const untouchedB = structuredClone(source.seatBoards!.b);
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    await revealSeatAndSettle('Club A');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ZERO INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const excluded = mocks.patchBoard.mock.calls[0][0] as {
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(excluded.teamId).toBe('a');
+    expect(excluded.expectedBoardRevision).toBe(source.seatBoards!.a.revision);
+    expect(excluded.board.rankings.zeroInterestPlayerIds).toEqual(['a-replacement']);
+    expect(excluded.board.slots).toEqual(source.seatBoards!.a.slots);
+    expect(mocks.roomState?.seatBoards?.b).toEqual(untouchedB);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'RESTORE INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
+    const restored = mocks.patchBoard.mock.calls[1][0] as {
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(restored.expectedBoardRevision).toBe(excluded.board.revision);
+    expect(restored.board.rankings.zeroInterestPlayerIds).toEqual([]);
+    expect(restored.board.slots).toEqual(source.seatBoards!.a.slots);
+    expect(mocks.roomState?.seatBoards?.b).toEqual(untouchedB);
   });
 
   test('rapid double Undo produces exactly one revision-safe restore and no false stale error', async () => {
@@ -719,7 +834,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
       saveMlbDraftSession: vi.fn(async (next) => next),
       refresh: mocks.refresh,
     };
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByText(/temporary room read failure/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'RETRY' }));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
@@ -767,7 +882,7 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent(selectedName);
   });
 
-  test('a recorded live pick selects the new on-clock club and opens its private seat covered', async () => {
+  test('a recorded practice pick selects the new on-clock club and opens its private seat covered', async () => {
     renderRoom(session(false));
     await screen.findByTestId('snake-draft-room');
     await revealSeatAndSettle('Club A');
@@ -776,8 +891,60 @@ describe('SNAKE-MOCK-2A real page persistence seam', () => {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_100)); });
     await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
     expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).completedPicks).toHaveLength(1);
+    expect(mocks.flush).not.toHaveBeenCalled();
     expect(screen.queryByTestId('private-draft-desk')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'REVEAL CLUB B SEAT' })).toBeInTheDocument();
+  });
+
+  test('an executed practice trade saves the new pick ownership', async () => {
+    const { source, traded } = sessionWithReadyTrade();
+    mocks.executeTradeResult = {
+      valid: true,
+      message: 'GUIDE-MATCHED AND LEGAL NOW.',
+      session: traded,
+      livePickMoved: true,
+      receipts: [
+        { teamId: 'b', text: 'YOU TRADED PICK 2 FOR PICK 1 — YOUR NEXT PICK: #1.' },
+        { teamId: 'a', text: 'YOU TRADED PICK 1 FOR PICK 2 — YOUR NEXT PICK: #2.' },
+      ],
+    };
+
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'EXECUTE TRADE' }));
+
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
+      .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
+    expect(mocks.flush).not.toHaveBeenCalled();
+  });
+
+  test('a generic cloud failure cannot break a saved practice trade', async () => {
+    const { source, traded } = sessionWithReadyTrade();
+    mocks.executeTradeResult = {
+      valid: true,
+      message: 'GUIDE-MATCHED AND LEGAL NOW.',
+      session: traded,
+      livePickMoved: true,
+      receipts: [
+        { teamId: 'b', text: 'YOU TRADED PICK 2 FOR PICK 1 — YOUR NEXT PICK: #1.' },
+        { teamId: 'a', text: 'YOU TRADED PICK 1 FOR PICK 2 — YOUR NEXT PICK: #2.' },
+      ],
+    };
+    mocks.flush.mockRejectedValueOnce(new Error('network unavailable'));
+
+    renderRoom(source);
+    await screen.findByTestId('snake-draft-room');
+    fireEvent.click(screen.getByRole('button', { name: 'TRADE' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'EXECUTE TRADE' }));
+
+    await waitFor(() => expect(mocks.saveRoom).toHaveBeenCalledTimes(1));
+    expect((mocks.saveRoom.mock.calls[0][0] as LeagueBuilderMlbDraftSession).pickOrder[0])
+      .toEqual(expect.objectContaining({ pick: 1, teamId: 'b' }));
+    expect(mocks.flush).not.toHaveBeenCalled();
+    expect(screen.queryByText(/COMPANION DEVICES DID NOT UPDATE/)).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent('THE TRADE WAS NOT SAVED. TRY AGAIN.');
   });
 
   test('public drafted money and chemistry update after a persisted pick and its correction while the private plan stays distinct', async () => {

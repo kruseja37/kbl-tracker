@@ -31,7 +31,19 @@
   membership. Manual adds/removes persist across reload and reshaping.
 - 2026-07-15: the player shuttle is two columns only at 1280px and wider; it stacks on iPad to
   prevent horizontal overflow. Explanations stay behind the Snake `HELP` control. Assistant GM
-  labels its archetype-first objective and 90%-of-frozen-IV guard directly in the private desk.
+  methodology stays behind Help rather than competing with live decisions in the private desk.
+- 2026-07-16: the live Assistant heading is `ASST GM 22`. My Board and Assistant GM Board retain
+  owned players as team-colored `ROSTER` rows, remove rival picks from actionable views, reserve CP
+  for the highest-IV owned closer, and keep lower-IV owned closers as committed depth. Player Pool
+  provides local Board/Fit/IV/signed Tax If Picked/True Cost/rating sorts plus fit filters; Snake IV
+  is salary, so there is no duplicate Salary sort. Sorting and filtering are view-only until `TOP`
+  persists the selected player to the current Overall or position board. Optional risk-worker
+  lifecycle is one compact board state; only actionable player risk remains on rows.
+- 2026-07-19: `/snake-room` is the sole public draft writer. `/snake-companion` reads the immutable
+  active-room catalog, writes only the approved private board, and submits pick/trade intent. The
+  companion route does not start account-wide backup sync. Realtime is a hint; bounded scoped reads
+  restore current public and private state. The original Hotseat profile remains required for final
+  local roster handoff until that separate cloud migration is built.
 
 ---
 

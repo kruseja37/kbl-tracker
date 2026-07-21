@@ -11,9 +11,11 @@ vi.mock('../syncEngine', () => ({
 
 import {
   addPlayersToLeaguePool,
+  isPlayerInExternalDraftSourceUniverse,
   isPlayerInLeaguePool,
   isPlayerInSourceUniverse,
   removePlayersFromLeaguePool,
+  resolveExternalDraftSourceLeagueIds,
   resolveIncludeUnassignedSourcePlayers,
   resolveSourceLeagueIds,
 } from '../leagueBuilderPoolBuilder';
@@ -72,21 +74,56 @@ function makePlayer(id: string, assignmentLeagueIds: string[] = []): Player {
 // ---------------------------------------------------------------------------------------------
 
 describe('resolveSourceLeagueIds', () => {
-  test('back-compat: absent sourceLeagueIds resolves to null = UNFILTERED (all leagues, filter skipped)', () => {
-    // Captain correction 2026-07-08 post-audit: absent means "drawn from everything", byte-
-    // identical to pre-feature behavior — NOT own-league-only (that earlier default was a
-    // contract framing error, and would have excluded e.g. the SMB4 'sml' seed players from a
-    // brand-new league's first extraction).
+  test('an absent saved set stays null so the caller can resolve every external source', () => {
     expect(resolveSourceLeagueIds({ sourceLeagueIds: undefined })).toBeNull();
   });
 
-  test('explicit empty array stays empty — own league IS un-checkable (JK ruling 2026-07-08 #1)', () => {
+  test('an explicit empty array stays empty', () => {
     expect(resolveSourceLeagueIds({ sourceLeagueIds: [] })).toEqual([]);
   });
 
   test('explicit set (including a mix of own + other leagues) is returned as-is', () => {
     expect(resolveSourceLeagueIds({ sourceLeagueIds: [OTHER_LEAGUE_ID] }))
       .toEqual([OTHER_LEAGUE_ID]);
+  });
+});
+
+describe('draft target and source separation', () => {
+  test('removes the target id from explicit and untouched source sets', () => {
+    expect(resolveExternalDraftSourceLeagueIds({
+      configuredSourceLeagueIds: [OWN_LEAGUE_ID, OTHER_LEAGUE_ID],
+      availableLeagueIds: [OWN_LEAGUE_ID, OTHER_LEAGUE_ID],
+      targetLeagueId: OWN_LEAGUE_ID,
+    })).toEqual([OTHER_LEAGUE_ID]);
+    expect(resolveExternalDraftSourceLeagueIds({
+      configuredSourceLeagueIds: null,
+      availableLeagueIds: [OWN_LEAGUE_ID, OTHER_LEAGUE_ID],
+      targetLeagueId: OWN_LEAGUE_ID,
+    })).toEqual([OTHER_LEAGUE_ID]);
+  });
+
+  test('a target pool write never becomes source ownership on reload', () => {
+    const targetOnly = makePlayer('target-only', [OWN_LEAGUE_ID]);
+    expect(isPlayerInExternalDraftSourceUniverse({
+      player: targetOnly,
+      sourceLeagueIds: [],
+      targetLeagueId: OWN_LEAGUE_ID,
+      includeUnassignedSourcePlayers: false,
+    })).toBe(false);
+
+    const sourceAndTarget = makePlayer('source-and-target', [OTHER_LEAGUE_ID, OWN_LEAGUE_ID]);
+    expect(isPlayerInExternalDraftSourceUniverse({
+      player: sourceAndTarget,
+      sourceLeagueIds: [OTHER_LEAGUE_ID],
+      targetLeagueId: OWN_LEAGUE_ID,
+      includeUnassignedSourcePlayers: false,
+    })).toBe(true);
+    expect(isPlayerInExternalDraftSourceUniverse({
+      player: sourceAndTarget,
+      sourceLeagueIds: [],
+      targetLeagueId: OWN_LEAGUE_ID,
+      includeUnassignedSourcePlayers: false,
+    })).toBe(false);
   });
 });
 
@@ -107,9 +144,10 @@ describe('unassigned-player source switch', () => {
   });
 });
 
-describe('unfiltered default — byte-identical universe (captain rework 2026-07-08)', () => {
-  test('absent field: resolve returns null and a null-guarded filter yields the FULL player set, byte-identical', () => {
-    // This mirrors the exact page-level composition: universe = resolved === null ? players : players.filter(...).
+describe('legacy raw resolver compatibility', () => {
+  test('an absent field still returns null for older callers', () => {
+    // Draft Setup now resolves this null state to every known external source. This assertion keeps
+    // the saved-record compatibility contract separate from the target-aware page resolver.
     const players = [
       makePlayer('own-1', [OWN_LEAGUE_ID]),
       makePlayer('other-1', [OTHER_LEAGUE_ID]),
@@ -118,7 +156,7 @@ describe('unfiltered default — byte-identical universe (captain rework 2026-07
     ];
     const resolved = resolveSourceLeagueIds({ sourceLeagueIds: undefined });
     const universe = resolved === null ? players : players.filter((p) => isPlayerInSourceUniverse(p, resolved));
-    // Byte-identical: the very same array reference — no filter pass ran at all.
+    // This is the legacy caller behavior only.
     expect(universe).toBe(players);
     expect(universe.map((p) => p.id)).toEqual(['own-1', 'other-1', 'third-1', 'fa-1']);
   });

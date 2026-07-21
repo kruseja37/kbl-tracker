@@ -3,8 +3,7 @@ import type { TaxonomyPosition } from '../../../../../data/playerArchetypeTaxono
 import { LEGAL_ROSTER } from '../../../../../data/rosterConstruction';
 import { computeOwnValueFactors } from '../../../../../engines/auctionMarketModel';
 import { archetypeStatFitMultiplier, archetypeToCapIdentity, resolveClubBandPriorities } from '../../../../../engines/archetypeIdentity';
-import { BANDS, shiftLuxuryCaps, type BandPriorities } from '../../../../../engines/leagueConstruction';
-import { snakeLuxuryCaps, snakePlayerTaxPressure } from '../../../../../engines/snakeLuxuryTax';
+import { BANDS, type BandPriorities } from '../../../../../engines/leagueConstruction';
 import type { LuxuryCapRow } from '../../../../../data/tierParams';
 import { derivePlayerBandWeights } from '../../../../../engines/snakePlayerBands';
 import { playSnakeRationalRoom, type SnakeRationalPlayer, type SnakeRationalSeat } from '../../../../../engines/snakeRationalRoom';
@@ -130,14 +129,6 @@ export function fitWord(input: {
     shape: input.player.shape,
     openSlots: input.openSlots,
   }).archetypeFitMultiplier;
-  const rawFit = multiplier >= 1.04 ? 'STRONG FIT' : multiplier <= 0.96 ? 'WEAK FIT' : 'SOLID FIT';
-  if (!input.baseCaps?.length || rawFit === 'WEAK FIT') return rawFit;
-  const normalized = snakeLuxuryCaps([...input.baseCaps]);
-  const caps = input.capIdentity ? shiftLuxuryCaps(normalized, input.capIdentity) : normalized;
-  const pressure = snakePlayerTaxPressure(input.player.construction, caps);
-  const materialPressure = Math.max(5_000, input.player.price * 0.25);
-  if (pressure >= materialPressure) return 'WEAK FIT';
-  if (rawFit === 'STRONG FIT' && pressure > Math.max(1_000, input.player.price * 0.05)) return 'SOLID FIT';
   if (multiplier >= 1.04) return 'STRONG FIT';
   if (multiplier <= 0.96) return 'WEAK FIT';
   return 'SOLID FIT';
@@ -271,11 +262,27 @@ export function reconcileExistingSeatBoards(input: {
       [...input.unavailablePlayerIds].filter((playerId) => !committedSet.has(playerId)),
     );
     let workingBoard = board;
+    const candidateById = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
     const committedMissingFromBoard = committedPlayerIds.some((playerId) => (
       !Object.values(workingBoard.slots).includes(playerId)
     ));
-    if (committedMissingFromBoard) {
-      const candidateById = new Map(input.candidates.map((candidate) => [candidate.id, candidate]));
+    const primaryCommittedCloser = committedPlayerIds
+      .flatMap((playerId) => {
+        const candidate = candidateById.get(playerId);
+        return candidate?.position === 'CP' ? [candidate] : [];
+      })
+      .sort((left, right) => (right.iv ?? 0) - (left.iv ?? 0) || left.id.localeCompare(right.id))[0];
+    const committedCloserAssignmentWrong = Boolean(
+      primaryCommittedCloser && workingBoard.slots.CP !== primaryCommittedCloser.id,
+    );
+    const hasUndraftedExtraCloser = Boolean(primaryCommittedCloser)
+      && Object.entries(workingBoard.slots).some(([slotId, playerId]) => (
+        slotId !== 'CP'
+        && Boolean(playerId)
+        && candidateById.get(playerId!)?.position === 'CP'
+        && !committedSet.has(playerId!)
+      ));
+    if (committedMissingFromBoard || committedCloserAssignmentWrong || hasUndraftedExtraCloser) {
       const rankings: SnakeSeatBoardRecord['rankings'] = {
         ...workingBoard.rankings,
         global: [
@@ -296,6 +303,7 @@ export function reconcileExistingSeatBoards(input: {
         rankings,
         candidates: input.candidates,
         unavailablePlayerIds: teamUnavailable,
+        committedPlayerIds: committedSet,
       });
       const refitPlayerIds = Object.values(refit.slots);
       if (refit.brokenSlots.length === 0 && !refit.invalidRoster

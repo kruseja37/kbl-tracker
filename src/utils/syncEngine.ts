@@ -12,7 +12,7 @@
  * - suppressSync flag prevents echo loops during pull-apply
  * - Push queue coalesces repeated edits to same record
  * - Cursor only advances after full page of records is applied
- * - Offline queue persists to localStorage for iPad/Safari resilience
+ * - Offline queue persists to an account-owned IndexedDB outbox
  */
 
 import { supabase } from '../supabase';
@@ -23,11 +23,23 @@ import {
   DYNAMIC_ELIMINATION_DB_PREFIX,
   DYNAMIC_ELIMINATION_DB_STORES,
   SYNCED_LOCAL_STORAGE_KEYS,
+  isRetiredGenericSyncStore,
   shouldSyncLocalStorageKey,
+  shouldUseGenericSyncStore,
   serializeKey,
 } from './syncConfig';
+import {
+  syncOutboxRecordId,
+  syncOutboxStore,
+  type SyncAccountStateRecord,
+  type SyncOutboxRecord,
+} from './syncOutboxStore';
 import { STATIC_DATABASE_SCHEMAS, openDatabaseWithSchema } from './backupRestore';
-import type { LeagueBuilderMlbDraftSession } from './leagueBuilderStorage';
+import type {
+  LeagueBuilderMlbDraftSession,
+  SnakeOpenTradeOffer,
+  SnakeSeatBoardStoreRecord,
+} from './leagueBuilderStorage';
 import {
   assertCanonicalFarmSyncBootstrap,
   FARM_SNAKE_SESSION_NUMBER,
@@ -38,6 +50,7 @@ import {
 // ============================================================
 
 interface PendingOp {
+  ownerUserId: string;
   opId?: string;
   baseReceivedAt?: string | null;
   baseId?: string | null;
@@ -50,6 +63,7 @@ interface PendingOp {
 }
 
 interface PendingLocalOp {
+  ownerUserId: string;
   opId?: string;
   baseReceivedAt?: string | null;
   baseKey?: string | null;
@@ -284,8 +298,13 @@ function assertFarmSyncEnvelopeUnchanged(
 }
 
 function isProtectedSnakeMlbRecord(record: CloudStoreRow): boolean {
-  if (record.store_name === 'registeredPools') return true;
-  if (record.store_name !== 'mlbDraftSessions') return false;
+  if (record.store_name === 'registeredPools') {
+    return shouldUseGenericSyncStore(record.db_name, 'mlbDraftSessions');
+  }
+  if (
+    record.store_name !== 'mlbDraftSessions'
+    || !shouldUseGenericSyncStore(record.db_name, record.store_name)
+  ) return false;
   const recordKey = JSON.parse(record.record_key);
   return typeof recordKey === 'string'
     && /::startup-mlb-draft::(?:1|2)$/.test(recordKey);
@@ -503,6 +522,8 @@ export interface SyncStatus {
   lastPullAt: number;
   pendingCount: number;
   error: string | null;
+  quotaRecoveryAvailable: boolean;
+  protectedConflictCount: number;
 }
 
 export interface SyncStoreDiagnostic {
@@ -559,10 +580,12 @@ type SyncEventDetail = { type: 'sync-complete' | 'status-change' };
 // ============================================================
 
 const DEVICE_ID_KEY = 'kbl-sync-device-id';
+// Legacy payload keys. New queue payloads never use localStorage.
 const QUEUE_PERSIST_KEY = 'kbl-sync-queue';
 const LOCAL_QUEUE_PERSIST_KEY = 'kbl-sync-local-queue';
 const STORE_WRITE_BASES_PERSIST_KEY = 'kbl-sync-store-write-bases';
 const LOCAL_WRITE_BASES_PERSIST_KEY = 'kbl-sync-local-write-bases';
+const WRITE_BASE_OWNER_PERSIST_KEY = 'kbl-sync-write-base-owner';
 const DEFERRED_SNAKE_PROTECTED_ROWS_KEY = 'kbl-sync-deferred-snake-protected-rows';
 const LAST_WRITE_TIME_KEY = 'kbl-sync-last-write-time';
 const DRAIN_INTERVAL_MS = 5_000;
@@ -571,6 +594,7 @@ const PULL_PAGE_SIZE = 500;
 const PUSH_BATCH_SIZE = 100;
 const UPLOAD_BATCH_SIZE = 200;
 const CLOUD_PAGE_SIZE = 1_000;
+const LARGE_RESTORED_QUEUE_RECOVERY_THRESHOLD = 100;
 
 // ============================================================
 // Sync Engine Singleton
@@ -587,9 +611,13 @@ class SyncEngine {
   private _error: string | null = null;
   private queuePersistenceError: string | null = null;
   private writeBasePersistenceError: string | null = null;
+  private quotaRecoveryContinuationRequired = false;
+  private protectedConflictSummaries: string[] = [];
   private drainTimer: ReturnType<typeof setInterval> | null = null;
   private pullTimer: ReturnType<typeof setInterval> | null = null;
   private initialized = false;
+  private liveRoomIsolationDepth = 0;
+  private enabledBeforeLiveRoomIsolation = true;
   private queueDrainsBlocked = false;
   private activeSyncOperation: Promise<void> | null = null;
   private syncOperationQueue: Promise<void> = Promise.resolve();
@@ -608,23 +636,111 @@ class SyncEngine {
   private lastGeneratedChangedAt = 0;
   private mutationBatchDepth = 0;
   private mutationBatchDirty = false;
+  private activeOwnerUserId: string | null = null;
+  private authTransitionGeneration = 0;
+  private authTransitionPromise: Promise<void> = Promise.resolve();
+  private outboxPersistencePromise: Promise<void> = Promise.resolve();
 
   constructor() {
     this.deviceId = this.getOrCreateDeviceId();
-    this.restoreWriteBaseOverrides();
-    this.restoreQueues();
   }
 
   // ============================================================
   // Initialization
   // ============================================================
 
+  /**
+   * Bind the generic sync service to one authenticated account.
+   *
+   * Account changes stop new queue writes at once. Pending work for the old
+   * account moves to quarantine. It is never replayed for the next account.
+   */
+  setAuthenticatedUser(ownerUserId: string | null): Promise<void> {
+    const generation = ++this.authTransitionGeneration;
+    this.queueDrainsBlocked = true;
+
+    const transition = async () => {
+      const previousOwnerUserId = this.activeOwnerUserId;
+      await this.waitForQueueDrains();
+      await this.awaitOutboxPersistence();
+      await this.migrateLegacyLocalStorageQueues();
+      await this.migrateLegacyWriteBaseOverrides();
+
+      if (previousOwnerUserId !== ownerUserId) {
+        if (previousOwnerUserId) {
+          await syncOutboxStore.quarantineOwner(
+            previousOwnerUserId,
+            ownerUserId ? 'signed-in account changed' : 'account signed out',
+          );
+          await syncOutboxStore.quarantineAccountState(
+            previousOwnerUserId,
+            ownerUserId ? 'signed-in account changed' : 'account signed out',
+          );
+        }
+        this.pushQueue.clear();
+        this.localQueue.clear();
+        this.inFlightPushDrainOps.clear();
+        this.inFlightLocalDrainOps.clear();
+        this.restoredPushQueueKeys.clear();
+        this.restoredLocalQueueKeys.clear();
+        this.resetAccountCaches();
+      }
+
+      if (ownerUserId) {
+        await syncOutboxStore.quarantineOtherOwners(
+          ownerUserId,
+          'another account became active on this device',
+        );
+        await syncOutboxStore.quarantineOtherAccountStates(
+          ownerUserId,
+          'another account became active on this device',
+        );
+        this.activeOwnerUserId = ownerUserId;
+        await this.restoreOutboxForOwner(ownerUserId);
+        await this.restoreWriteBaseOverridesForOwner(ownerUserId);
+      } else {
+        this.activeOwnerUserId = null;
+      }
+
+      if (generation === this.authTransitionGeneration) {
+        this.queueDrainsBlocked = false;
+        if (!this.queuePersistenceError && !this.writeBasePersistenceError) {
+          this._error = null;
+        }
+        this.emitStatusChange();
+      }
+    };
+
+    this.authTransitionPromise = this.authTransitionPromise
+      .catch(() => undefined)
+      .then(transition)
+      .catch((error) => {
+        if (generation === this.authTransitionGeneration) {
+          this.activeOwnerUserId = null;
+          this.queueDrainsBlocked = true;
+          this._error = error instanceof Error ? error.message : 'Sync account transition failed.';
+          this.emitStatusChange();
+        }
+        throw error;
+      });
+    return this.authTransitionPromise;
+  }
+
+  async prepareForSignOut(): Promise<void> {
+    await this.setAuthenticatedUser(null);
+  }
+
   async init(): Promise<void> {
     if (this.initialized) return;
     if (!supabase) return;
+    if (!this._enabled) return;
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    if (!this._enabled) return;
+
+    await this.setAuthenticatedUser(session.user.id);
+    if (!this._enabled || this.activeOwnerUserId !== session.user.id) return;
 
     // Load cursor before any pull. If this fails, an initial pull from zero
     // could replay stale cloud rows, so leave sync unstarted until retry.
@@ -639,23 +755,23 @@ class SyncEngine {
       this._error = null;
     }
 
-    // Start drain and pull timers
-    this.drainTimer = setInterval(() => this.flush(), DRAIN_INTERVAL_MS);
-    this.pullTimer = setInterval(() => this.pull(), PULL_INTERVAL_MS);
-
     // Event listeners for flush/online
     if (typeof document !== 'undefined') {
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'hidden') this.flush();
+        if (this._enabled && document.visibilityState === 'hidden') this.flush();
       });
-      window.addEventListener('pagehide', () => this.flush());
+      window.addEventListener('pagehide', () => {
+        if (this._enabled) this.flush();
+      });
       window.addEventListener('online', () => {
-        this.restoreQueues();
-        this.pull();
+        if (this._enabled) {
+          void this.restoreOutboxForOwner(session.user.id).then(() => this.pull());
+        }
       });
     }
 
     this.initialized = true;
+    this.startTimers();
 
     // Initial pull
     this.pull();
@@ -674,6 +790,7 @@ class SyncEngine {
       if (this.mutationBatchDepth === 0 && this.mutationBatchDirty) {
         this.mutationBatchDirty = false;
         this.persistQueues();
+        await this.awaitOutboxPersistence();
         this.emitStatusChange();
       }
     }
@@ -689,7 +806,8 @@ class SyncEngine {
   }
 
   upsert(dbName: string, storeName: string, recordKey: unknown, data: unknown): void {
-    if (!this._enabled || this._suppressSync || !supabase) return;
+    if (!this._enabled || this._suppressSync || !supabase || !this.activeOwnerUserId) return;
+    if (!shouldUseGenericSyncStore(dbName, storeName)) return;
 
     const keyStr = serializeKey(recordKey);
     const queueKey = `${dbName}|${storeName}|${keyStr}`;
@@ -697,6 +815,7 @@ class SyncEngine {
     this.restoredPushQueueKeys.delete(queueKey);
 
     this.pushQueue.set(queueKey, {
+      ownerUserId: this.activeOwnerUserId,
       opId: this.createQueueOpId('store'),
       ...this.pendingStoreBaseForIdentity(this.storeIdentityKey(dbName, storeName, keyStr)),
       dbName,
@@ -710,7 +829,8 @@ class SyncEngine {
   }
 
   remove(dbName: string, storeName: string, recordKey: unknown, tombstoneData: unknown = {}): void {
-    if (!this._enabled || this._suppressSync || !supabase) return;
+    if (!this._enabled || this._suppressSync || !supabase || !this.activeOwnerUserId) return;
+    if (!shouldUseGenericSyncStore(dbName, storeName)) return;
 
     const keyStr = serializeKey(recordKey);
     const queueKey = `${dbName}|${storeName}|${keyStr}`;
@@ -718,6 +838,7 @@ class SyncEngine {
     this.restoredPushQueueKeys.delete(queueKey);
 
     this.pushQueue.set(queueKey, {
+      ownerUserId: this.activeOwnerUserId,
       opId: this.createQueueOpId('store'),
       ...this.pendingStoreBaseForIdentity(this.storeIdentityKey(dbName, storeName, keyStr)),
       dbName,
@@ -735,11 +856,12 @@ class SyncEngine {
   // ============================================================
 
   upsertLocal(key: string, data: unknown): void {
-    if (!this._enabled || this._suppressSync || !supabase) return;
+    if (!this._enabled || this._suppressSync || !supabase || !this.activeOwnerUserId) return;
 
     this.rememberLocalStorageMutation(key);
     this.restoredLocalQueueKeys.delete(key);
     this.localQueue.set(key, {
+      ownerUserId: this.activeOwnerUserId,
       opId: this.createQueueOpId('local'),
       ...this.pendingLocalBaseForKey(key),
       key,
@@ -751,11 +873,12 @@ class SyncEngine {
   }
 
   removeLocal(key: string): void {
-    if (!this._enabled || this._suppressSync || !supabase) return;
+    if (!this._enabled || this._suppressSync || !supabase || !this.activeOwnerUserId) return;
 
     this.rememberLocalStorageMutation(key);
     this.restoredLocalQueueKeys.delete(key);
     this.localQueue.set(key, {
+      ownerUserId: this.activeOwnerUserId,
       opId: this.createQueueOpId('local'),
       ...this.pendingLocalBaseForKey(key),
       key,
@@ -780,10 +903,17 @@ class SyncEngine {
     await this.runSyncOperation(false, async () => {
       const { data: { session } } = await client.auth.getSession();
       if (!session) return;
+      if (this.activeOwnerUserId !== session.user.id) {
+        await this.setAuthenticatedUser(session.user.id);
+      } else {
+        await this.authTransitionPromise;
+      }
+      if (!this._enabled || this.activeOwnerUserId !== session.user.id) return;
 
       try {
         await this.loadCursor();
         await this.flush();
+        if (!this._enabled) return;
         await this.pullForUser(session.user.id);
       } catch (err) {
         this._error = err instanceof Error ? err.message : 'Pull failed';
@@ -805,6 +935,7 @@ class SyncEngine {
     await this.runSyncOperation(true, async () => {
       let rollbackSnapshot: LocalDownloadSnapshot | null = null;
       let queuesAtOperationStart: QueueSnapshot | null = null;
+      let operationUserId: string | null = null;
       try {
         this.queueDrainsBlocked = true;
         queuesAtOperationStart = this.snapshotQueues();
@@ -812,6 +943,7 @@ class SyncEngine {
 
         const { data: { session } } = await client.auth.getSession();
         if (!session) return;
+        operationUserId = session.user.id;
         await this.loadCursor();
 
         // Collect dynamic DB IDs BEFORE clearing meta stores.
@@ -877,10 +1009,14 @@ class SyncEngine {
         this.emitEvent('sync-complete');
       } catch (err) {
         let rollbackError: unknown = null;
-        if (rollbackSnapshot) {
+        if (rollbackSnapshot && operationUserId) {
           const currentQueues = this.snapshotQueues();
           try {
-            await this.restoreLocalDownloadSnapshot(rollbackSnapshot, currentQueues);
+            await this.restoreLocalDownloadSnapshot(
+              rollbackSnapshot,
+              currentQueues,
+              operationUserId,
+            );
           } catch (restoreErr) {
             rollbackError = restoreErr;
             console.error('[syncEngine] Download rollback error:', restoreErr);
@@ -1051,12 +1187,12 @@ class SyncEngine {
         cloudRollbackSnapshot = null;
         this.rememberStoreWriteBaseOverrides(verifiedWriteBases.stores);
         this.rememberLocalStorageWriteBaseOverrides(verifiedWriteBases.localStorage);
-        if (!this.persistWriteBaseOverrides()) {
+        if (!await this.persistWriteBaseOverrides()) {
           throw new Error('Upload completed cloud verification but could not persist write bases for reload-safe edits');
         }
 
         this.cursor = operationBaseCursor;
-        await this.saveCursor();
+        await this.saveCursor(session.user.id);
 
         this.queueDrainsBlocked = false;
         // A successful full replacement supersedes any incremental operations queued
@@ -1102,8 +1238,12 @@ class SyncEngine {
    * Drain push queue immediately.
    */
   async flush(options: { throwOnPending?: boolean } = {}): Promise<void> {
+    if (!this._enabled) return;
+    await this.authTransitionPromise;
+    await this.awaitOutboxPersistence();
     await this.drainQueue();
     await this.drainLocalQueue();
+    await this.awaitOutboxPersistence();
     const pendingCount = this.getPendingOperationCount();
     const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
     if (options.throwOnPending && (pendingCount > 0 || durabilityError)) {
@@ -1112,6 +1252,150 @@ class SyncEngine {
           ? `Final sync flush incomplete with ${pendingCount} pending operation(s): ${this._error ?? durabilityError}`
           : `Final sync flush incomplete with ${pendingCount} pending operation(s)`,
       );
+    }
+  }
+
+  private async flushForExpectedUser(expectedUserId: string): Promise<void> {
+    await this.drainQueue(expectedUserId, true);
+    await this.drainLocalQueue(expectedUserId, true);
+  }
+
+  private async flushQueueOpsForExpectedUser(
+    expectedUserId: string,
+    storeQueueOps: ReadonlyMap<string, PendingOp>,
+    localQueueOps: ReadonlyMap<string, PendingLocalOp>,
+  ): Promise<void> {
+    await this.drainQueue(expectedUserId, true, storeQueueOps);
+    await this.drainLocalQueue(expectedUserId, true, localQueueOps);
+  }
+
+  /**
+   * Recover an otherwise-valid queue when rebuildable write-base caches and
+   * the durable queue together exceed the browser's localStorage quota.
+   *
+   * The queued operations remain in memory and in their source IndexedDB
+   * stores. Only the derived conflict-base cache is evicted; a successful
+   * drain and pull rebuild the current bases from cloud receipt truth.
+   */
+  async recoverQuotaBlockedQueue(): Promise<void> {
+    await this.authTransitionPromise;
+    if (this.activeOwnerUserId) {
+      await this.restoreOutboxForOwner(this.activeOwnerUserId);
+    }
+    if (!this.isQuotaRecoveryAvailable()) {
+      await this.flush({ throwOnPending: true });
+      return;
+    }
+    this.queueDrainsBlocked = true;
+    try {
+      await this.waitForQueueDrains();
+      if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+      const { data: { session: recoverySession } } = await supabase.auth.getSession();
+      if (!recoverySession) throw new Error('Sync recovery failed: signed out during sync');
+      const recoveryUserId = recoverySession.user.id;
+
+      const releasePersistedBases = () => {
+        const previousWriteBaseError = this.writeBasePersistenceError;
+        try {
+          localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
+          localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+        } catch (error) {
+          throw new Error(
+            `Sync recovery could not release rebuildable browser storage: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        this.writeBasePersistenceError = null;
+        if (this._error === previousWriteBaseError) this._error = null;
+      };
+
+      releasePersistedBases();
+      this.quotaRecoveryContinuationRequired = true;
+      this.protectedConflictSummaries = [];
+      if (!await this.persistQueuesDurably()) {
+        throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the protected queue.');
+      }
+
+      // A large restored queue can be concurrently draining when recovery
+      // begins, or a transient batch can fail while later batches succeed. Keep
+      // making bounded progress, evicting only the rebuildable persisted bases
+      // between passes. Two consecutive no-progress passes stop safely instead
+      // of looping on a genuine stale-write conflict.
+      let pendingCount = this.getPendingOperationCount();
+      let stagnantPasses = 0;
+      for (let pass = 0; pass < 20 && pendingCount > 0; pass += 1) {
+        const before = pendingCount;
+        await this.flushForExpectedUser(recoveryUserId);
+        pendingCount = this.getPendingOperationCount();
+        if (!await this.persistQueuesDurably()) {
+          throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the remaining queue.');
+        }
+        if (pendingCount === 0) break;
+        releasePersistedBases();
+        stagnantPasses = pendingCount < before ? 0 : stagnantPasses + 1;
+        if (stagnantPasses >= 2) break;
+      }
+
+      if (pendingCount > 0) {
+        let reconciliation = await this.retireQueuedOpsAlreadyInCloud(recoveryUserId);
+        pendingCount = this.getPendingOperationCount();
+
+        if (pendingCount > 0) {
+          const rebase = await this.rebaseQueuedOpsStillRepresentedLocally(recoveryUserId);
+          if (rebase.rebasedCount > 0) {
+            await this.flushQueueOpsForExpectedUser(
+              recoveryUserId,
+              rebase.rebasedStoreQueueOps,
+              rebase.rebasedLocalQueueOps,
+            );
+            if (!await this.persistQueuesDurably()) {
+              throw new Error(this.queuePersistenceError ?? 'Sync recovery could not save the rebased queue.');
+            }
+            pendingCount = this.getPendingOperationCount();
+            reconciliation = pendingCount > 0
+              ? await this.retireQueuedOpsAlreadyInCloud(recoveryUserId)
+              : { retiredCount: 0, protectedConflicts: [] };
+            pendingCount = this.getPendingOperationCount();
+          }
+        }
+
+        this.protectedConflictSummaries = reconciliation.protectedConflicts;
+
+        if (pendingCount > 0) {
+          const detail = reconciliation.protectedConflicts.length > 0
+            ? `${reconciliation.protectedConflicts.length} operation(s) are not exact matches across this device and cloud and remain protected`
+            : this._error ?? 'no exact cloud matches were found';
+          this._error = `Sync recovery paused safely with ${pendingCount} pending operation(s): ${detail}`;
+          this.emitStatusChange();
+          throw new Error(this._error);
+        }
+      }
+
+      // Do not force the full rebuilt base cache back into localStorage before
+      // the receipt pull can advance the durable cursor and prune it. The queue
+      // is already durably empty; pull now rebuilds, cursor-saves, prunes, and
+      // persists only the still-required bases.
+      releasePersistedBases();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sync recovery failed: signed out during sync');
+      if (session.user.id !== recoveryUserId) {
+        throw new Error('Sync recovery failed: signed-in account changed during sync');
+      }
+      await this.pullForUser(recoveryUserId, { emitComplete: false });
+
+      const queuePersisted = await this.persistQueuesDurably();
+      const basesPersisted = await this.persistWriteBaseOverrides();
+      const durabilityError = this.writeBasePersistenceError ?? this.queuePersistenceError;
+      if (!queuePersisted || !basesPersisted || durabilityError) {
+        throw new Error(
+          `Sync recovery incomplete with 0 pending operation(s): ${durabilityError ?? 'browser persistence failed'}`,
+        );
+      }
+      this.quotaRecoveryContinuationRequired = false;
+      this.protectedConflictSummaries = [];
+      this._error = null;
+      this.emitEvent('sync-complete');
+    } finally {
+      this.queueDrainsBlocked = false;
     }
   }
 
@@ -1129,6 +1413,8 @@ class SyncEngine {
       lastPullAt: this.cursor.changedAt,
       pendingCount: this.getPendingOperationCount(),
       error: this._error,
+      quotaRecoveryAvailable: this.isQuotaRecoveryAvailable(),
+      protectedConflictCount: this.protectedConflictSummaries.length,
     };
   }
 
@@ -1282,12 +1568,68 @@ class SyncEngine {
   }
 
   setEnabled(enabled: boolean): void {
-    this._enabled = enabled;
+    if (this.liveRoomIsolationDepth > 0) {
+      this.enabledBeforeLiveRoomIsolation = enabled;
+      this._enabled = false;
+    } else {
+      this._enabled = enabled;
+    }
+    if (this._enabled) this.startTimers();
+    else this.stopTimers();
     this.emitStatusChange();
   }
 
   isEnabled(): boolean {
     return this._enabled;
+  }
+
+  /**
+   * Stop the account-wide backup engine before a companion opens a live room.
+   * Existing work is allowed to settle, but no new generic pull or queue drain
+   * can overlap the live-room transport. Call leaveLiveRoomIsolation on exit.
+   */
+  async enterLiveRoomIsolation(): Promise<void> {
+    if (this.liveRoomIsolationDepth === 0) {
+      this.enabledBeforeLiveRoomIsolation = this._enabled;
+      this._enabled = false;
+      this.stopTimers();
+      this.emitStatusChange();
+    }
+    this.liveRoomIsolationDepth += 1;
+
+    await Promise.allSettled([
+      this.syncOperationQueue,
+      this.authTransitionPromise,
+      this.outboxPersistencePromise,
+    ]);
+    await this.waitForQueueDrains();
+  }
+
+  leaveLiveRoomIsolation(): void {
+    if (this.liveRoomIsolationDepth === 0) return;
+    this.liveRoomIsolationDepth -= 1;
+    if (this.liveRoomIsolationDepth > 0) return;
+
+    this._enabled = this.enabledBeforeLiveRoomIsolation;
+    if (this._enabled) this.startTimers();
+    this.emitStatusChange();
+  }
+
+  private startTimers(): void {
+    if (!this.initialized || !this._enabled) return;
+    if (!this.drainTimer) {
+      this.drainTimer = setInterval(() => this.flush(), DRAIN_INTERVAL_MS);
+    }
+    if (!this.pullTimer) {
+      this.pullTimer = setInterval(() => this.pull(), PULL_INTERVAL_MS);
+    }
+  }
+
+  private stopTimers(): void {
+    if (this.drainTimer) clearInterval(this.drainTimer);
+    if (this.pullTimer) clearInterval(this.pullTimer);
+    this.drainTimer = null;
+    this.pullTimer = null;
   }
 
   private async runSyncOperation(
@@ -1340,10 +1682,14 @@ class SyncEngine {
   // Private — Push Queue
   // ============================================================
 
-  private async drainQueue(): Promise<void> {
+  private async drainQueue(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueOps?: ReadonlyMap<string, PendingOp>,
+  ): Promise<void> {
     if (this.drainQueuePromise) return this.drainQueuePromise;
 
-    const promise = this.drainQueueOnce().finally(() => {
+    const promise = this.drainQueueOnce(expectedUserId, allowWhileBlocked, targetQueueOps).finally(() => {
       if (this.drainQueuePromise === promise) {
         this.drainQueuePromise = null;
       }
@@ -1352,17 +1698,40 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainQueueOnce(): Promise<void> {
-    if (this.queueDrainsBlocked) return;
+  private async drainQueueOnce(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueOps?: ReadonlyMap<string, PendingOp>,
+  ): Promise<void> {
+    if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.pushQueue.size === 0) return;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    await this.awaitOutboxPersistence();
 
-    const ops = Array.from(this.pushQueue.values());
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      if (expectedUserId) throw new Error('Sync recovery failed: signed out during sync');
+      return;
+    }
+    if (expectedUserId && session.user.id !== expectedUserId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+    if (this.activeOwnerUserId !== session.user.id) {
+      throw new Error('Sync queue owner does not match the signed-in account.');
+    }
+
+    const ops = Array.from(this.pushQueue.entries())
+      .filter(([queueKey, op]) => !targetQueueOps || targetQueueOps.get(queueKey) === op)
+      .map(([, op]) => op);
+    if (ops.length === 0) return;
+    if (ops.some((op) => op.ownerUserId !== session.user.id)) {
+      throw new Error('Sync queue contains operations owned by another account.');
+    }
     const inFlightOps = new Map(ops.map((op) => [this.pushQueueKey(op), op]));
     this.inFlightPushDrainOps = inFlightOps;
-    this.pushQueue.clear();
+    for (const [queueKey, op] of inFlightOps) {
+      if (this.pushQueue.get(queueKey) === op) this.pushQueue.delete(queueKey);
+    }
 
     try {
       // Process in batches
@@ -1372,7 +1741,7 @@ class SyncEngine {
         if (liveBatch.length === 0) continue;
 
         const rows = liveBatch.map(op => ({
-          user_id: session.user.id,
+          user_id: op.ownerUserId,
           db_name: op.dbName,
           store_name: op.storeName,
           record_key: op.recordKey,
@@ -1439,13 +1808,18 @@ class SyncEngine {
     }
 
     this.persistQueues();
+    await this.awaitOutboxPersistence();
     this.emitStatusChange();
   }
 
-  private async drainLocalQueue(): Promise<void> {
+  private async drainLocalQueue(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueOps?: ReadonlyMap<string, PendingLocalOp>,
+  ): Promise<void> {
     if (this.drainLocalQueuePromise) return this.drainLocalQueuePromise;
 
-    const promise = this.drainLocalQueueOnce().finally(() => {
+    const promise = this.drainLocalQueueOnce(expectedUserId, allowWhileBlocked, targetQueueOps).finally(() => {
       if (this.drainLocalQueuePromise === promise) {
         this.drainLocalQueuePromise = null;
       }
@@ -1454,24 +1828,47 @@ class SyncEngine {
     return promise;
   }
 
-  private async drainLocalQueueOnce(): Promise<void> {
-    if (this.queueDrainsBlocked) return;
+  private async drainLocalQueueOnce(
+    expectedUserId?: string,
+    allowWhileBlocked = false,
+    targetQueueOps?: ReadonlyMap<string, PendingLocalOp>,
+  ): Promise<void> {
+    if (this.queueDrainsBlocked && !allowWhileBlocked) return;
     if (!supabase || this.localQueue.size === 0) return;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    await this.awaitOutboxPersistence();
 
-    const ops = Array.from(this.localQueue.values());
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      if (expectedUserId) throw new Error('Sync recovery failed: signed out during sync');
+      return;
+    }
+    if (expectedUserId && session.user.id !== expectedUserId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+    if (this.activeOwnerUserId !== session.user.id) {
+      throw new Error('Sync queue owner does not match the signed-in account.');
+    }
+
+    const ops = Array.from(this.localQueue.entries())
+      .filter(([key, op]) => !targetQueueOps || targetQueueOps.get(key) === op)
+      .map(([, op]) => op);
+    if (ops.length === 0) return;
+    if (ops.some((op) => op.ownerUserId !== session.user.id)) {
+      throw new Error('Sync queue contains local operations owned by another account.');
+    }
     const inFlightOps = new Map(ops.map((op) => [op.key, op]));
     this.inFlightLocalDrainOps = inFlightOps;
-    this.localQueue.clear();
+    for (const [key, op] of inFlightOps) {
+      if (this.localQueue.get(key) === op) this.localQueue.delete(key);
+    }
 
     try {
       const liveOps = ops;
       if (liveOps.length === 0) return;
 
       const rows = liveOps.map(op => ({
-        user_id: session.user.id,
+        user_id: op.ownerUserId,
         key: op.key,
         data: op.deleted ? {} : this.toLocalStorageWireValue(op.data),
         changed_at: op.changedAt,
@@ -1528,6 +1925,7 @@ class SyncEngine {
     }
 
     this.persistQueues();
+    await this.awaitOutboxPersistence();
     this.emitStatusChange();
   }
 
@@ -1581,6 +1979,351 @@ class SyncEngine {
       const cloudChangedAt = cloudChangedAtByKey.get(op.key);
       return cloudChangedAt === undefined || cloudChangedAt <= op.changedAt;
     });
+  }
+
+  /**
+   * Safely retire restored writes whose exact target state is already present
+   * in cloud. This is not conflict resolution: any content or tombstone
+   * difference remains queued and protected by the normal stale-write guard.
+   */
+  private async retireQueuedOpsAlreadyInCloud(userId: string): Promise<{
+    retiredCount: number;
+    protectedConflicts: string[];
+  }> {
+    const storeSnapshot = new Map(this.pushQueue);
+    const localSnapshot = new Map(this.localQueue);
+    if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
+      return { retiredCount: 0, protectedConflicts: [] };
+    }
+
+    const [storeRows, localRows] = await Promise.all([
+      storeSnapshot.size > 0 ? this.fetchStoreWriteBaseRows(userId) : Promise.resolve([]),
+      localSnapshot.size > 0 ? this.fetchLocalStorageWriteBaseRows(userId) : Promise.resolve([]),
+    ]);
+    const storeCloudByIdentity = new Map(
+      storeRows.map((row) => [
+        this.storeIdentityKey(row.db_name, row.store_name, row.record_key),
+        row,
+      ]),
+    );
+    const localCloudByKey = new Map(localRows.map((row) => [row.key, row]));
+    const localStoreFingerprintsByScope = new Map<string, Map<string, string> | null>();
+    const storeScopes = new Map<string, { dbName: string; storeName: string }>();
+    for (const op of storeSnapshot.values()) {
+      storeScopes.set(this.storeCountKey(op.dbName, op.storeName), {
+        dbName: op.dbName,
+        storeName: op.storeName,
+      });
+    }
+    await Promise.all(Array.from(storeScopes.entries()).map(async ([scope, { dbName, storeName }]) => {
+      const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+      localStoreFingerprintsByScope.set(
+        scope,
+        keyPath ? await this.getLocalStoreFingerprints(dbName, storeName, keyPath) : null,
+      );
+    }));
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sync recovery failed: signed out during sync');
+    if (session.user.id !== userId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+    const retiredStoreEntries: Array<[string, PendingOp, boolean]> = [];
+    const retiredLocalEntries: Array<[string, PendingLocalOp, boolean]> = [];
+    const protectedConflicts: string[] = [];
+
+    for (const [queueKey, op] of storeSnapshot) {
+      // A newer local mutation replaced this snapshot while cloud rows were
+      // loading. It is not eligible for duplicate retirement.
+      const identity = this.storeIdentityKey(op.dbName, op.storeName, op.recordKey);
+      if (this.pushQueue.get(queueKey) !== op) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      const cloudRow = storeCloudByIdentity.get(identity);
+      const localFingerprints = localStoreFingerprintsByScope.get(
+        this.storeCountKey(op.dbName, op.storeName),
+      );
+      const localMatchesQueued = localFingerprints !== null && localFingerprints !== undefined && (
+        op.deleted
+          ? !localFingerprints.has(identity)
+          : localFingerprints.get(identity) === this.fingerprintValue(op.data)
+      );
+      if (
+        localMatchesQueued
+        && cloudRow
+        && this.fingerprintStoreWriteState(cloudRow.data, cloudRow.deleted)
+          === this.fingerprintStoreWriteState(op.data, op.deleted)
+      ) {
+        retiredStoreEntries.push([queueKey, op, this.restoredPushQueueKeys.has(queueKey)]);
+        this.pushQueue.delete(queueKey);
+        this.restoredPushQueueKeys.delete(queueKey);
+      } else {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+      }
+    }
+
+    for (const [key, op] of localSnapshot) {
+      if (this.localQueue.get(key) !== op) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const cloudRow = localCloudByKey.get(key);
+      const currentLocalValue = localStorage.getItem(key);
+      const localMatchesQueued = op.deleted
+        ? currentLocalValue === null
+        : currentLocalValue !== null
+          && this.fingerprintLocalWriteState(currentLocalValue, false)
+            === this.fingerprintLocalWriteState(op.data, false);
+      if (
+        localMatchesQueued
+        && cloudRow
+        && this.fingerprintLocalWriteState(cloudRow.data, cloudRow.deleted)
+          === this.fingerprintLocalWriteState(op.data, op.deleted)
+      ) {
+        retiredLocalEntries.push([key, op, this.restoredLocalQueueKeys.has(key)]);
+        this.localQueue.delete(key);
+        this.restoredLocalQueueKeys.delete(key);
+      } else {
+        protectedConflicts.push(`localStorage[${key}]`);
+      }
+    }
+
+    const retiredCount = retiredStoreEntries.length + retiredLocalEntries.length;
+    if (retiredCount === 0) {
+      return { retiredCount, protectedConflicts };
+    }
+
+    if (!await this.persistQueuesDurably()) {
+      // The durable shrink did not complete. Restore every retired in-memory
+      // operation and make a best-effort durability retry; never report it as
+      // reconciled when the queue checkpoint is uncertain.
+      for (const [queueKey, op, wasRestored] of retiredStoreEntries) {
+        if (!this.pushQueue.has(queueKey)) this.pushQueue.set(queueKey, op);
+        if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      }
+      for (const [key, op, wasRestored] of retiredLocalEntries) {
+        if (!this.localQueue.has(key)) this.localQueue.set(key, op);
+        if (wasRestored) this.restoredLocalQueueKeys.add(key);
+      }
+      this.persistQueues();
+      throw new Error(
+        this.queuePersistenceError
+          ?? 'Sync recovery could not save the exact-match reconciliation checkpoint.',
+      );
+    }
+
+    return { retiredCount, protectedConflicts };
+  }
+
+  /**
+   * Rebase only still-current local intent onto the exact cloud rows it is
+   * replacing. A queued payload that no longer matches current local source
+   * truth is never published by recovery. The atomic RPC remains the final
+   * compare-and-set authority if cloud changes after this snapshot.
+   */
+  private async rebaseQueuedOpsStillRepresentedLocally(userId: string): Promise<{
+    rebasedCount: number;
+    rebasedStoreQueueOps: Map<string, PendingOp>;
+    rebasedLocalQueueOps: Map<string, PendingLocalOp>;
+    protectedConflicts: string[];
+  }> {
+    const storeSnapshot = new Map(this.pushQueue);
+    const localSnapshot = new Map(this.localQueue);
+    if (storeSnapshot.size === 0 && localSnapshot.size === 0) {
+      return {
+        rebasedCount: 0,
+        rebasedStoreQueueOps: new Map(),
+        rebasedLocalQueueOps: new Map(),
+        protectedConflicts: [],
+      };
+    }
+
+    const [storeRows, localRows] = await Promise.all([
+      storeSnapshot.size > 0 ? this.fetchStoreWriteBaseRows(userId) : Promise.resolve([]),
+      localSnapshot.size > 0 ? this.fetchLocalStorageWriteBaseRows(userId) : Promise.resolve([]),
+    ]);
+    const storeCloudByIdentity = new Map(
+      storeRows.map((row) => [
+        this.storeIdentityKey(row.db_name, row.store_name, row.record_key),
+        row,
+      ]),
+    );
+    const localCloudByKey = new Map(localRows.map((row) => [row.key, row]));
+    const localStoreFingerprintsByScope = new Map<string, Map<string, string> | null>();
+    const storeScopes = new Map<string, { dbName: string; storeName: string }>();
+    for (const op of storeSnapshot.values()) {
+      storeScopes.set(this.storeCountKey(op.dbName, op.storeName), {
+        dbName: op.dbName,
+        storeName: op.storeName,
+      });
+    }
+    await Promise.all(Array.from(storeScopes.entries()).map(async ([scope, { dbName, storeName }]) => {
+      const keyPath = this.getSyncStoreKeyPath(dbName, storeName);
+      localStoreFingerprintsByScope.set(
+        scope,
+        keyPath ? await this.getLocalStoreFingerprints(dbName, storeName, keyPath) : null,
+      );
+    }));
+
+    if (!supabase) throw new Error('Sync recovery failed: Supabase is not configured');
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Sync recovery failed: signed out during sync');
+    if (session.user.id !== userId) {
+      throw new Error('Sync recovery failed: signed-in account changed during sync');
+    }
+
+    const rebasedStoreEntries: Array<[string, PendingOp, PendingOp, boolean]> = [];
+    const rebasedLocalEntries: Array<[string, PendingLocalOp, PendingLocalOp, boolean]> = [];
+    const protectedConflicts: string[] = [];
+
+    for (const [queueKey, op] of storeSnapshot) {
+      const identity = this.storeIdentityKey(op.dbName, op.storeName, op.recordKey);
+      if (this.pushQueue.get(queueKey) !== op) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      const localFingerprints = localStoreFingerprintsByScope.get(
+        this.storeCountKey(op.dbName, op.storeName),
+      );
+      const localMatchesQueued = localFingerprints !== null && localFingerprints !== undefined && (
+        op.deleted
+          ? !localFingerprints.has(identity)
+          : localFingerprints.get(identity) === this.fingerprintValue(op.data)
+      );
+      if (!localMatchesQueued) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+
+      const cloudRow = storeCloudByIdentity.get(identity);
+      if (cloudRow && (!cloudRow.received_at || !cloudRow.id)) {
+        protectedConflicts.push(this.formatStoreIdentity(identity));
+        continue;
+      }
+      if (
+        op.dbName === 'kbl-league-builder'
+        && op.storeName === 'mlbDraftSessions'
+        && cloudRow
+      ) {
+        if (op.deleted !== cloudRow.deleted) {
+          protectedConflicts.push(this.formatStoreIdentity(identity));
+          continue;
+        }
+        if (op.deleted) continue;
+        const cloudRoom = this.asSnakeDraftSession(cloudRow.data);
+        const localRoom = this.asSnakeDraftSession(op.data);
+        if (
+          !cloudRoom
+          || !localRoom
+          || !this.publishedRoomCoversQueuedCompanionIntent(cloudRoom, localRoom)
+        ) {
+          protectedConflicts.push(this.formatStoreIdentity(identity));
+          continue;
+        }
+      }
+
+      const rebasedOp: PendingOp = {
+        ...op,
+        opId: this.createQueueOpId('store'),
+        changedAt: this.nextChangedAt(Math.max(
+          this.cursor.changedAt + 1,
+          op.changedAt + 1,
+          (cloudRow?.changed_at ?? 0) + 1,
+        )),
+        baseReceivedAt: cloudRow?.received_at ?? null,
+        baseId: cloudRow?.id ?? null,
+      };
+      rebasedStoreEntries.push([
+        queueKey,
+        op,
+        rebasedOp,
+        this.restoredPushQueueKeys.has(queueKey),
+      ]);
+      this.pushQueue.set(queueKey, rebasedOp);
+      this.restoredPushQueueKeys.delete(queueKey);
+    }
+
+    for (const [key, op] of localSnapshot) {
+      if (this.localQueue.get(key) !== op) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const currentLocalValue = localStorage.getItem(key);
+      const localMatchesQueued = op.deleted
+        ? currentLocalValue === null
+        : currentLocalValue !== null
+          && this.fingerprintLocalWriteState(currentLocalValue, false)
+            === this.fingerprintLocalWriteState(op.data, false);
+      if (!localMatchesQueued) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+
+      const cloudRow = localCloudByKey.get(key);
+      if (cloudRow && !cloudRow.received_at) {
+        protectedConflicts.push(`localStorage[${key}]`);
+        continue;
+      }
+      const rebasedOp: PendingLocalOp = {
+        ...op,
+        opId: this.createQueueOpId('local'),
+        changedAt: this.nextChangedAt(Math.max(
+          this.cursor.changedAt + 1,
+          op.changedAt + 1,
+          (cloudRow?.changed_at ?? 0) + 1,
+        )),
+        baseReceivedAt: cloudRow?.received_at ?? null,
+        baseKey: cloudRow?.key ?? null,
+      };
+      rebasedLocalEntries.push([
+        key,
+        op,
+        rebasedOp,
+        this.restoredLocalQueueKeys.has(key),
+      ]);
+      this.localQueue.set(key, rebasedOp);
+      this.restoredLocalQueueKeys.delete(key);
+    }
+
+    const rebasedCount = rebasedStoreEntries.length + rebasedLocalEntries.length;
+    const rebasedStoreQueueOps = new Map(
+      rebasedStoreEntries.map(([queueKey, , rebasedOp]) => [queueKey, rebasedOp]),
+    );
+    const rebasedLocalQueueOps = new Map(
+      rebasedLocalEntries.map(([key, , rebasedOp]) => [key, rebasedOp]),
+    );
+    if (rebasedCount === 0) {
+      return {
+        rebasedCount,
+        rebasedStoreQueueOps,
+        rebasedLocalQueueOps,
+        protectedConflicts,
+      };
+    }
+
+    if (!await this.persistQueuesDurably()) {
+      for (const [queueKey, originalOp, rebasedOp, wasRestored] of rebasedStoreEntries) {
+        if (this.pushQueue.get(queueKey) === rebasedOp) this.pushQueue.set(queueKey, originalOp);
+        if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      }
+      for (const [key, originalOp, rebasedOp, wasRestored] of rebasedLocalEntries) {
+        if (this.localQueue.get(key) === rebasedOp) this.localQueue.set(key, originalOp);
+        if (wasRestored) this.restoredLocalQueueKeys.add(key);
+      }
+      this.persistQueues();
+      throw new Error(
+        this.queuePersistenceError
+          ?? 'Sync recovery could not save the current-local rebase checkpoint.',
+      );
+    }
+
+    return {
+      rebasedCount,
+      rebasedStoreQueueOps,
+      rebasedLocalQueueOps,
+      protectedConflicts,
+    };
   }
 
   private async waitForQueueDrains(): Promise<void> {
@@ -1684,7 +2427,13 @@ class SyncEngine {
 
     // Save only the safe cursor. Queued local conflicts act as a cursor barrier
     // so future-dated stale cloud rows cannot hide later normal rows.
-    await this.saveCursor();
+    await this.saveCursor(userId);
+
+    // Once the pull cursor reaches an accepted write, its per-row override is
+    // redundant. Keeping every historical override indefinitely can crowd the
+    // same browser quota needed by the offline queue during large imports.
+    this.pruneWriteBaseOverridesAtOrBeforeCursor();
+    await this.persistWriteBaseOverrides();
 
     if (!this.queuePersistenceError && !this.writeBasePersistenceError) {
       this._error = null;
@@ -1733,10 +2482,239 @@ class SyncEngine {
     return data ?? [];
   }
 
+  private asSnakeDraftSession(value: unknown): LeagueBuilderMlbDraftSession | null {
+    if (!value || typeof value !== 'object') return null;
+    const candidate = value as Partial<LeagueBuilderMlbDraftSession>;
+    if (
+      typeof candidate.id !== 'string'
+      || typeof candidate.leagueId !== 'string'
+      || !Number.isInteger(candidate.seasonNumber)
+      || !Array.isArray(candidate.pickOrder)
+      || !Array.isArray(candidate.completedPicks)
+    ) return null;
+    return candidate as LeagueBuilderMlbDraftSession;
+  }
+
+  private publishedRoomCoversQueuedCompanionIntent(
+    queued: LeagueBuilderMlbDraftSession,
+    published: LeagueBuilderMlbDraftSession,
+  ): boolean {
+    if ((queued.currentPickIndex ?? 0) > (published.currentPickIndex ?? 0)) return false;
+
+    const publishedPickFingerprints = new Set(
+      published.completedPicks.map((pick) => this.fingerprintValue(pick)),
+    );
+    if (queued.completedPicks.some((pick) => !publishedPickFingerprints.has(this.fingerprintValue(pick)))) {
+      return false;
+    }
+
+    const publishedTradeFingerprints = new Set(
+      (published.trades ?? []).map((trade) => this.fingerprintValue(trade)),
+    );
+    if ((queued.trades ?? []).some((trade) => !publishedTradeFingerprints.has(this.fingerprintValue(trade)))) {
+      return false;
+    }
+
+    if (queued.draftManifest
+      && this.fingerprintValue(queued.draftManifest) !== this.fingerprintValue(published.draftManifest)) {
+      return false;
+    }
+    if (queued.rosterHandoff
+      && this.fingerprintValue(queued.rosterHandoff) !== this.fingerprintValue(published.rosterHandoff)) {
+      return false;
+    }
+
+    const queuedCompanions = queued.snakeCompanions;
+    const publishedCompanions = published.snakeCompanions;
+    if (queuedCompanions) {
+      if (!publishedCompanions || queuedCompanions.roomCode !== publishedCompanions.roomCode) return false;
+      for (const queuedClaim of queuedCompanions.claims ?? []) {
+        const publishedClaim = publishedCompanions.claims.find((claim) => (
+          queuedClaim.claimId
+            ? claim.claimId === queuedClaim.claimId
+            : claim.deviceId === queuedClaim.deviceId && claim.teamId === queuedClaim.teamId
+        ));
+        if (!publishedClaim) return false;
+        const queuedVersion = queuedClaim.claimVersion ?? 0;
+        const publishedVersion = publishedClaim.claimVersion ?? 0;
+        if (publishedVersion < queuedVersion) return false;
+        if (publishedVersion === queuedVersion
+          && this.fingerprintValue(publishedClaim) !== this.fingerprintValue(queuedClaim)) {
+          return false;
+        }
+      }
+
+      const queuedRequest = queuedCompanions.pickRequest;
+      if (queuedRequest) {
+        const requestStillPublished = publishedCompanions.pickRequest
+          && this.fingerprintValue(publishedCompanions.pickRequest) === this.fingerprintValue(queuedRequest);
+        const requestWasCommitted = published.completedPicks.some((pick) => (
+          pick.pick === queuedRequest.pick
+          && pick.teamId === queuedRequest.teamId
+          && pick.playerId === queuedRequest.playerId
+        ));
+        if (!requestStillPublished && !requestWasCommitted) return false;
+      }
+    }
+
+    const queuedOffers = queued.openTradeOffers ?? [];
+    if (!queuedOffers.every((offer) => this.publishedRoomCoversQueuedTradeOffer(offer, published))) {
+      return false;
+    }
+
+    // Absence can itself be companion intent: WITHDRAW and DECLINE remove an
+    // offer from the queued room. A published offer may be absent safely only
+    // when it was posted at or after the queued snapshot's revision.
+    const queuedOfferIds = new Set(queuedOffers.map((offer) => offer.id));
+    return (published.openTradeOffers ?? []).every((offer) => (
+      queuedOfferIds.has(offer.id)
+      || (Number.isInteger(offer.postedSessionRevision)
+        && offer.postedSessionRevision >= (queued.revision ?? 0))
+    ));
+  }
+
+  private publishedRoomCoversQueuedTradeOffer(
+    queuedOffer: SnakeOpenTradeOffer,
+    published: LeagueBuilderMlbDraftSession,
+  ): boolean {
+    const live = published.openTradeOffers?.find((offer) => offer.id === queuedOffer.id);
+    if (live) {
+      const immutableQueued = {
+        ...queuedOffer,
+        buyerNod: false,
+        sellerNod: false,
+      };
+      const immutableLive = {
+        ...live,
+        buyerNod: false,
+        sellerNod: false,
+      };
+      return this.fingerprintValue(immutableQueued) === this.fingerprintValue(immutableLive)
+        && (!queuedOffer.buyerNod || live.buyerNod)
+        && (!queuedOffer.sellerNod || live.sellerNod);
+    }
+
+    const queuedTeams = [queuedOffer.buyerTeamId, queuedOffer.sellerTeamId].sort().join('::');
+    const offered = [...queuedOffer.offerPickNumbers].sort((left, right) => left - right).join(',');
+    const received = [...queuedOffer.receivePickNumbers].sort((left, right) => left - right).join(',');
+    return (published.trades ?? []).some((trade) => {
+      const tradeTeams = [trade.humanTeamId, trade.cpuTeamId].sort().join('::');
+      if (tradeTeams !== queuedTeams) return false;
+      const human = [...trade.humanPickNumbers].sort((left, right) => left - right).join(',');
+      const cpu = [...trade.cpuPickNumbers].sort((left, right) => left - right).join(',');
+      return (human === offered && cpu === received) || (human === received && cpu === offered);
+    });
+  }
+
+  private async readStandaloneSnakeBoards(sessionId: string): Promise<SnakeSeatBoardStoreRecord[]> {
+    const db = await this.openDatabase('kbl-league-builder');
+    try {
+      if (!db.objectStoreNames.contains('snakeSeatBoards')) return [];
+      const tx = db.transaction('snakeSeatBoards', 'readonly');
+      const store = tx.objectStore('snakeSeatBoards');
+      if (!store.indexNames.contains('sessionId')) return [];
+      const request = store.index('sessionId').getAll(sessionId);
+      const rows = await new Promise<SnakeSeatBoardStoreRecord[]>((resolve, reject) => {
+        let result: SnakeSeatBoardStoreRecord[] = [];
+        request.onsuccess = () => {
+          result = request.result as SnakeSeatBoardStoreRecord[];
+        };
+        request.onerror = () => reject(request.error);
+        tx.oncomplete = () => resolve(result);
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+      return rows;
+    } finally {
+      db.close();
+    }
+  }
+
+  private async retireSupersededLegacySnakeBoardRoomWrite(
+    record: CloudStoreRow,
+    mutationBaseline: number,
+  ): Promise<boolean> {
+    if (
+      record.db_name !== 'kbl-league-builder'
+      || record.store_name !== 'mlbDraftSessions'
+      || record.deleted
+    ) return false;
+
+    const published = this.asSnakeDraftSession(record.data);
+    const marker = published?.companionRoomPublication;
+    if (
+      !published
+      || marker?.formatVersion !== 'snake-companion-room-publication-v1'
+      || !marker.publicationId
+      || marker.publishedRevision !== (published.revision ?? 0)
+      || marker.publishedRevision !== marker.supersedesRevision + 1
+      || !Number.isFinite(Date.parse(marker.publishedAt))
+    ) return false;
+
+    const queueKey = `${record.db_name}|${record.store_name}|${record.record_key}`;
+    if ((this.storeMutationGenerations.get(queueKey) ?? 0) > mutationBaseline) return false;
+    const queuedOp = this.pushQueue.get(queueKey);
+    if (!queuedOp || queuedOp.deleted) return false;
+    const queued = this.asSnakeDraftSession(queuedOp.data);
+    if (
+      !queued
+      || queued.id !== published.id
+      || queued.leagueId !== published.leagueId
+      || queued.seasonNumber !== published.seasonNumber
+      || (queued.revision ?? 0) > marker.supersedesRevision
+      || !this.publishedRoomCoversQueuedCompanionIntent(queued, published)
+    ) return false;
+
+    let boardRows: SnakeSeatBoardStoreRecord[];
+    try {
+      boardRows = await this.readStandaloneSnakeBoards(queued.id);
+    } catch {
+      return false;
+    }
+    if (this.pushQueue.get(queueKey) !== queuedOp) return false;
+    const queuedModifiedAt = Date.parse(queued.lastModified);
+    const hasLegacyBoardEvidence = Number.isFinite(queuedModifiedAt) && boardRows.some((row) => {
+      if (row.sessionId !== queued.id || row.leagueId !== queued.leagueId) return false;
+      const embedded = row.phase === 'MLB'
+        ? queued.seatBoards?.[row.teamId]
+        : queued.farmSeatBoards?.[row.teamId];
+      const rowModifiedAt = Date.parse(row.lastModified);
+      return Boolean(embedded)
+        && Number.isFinite(rowModifiedAt)
+        && queuedModifiedAt <= rowModifiedAt
+        && Number.isInteger(embedded?.revision)
+        && embedded!.revision <= row.revision;
+    });
+    if (!hasLegacyBoardEvidence) return false;
+
+    const wasRestored = this.restoredPushQueueKeys.has(queueKey);
+    this.pushQueue.delete(queueKey);
+    this.restoredPushQueueKeys.delete(queueKey);
+    if (!await this.persistQueuesDurably()) {
+      this.pushQueue.set(queueKey, queuedOp);
+      if (wasRestored) this.restoredPushQueueKeys.add(queueKey);
+      // The first attempt may have removed the durable room entry before a
+      // later localStorage write failed. Re-persist the restored in-memory op
+      // before refusing the cloud adoption.
+      this.persistQueues();
+      return false;
+    }
+    return true;
+  }
+
   private async applyPage(
     page: CloudStoreRow[],
     mutationBaseline: number,
   ): Promise<PullApplyResult> {
+    // Contract 43 recovery is deliberately evaluated before the normal queue
+    // conflict barrier. Only an explicit Hotseat publication can retire the
+    // retired board writer's exact whole-room op; every other conflict remains.
+    const genericPage = page.filter((record) => (
+      !isRetiredGenericSyncStore(record.db_name, record.store_name)
+    ));
+    for (const record of genericPage) {
+      await this.retireSupersededLegacySnakeBoardRoomWrite(record, mutationBaseline);
+    }
     const pageIndexes = new Map(page.map((record, index) => [record, index]));
     let firstSkippedIndex = -1;
     const markSkippedConflict = (record: CloudStoreRow) => {
@@ -1746,7 +2724,7 @@ class SyncEngine {
         firstSkippedIndex = index;
       }
     };
-    const recordsToApply = page.filter((record) => {
+    const recordsToApply = genericPage.filter((record) => {
       if (this.hasQueuedStoreWrite(record, mutationBaseline)) {
         markSkippedConflict(record);
         return false;
@@ -1781,40 +2759,42 @@ class SyncEngine {
       try {
         if (dbName === 'kbl-league-builder') {
           const pageProtectedRecords = records.filter(isProtectedSnakeMlbRecord);
-          const protectedRecordsByIdentity = new Map<string, CloudStoreRow>();
-          for (const record of [
-            ...this.loadDeferredSnakeProtectedRows(),
-            ...pageProtectedRecords,
-          ]) {
-            protectedRecordsByIdentity.set(
-              this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
-              record,
-            );
-          }
-          const protectedRecords = [...protectedRecordsByIdentity.values()].filter((record) => {
-            if (!this.hasQueuedStoreWrite(record, mutationBaseline)) return true;
-            markSkippedConflict(record);
-            return false;
-          });
-          if (protectedRecords.length > 0) {
-            const result = await this.applySnakeManifestPoolInboundAtomically(
-              db,
-              protectedRecords,
-              mutationBaseline,
-              markSkippedConflict,
-            );
-            this.persistDeferredSnakeProtectedRows(result.deferredRows);
-            writeBasesChanged = result.writeBasesChanged || writeBasesChanged;
-          } else {
-            this.persistDeferredSnakeProtectedRows([]);
-          }
           if (pageProtectedRecords.length > 0) {
+            const protectedRecordsByIdentity = new Map<string, CloudStoreRow>();
+            for (const record of [
+              ...this.loadDeferredSnakeProtectedRows(),
+              ...pageProtectedRecords,
+            ]) {
+              protectedRecordsByIdentity.set(
+                this.storeIdentityKey(record.db_name, record.store_name, record.record_key),
+                record,
+              );
+            }
+            const protectedRecords = [...protectedRecordsByIdentity.values()].filter((record) => {
+              if (!this.hasQueuedStoreWrite(record, mutationBaseline)) return true;
+              markSkippedConflict(record);
+              return false;
+            });
+            if (protectedRecords.length > 0) {
+              const result = await this.applySnakeManifestPoolInboundAtomically(
+                db,
+                protectedRecords,
+                mutationBaseline,
+                markSkippedConflict,
+              );
+              this.persistDeferredSnakeProtectedRows(result.deferredRows);
+              writeBasesChanged = result.writeBasesChanged || writeBasesChanged;
+            } else {
+              this.persistDeferredSnakeProtectedRows([]);
+            }
             byStore.delete('registeredPools');
             const ordinaryDraftSessions = byStore.get('mlbDraftSessions')?.filter((record) => (
               !isProtectedSnakeMlbRecord(record)
             )) ?? [];
             if (ordinaryDraftSessions.length > 0) byStore.set('mlbDraftSessions', ordinaryDraftSessions);
             else byStore.delete('mlbDraftSessions');
+          } else {
+            this.persistDeferredSnakeProtectedRows([]);
           }
         }
         for (const [storeName, storeRecords] of byStore) {
@@ -1868,7 +2848,7 @@ class SyncEngine {
       }
     }
     if (writeBasesChanged) {
-      this.persistWriteBaseOverrides();
+      await this.persistWriteBaseOverrides();
     }
 
     const skippedConflicts = firstSkippedIndex >= 0;
@@ -2108,7 +3088,7 @@ class SyncEngine {
       if (!shouldSyncLocalStorageKey(row.key)) continue;
       if (this.hasQueuedLocalStorageWrite(row.key, mutationBaseline)) {
         if (writeBasesChanged) {
-          this.persistWriteBaseOverrides();
+          await this.persistWriteBaseOverrides();
         }
         if (appliedCursor) {
           this.cursor = {
@@ -2144,7 +3124,7 @@ class SyncEngine {
       };
     }
     if (writeBasesChanged) {
-      this.persistWriteBaseOverrides();
+      await this.persistWriteBaseOverrides();
     }
     return false;
   }
@@ -2430,6 +3410,7 @@ class SyncEngine {
   private async restoreLocalDownloadSnapshot(
     snapshot: LocalDownloadSnapshot,
     queuedDuringFailure: QueueSnapshot,
+    expectedUserId: string,
   ): Promise<void> {
     for (const dbName of snapshot.dynamicDbNames) {
       try {
@@ -2457,7 +3438,7 @@ class SyncEngine {
     await this.reapplyQueuedWritesToLocal();
     this.persistQueues();
     try {
-      await this.saveCursor();
+      await this.saveCursor(expectedUserId);
     } catch (err) {
       throw new Error(
         `Rollback restored local stores, localStorage, queues, and in-memory cursor but failed to persist restored cursor: ${
@@ -2637,6 +3618,12 @@ class SyncEngine {
     message: string,
     options: { throwOnSkipped?: boolean } = {},
   ): Promise<AtomicUpsertResultRow[]> {
+    const retiredRow = rows.find((row) => isRetiredGenericSyncStore(row.db_name, row.store_name));
+    if (retiredRow) {
+      throw new Error(
+        `Generic cloud sync cannot write retired live-draft store ${retiredRow.db_name}.${retiredRow.store_name}.`,
+      );
+    }
     if (!supabase || rows.length === 0) return [];
 
     const { data, error } = await supabase.rpc('kbl_atomic_upsert_store_rows', {
@@ -2979,6 +3966,26 @@ class SyncEngine {
     return rows;
   }
 
+  private async fetchExactStoreWriteBaseRow(
+    userId: string,
+    dbName: string,
+    storeName: string,
+    recordKey: string,
+  ): Promise<CloudStoreWriteBaseRow | null> {
+    if (!supabase) return null;
+
+    const { data, error } = await supabase
+      .from('kbl_stores')
+      .select('id, db_name, store_name, record_key, data, changed_at, received_at, deleted')
+      .eq('user_id', userId)
+      .eq('db_name', dbName)
+      .eq('store_name', storeName)
+      .eq('record_key', recordKey)
+      .maybeSingle();
+    this.assertNoSupabaseError(error, 'Cloud room write-base fetch failed');
+    return (data ?? null) as CloudStoreWriteBaseRow | null;
+  }
+
   private async fetchLocalStorageWriteBaseRows(userId: string): Promise<CloudLocalStorageWriteBaseRow[]> {
     if (!supabase) return [];
 
@@ -3029,7 +4036,7 @@ class SyncEngine {
         this.storeWriteBaseOverrides.delete(identity);
       }
     }
-    this.persistWriteBaseOverrides();
+    await this.persistWriteBaseOverrides();
   }
 
   private async refreshLocalStorageWriteBaseOverrides(
@@ -3059,7 +4066,7 @@ class SyncEngine {
         this.localWriteBaseOverrides.delete(key);
       }
     }
-    this.persistWriteBaseOverrides();
+    await this.persistWriteBaseOverrides();
   }
 
   private async fetchLocalStoragePullRows(userId: string): Promise<Array<CloudLocalStorageCursorRow & {
@@ -3792,6 +4799,11 @@ class SyncEngine {
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+    if (this.activeOwnerUserId !== session.user.id) {
+      throw new Error('Sync cursor load failed: signed-in account does not own this sync session.');
+    }
+
+    this.cursor = { changedAt: 0, id: null };
 
     const { data, error } = await supabase
       .from('kbl_sync_meta')
@@ -3813,11 +4825,17 @@ class SyncEngine {
     }
   }
 
-  private async saveCursor(): Promise<void> {
-    if (!supabase) return;
+  private async saveCursor(expectedUserId: string): Promise<void> {
+    if (!supabase) throw new Error('Sync cursor save failed: Supabase is not configured');
 
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) throw new Error('Sync cursor save failed: signed out during sync');
+    if (session.user.id !== expectedUserId) {
+      throw new Error('Sync cursor save failed: signed-in account changed during sync');
+    }
+    if (this.activeOwnerUserId !== expectedUserId) {
+      throw new Error('Sync cursor save failed: sync owner changed during sync');
+    }
 
     const { error } = await supabase
       .from('kbl_sync_meta')
@@ -3834,125 +4852,328 @@ class SyncEngine {
   }
 
   // ============================================================
-  // Private — Queue Persistence (offline safety net)
+  // Private — Queue Persistence (account-owned IndexedDB outbox)
   // ============================================================
 
   private persistQueues(): boolean {
-    try {
-      const previousPersistenceError = this.queuePersistenceError;
-      if (this.pushQueue.size > 0) {
-        localStorage.setItem(QUEUE_PERSIST_KEY, JSON.stringify(Array.from(this.pushQueue.entries())));
-      } else {
-        localStorage.removeItem(QUEUE_PERSIST_KEY);
-      }
+    const ownerUserId = this.activeOwnerUserId;
+    const snapshot = this.snapshotQueues();
+    const operations = [
+      ...Array.from(snapshot.pushQueue.entries()).map(([queueKey, operation]): SyncOutboxRecord => ({
+        id: syncOutboxRecordId(operation.ownerUserId, 'store', queueKey),
+        ownerUserId: operation.ownerUserId,
+        kind: 'store',
+        queueKey,
+        operation,
+        updatedAt: Date.now(),
+      })),
+      ...Array.from(snapshot.localQueue.entries()).map(([queueKey, operation]): SyncOutboxRecord => ({
+        id: syncOutboxRecordId(operation.ownerUserId, 'localStorage', queueKey),
+        ownerUserId: operation.ownerUserId,
+        kind: 'localStorage',
+        queueKey,
+        operation,
+        updatedAt: Date.now(),
+      })),
+    ];
 
-      if (this.localQueue.size > 0) {
-        localStorage.setItem(LOCAL_QUEUE_PERSIST_KEY, JSON.stringify(Array.from(this.localQueue.entries())));
-      } else {
-        localStorage.removeItem(LOCAL_QUEUE_PERSIST_KEY);
-      }
-      if (this._error === previousPersistenceError) {
-        this._error = null;
-      }
-      this.queuePersistenceError = null;
-      return true;
-    } catch (error) {
-      const message = `Sync queue persistence failed: ${error instanceof Error ? error.message : String(error)}`;
+    if (!ownerUserId) {
+      if (operations.length === 0) return true;
+      const message = 'Sync queue persistence failed: no authenticated account owns the pending operations.';
       this.queuePersistenceError = message;
       this._error = message;
       return false;
     }
+    if (operations.some((record) => record.ownerUserId !== ownerUserId)) {
+      const message = 'Sync queue persistence failed: pending operations contain another account owner.';
+      this.queuePersistenceError = message;
+      this._error = message;
+      return false;
+    }
+
+    this.outboxPersistencePromise = this.outboxPersistencePromise
+      .catch(() => undefined)
+      .then(async () => {
+        await syncOutboxStore.replaceOwnerSnapshot(ownerUserId, operations);
+        try {
+          localStorage.removeItem(QUEUE_PERSIST_KEY);
+          localStorage.removeItem(LOCAL_QUEUE_PERSIST_KEY);
+        } catch {
+          // Legacy cleanup is best effort. Active queues live in IndexedDB.
+        }
+        const previousPersistenceError = this.queuePersistenceError;
+        this.queuePersistenceError = null;
+        if (this._error === previousPersistenceError) this._error = null;
+      })
+      .catch((error) => {
+        const message = `Sync queue persistence failed: ${error instanceof Error ? error.message : String(error)}`;
+        this.queuePersistenceError = message;
+        this._error = message;
+        this.emitStatusChange();
+      });
+    return true;
   }
 
-  private restoreQueues(): void {
+  private async awaitOutboxPersistence(): Promise<void> {
+    await this.outboxPersistencePromise;
+    if (this.queuePersistenceError) {
+      throw new Error(
+        this.queuePersistenceError,
+      );
+    }
+  }
+
+  private async persistQueuesDurably(): Promise<boolean> {
+    if (!this.persistQueues()) return false;
     try {
-      let restored = false;
-      const pushData = localStorage.getItem(QUEUE_PERSIST_KEY);
+      await this.awaitOutboxPersistence();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async restoreOutboxForOwner(ownerUserId: string): Promise<void> {
+    await this.awaitOutboxPersistence();
+    const records = await syncOutboxStore.loadOwner(ownerUserId);
+    const activeRecords = records.filter((record) => {
+      if (record.kind !== 'store') return true;
+      const operation = record.operation as Partial<PendingOp>;
+      return !isRetiredGenericSyncStore(String(operation.dbName ?? ''), String(operation.storeName ?? ''));
+    });
+    if (activeRecords.length !== records.length) {
+      await syncOutboxStore.replaceOwnerSnapshot(ownerUserId, activeRecords);
+    }
+
+    let changed = false;
+    for (const [queueKey, operation] of this.pushQueue) {
+      if (!isRetiredGenericSyncStore(operation.dbName, operation.storeName)) continue;
+      this.pushQueue.delete(queueKey);
+      this.restoredPushQueueKeys.delete(queueKey);
+      changed = true;
+    }
+
+    for (const record of activeRecords) {
+      if (record.ownerUserId !== ownerUserId) continue;
+      if (record.kind === 'store') {
+        const operation = record.operation as PendingOp;
+        if (operation.ownerUserId !== ownerUserId || !shouldUseGenericSyncStore(operation.dbName, operation.storeName)) {
+          continue;
+        }
+        if (!this.pushQueue.has(record.queueKey)) {
+          this.pushQueue.set(record.queueKey, operation);
+          this.restoredPushQueueKeys.add(record.queueKey);
+          changed = true;
+        }
+      } else {
+        const operation = record.operation as PendingLocalOp;
+        if (operation.ownerUserId !== ownerUserId) continue;
+        if (!this.localQueue.has(record.queueKey)) {
+          this.localQueue.set(record.queueKey, operation);
+          this.restoredLocalQueueKeys.add(record.queueKey);
+          changed = true;
+        }
+      }
+    }
+    if (changed) this.emitStatusChange();
+  }
+
+  private async migrateLegacyLocalStorageQueues(): Promise<void> {
+    let pushData: string | null;
+    let localData: string | null;
+    try {
+      pushData = localStorage.getItem(QUEUE_PERSIST_KEY);
+      localData = localStorage.getItem(LOCAL_QUEUE_PERSIST_KEY);
+    } catch {
+      return;
+    }
+
+    try {
+      const ownedRecords: SyncOutboxRecord[] = [];
+      const unownedRecords: SyncOutboxRecord[] = [];
       if (pushData) {
         const entries = JSON.parse(pushData) as [string, PendingOp][];
         for (const [key, op] of entries) {
-          const restoredOp = {
-            ...op,
-            opId: op.opId ?? this.createQueueOpId('store'),
-          };
-          if (!this.pushQueue.has(key)) {
-            this.pushQueue.set(key, restoredOp);
-            restored = true;
+          if (isRetiredGenericSyncStore(String(op.dbName ?? ''), String(op.storeName ?? ''))) {
+            continue;
           }
-          this.restoredPushQueueKeys.add(key);
+          const ownerUserId = typeof op.ownerUserId === 'string' && op.ownerUserId ? op.ownerUserId : '__legacy_unowned__';
+          const operation = {
+            ...op,
+            ownerUserId,
+            opId: op.opId ?? this.createQueueOpId('store'),
+          } satisfies PendingOp;
+          const record: SyncOutboxRecord = {
+            id: syncOutboxRecordId(ownerUserId, 'store', key),
+            ownerUserId,
+            kind: 'store',
+            queueKey: key,
+            operation,
+            updatedAt: Date.now(),
+          };
+          (ownerUserId === '__legacy_unowned__' ? unownedRecords : ownedRecords).push(record);
         }
       }
 
-      const localData = localStorage.getItem(LOCAL_QUEUE_PERSIST_KEY);
       if (localData) {
         const entries = JSON.parse(localData) as [string, PendingLocalOp][];
         for (const [key, op] of entries) {
-          const restoredOp = {
+          const ownerUserId = typeof op.ownerUserId === 'string' && op.ownerUserId ? op.ownerUserId : '__legacy_unowned__';
+          const operation = {
             ...op,
+            ownerUserId,
             opId: op.opId ?? this.createQueueOpId('local'),
+          } satisfies PendingLocalOp;
+          const record: SyncOutboxRecord = {
+            id: syncOutboxRecordId(ownerUserId, 'localStorage', key),
+            ownerUserId,
+            kind: 'localStorage',
+            queueKey: key,
+            operation,
+            updatedAt: Date.now(),
           };
-          if (!this.localQueue.has(key)) {
-            this.localQueue.set(key, restoredOp);
-            restored = true;
-          }
-          this.restoredLocalQueueKeys.add(key);
+          (ownerUserId === '__legacy_unowned__' ? unownedRecords : ownedRecords).push(record);
         }
       }
-      if (restored) {
-        this.emitStatusChange();
+
+      await syncOutboxStore.importOwnedRecords(ownedRecords);
+      await syncOutboxStore.quarantineRecords(
+        unownedRecords,
+        'legacy localStorage queue has no verified account owner',
+      );
+      try {
+        localStorage.removeItem(QUEUE_PERSIST_KEY);
+        localStorage.removeItem(LOCAL_QUEUE_PERSIST_KEY);
+      } catch {
+        // Legacy cleanup is best effort. Active queues live in IndexedDB.
       }
-    } catch {
-      // Corrupt data, ignore
+    } catch (error) {
+      const message = `Legacy sync queue migration failed: ${error instanceof Error ? error.message : String(error)}`;
+      this.queuePersistenceError = message;
+      this._error = message;
+      throw error;
     }
   }
 
-  private restoreWriteBaseOverrides(): void {
+  private resetAccountCaches(): void {
+    this.cursor = { changedAt: 0, id: null };
+    this.storeWriteBaseOverrides.clear();
+    this.localWriteBaseOverrides.clear();
+    this.storeMutationGenerations.clear();
+    this.localStorageMutationGenerations.clear();
+    this.localMutationGeneration = 0;
+    this.protectedConflictSummaries = [];
+    this.quotaRecoveryContinuationRequired = false;
+    this.writeBasePersistenceError = null;
+    this.removeLegacyWriteBaseStorage();
     try {
-      const storeData = localStorage.getItem(STORE_WRITE_BASES_PERSIST_KEY);
-      if (storeData) {
-        const entries = JSON.parse(storeData) as Array<[string, { receivedAt?: string; id?: string }]>;
-        for (const [identity, base] of entries) {
-          if (typeof base.receivedAt === 'string' && typeof base.id === 'string') {
-            this.storeWriteBaseOverrides.set(identity, { receivedAt: base.receivedAt, id: base.id });
-          }
-        }
-      }
-
-      const localData = localStorage.getItem(LOCAL_WRITE_BASES_PERSIST_KEY);
-      if (localData) {
-        const entries = JSON.parse(localData) as Array<[string, { receivedAt?: string; key?: string }]>;
-        for (const [key, base] of entries) {
-          if (typeof base.receivedAt === 'string' && typeof base.key === 'string') {
-            this.localWriteBaseOverrides.set(key, { receivedAt: base.receivedAt, key: base.key });
-          }
-        }
-      }
+      localStorage.removeItem(DEFERRED_SNAKE_PROTECTED_ROWS_KEY);
     } catch {
-      this.storeWriteBaseOverrides.clear();
-      this.localWriteBaseOverrides.clear();
+      // Generic sync no longer depends on localStorage being writable.
     }
   }
 
-  private persistWriteBaseOverrides(): boolean {
+  private async migrateLegacyWriteBaseOverrides(): Promise<void> {
+    let persistedOwnerUserId: string | null;
+    let storeData: string | null;
+    let localData: string | null;
+    try {
+      persistedOwnerUserId = localStorage.getItem(WRITE_BASE_OWNER_PERSIST_KEY);
+      storeData = localStorage.getItem(STORE_WRITE_BASES_PERSIST_KEY);
+      localData = localStorage.getItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+    } catch {
+      return;
+    }
+    if (!storeData && !localData) {
+      this.removeLegacyWriteBaseStorage();
+      return;
+    }
+
+    try {
+      const storeWriteBases = storeData
+        ? (JSON.parse(storeData) as Array<[string, { receivedAt?: string; id?: string }]>).flatMap(
+          ([identity, base]) => (
+            typeof identity === 'string'
+            && typeof base?.receivedAt === 'string'
+            && typeof base.id === 'string'
+              ? [[identity, { receivedAt: base.receivedAt, id: base.id }] as [string, { receivedAt: string; id: string }]]
+              : []
+          ),
+        )
+        : [];
+      const localWriteBases = localData
+        ? (JSON.parse(localData) as Array<[string, { receivedAt?: string; key?: string }]>).flatMap(
+          ([key, base]) => (
+            typeof key === 'string'
+            && typeof base?.receivedAt === 'string'
+            && typeof base.key === 'string'
+              ? [[key, { receivedAt: base.receivedAt, key: base.key }] as [string, { receivedAt: string; key: string }]]
+              : []
+          ),
+        )
+        : [];
+      const ownerUserId = persistedOwnerUserId || '__legacy_unowned__';
+      const record: SyncAccountStateRecord = {
+        ownerUserId,
+        storeWriteBases,
+        localWriteBases,
+        updatedAt: Date.now(),
+      };
+      if (persistedOwnerUserId) {
+        const existing = await syncOutboxStore.loadAccountState(persistedOwnerUserId);
+        if (existing) {
+          await syncOutboxStore.quarantineAccountStateRecord(
+            record,
+            'legacy localStorage write bases were superseded by durable account state',
+          );
+        } else {
+          await syncOutboxStore.replaceAccountState(record);
+        }
+      } else {
+        await syncOutboxStore.quarantineAccountStateRecord(
+          record,
+          'legacy localStorage write bases have no verified account owner',
+        );
+      }
+    } finally {
+      this.removeLegacyWriteBaseStorage();
+    }
+  }
+
+  private async restoreWriteBaseOverridesForOwner(ownerUserId: string): Promise<void> {
+    this.storeWriteBaseOverrides.clear();
+    this.localWriteBaseOverrides.clear();
+    const record = await syncOutboxStore.loadAccountState(ownerUserId);
+    if (!record || record.ownerUserId !== ownerUserId) return;
+    for (const [identity, base] of record.storeWriteBases) {
+      this.storeWriteBaseOverrides.set(identity, base);
+    }
+    for (const [key, base] of record.localWriteBases) {
+      this.localWriteBaseOverrides.set(key, base);
+    }
+  }
+
+  private removeLegacyWriteBaseStorage(): void {
+    try {
+      localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
+      localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
+      localStorage.removeItem(WRITE_BASE_OWNER_PERSIST_KEY);
+    } catch {
+      // Legacy cleanup is best effort. Durable state lives in IndexedDB.
+    }
+  }
+
+  private async persistWriteBaseOverrides(): Promise<boolean> {
     try {
       const previousPersistenceError = this.writeBasePersistenceError;
-      if (this.storeWriteBaseOverrides.size > 0) {
-        localStorage.setItem(
-          STORE_WRITE_BASES_PERSIST_KEY,
-          JSON.stringify(Array.from(this.storeWriteBaseOverrides.entries())),
-        );
-      } else {
-        localStorage.removeItem(STORE_WRITE_BASES_PERSIST_KEY);
-      }
-
-      if (this.localWriteBaseOverrides.size > 0) {
-        localStorage.setItem(
-          LOCAL_WRITE_BASES_PERSIST_KEY,
-          JSON.stringify(Array.from(this.localWriteBaseOverrides.entries())),
-        );
-      } else {
-        localStorage.removeItem(LOCAL_WRITE_BASES_PERSIST_KEY);
-      }
+      if (!this.activeOwnerUserId) throw new Error('no authenticated account owns the write bases');
+      await syncOutboxStore.replaceAccountState({
+        ownerUserId: this.activeOwnerUserId,
+        storeWriteBases: Array.from(this.storeWriteBaseOverrides.entries()),
+        localWriteBases: Array.from(this.localWriteBaseOverrides.entries()),
+        updatedAt: Date.now(),
+      });
+      this.removeLegacyWriteBaseStorage();
       if (this._error === previousPersistenceError) {
         this._error = null;
       }
@@ -3964,6 +5185,42 @@ class SyncEngine {
       this._error = message;
       return false;
     }
+  }
+
+  private pruneWriteBaseOverridesAtOrBeforeCursor(): void {
+    for (const [identity, override] of this.storeWriteBaseOverrides) {
+      if (!this.isStoreOverrideAfterCursor(override, this.cursor)) {
+        this.storeWriteBaseOverrides.delete(identity);
+      }
+    }
+    for (const [key, override] of this.localWriteBaseOverrides) {
+      if (!this.isLocalOverrideAfterCursor(override, this.cursor)) {
+        this.localWriteBaseOverrides.delete(key);
+      }
+    }
+  }
+
+  private isStorageQuotaError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return normalized.includes('quota') || (
+      normalized.includes('storage') && normalized.includes('exceed')
+    );
+  }
+
+  private isQuotaRecoveryAvailable(): boolean {
+    return Boolean(
+      this.quotaRecoveryContinuationRequired
+      || (
+        (this.writeBasePersistenceError && this.isStorageQuotaError(this.writeBasePersistenceError))
+        || (this.queuePersistenceError && this.isStorageQuotaError(this.queuePersistenceError))
+      )
+      || (
+        this.getPendingOperationCount() >= LARGE_RESTORED_QUEUE_RECOVERY_THRESHOLD
+        && (this.restoredPushQueueKeys.size > 0 || this.restoredLocalQueueKeys.size > 0)
+        && this.storeWriteBaseOverrides.size === 0
+        && this.localWriteBaseOverrides.size === 0
+      )
+    );
   }
 
   private rememberStoreWriteBaseOverrides(bases: Map<string, { receivedAt: string; id: string }>): void {
@@ -3985,16 +5242,30 @@ class SyncEngine {
   // ============================================================
 
   private getOrCreateDeviceId(): string {
-    let id = localStorage.getItem(DEVICE_ID_KEY);
+    let id: string | null = null;
+    try {
+      id = localStorage.getItem(DEVICE_ID_KEY);
+    } catch {
+      // A full or disabled localStorage area must not prevent app startup.
+    }
     if (!id) {
       id = `device-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-      localStorage.setItem(DEVICE_ID_KEY, id);
+      try {
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      } catch {
+        // Keep one stable in-memory ID for this page session.
+      }
     }
     return id;
   }
 
   private nextChangedAt(minimum = 0): number {
-    const persisted = Number(localStorage.getItem(LAST_WRITE_TIME_KEY) ?? 0);
+    let persisted = 0;
+    try {
+      persisted = Number(localStorage.getItem(LAST_WRITE_TIME_KEY) ?? 0);
+    } catch {
+      // The in-memory counter remains monotonic for this page session.
+    }
     const next = Math.max(Date.now(), this.lastGeneratedChangedAt + 1, persisted + 1, minimum);
     this.lastGeneratedChangedAt = next;
     try {
@@ -4221,9 +5492,9 @@ class SyncEngine {
   }
 
   destroy(): void {
-    if (this.drainTimer) clearInterval(this.drainTimer);
-    if (this.pullTimer) clearInterval(this.pullTimer);
+    this.stopTimers();
     this.persistQueues();
+    void this.outboxPersistencePromise.finally(() => syncOutboxStore.close());
   }
 }
 

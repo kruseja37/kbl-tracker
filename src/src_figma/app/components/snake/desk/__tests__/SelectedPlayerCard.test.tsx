@@ -95,6 +95,7 @@ describe('SelectedPlayerCard', () => {
     for (const label of ['CON', 'SPD', 'FLD', 'ARM', 'VEL', 'JNK', 'ACC']) expect(screen.getByText(label)).toBeInTheDocument();
     expect(screen.queryByText('POW')).not.toBeInTheDocument();
     expect(screen.getByText('ARSENAL · 4F · SL · CH')).toBeInTheDocument();
+    expect(container.querySelectorAll('[aria-hidden="true"] span[style*="width"]')).toHaveLength(7);
     expect(screen.getByText('Big Hack')).toBeInTheDocument();
     expect(screen.getByText('Tough Out')).toBeInTheDocument();
     expect(screen.getByText('PLAYER ARCHETYPE · Effectively-Wild')).toBeInTheDocument();
@@ -125,6 +126,36 @@ describe('SelectedPlayerCard', () => {
     }
   });
 
+  it('persists zero-interest intent, shows live next-pick risk, and never attributes negative true cost to a drafted player', () => {
+    const onSetZeroInterest = vi.fn();
+    const { rerender } = render(<SelectedPlayerCard
+      player={player}
+      candidate={{ ...candidate, hasNextPick: true, risk: 'LIKELY_GONE', riskReason: '2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.' }}
+      consequence={null}
+      teamName="Beewolves"
+      zeroInterest={false}
+      onSetZeroInterest={onSetZeroInterest}
+    />);
+    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveTextContent('LIKELY GONE · 2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.');
+    expect(screen.getByTestId('selected-player-next-pick-risk')).toHaveClass('text-[var(--ballpark-status-red-bright)]');
+    fireEvent.click(screen.getByRole('button', { name: 'ZERO INTEREST' }));
+    expect(onSetZeroInterest).toHaveBeenCalledWith(true);
+
+    rerender(<SelectedPlayerCard
+      player={player}
+      candidate={{ ...candidate, drafted: true, salary: 90_000, marginalTax: -500_000, trueCost: -410_000 }}
+      consequence={null}
+      teamName="Beewolves"
+      zeroInterest
+      onSetZeroInterest={onSetZeroInterest}
+    />);
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('SALARY$90,000');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TAX IMPACTSEE TAX CORE');
+    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('TRUE COST—');
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('-$410,000');
+    expect(screen.queryByRole('button', { name: 'RESTORE INTEREST' })).not.toBeInTheDocument();
+  });
+
   it('keeps the inline profile contract and renders unknown consequences as dashes, never safe or zero', () => {
     render(<SelectedPlayerCard
       player={player}
@@ -134,7 +165,7 @@ describe('SelectedPlayerCard', () => {
     />);
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('Jovita Pulo');
     expect(screen.getByTestId('selected-player-card')).toHaveTextContent('MY BOARD—');
-    expect(screen.getByTestId('selected-player-card')).toHaveTextContent('BOARD CONSEQUENCES —');
+    expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('BOARD CONSEQUENCES —');
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('SAFE');
     expect(screen.getByTestId('selected-player-card')).not.toHaveTextContent('$0');

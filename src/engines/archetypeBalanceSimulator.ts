@@ -467,6 +467,8 @@ export interface IdentityRosterResult {
   baselineIv: number;
   valueFloor: number;
   floorMet: boolean;
+  /** False when the bounded exclusive-group cycle neighborhood could not be exhausted. */
+  optimizationComplete: boolean;
   embodiment: EmbodimentReport;
 }
 
@@ -592,8 +594,9 @@ function identityEligible(
   slot: IdentitySlotKind,
   used: Set<string>,
   greedyCtx?: { pitchers: number },
+  exclusiveGroupId?: (player: SimPlayer) => string,
 ): SimPlayer[] {
-  const free = pool.filter((p) => !used.has(p.id));
+  const free = pool.filter((p) => !used.has(exclusiveGroupId?.(p) ?? p.id));
   if (slot.kind === 'backupC') {
     const coveringHitters = free.filter((p) => !p.isPitcher && canCover(p, 'C'));
     const twoWayArms = free.filter((p) => p.isPitcher && p.twoWayVariant === 'C');
@@ -615,26 +618,30 @@ function identityEligible(
     return nonCloser.length > 0 ? nonCloser : free.filter(canRelieve);
   }
   if (slot.kind === 'cp') return free.filter(isCloser);
-  return eligible(pool, slot as SlotKind, used);
+  // `free` already applies either player-id or exclusive-group occupancy. Reusing `pool` here
+  // would reinterpret group ids as card ids and allow a constrained climb to select siblings.
+  return eligible(free, slot as SlotKind, new Set());
 }
 
 function normalizeIdentityPins(
   pool: SimPlayer[],
   pinned: ReadonlyArray<{ slotIndex: number; playerId: string }> | undefined,
+  exclusiveGroupId?: (player: SimPlayer) => string,
 ): Map<number, SimPlayer> | undefined {
   if (!pinned?.length) return undefined;
   const byId = new Map(pool.map((player) => [player.id, player]));
   const pinnedBySlot = new Map<number, SimPlayer>();
   const usedPlayers = new Set<string>();
   for (const pin of pinned) {
-    if (usedPlayers.has(pin.playerId) || pinnedBySlot.has(pin.slotIndex)) continue;
     const player = byId.get(pin.playerId);
+    const uniqueId = player ? exclusiveGroupId?.(player) ?? player.id : pin.playerId;
+    if (usedPlayers.has(uniqueId) || pinnedBySlot.has(pin.slotIndex)) continue;
     const slot = IDENTITY_SLOT_PLAN[pin.slotIndex];
     if (!player || !slot) continue;
     const eligibleForPinnedSlot = identityEligible(pool, slot, new Set()).some((candidate) => candidate.id === player.id);
     if (!eligibleForPinnedSlot) continue;
     pinnedBySlot.set(pin.slotIndex, player);
-    usedPlayers.add(player.id);
+    usedPlayers.add(uniqueId);
   }
   return pinnedBySlot.size > 0 ? pinnedBySlot : undefined;
 }
@@ -692,8 +699,9 @@ function identityShortlist(
   fitScore: (p: SimPlayer) => number,
   slotIndex?: number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
+  exclusiveGroupId?: (player: SimPlayer) => string,
 ): SimPlayer[] {
-  const cands = identityEligible(pool, slot, used);
+  const cands = identityEligible(pool, slot, used, undefined, exclusiveGroupId);
   const lensScore = (p: SimPlayer) =>
     fitScore(p) + (slotBonus && slotIndex !== undefined ? slotBonus(p.id, slotIndex) : 0);
   const byIv = [...cands].sort((a, b) => b.iv - a.iv).slice(0, 24);
@@ -701,6 +709,371 @@ function identityShortlist(
   const byFit = [...cands].sort((a, b) => lensScore(b) - lensScore(a)).slice(0, 18);
   const seen = new Set<string>();
   return [...byIv, ...byFit, ...bySalary].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+}
+
+/** Exact rectangular maximum-weight assignment (rows to distinct columns). */
+function maximumWeightAssignment(weights: readonly (readonly number[])[]): number[] | null {
+  const rowCount = weights.length;
+  const columnCount = weights[0]?.length ?? 0;
+  if (rowCount === 0) return [];
+  if (columnCount < rowCount || weights.some((row) => row.length !== columnCount)) return null;
+
+  // Hungarian minimization over negated weights. Missing edges stay finite for the algorithm, then
+  // are rejected from the recovered assignment. Stable column order is the deterministic tie law.
+  const forbiddenCost = 1e15;
+  const u = Array<number>(rowCount + 1).fill(0);
+  const v = Array<number>(columnCount + 1).fill(0);
+  const matchedRow = Array<number>(columnCount + 1).fill(0);
+  const previousColumn = Array<number>(columnCount + 1).fill(0);
+
+  for (let row = 1; row <= rowCount; row += 1) {
+    matchedRow[0] = row;
+    const minCost = Array<number>(columnCount + 1).fill(forbiddenCost);
+    const usedColumn = Array<boolean>(columnCount + 1).fill(false);
+    let column = 0;
+    do {
+      usedColumn[column] = true;
+      const activeRow = matchedRow[column];
+      let delta = forbiddenCost;
+      let nextColumn = 0;
+      for (let candidateColumn = 1; candidateColumn <= columnCount; candidateColumn += 1) {
+        if (usedColumn[candidateColumn]) continue;
+        const weight = weights[activeRow - 1][candidateColumn - 1];
+        const cost = Number.isFinite(weight) ? -weight : forbiddenCost;
+        const reduced = cost - u[activeRow] - v[candidateColumn];
+        if (reduced < minCost[candidateColumn]) {
+          minCost[candidateColumn] = reduced;
+          previousColumn[candidateColumn] = column;
+        }
+        if (minCost[candidateColumn] < delta) {
+          delta = minCost[candidateColumn];
+          nextColumn = candidateColumn;
+        }
+      }
+      if (!Number.isFinite(delta) || delta >= forbiddenCost / 2 || nextColumn === 0) return null;
+      for (let candidateColumn = 0; candidateColumn <= columnCount; candidateColumn += 1) {
+        if (usedColumn[candidateColumn]) {
+          u[matchedRow[candidateColumn]] += delta;
+          v[candidateColumn] -= delta;
+        } else {
+          minCost[candidateColumn] -= delta;
+        }
+      }
+      column = nextColumn;
+    } while (matchedRow[column] !== 0);
+
+    do {
+      const prior = previousColumn[column];
+      matchedRow[column] = matchedRow[prior];
+      column = prior;
+    } while (column !== 0);
+  }
+
+  const assignment = Array<number>(rowCount).fill(-1);
+  for (let column = 1; column <= columnCount; column += 1) {
+    if (matchedRow[column] > 0) assignment[matchedRow[column] - 1] = column - 1;
+  }
+  return assignment.every((column, row) => column >= 0 && Number.isFinite(weights[row][column]))
+    ? assignment
+    : null;
+}
+
+/**
+ * Exact group-capacity seed for the weighted identity optimizer. Every sibling remains an edge;
+ * the solver chooses the best card for each slot/group pair and the best disjoint group assignment
+ * globally. A legal 22 can use at most one pitcher across backup-C and swing, so the two exhaustive
+ * hitter-policy branches cover the complete legal assignment space without a heuristic fallback.
+ */
+function exactExclusiveIdentityStart(
+  pool: SimPlayer[],
+  score: (player: SimPlayer) => number,
+  exclusiveGroupId: (player: SimPlayer) => string,
+  slotBonus?: (playerId: string, slotIndex: number) => number,
+  pinnedBySlot?: ReadonlyMap<number, SimPlayer>,
+): SlotPick[] | null {
+  const pinnedPicks = [...(pinnedBySlot?.entries() ?? [])]
+    .sort(([left], [right]) => left - right)
+    .map(([slotIndex, player]) => ({ slotIndex, player }));
+  const pinnedGroups = new Set(pinnedPicks.map((pick) => exclusiveGroupId(pick.player)));
+  if (pinnedGroups.size !== pinnedPicks.length) return null;
+  const openSlotIndices = IDENTITY_SLOT_PLAN
+    .map((_, slotIndex) => slotIndex)
+    .filter((slotIndex) => !pinnedBySlot?.has(slotIndex));
+  const groupIds = [...new Set(pool.map(exclusiveGroupId))]
+    .filter((groupId) => !pinnedGroups.has(groupId))
+    .sort((left, right) => left.localeCompare(right));
+  if (groupIds.length < openSlotIndices.length) return null;
+  const groupIndex = new Map(groupIds.map((groupId, index) => [groupId, index]));
+
+  const policies = [new Set([8]), new Set([21])]; // backup-C hitter OR swing hitter
+  let best: { picks: SlotPick[]; score: number; tie: string } | null = null;
+  for (const forceHitterSlots of policies) {
+    if (pinnedPicks.some((pick) => forceHitterSlots.has(pick.slotIndex) && pick.player.isPitcher)) continue;
+    const edgePlayers: Array<Array<SimPlayer | null>> = openSlotIndices.map(() =>
+      Array<SimPlayer | null>(groupIds.length).fill(null));
+    const weights: number[][] = openSlotIndices.map((slotIndex, rowIndex) => {
+      const row = Array<number>(groupIds.length).fill(Number.NEGATIVE_INFINITY);
+      for (const player of identityEligible(pool, IDENTITY_SLOT_PLAN[slotIndex], pinnedGroups, undefined, exclusiveGroupId)) {
+        if (forceHitterSlots.has(slotIndex) && player.isPitcher) continue;
+        const columnIndex = groupIndex.get(exclusiveGroupId(player));
+        if (columnIndex === undefined) continue;
+        const weight = score(player) + (slotBonus?.(player.id, slotIndex) ?? 0);
+        const current = edgePlayers[rowIndex][columnIndex];
+        if (!current || weight > row[columnIndex] + 1e-9
+          || (Math.abs(weight - row[columnIndex]) <= 1e-9 && player.id.localeCompare(current.id) < 0)) {
+          row[columnIndex] = weight;
+          edgePlayers[rowIndex][columnIndex] = player;
+        }
+      }
+      return row;
+    });
+    const assignment = maximumWeightAssignment(weights);
+    if (!assignment) continue;
+    const openPicks = openSlotIndices.map((slotIndex, rowIndex) => ({
+      slotIndex,
+      player: edgePlayers[rowIndex][assignment[rowIndex]]!,
+    }));
+    if (openPicks.some((pick) => !pick.player)) continue;
+    const picks = [...pinnedPicks, ...openPicks].sort((left, right) => left.slotIndex - right.slotIndex);
+    const players = picks.map((pick) => pick.player);
+    if (picks.length !== ROSTER_SIZE
+      || new Set(players.map(exclusiveGroupId)).size !== ROSTER_SIZE
+      || !isLegalRoster(players)) continue;
+    const totalScore = picks.reduce(
+      (sum, pick) => sum + score(pick.player) + (slotBonus?.(pick.player.id, pick.slotIndex) ?? 0),
+      0,
+    );
+    const tie = picks.map((pick) => `${pick.slotIndex}:${pick.player.id}`).join('|');
+    if (!best || totalScore > best.score + 1e-9
+      || (Math.abs(totalScore - best.score) <= 1e-9 && tie.localeCompare(best.tie) < 0)) {
+      best = { picks, score: totalScore, tie };
+    }
+  }
+  return best?.picks ?? null;
+}
+
+function constrainedExclusiveValueClimb(
+  start: SlotPick[],
+  pool: SimPlayer[],
+  caps: LuxuryCapRow[],
+  budget: number,
+  fitScore: (player: SimPlayer) => number,
+  exclusiveGroupId: (player: SimPlayer) => string,
+): SlotPick[] {
+  const picks = start.map((pick) => ({ ...pick }));
+  const used = new Set(picks.map((pick) => exclusiveGroupId(pick.player)));
+  const assess = (players: SimPlayer[]): ValueObjective => {
+    const result = objective(players, caps, budget);
+    return {
+      over: result.over + (players.length === ROSTER_SIZE && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY),
+      iv: result.iv,
+    };
+  };
+  for (let pass = 0; pass < IDENTITY_MAX_PASSES; pass += 1) {
+    let improved = false;
+    for (let index = 0; index < picks.length; index += 1) {
+      const current = picks[index].player;
+      const usedExcept = new Set(used);
+      usedExcept.delete(exclusiveGroupId(current));
+      const players = picks.map((pick) => pick.player);
+      let bestObjective = assess(players);
+      let bestReplacement: SimPlayer | null = null;
+      for (const replacement of identityShortlist(
+        pool,
+        IDENTITY_SLOT_PLAN[picks[index].slotIndex],
+        usedExcept,
+        fitScore,
+        undefined,
+        undefined,
+        exclusiveGroupId,
+      )) {
+        if (replacement.id === current.id) continue;
+        players[index] = replacement;
+        const candidateObjective = assess(players);
+        if (betterObjective(candidateObjective, bestObjective)) {
+          bestObjective = candidateObjective;
+          bestReplacement = replacement;
+        }
+      }
+      players[index] = current;
+      if (bestReplacement) {
+        used.delete(exclusiveGroupId(current));
+        used.add(exclusiveGroupId(bestReplacement));
+        picks[index] = { slotIndex: picks[index].slotIndex, player: bestReplacement };
+        improved = true;
+      }
+    }
+    if (!improved) break;
+  }
+  return picks;
+}
+
+const EXCLUSIVE_CYCLE_NODE_CAP = 250_000;
+const EXCLUSIVE_CYCLE_CANDIDATE_CAP = 250_000;
+const EXCLUSIVE_CYCLE_IMPROVEMENT_PASSES = 6;
+
+interface ExclusiveCycleResult {
+  picks: SlotPick[];
+  complete: boolean;
+}
+
+/**
+ * Exhausts simple occupied-version-group cycles under the caller's real full-roster objective.
+ * Hungarian remains only an additive seed; this pass can jointly rotate sibling cards through an
+ * arbitrary-length alternating cycle. Caps are explicit proof boundaries, never success shortcuts.
+ */
+function improveExclusiveGroupCycles<Score>(input: {
+  start: SlotPick[];
+  pool: SimPlayer[];
+  exclusiveGroupId: (player: SimPlayer) => string;
+  assess: (picks: readonly SlotPick[]) => Score;
+  better: (candidate: Score, current: Score) => boolean;
+  pinnedSlots?: ReadonlySet<number>;
+}): ExclusiveCycleResult {
+  let picks = input.start.map((pick) => ({ ...pick }));
+  const cardsByGroup = new Map<string, SimPlayer[]>();
+  for (const player of input.pool) {
+    const groupId = input.exclusiveGroupId(player);
+    const cards = cardsByGroup.get(groupId) ?? [];
+    cards.push(player);
+    cardsByGroup.set(groupId, cards);
+  }
+  for (const cards of cardsByGroup.values()) cards.sort((left, right) => left.id.localeCompare(right.id));
+
+  for (let pass = 0; pass < EXCLUSIVE_CYCLE_IMPROVEMENT_PASSES; pass += 1) {
+    const movableNodes = picks
+      .map((pick, pickIndex) => ({ pick, pickIndex }))
+      .filter(({ pick }) => !input.pinnedSlots?.has(pick.slotIndex))
+      .sort((left, right) => left.pick.slotIndex - right.pick.slotIndex);
+    if (movableNodes.length < 2) return { picks, complete: true };
+
+    const edgeCards = new Map<string, readonly SimPlayer[]>();
+    const cardsForEdge = (sourcePickIndex: number, targetPickIndex: number): readonly SimPlayer[] => {
+      const key = `${sourcePickIndex}:${targetPickIndex}`;
+      const cached = edgeCards.get(key);
+      if (cached) return cached;
+      const sourceGroup = input.exclusiveGroupId(picks[sourcePickIndex].player);
+      const targetSlotIndex = picks[targetPickIndex].slotIndex;
+      const eligibleIds = new Set(identityEligible(
+        input.pool,
+        IDENTITY_SLOT_PLAN[targetSlotIndex],
+        new Set(),
+        undefined,
+        input.exclusiveGroupId,
+      ).map((player) => player.id));
+      const cards = (cardsByGroup.get(sourceGroup) ?? []).filter((player) => eligibleIds.has(player.id));
+      edgeCards.set(key, cards);
+      return cards;
+    };
+
+    // A one-card occupied group may be an indispensable intermediary in a version rotation. Include
+    // every unpinned node in an SCC that contains a real multi-card choice, and prune only components
+    // whose cycles can do nothing beyond permuting the exact same player IDs. With at most 22 roster
+    // nodes, deterministic transitive closure is smaller and clearer than a special-case path heuristic.
+    const reachable = movableNodes.map((source) => movableNodes.map((target) =>
+      source.pickIndex !== target.pickIndex && cardsForEdge(source.pickIndex, target.pickIndex).length > 0));
+    for (let through = 0; through < movableNodes.length; through += 1) {
+      for (let source = 0; source < movableNodes.length; source += 1) {
+        if (!reachable[source][through]) continue;
+        for (let target = 0; target < movableNodes.length; target += 1) {
+          reachable[source][target] ||= reachable[through][target];
+        }
+      }
+    }
+    const versionNodeIndices = movableNodes
+      .map((node, index) => (cardsByGroup.get(input.exclusiveGroupId(node.pick.player))?.length ?? 0) > 1
+        ? index
+        : -1)
+      .filter((index) => index >= 0);
+    const cycleNodes = movableNodes.filter((_, index) => versionNodeIndices.some((versionIndex) =>
+      reachable[index][versionIndex] && reachable[versionIndex][index]));
+    if (cycleNodes.length < 2) return { picks, complete: true };
+
+    let nodesVisited = 0;
+    let candidatesEvaluated = 0;
+    let capped = false;
+    let bestPicks: SlotPick[] | null = null;
+    let bestScore = input.assess(picks);
+
+    const evaluateCycle = (cycle: readonly number[]) => {
+      const choices = cycle.map((sourcePickIndex, index) =>
+        cardsForEdge(sourcePickIndex, cycle[(index + 1) % cycle.length]));
+      if (choices.some((cards) => cards.length === 0)) return;
+      const selected: SimPlayer[] = [];
+      const enumerateCards = (edgeIndex: number) => {
+        if (capped) return;
+        if (edgeIndex === choices.length) {
+          candidatesEvaluated += 1;
+          if (candidatesEvaluated > EXCLUSIVE_CYCLE_CANDIDATE_CAP) {
+            capped = true;
+            return;
+          }
+          const candidate = picks.map((pick) => ({ ...pick }));
+          let changedVersion = false;
+          cycle.forEach((sourcePickIndex, index) => {
+            const targetPickIndex = cycle[(index + 1) % cycle.length];
+            const card = selected[index];
+            candidate[targetPickIndex] = { slotIndex: candidate[targetPickIndex].slotIndex, player: card };
+            if (card.id !== picks[sourcePickIndex].player.id) changedVersion = true;
+          });
+          if (!changedVersion) return;
+          const score = input.assess(candidate);
+          if (input.better(score, bestScore)) {
+            bestScore = score;
+            bestPicks = candidate;
+          }
+          return;
+        }
+        for (const card of choices[edgeIndex]) {
+          selected.push(card);
+          enumerateCards(edgeIndex + 1);
+          selected.pop();
+          if (capped) return;
+        }
+      };
+      enumerateCards(0);
+    };
+
+    // Canonical simple directed cycles: the root has the smallest slot index in the cycle, which
+    // removes rotational duplicates while retaining both directions and every cycle length.
+    for (let length = 2; length <= cycleNodes.length && !capped; length += 1) {
+      for (let rootIndex = 0; rootIndex < cycleNodes.length && !capped; rootIndex += 1) {
+        const root = cycleNodes[rootIndex];
+        const path = [root.pickIndex];
+        const used = new Set(path);
+        const visit = () => {
+          if (capped) return;
+          nodesVisited += 1;
+          if (nodesVisited > EXCLUSIVE_CYCLE_NODE_CAP) {
+            capped = true;
+            return;
+          }
+          if (path.length === length) {
+            if (cardsForEdge(path[path.length - 1], path[0]).length > 0) evaluateCycle(path);
+            return;
+          }
+          const last = path[path.length - 1];
+          for (const next of cycleNodes) {
+            if (next.pick.slotIndex <= root.pick.slotIndex || used.has(next.pickIndex)) continue;
+            if (cardsForEdge(last, next.pickIndex).length === 0) continue;
+            path.push(next.pickIndex);
+            used.add(next.pickIndex);
+            visit();
+            used.delete(next.pickIndex);
+            path.pop();
+            if (capped) return;
+          }
+        };
+        visit();
+      }
+    }
+
+    if (capped) return { picks: bestPicks ?? picks, complete: false };
+    if (!bestPicks) return { picks, complete: true };
+    picks = bestPicks;
+  }
+  // A final no-improvement pass was not completed, so local completion is unproved.
+  return { picks, complete: false };
 }
 
 /** Dominates over-budget/floor dollars-and-IV units; keeps illegal states strictly ordered below. */
@@ -725,9 +1098,11 @@ function constrainedIdentityClimb(
   rosterFitScore: (players: SimPlayer[]) => number,
   slotBonus?: (playerId: string, slotIndex: number) => number,
   pinnedSlots?: ReadonlySet<number>,
+  exclusiveGroupId?: (player: SimPlayer) => string,
 ): SlotPick[] {
   const picks = start.map((p) => ({ ...p }));
-  const used = new Set(picks.map((p) => p.player.id));
+  const uniqueId = (player: SimPlayer) => exclusiveGroupId?.(player) ?? player.id;
+  const used = new Set(picks.map((p) => uniqueId(p.player)));
   // The preference bonus is slot-positional, so fit is assessed over PICKS (player + slot),
   // not the bare player list. Absent bonus adds an exact 0 — byte-identical acceptance.
   const assess = (players: SimPlayer[]) => {
@@ -747,7 +1122,7 @@ function constrainedIdentityClimb(
       if (pinnedSlots?.has(picks[idx].slotIndex)) continue;
       const current = picks[idx].player;
       const usedExcept = new Set(used);
-      usedExcept.delete(current.id);
+      usedExcept.delete(uniqueId(current));
       const players = picks.map((p) => p.player);
       let best = assess(players);
       let bestRepl: SimPlayer | null = null;
@@ -758,6 +1133,7 @@ function constrainedIdentityClimb(
         fitScore,
         picks[idx].slotIndex,
         slotBonus,
+        exclusiveGroupId,
       )) {
         if (repl.id === current.id) continue;
         players[idx] = repl;
@@ -772,8 +1148,8 @@ function constrainedIdentityClimb(
       }
       players[idx] = current;
       if (bestRepl) {
-        used.delete(current.id);
-        used.add(bestRepl.id);
+        used.delete(uniqueId(current));
+        used.add(uniqueId(bestRepl));
         picks[idx] = { slotIndex: picks[idx].slotIndex, player: bestRepl };
         improved = true;
       }
@@ -819,6 +1195,118 @@ export interface BuildIdentityOptions {
    * today because `buildBest22Target` passes no banned set.
    */
   pinned?: ReadonlyArray<{ slotIndex: number; playerId: string }>;
+  /**
+   * Optional one-capacity identity group for alternate cards of the same person. When present, the
+   * weighted optimizer keeps every card edge and solves slot-to-group assignment exactly before
+   * its normal constrained climb. Absent callers retain the existing byte-path.
+   */
+  exclusiveGroupByPlayerId?: ReadonlyMap<string, string>;
+}
+
+export interface IdentityValueBaselineResult {
+  baselineIv: number;
+  valueFloor: number;
+  optimizationComplete: boolean;
+}
+
+function buildIdentityValueBaselineState(input: {
+  pool: SimPlayer[];
+  caps: LuxuryCapRow[];
+  budget: number;
+  valueFit: (player: SimPlayer) => number;
+  exclusiveGroupId?: (player: SimPlayer) => string;
+}) {
+  const objOf = (picks: SlotPick[]) => objective(picks.map((pick) => pick.player), input.caps, input.budget);
+  const assessValuePicks = (picks: readonly SlotPick[]): ValueObjective => {
+    const players = picks.map((pick) => pick.player);
+    const result = objective(players, input.caps, input.budget);
+    return {
+      over: result.over + (players.length === ROSTER_SIZE && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY),
+      iv: result.iv,
+    };
+  };
+  const buildExclusiveValueStart = (score: (player: SimPlayer) => number): ExclusiveCycleResult => {
+    if (!input.exclusiveGroupId) return { picks: [], complete: true };
+    const seed = exactExclusiveIdentityStart(input.pool, score, input.exclusiveGroupId) ?? [];
+    const climbed = constrainedExclusiveValueClimb(
+      seed,
+      input.pool,
+      input.caps,
+      input.budget,
+      input.valueFit,
+      input.exclusiveGroupId,
+    );
+    return improveExclusiveGroupCycles({
+      start: climbed,
+      pool: input.pool,
+      exclusiveGroupId: input.exclusiveGroupId,
+      assess: assessValuePicks,
+      better: betterObjective,
+    });
+  };
+  const fromValueState = input.exclusiveGroupId
+    ? buildExclusiveValueStart((player) => player.iv)
+    : {
+        picks: climb(
+          greedyStart(input.pool, (player) => player.iv),
+          input.pool,
+          input.caps,
+          input.budget,
+          input.valueFit,
+        ),
+        complete: true,
+      };
+  const fromFitState = input.exclusiveGroupId
+    ? (fromValueState.complete ? buildExclusiveValueStart(input.valueFit) : fromValueState)
+    : {
+        picks: climb(
+          greedyStart(input.pool, input.valueFit),
+          input.pool,
+          input.caps,
+          input.budget,
+          input.valueFit,
+        ),
+        complete: true,
+      };
+  const baselineState = betterObjective(objOf(fromFitState.picks), objOf(fromValueState.picks))
+    ? fromFitState
+    : fromValueState;
+  return {
+    picks: baselineState.picks,
+    baselineIv: baselineState.picks.reduce((sum, pick) => sum + pick.player.iv, 0),
+    optimizationComplete: fromValueState.complete && fromFitState.complete,
+  };
+}
+
+/**
+ * Canonical value-max floor authority without running the identity climb. Large Snake source
+ * certificates use this against immutable Full Sources, then run the bounded identity search on a
+ * smaller candidate union. `buildIdentityRoster` calls the same helper, so the floor has one math
+ * path rather than a test-only approximation.
+ */
+export function buildIdentityValueBaseline(
+  fullPool: SimPlayer[],
+  archetype: SimArchetype,
+  tier: TierKey,
+  budget: number,
+  options: BuildIdentityOptions,
+): IdentityValueBaselineResult {
+  const posture = options.posture ?? 'optimal';
+  const params = POSTURE_PARAMS[posture];
+  const pool = options.banned?.size ? fullPool.filter((player) => !options.banned!.has(player.id)) : fullPool;
+  const caps = options.taxCaps
+    ? [...options.taxCaps]
+    : archetypeTaxCaps(archetype, tier, options.realTeamCount);
+  const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
+  const exclusiveGroupId = options.exclusiveGroupByPlayerId
+    ? (player: SimPlayer) => options.exclusiveGroupByPlayerId!.get(player.id) ?? player.id
+    : undefined;
+  const baseline = buildIdentityValueBaselineState({ pool, caps, budget, valueFit, exclusiveGroupId });
+  return {
+    baselineIv: baseline.baselineIv,
+    valueFloor: options.valueFloorOverride ?? params.valueFloor,
+    optimizationComplete: baseline.optimizationComplete,
+  };
 }
 
 /**
@@ -842,15 +1330,17 @@ export function buildIdentityRoster(
     ? [...options.taxCaps]
     : archetypeTaxCaps(archetype, tier, options.realTeamCount);
   const valueFit = makeFitScore(archetypeCaps(archetype, tier), tier);
+  const exclusiveGroupId = options.exclusiveGroupByPlayerId
+    ? (player: SimPlayer) => options.exclusiveGroupByPlayerId!.get(player.id) ?? player.id
+    : undefined;
 
-  // The pure value-max baseline on the SAME pool anchors the floor (identical two-start procedure
-  // to buildBestRoster, kept inline so that function stays byte-compatible for the frozen gate).
-  const objOf = (picks: SlotPick[]) => objective(picks.map((p) => p.player), caps, budget);
-  const fromValue = climb(greedyStart(pool, (p) => p.iv), pool, caps, budget, valueFit);
-  const fromFit = climb(greedyStart(pool, valueFit), pool, caps, budget, valueFit);
-  const baselinePicks = betterObjective(objOf(fromFit), objOf(fromValue)) ? fromFit : fromValue;
-  const baselineIv = baselinePicks.reduce((s, p) => s + p.player.iv, 0);
-
+  // The pure value-max baseline on the SAME pool anchors the floor. The exported baseline-only
+  // authority uses this exact helper for large-source proof without paying for another identity
+  // climb.
+  const baseline = buildIdentityValueBaselineState({ pool, caps, budget, valueFit, exclusiveGroupId });
+  const baselineOptimizationComplete = baseline.optimizationComplete;
+  const baselinePicks = baseline.picks;
+  const baselineIv = baseline.baselineIv;
   const valueFloor = options.valueFloorOverride ?? params.valueFloor;
   const floorIv = baselineIv * valueFloor;
   const fitScore = makeFitScore(
@@ -863,10 +1353,13 @@ export function buildIdentityRoster(
   );
 
   const slotBonus = options.slotPreferenceBonus;
-  const pinnedBySlot = normalizeIdentityPins(pool, options.pinned);
+  const pinnedBySlot = normalizeIdentityPins(pool, options.pinned, exclusiveGroupId);
   const pinnedSlots = pinnedBySlot ? new Set(pinnedBySlot.keys()) : undefined;
-  const idFromFit = constrainedIdentityClimb(
-    identityGreedyStart(pool, fitScore, slotBonus, pinnedBySlot),
+  const fitStart = exclusiveGroupId
+    ? exactExclusiveIdentityStart(pool, fitScore, exclusiveGroupId, slotBonus, pinnedBySlot) ?? []
+    : identityGreedyStart(pool, fitScore, slotBonus, pinnedBySlot);
+  const idFromFitSingle = constrainedIdentityClimb(
+    fitStart,
     pool,
     caps,
     budget,
@@ -875,13 +1368,18 @@ export function buildIdentityRoster(
     rosterFitScore,
     slotBonus,
     pinnedSlots,
+    exclusiveGroupId,
   );
   // Unpinned builds re-seed the value baseline into identity slot indices; pinned builds use a
   // value-greedy fixed-slot seed so the frozen occupants stay correct.
-  const idFromValue = constrainedIdentityClimb(
-    pinnedBySlot
-      ? identityGreedyStart(pool, (p) => p.iv, undefined, pinnedBySlot)
-      : baselinePicks.map((p) => ({ slotIndex: VALUE_TO_IDENTITY_SLOT[p.slotIndex], player: p.player })),
+  const idFromValueSingle = constrainedIdentityClimb(
+    exclusiveGroupId
+      ? (pinnedBySlot
+          ? exactExclusiveIdentityStart(pool, (player) => player.iv, exclusiveGroupId, undefined, pinnedBySlot) ?? []
+          : baselinePicks)
+      : (pinnedBySlot
+          ? identityGreedyStart(pool, (p) => p.iv, undefined, pinnedBySlot)
+          : baselinePicks.map((p) => ({ slotIndex: VALUE_TO_IDENTITY_SLOT[p.slotIndex], player: p.player }))),
     pool,
     caps,
     budget,
@@ -890,9 +1388,51 @@ export function buildIdentityRoster(
     rosterFitScore,
     slotBonus,
     pinnedSlots,
+    exclusiveGroupId,
   );
 
-  const evaluate = (picks: SlotPick[]) => {
+  const assessIdentityPicks = (picks: readonly SlotPick[]) => {
+    const players = picks.map((pick) => pick.player);
+    const iv = players.reduce((sum, player) => sum + player.iv, 0);
+    const over = Math.max(0, rosterCost(players, caps) - budget);
+    const short = Math.max(0, floorIv - iv);
+    const illegal = players.length === ROSTER_SIZE && isLegalRoster(players) ? 0 : ILLEGAL_ROSTER_PENALTY;
+    return {
+      violation: illegal + over + short,
+      fit: rosterFitScore(players) + players.reduce(
+        (sum, player, index) => sum + (slotBonus?.(player.id, picks[index].slotIndex) ?? 0),
+        0,
+      ),
+    };
+  };
+  const betterIdentityScore = (
+    candidate: ReturnType<typeof assessIdentityPicks>,
+    current: ReturnType<typeof assessIdentityPicks>,
+  ) => candidate.violation < current.violation - 1e-9
+    || (candidate.violation <= current.violation + 1e-9 && candidate.fit > current.fit + 1e-6);
+  const idFromFitState = exclusiveGroupId && baselineOptimizationComplete
+    ? improveExclusiveGroupCycles({
+        start: idFromFitSingle,
+        pool,
+        exclusiveGroupId,
+        assess: assessIdentityPicks,
+        better: betterIdentityScore,
+        pinnedSlots,
+      })
+    : { picks: idFromFitSingle, complete: !exclusiveGroupId };
+  const idFromValueState = exclusiveGroupId && baselineOptimizationComplete
+    ? improveExclusiveGroupCycles({
+        start: idFromValueSingle,
+        pool,
+        exclusiveGroupId,
+        assess: assessIdentityPicks,
+        better: betterIdentityScore,
+        pinnedSlots,
+      })
+    : { picks: idFromValueSingle, complete: !exclusiveGroupId };
+
+  const evaluate = (state: ExclusiveCycleResult) => {
+    const { picks } = state;
     const players = picks.map((p) => p.player);
     const totalIv = players.reduce((s, p) => s + p.iv, 0);
     const totalSalary = players.reduce((s, p) => s + p.salary, 0);
@@ -907,11 +1447,16 @@ export function buildIdentityRoster(
         ? snakeMoneyNonnegative(budget - totalSalary - totalTax)
         : totalSalary + totalTax <= budget,
       floorMet: totalIv >= floorIv - 1e-9,
-      fit: rosterFitScore(players),
+      // The combined slot-aware final-start comparison is exclusive to the group-constrained
+      // Assistant path. Default callers retain the literal pre-versioning roster-fit comparison.
+      fit: rosterFitScore(players) + (exclusiveGroupId
+        ? picks.reduce((sum, pick) => sum + (slotBonus?.(pick.player.id, pick.slotIndex) ?? 0), 0)
+        : 0),
+      optimizationComplete: state.complete,
     };
   };
-  const a = evaluate(idFromFit);
-  const b = evaluate(idFromValue);
+  const a = evaluate(idFromFitState);
+  const b = evaluate(idFromValueState);
   // Feasible = LEGAL 22 + solvent + floor (audit F3 follow-through: a shorter/illegal candidate
   // must never out-rank a legal build on raw fit — legality is a feasibility dimension, not a flag).
   const feasible = (x: typeof a) =>
@@ -941,6 +1486,7 @@ export function buildIdentityRoster(
       chosenEmbodiment = alternateEmbodiment;
     }
   }
+  const identityOptimizationComplete = idFromFitState.complete && idFromValueState.complete;
 
   return {
     name: archetype.name,
@@ -957,6 +1503,7 @@ export function buildIdentityRoster(
     baselineIv,
     valueFloor,
     floorMet: chosen.floorMet,
+    optimizationComplete: baselineOptimizationComplete && identityOptimizationComplete,
     embodiment: chosenEmbodiment,
   };
 }

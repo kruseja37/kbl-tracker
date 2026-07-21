@@ -1,5 +1,15 @@
 # Draft-Available Player Universe — Spec Draft (BUILDING)
 
+> **2026-07-20 source/output correction:** The active draft league is the output of Draft Setup.
+> It is not one of its own source leagues. Draft Setup lists external source leagues only and
+> ignores the active league id in older saved `sourceLeagueIds` arrays. A pool assignment written
+> to the active league cannot become source evidence on reload. An absent source field means all
+> known external source leagues. An explicit empty array means no external source leagues; the
+> separate Unassigned Players switch still controls unassigned players. This correction supersedes
+> the earlier parts of this document that listed the active league as a selectable source. The
+> earlier design could not distinguish source ownership from the target pool rows that Draft Setup
+> itself writes, so a completed build could feed itself on the next render.
+
 **BUILDING (2026-07-08) — JK ruled all three §10 forks the same day this spec was captured; see the rulings recorded at the top of §10 below. Single-seam verdict (both extraction modes converge on one adapter call, LeagueBuilderDraftSetup.tsx ~:2029/:2055 at capture time, re-verified at ~:2043/:2069 at build time); size: small-to-moderate (the anticipated dedup problem doesn't exist — players are shared global rows with multi-league leagueAssignments). Build lane: CONTRACT_UNIVERSE_2026-07-08.md.**
 
 Status: **parked feature**, captured 2026-07-08 per JK so context isn't lost. Not scheduled to any lane. Grounded against `main` as of this session; re-verify file:line citations before build (this area — Draft Setup / pool extraction — moves fast).

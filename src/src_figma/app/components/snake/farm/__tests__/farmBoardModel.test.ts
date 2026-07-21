@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  buildFarmLivePrivateBoard,
   canonicalFarmEligiblePositions,
   buildFarmPublicRosters,
   buildFarmScoutPressure,
+  readFarmLivePrivateBoard,
   reconcileFarmSeatBoards,
   reorderFarmBoard,
   seedFarmSeatBoard,
@@ -132,5 +134,79 @@ describe('farm private boards under scouting fog', () => {
     });
     expect(result.changed).toBe(false);
     expect(result.session).toBe(source);
+  });
+
+  test('round-trips a scout-only live board and takes revision from the server row', () => {
+    const board = seedFarmSeatBoard({ candidates, rankedIds: ['ss', 'c', 'two', 'cf'], remainingTurns: 2 });
+    const cards = candidates.map((candidate, index) => ({
+      id: candidate.id,
+      name: `Prospect ${index + 1}`,
+      position: candidate.eligiblePositions[0],
+      scoutedGrade: 'B' as const,
+      gradeRange: 'A–C',
+      confidence: 'medium' as const,
+      scoutName: 'Own Scout',
+      scoutsCall: 'SCOUT READ.',
+      eligiblePositions: [...candidate.eligiblePositions],
+    }));
+    const payload = buildFarmLivePrivateBoard({ board, cards, farmBudget: 250_000 });
+    expect(JSON.stringify(payload)).not.toMatch(/trueGrade|prospectProfile|power|contact|velocity|hiddenPersonality/i);
+
+    const parsed = readFarmLivePrivateBoard({
+      roomId: 'room', teamId: 'a', boardRevision: 7, board: payload,
+      updatedByDeviceId: 'host', updatedAt: 'now',
+    });
+    expect(parsed).toEqual(expect.objectContaining({ farmBudget: 250_000, cards }));
+    expect(parsed?.board).toEqual(expect.objectContaining({ overall: board.overall, revision: 7 }));
+  });
+
+  test('rejects a FARM private board that contains true prospect data', () => {
+    const board = seedFarmSeatBoard({ candidates, rankedIds: ['ss', 'c', 'two', 'cf'], remainingTurns: 2 });
+    expect(() => buildFarmLivePrivateBoard({
+      board,
+      cards: [{
+        id: 'ss', name: 'Secret', position: 'SS', scoutedGrade: 'B', gradeRange: 'A–C',
+        confidence: 'medium', scoutName: 'Scout', scoutsCall: 'READ', eligiblePositions: ['SS'],
+        trueGrade: 'A+',
+      } as never],
+      farmBudget: 250_000,
+    })).toThrow('forbidden prospect data');
+  });
+
+  test('keeps eight club scout payloads isolated from one another', () => {
+    const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index + 1}`);
+    const rows = teamIds.map((teamId, teamIndex) => {
+      const cards = candidates.map((candidate, cardIndex) => ({
+        id: candidate.id,
+        name: `Prospect ${cardIndex + 1}`,
+        position: candidate.eligiblePositions[0],
+        scoutedGrade: 'B' as const,
+        gradeRange: 'A–C',
+        confidence: 'medium' as const,
+        scoutName: `Scout ${teamId}`,
+        scoutsCall: `PRIVATE READ ${teamIndex + 1}.`,
+        eligiblePositions: [...candidate.eligiblePositions],
+      }));
+      const board = seedFarmSeatBoard({
+        candidates,
+        rankedIds: [...candidates.map((candidate) => candidate.id).slice(teamIndex % candidates.length), ...candidates.map((candidate) => candidate.id).slice(0, teamIndex % candidates.length)],
+        remainingTurns: 10,
+      });
+      return {
+        teamId,
+        payload: buildFarmLivePrivateBoard({ board, cards, farmBudget: 250_000 + teamIndex }),
+      };
+    });
+
+    expect(rows).toHaveLength(8);
+    for (const row of rows) {
+      const ownScout = `Scout ${row.teamId}`;
+      const serialized = JSON.stringify(row.payload);
+      expect(serialized).toContain(ownScout);
+      for (const otherTeamId of teamIds.filter((id) => id !== row.teamId)) {
+        expect(serialized).not.toContain(`Scout ${otherTeamId}`);
+      }
+      expect(serialized).not.toMatch(/trueGrade|prospectProfile|power|velocity|hiddenPersonality/i);
+    }
   });
 });

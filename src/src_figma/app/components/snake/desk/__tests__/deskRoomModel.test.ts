@@ -260,6 +260,157 @@ describe('private desk room assembly', () => {
     });
   });
 
+  it('preserves an exact certified surplus closer before the team has drafted a closer', () => {
+    const fixture = canonicalBackfillFixture('certified-extra-closer');
+    const availableExtra: DeskEligibilityCandidate = {
+      id: 'certified-available-extra-cp', iv: 90, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'certified-available-extra-cp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, RP1: availableExtra.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [availableExtra.id, ...fixture.board.rankings.global],
+        byPosition: { CP: [availableExtra.id, fixture.board.slots.CP] },
+      },
+    };
+    const source = { ...session(), seatBoards: { a: savedBoard } } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, availableExtra],
+      unavailablePlayerIds: new Set(),
+    });
+
+    expect(result.changed).toBe(false);
+    expect(result.session).toBe(source);
+    expect(result.session.seatBoards?.a).toBe(savedBoard);
+    expect(result.session.seatBoards?.a.slots.RP1).toBe(availableExtra.id);
+  });
+
+  it('backfills a certified ninth pure starter in SWING without changing any survivor', () => {
+    const fixture = canonicalBackfillFixture('certified-extra-starter');
+    const originalSwingHitterId = fixture.board.slots.SWING;
+    const goneStarter: DeskEligibilityCandidate = {
+      id: 'certified-gone-ninth-sp', position: 'SP', eligiblePositions: ['SP'],
+      rosterShape: { isPitcher: true, position: 'SP', role: 'SP' }, versionGroupId: 'certified-gone-ninth-sp-human',
+    };
+    const promotedStarter: DeskEligibilityCandidate = {
+      id: 'certified-promoted-ninth-sp', position: 'SP', eligiblePositions: ['SP'],
+      rosterShape: { isPitcher: true, position: 'SP', role: 'SP' }, versionGroupId: 'certified-promoted-ninth-sp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, SWING: goneStarter.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [
+          promotedStarter.id,
+          goneStarter.id,
+          ...fixture.board.rankings.global.filter((playerId) => playerId !== originalSwingHitterId),
+        ],
+      },
+    };
+    const source = { ...session(), seatBoards: { a: savedBoard } } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [
+        ...fixture.candidates.filter((candidate) => candidate.id !== originalSwingHitterId),
+        goneStarter,
+        promotedStarter,
+      ],
+      unavailablePlayerIds: new Set([goneStarter.id]),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.seatBoards?.a.slots.SWING).toBe(promotedStarter.id);
+    for (const [slotId, playerId] of Object.entries(savedBoard.slots)) {
+      if (slotId !== 'SWING') expect(result.session.seatBoards?.a.slots[slotId as SnakeBoardSlotId]).toBe(playerId);
+    }
+  });
+
+  it('repairs a complete saved board so the highest-IV committed closer owns CP', () => {
+    const fixture = canonicalBackfillFixture('closer-order');
+    const lower: DeskEligibilityCandidate = {
+      id: 'lower-owned-cp', iv: 40, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'lower-owned-cp-human',
+    };
+    const higher: DeskEligibilityCandidate = {
+      id: 'higher-owned-cp', iv: 80, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'higher-owned-cp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, CP: lower.id, RP1: higher.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [lower.id, higher.id, ...fixture.board.rankings.global],
+        byPosition: { CP: [lower.id, higher.id] },
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [lower, higher].map((candidate, index) => ({
+        round: 1, pick: index + 1, pickIndex: index, teamId: 'a', playerId: candidate.id,
+        versionGroupId: candidate.versionGroupId!, settledSalary: candidate.iv!, marginalTax: 0,
+      })),
+      seatBoards: { a: savedBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, lower, higher],
+      unavailablePlayerIds: new Set([lower.id, higher.id]),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.seatBoards?.a.slots.CP).toBe(higher.id);
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).toContain(lower.id);
+    expect(savedBoard.slots.CP).toBe(lower.id);
+  });
+
+  it('repairs a complete saved board that carries an undrafted extra closer as relief depth', () => {
+    const fixture = canonicalBackfillFixture('extra-closer');
+    const owned: DeskEligibilityCandidate = {
+      id: 'owned-cp', iv: 80, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'owned-cp-human',
+    };
+    const availableExtra: DeskEligibilityCandidate = {
+      id: 'available-extra-cp', iv: 90, position: 'CP', eligiblePositions: ['CP'],
+      rosterShape: { isPitcher: true, position: 'CP', role: 'CP' }, versionGroupId: 'available-extra-cp-human',
+    };
+    const savedBoard: SnakeSeatBoardRecord = {
+      ...fixture.board,
+      slots: { ...fixture.board.slots, CP: owned.id, RP1: availableExtra.id },
+      rankings: {
+        ...fixture.board.rankings,
+        global: [availableExtra.id, owned.id, ...fixture.board.rankings.global],
+        byPosition: { CP: [availableExtra.id, owned.id] },
+      },
+    };
+    const source = {
+      ...session(),
+      completedPicks: [{
+        round: 1, pick: 1, pickIndex: 0, teamId: 'a', playerId: owned.id,
+        versionGroupId: owned.versionGroupId!, settledSalary: owned.iv!, marginalTax: 0,
+      }],
+      seatBoards: { a: savedBoard },
+    } as LeagueBuilderMlbDraftSession;
+
+    const result = reconcileExistingSeatBoards({
+      session: source,
+      candidates: [...fixture.candidates, owned, availableExtra],
+      unavailablePlayerIds: new Set([owned.id]),
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.session.seatBoards?.a.slots.CP).toBe(owned.id);
+    expect(Object.values(result.session.seatBoards?.a.slots ?? {})).not.toContain(availableExtra.id);
+    expect(result.session.seatBoards?.a.slots.RP1).toBe(fixture.board.slots.RP1);
+  });
+
   it('only marks an existing board changed when automatic FLEX backfill can prove canonical version-unique truth', () => {
     const fixture = canonicalBackfillFixture('automatic');
     const gonePlayerId = fixture.board.slots.FLEX1;
@@ -404,7 +555,7 @@ describe('private desk room assembly', () => {
       .toBe('WEAK FIT');
   });
 
-  it('refuses STRONG FIT when unshifted rating rows create material tax pressure', () => {
+  it('keeps archetype FIT independent when other rating rows create material tax pressure', () => {
     const locked = resolveLockedSeat({ team: { id: 'a' } as Team, session: session('junkball-surgeons') });
     const hitterShape = { isPitcher: false, position: 'CF' } as const;
     const hitter = storedPlayer('one-lever-fit', {
@@ -445,7 +596,7 @@ describe('private desk room assembly', () => {
       baseCaps: caps,
       need: null,
       openSlots: 22,
-    })).toBe('WEAK FIT');
+    })).toBe('STRONG FIT');
   });
 
   it('keys exact settled public prices and uses them instead of frozen card prices', () => {

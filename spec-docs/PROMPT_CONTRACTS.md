@@ -30858,6 +30858,7 @@ Close FINDING-166 through FINDING-169 and FINDING-173 without changing MLB trade
 - `src/utils/leagueBuilderStorage.ts`
 - `src/utils/syncConfig.ts`
 - `src/utils/syncEngine.ts`
+- `src/utils/leagueBuilderStorage.ts` (additive recovery-publication marker only)
 - `src/src_figma/app/pages/SnakeDraftRoom.tsx`
 - `src/src_figma/app/pages/SnakeCompanion.tsx`
 - `src/src_figma/app/components/snake/desk/SelectedPlayerCard.tsx`
@@ -31877,3 +31878,1173 @@ Stop if the adjustment requires changing shared layout behavior or any other hom
 
 Use medium reasoning effort.
 <!-- ===== END CONTRACT: HOMEBAR-1 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 ===== -->
+# SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 — LIVE GM DECISION DESK CORRECTIONS
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-16 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair the approved Snake Draft walkthrough defects on the clean PR #115 branch without changing
+the tax, salary, cap, archetype, setup-pool, auction, or persistence contracts. The completed desk
+must make committed roster truth obvious, assign closers consistently, expose fast local decision
+views, and remove non-actionable clutter without introducing interaction lag.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-16 walkthrough notes and approvals.
+- `spec-docs/NOW/SNAKE_DRAFT.md`, `spec-docs/DECISIONS_LOG.md`, and FINDING-220 through FINDING-224.
+- Snake salary is frozen IV. Do not add a redundant Salary sort.
+- `TAX IF PICKED` is signed marginal tax for adding the player to this club now.
+- `TRUE COST` is frozen IV plus that signed marginal tax.
+- JK's browser walkthrough remains the sole product-acceptance gate.
+
+## ALLOWED FILES
+- `src/engines/snakeAssistantBoard.ts` and focused tests
+- `src/src_figma/app/components/snake/desk/deskModel.ts`, `deskRoomModel.ts`, `RankingsView.tsx`,
+  `DeskCandidateRow.tsx`, `BoardView.tsx`, `PrivateDesk.tsx`, `SelectedPlayerCard.tsx`, and focused tests
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`, preview fixtures, and focused tests
+- required findings, decision, truth-map, execution-report, status, audit, and session documents
+
+## REQUIRED BEHAVIOR
+- Both My Board and Assistant GM treat drafted players owned by the active club as committed. The
+  highest-IV owned CP occupies CP; additional owned CPs remain legal depth. Once CP is owned, no
+  undrafted extra CP enters a normal 22 unless it is the explicit Optimize Around target.
+- Own drafted players remain locked and are marked by team color plus `ROSTER`. Rival-drafted
+  players leave actionable boards and Player Pool. Activity remains the public pick record.
+- Player Pool and position views can filter All/Strong/Solid/Weak and sort by Board order, Fit, IV,
+  signed Tax If Picked, True Cost, POW, CON, SPD, FLD, ARM, VEL, JNK, or ACC. Do not add Salary.
+- Sort/filter is view-only, stable, memoized local state. It must not call an optimizer, worker,
+  persistence writer, board reconciler, or full pool rebuild. Direction changes are local.
+- `TOP` always persists the selected player to the top of the current Overall or position ranking,
+  including from a sorted or filtered view.
+- Candidate rows show only actionable risk. Unavailable risk becomes one compact board-level state;
+  details remain behind Help. Remove the dead selected-card placeholder and shorten the visible
+  Assistant heading to `ASST GM 22`.
+- Main and companion desks use the same board, CP, sort/filter, branding, and privacy laws.
+
+## PERFORMANCE AND PROOF
+- Before edits, record the clean branch's build and full-suite baseline; pre-existing failures stay
+  distinct from this change.
+- Focused tests must prove the CP invariant, committed/rival state, team-branded roster rows,
+  sort/filter order, signed tax and true-cost ordering, rating order, and context-aware `TOP`.
+- Tests must prove sort/filter changes trigger zero persistence, optimizer, worker, or board
+  recalculation calls; `TOP` triggers one intended reorder only.
+- Run focused tests after each bounded batch, then TypeScript, changed-file lint, production build,
+  final full tests once, and `git diff --check`.
+- Run a bounded real-browser Mac and iPad-viewport journey. Record repeated sort/filter response
+  time and verify no console error, blink loop, indefinite calculation, or stale private state.
+- A separate read-only auditor must inspect the committed diff and try to disprove the state and
+  performance claims before handoff to JK.
+
+## STOP CONDITIONS
+Stop rather than changing economy/archetype math, adding a schema or Supabase migration, weakening
+private-desk cover, exposing insider data, enabling Farm trades, changing auction behavior, hiding a
+correctness failure behind copy, or accepting a measurable interaction regression.
+<!-- ===== END CONTRACT: SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-FIT-POOL-CORRECTNESS-34 ===== -->
+# SNAKE-FIT-POOL-CORRECTNESS-34 — IDENTITY-TRUE FIT AND BOUNDED CERTIFICATE POOLS
+
+**ROUTE:** Codex builder | high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-fit-pool-calibration`
+
+## ROLE AND GOAL
+Implement only the correctness repair proven by FINDING-225 and FINDING-226: make displayed FIT
+mean team-archetype alignment, and build Tight/Competitive/Loose pools from an exact simultaneous
+identity certificate without silently exceeding the selected named preset. Do not perform the
+separate Draft Setup performance work.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 browser feedback: the 440-player SMB source showed almost no STRONG FIT, roughly
+  85% WEAK FIT, and a nominally generous shaped pool could not honestly support chosen identities.
+- FINDING-225: canonical 440-player proof reproduced 69.1%-83.2% displayed WEAK at Standard because
+  tax pressure overwrites identity fit; the identity-only curve is materially healthier.
+- FINDING-226: all-claim protection expands eight-team Competitive/Loose from 238/264 to 336/344;
+  the full-source simultaneous proof needs exactly 176 disjoint support players. Numeric shaping
+  also overfills targets when protected distribution exceeds its grade/role quotas.
+- Help-Button UI Law remains canon. Existing source-role and blocker detail stays behind Help.
+- JK's browser walk remains the sole product-acceptance gate.
+
+## ALLOWED FILES
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/components/snake/desk/__tests__/deskRoomModel.test.ts`
+- `src/engines/poolFromDemand.ts`
+- `src/engines/__tests__/poolFromDemand.test.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`
+- `src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.universe.test.tsx`
+- `src/engines/__tests__/snakeFitPoolCalibration.test.ts` (new focused real-440 regression)
+- Required finding, contract, decision, audit, status, and session documents
+
+The temporary `draftFitDistribution.diagnostic.test.ts` may be deleted; it must not ship.
+
+## DO NOT TOUCH
+- `snakeSeatingProof.ts`, its search law, proof caps, workers, or transport
+- Proof scheduling, off-main-thread execution, fingerprints, cancellation, caching, refresh behavior,
+  persistence batching, or latency/UI-busy behavior
+- Archetype definitions, cap shifts, identity thresholds, IV/salary/tax formulas, roster legality,
+  version-group/person exclusivity, Auction, FARM, Supabase, schema, deploy, or production config
+- Inline explanatory copy; blocker detail remains behind Help
+
+## REQUIRED BEHAVIOR
+- `STRONG FIT` / `SOLID FIT` / `WEAK FIT` use only the shared exact archetype multiplier and its
+  existing `>=1.04` / `<=0.96` thresholds. Tax never downgrades FIT. `TAX IF PICKED` and `TRUE COST`
+  remain unchanged and separate.
+- For a shaped Snake BUILD, prove the exact eligible Full Sources membership first. If feasible,
+  use only the proof's disjoint assignment ids as identity support; do not protect every independent
+  archetype seed or every extractor floor.
+- Seed the already-ruled competitive position-depth floor alongside certificate support before
+  numeric fill. These support ids are engine-generated membership, not user hand-picks.
+- Numeric shaping trims unprotected quota overfill to the effective target whenever protected ids
+  do not themselves exceed it. Protected ids still win; diagnostics must not falsely claim an
+  overage is entirely protected when evictable cards exist.
+- Candidate acceptance requires both an exact feasible final proof and `finalSize <= effectiveTarget`.
+  BUILD may try only the selected preset and wider named presets in order. If Loose cannot satisfy
+  both conditions, persist Full Sources and label that exact fallback. Never persist an unnamed size
+  above Loose while calling it Tight, Competitive, or Loose.
+- If Full Sources itself is infeasible or proof-unknown, keep its honest proof state and existing
+  actionable blocker reasons. Do not manufacture a shaped green state.
+- Manual adds, removals, roster pins, source selection, chosen archetypes, and current actual-mode
+  receipt persistence retain their established semantics.
+- An auto-widened named preset remains the current persisted preset. `RESET EDITS` clears only the
+  hand-add/remove ledger, then rebuilds that current preset through the same Full Sources certificate
+  and final proof path; it does not silently restore the narrower pre-widen selection.
+
+## VERIFICATION
+- Desk regression proves a tax-heavy but identity-strong player remains STRONG while tax fields are
+  untouched elsewhere.
+- Numeric-shaper regression proves skewed protected distribution below target returns exactly the
+  target, preserves every protected id, and deterministically trims only unprotected candidates.
+- Draft Setup regressions prove certificate assignment ids are passed into shaping, all-claim
+  preservation is disabled for that build, oversize candidate presets are rejected/widened, and a
+  Full Sources infeasible/unknown result is reported honestly. The reset regression must model the
+  real `replaceLeagueLocal` state transition and prove Reset clears edits while retaining the
+  persisted auto-widened named preset.
+- Real-data regression seeds exactly the 440 assigned SMB4 players, checks all 24 identity-only FIT
+  distributions, and proves the checked-in eight-identity Competitive/Loose pools stay within their
+  named bounds with no LOCKED identity and an exact simultaneous finish.
+- Run `NODE_ENV= ` focused Vitest, TypeScript, changed-file ESLint, production build, and
+  `git diff --check`. A separate non-builder auditor must try to disprove the frozen diff.
+
+## STOP CONDITIONS
+Stop if correctness requires changing proof scheduling/runtime placement, weakening any proof or
+economy law, changing the 1.04/0.96 thresholds, adding inline explainer text, touching a forbidden
+file, or overlapping runtime edits with the performance lane.
+
+Use high reasoning effort.
+<!-- ===== END CONTRACT: SNAKE-FIT-POOL-CORRECTNESS-34 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 ===== -->
+# SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 — PRODUCTION-TRUE CHOSEN-IDENTITY CERTIFICATE
+
+**ROUTE:** Codex correctness builder | high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-fit-pool-calibration`
+
+## ROLE AND GOAL
+Close FINDING-228 without changing the product law: make the bounded simultaneous certifier find and
+independently validate viable disjoint chosen-identity rosters for the exact production Draft Setup
+input, then prove the 440-player Full Sources and bounded 238/264 builds through that exact adapter.
+
+## SOURCE OF TRUTH
+- FINDING-228 and the production browser evidence returned by the performance lane.
+- Production `buildSnakeSetupProofInput`, which supplies both `capIdentity` and
+  `identityArchetype` for every chosen MLB archetype.
+- The exact 440 assigned SMB4 players; the 66 unassigned free agents remain excluded.
+- Existing `validateConstructiveSnakeSeatingProof` law: unique people, legal 22, exact Snake money,
+  optimal-posture IV floor, and strict positive identity embodiment for every club.
+- Help-Button UI Law and JK's real browser walk remain final product gates.
+
+## ALLOWED FILES
+- `src/engines/snakeSeatingProof.ts`
+- `src/engines/__tests__/snakeSeatingProof.test.ts`
+- `src/engines/__tests__/snakeFitPoolCalibration.test.ts`
+- Required FINDING-228 contract, audit, decision, status, and session documents
+
+## DO NOT TOUCH
+- FIT math, archetype definitions or thresholds, cap/tax/IV/salary formulas, roster law, value-floor
+  percentage, strict `boostZ > 0`, version/person exclusivity, pool membership shaping, position
+  floors, named 238/264 bounds, auto-widen order, blocker meaning, Auction, FARM, Supabase, or schema
+- Performance-lane worker, fingerprint, cancellation, cache, refresh, persistence, latency, journey,
+  or page scheduling files
+- `identity-proof-unknown` semantics; bounded failure remains UNKNOWN, never a fabricated success or
+  a confirmed shortage
+
+## REQUIRED BEHAVIOR
+- Permanent real-data calibration constructs its proof input through production
+  `buildSnakeSetupProofInput` and asserts every chosen club carries `identityArchetype`.
+- Exact 440 Full Sources must mint a disjoint 22-per-club certificate for the checked eight-club room;
+  its assignment IDs seed the unchanged 238/264 membership shaper.
+- The final exact 238 Competitive and 264 Loose inputs must independently re-prove every chosen
+  identity through the same production adapter input.
+- The two-club Murderers Row/Whiteyball browser case must also certify on exact Full Sources.
+- Any new deterministic construction is only a certificate candidate. It may return SUCCESS only
+  after the unchanged independent constructive validator accepts every assignment and bill.
+- Existing synthetic UNKNOWN coverage must remain UNKNOWN when the bounded constructor cannot prove
+  strict identity embodiment.
+
+## VERIFICATION
+- Start with the corrected exact-440 calibration red at Full Sources.
+- Add focused constructor/validator regressions, then run exact-440 identity-aware calibration,
+  complete Snake seating proof tests, surrounding pool/Draft Setup correctness gates, TypeScript,
+  changed-file ESLint, production build, and `git diff --check`.
+- Freeze the final diff and require a separate non-builder auditor to try to disprove the exact
+  adapter input, certificate law, named bounds, and UNKNOWN preservation.
+
+## STOP CONDITIONS
+Stop rather than weakening any product law, editing performance files, hard-coding the stock result,
+accepting an unvalidated assignment, hiding UNKNOWN, merging, pushing, deploying, or claiming product
+acceptance before combined audit, one preview, and JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-DRAFT-SETUP-PERFORMANCE-35 ===== -->
+# SNAKE-DRAFT-SETUP-PERFORMANCE-35 — NON-BLOCKING PROOF AND NARROW STATE UPDATES
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair only the confirmed Snake proof-scheduling responsiveness defects after rebasing onto the
+approved correctness lane. Exact seating proof must run outside the browser main thread, identical
+stable inputs must share one proof, stale work must be cancelled, and successful pool writes must
+patch local state instead of reloading the complete League Builder dataset.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 production walkthrough: two-team Loose could not proceed; switching to all 440
+  players froze Draft Setup and left League Builder sticky or unresponsive.
+- FINDING-227.
+- Correctness contracts `SNAKE-FIT-POOL-CORRECTNESS-34` and
+  `SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36`; their FIT, membership, identity-certificate,
+  named-bound, auto-widen, reset, readiness, and honest-UNKNOWN laws are frozen.
+- Help-Button UI Law remains canon. JK's real browser walk remains the product-acceptance gate.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx` (Practice restart proof only)
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- the focused Snake setup proof client and worker
+- focused Draft Setup/proof-client tests and required session documents
+
+## DO NOT TOUCH
+- Proof caps, search order, result meaning, certificate validator law, FIT math, archetype thresholds,
+  identity-support membership, position floors, named bounds, auto-widen order, roster legality,
+  IV/salary/tax, Auction, FARM, Supabase, schema, deploy, or production configuration
+- Inline explanatory copy or a weakened/hard-coded readiness result
+
+## REQUIRED BEHAVIOR
+- Production Draft Setup invokes simultaneous seating only through an ES-module Web Worker; no
+  production fallback may execute the proof on the main thread.
+- A deterministic complete-input fingerprint shares equivalent in-flight/resolved work through a
+  bounded cache. Changed inputs cannot reuse stale results.
+- Each caller has cancellable interest; unowned stale workers terminate, and late results cannot
+  update later readiness or BUILD state.
+- Adapter readiness, BUILD, Reset, and legacy restore share the worker client. Snake's duplicate
+  legacy salary diagnostic does not run.
+- Practice restart obtains and injects a fresh empty-room worker certificate before rebuilding.
+- Successful membership writes patch returned players locally and do not trigger a broad refresh.
+- Worker failure fails closed and never fabricates feasibility.
+
+## VERIFICATION
+- Focused tests cover fingerprinting, deduplication, bounded reuse, input separation, cancellation,
+  stale rejection, fail-closed transport, BUILD/Reset receipts, local patches, and Practice restart.
+- Re-run correctness gates, exact production-input calibration, TypeScript, changed-file ESLint,
+  production build, and diff integrity.
+- Production Mac/iPad browser gates must remain responsive during two-team and Full Sources proofs.
+- A separate non-builder auditor must approve the combined result before one preview reaches JK.
+
+## STOP CONDITIONS
+Stop rather than weakening proof or frozen correctness law, adding a synchronous production fallback,
+accepting duplicate stable-input proof, hiding failure, merging, pushing, deploying, or declaring
+product acceptance without JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-DRAFT-SETUP-PERFORMANCE-35 ===== -->
+
+<!-- ===== CONTRACT: LEGENDS-DRAFT-TARGET-RECOVERY-37 ===== -->
+# LEGENDS-DRAFT-TARGET-RECOVERY-37 — RECOVER STOCK-SOURCE COLLISION WITHOUT LOSING THE FOUR-TEAM DRAFT
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair the exact browser state where the League Builder dashboard routes Draft Setup through a
+Legends source-library id and legacy verified Legends cards retain a false SML assignment, blocking
+the Legends repair and inflating the SML source from 506 to 1,341 players.
+
+## SOURCE OF TRUTH
+- JK's 2026-07-17 browser evidence: the intended target is the existing four-team league; importing
+  Legends fails on `hl:ryann001:draft` owned by `League Builder`; Draft Setup shows SML 1,341.
+- System source libraries feed draft pools but are not draft targets.
+- The exact count identity is 506 stock SMB4 players + 835 Legends cards = 1,341.
+- Existing user-created league assignments are durable and must remain protected.
+
+## ALLOWED FILES
+- `src/src_figma/app/pages/LeagueBuilder.tsx`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- `src/utils/historicalLegendsImport.ts`
+- `src/utils/leagueBuilderStorage.ts`
+- focused tests for those paths
+- required session documents
+
+## REQUIRED BEHAVIOR
+- Dashboard Draft Setup never selects a `sourceLibrary` as the target.
+- Draft Setup treats a requested source-library id as source context, resolves the real draft target,
+  and writes later league selections into the URL.
+- A verified payload-owned `hl:` legacy card may be repaired when every prior assignment is only to
+  a closed stock source (`sml`/`mlb`). Any user-league assignment still blocks ownership repair.
+- Legends reimport removes stale stock-source assignments while preserving ordinary user-league
+  assignments and provisioning the three version libraries.
+- SMB4 refresh deletes only SMB4-owned or proven legacy SMB4 rows; it cannot delete a non-SMB4 row
+  merely because that row carries the stale SML assignment.
+- No four-team league, draft session, roster, custom assignment, or cloud snapshot is reset.
+
+## VERIFICATION
+- Focused Legends import, League Builder navigation, Draft Setup routing, and SMB4-refresh tests.
+- TypeScript, changed-file ESLint, production build, and diff integrity.
+- Separate non-builder audit before JK retries the browser import/repair path.
+
+## STOP CONDITIONS
+Stop rather than auto-deleting a custom assignment, resetting the four-team league, changing draft
+math, altering Supabase data, merging, pushing, deploying, or claiming product acceptance before
+JK's browser walk.
+<!-- ===== END CONTRACT: LEGENDS-DRAFT-TARGET-RECOVERY-37 ===== -->
+
+<!-- ===== CONTRACT: SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 ===== -->
+# SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 — MATERIALIZE EVERY LEGAL 14/8 CERTIFICATE
+
+**ROUTE:** Codex builder | extra-high reasoning; separate non-builder auditor
+**Date:** 2026-07-17 | **Branch:** `codex/draft-setup-browser-fixes`
+
+## ROLE AND GOAL
+Repair JK's repeated Full Sources blocker where the Sirloins have a valid legal-finish certificate
+but initial board materialization reports broken `SP4, SWING`. Preserve the certificate, canonical
+roster law, and empty-roster draft start; change only how the private 22-player plan is represented.
+
+## SOURCE OF TRUTH
+- A new Snake league begins with empty drafted rosters. The certificate is a hypothetical legal and
+  affordable finish, and the initial board is a private 22-player plan—not roster ownership.
+- Canonical legality permits 14 hitters / 8 pitchers when catcher depth comes from a Two Way (C)
+  pitcher. That pitcher must remain in a staff slot; the fifth bench-body row becomes ordinary flex.
+- The same board law applies to My Board and the read-only Assistant board.
+
+## ALLOWED FILES
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/BoardView.tsx`
+- `src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx`
+- focused desk/BoardView tests and required session documents
+
+## REQUIRED BEHAVIOR
+- A legal 14/8 certificate with one primary C and Two Way (C) staff coverage materializes 22 unique
+  players without moving the Two Way pitcher out of the staff.
+- `BACKUP_C` continues to prefer actual C-coverers. It may hold the fifth ordinary position player
+  only when whole-roster legality independently proves catcher depth elsewhere.
+- When an ordinary hitter occupies that stored seat, both My Board and Assistant display `FLEX5`,
+  not a false backup-catcher label.
+- Missing closer, illegal roster, duplicate person/version, affordability, and certificate failures
+  remain fail-closed. No roster, pool, tax, FIT, archetype, or draft-session math changes.
+
+## VERIFICATION
+- Red-first exact 14/8 Two Way (C) adapter regression plus desk matching and BoardView label proof.
+- Full desk/adapter tests, TypeScript, changed-file ESLint, production build, and diff integrity.
+- Separate non-builder audit before JK retries Start Draft. JK's browser remains the product gate.
+
+## STOP CONDITIONS
+Stop rather than weakening `isLegalRoster`, duplicating one player across two rows, relabeling a
+pitcher's role, changing the certificate, resetting the league, merging, pushing, deploying, or
+claiming product acceptance before JK's browser walk.
+<!-- ===== END CONTRACT: SNAKE-TWO-WAY-BOARD-MATERIALIZATION-38 ===== -->
+## SNAKE-CERTIFIED-BOARD-ROLE-MATERIALIZATION-39
+
+**Role:** Snake private-board materialization builder.
+
+**Goal:** Every exact 22-player roster accepted by the existing simultaneous legal-finish
+certificate must materialize into one complete private board without imposing a stricter second
+pitching-role law through UI storage rows.
+
+**Source of truth:** FINDING-232 and `src/data/rosterConstruction.ts` canonical `isLegalRoster`.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/snake/desk/deskModel.ts`
+- `src/src_figma/app/components/snake/desk/deskRoomModel.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- focused tests for those surfaces
+- required session/finding/status records
+
+**Frozen behavior:**
+
+- Do not alter simultaneous proof, pool membership, source selection, named pool sizes, FIT, tax,
+  archetypes, salary/IV, affordability, version-person uniqueness, or canonical roster legality.
+- Do not duplicate a player to visually satisfy both starter and reliever rows.
+- Do not require the certificate to select a different 22 merely to satisfy board labels.
+- Keep the persisted 22-slot board schema compatible.
+- The final selected set must still pass the unchanged `isLegalRoster`, unique-id, and unique-person
+  checks before a board is returned.
+- Preserve GM rankings, reorder/backfill fail-closed behavior, and My/Assistant shared rendering.
+
+**Required red-first proof:**
+
+- A legal 13-hitter/9-pitcher certificate with surplus closers that currently breaks `RP3, SWING`.
+- A legal 13-hitter/9-pitcher certificate whose ninth arm is a surplus pure starter.
+- Existing Two Way catcher 14/8 coverage remains green.
+- The materialized board contains exactly 22 unique ids and unique version groups and the exact
+  certified membership.
+
+**Gates:** focused desk/adapter suites, TypeScript, changed-file ESLint, production build, diff
+integrity, separate non-builder audit, then JK's same four-team browser retry.
+
+## SNAKE-COMPANION-HOME-SIGNIN-FEEDBACK-40
+
+**Role:** Companion-entry UI builder.
+
+**Goal:** The home Cloud Sync sign-in form must never silently absorb a rejected or stalled Auth
+request. Every attempt ends in authenticated state, provider error, network-unreachable copy, or a
+bounded timeout that permits retry.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/LoginForm.tsx`
+- `src/supabase.ts`
+- `src/src_figma/__tests__/app/SyncModal.test.tsx`
+- `src/src_figma/__tests__/app/supabaseAuthStorage.test.ts`
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Do not change Supabase project configuration, credentials, Auth provider, sync semantics,
+  companion claims, or room admission.
+- Preserve local storage as the normal persistent Auth store. Only a quota-exceeded token write may
+  fall back to same-tab session storage; never clear, inspect, enumerate, or overwrite any unrelated
+  league/draft key.
+- Do not log, inspect, serialize, or persist email/password values.
+- Preserve returned provider errors such as invalid credentials.
+- Preserve the existing loading/disabled submit state and shared home/companion form.
+- Keep explanatory copy out of the normal surface; visible error and loading state are actionable
+  status, while methodology remains behind Help.
+
+**Required red-first proof:**
+
+- A rejected `Load failed` sign-in promise produces the existing account-service-unreachable copy.
+- A never-settling sign-in promise exits loading after the bounded wait and shows a retryable timeout.
+- The existing successful submit wiring and provider-error rendering remain green.
+- A normal Auth-token write uses local storage and leaves no session fallback behind.
+- A quota-exceeded local token write succeeds through session storage, whose newer token wins over a
+  stale local copy; sign-out removes that same token key from both stores.
+- A non-quota storage failure still rejects instead of hiding a different defect.
+
+**Gates:** focused SyncModal and companion sign-in suites, TypeScript, changed-file ESLint,
+production build, diff integrity, separate non-builder audit, then JK's home sign-in retry.
+
+## SNAKE-COMPANION-PENDING-ADMISSION-FEEDBACK-41
+
+**Role:** Companion-admission UI builder.
+
+**Goal:** A recovered pending request must never trap the companion in a waiting-only screen, and
+Hotseat must see that current claims await action without opening the approval panel automatically.
+
+**Allowed implementation files:**
+
+- `src/src_figma/app/components/snake/companion/CompanionClaimScreen.tsx`
+- `src/src_figma/app/components/snake/SnakeDraftRoomView.tsx`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- focused existing companion/room view tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Keep companion content covered until the exact claim is approved on Hotseat.
+- Preserve GM/package matching, four-digit room validation, device capacity, claim identities and
+  versions, explicit Hotseat approval, cloud sync, FARM no-trade law, and all private board/pick/trade
+  guards.
+- Do not auto-open the approval panel or expose a claimant's GM/team details on the shared surface.
+- Keep explanatory copy behind Help; a pending count and resend action are operational state.
+
+**Required red-first proof:**
+
+- A pending CompanionClaimScreen still exposes GM name and room-code fields and can submit again.
+- The normal fresh claim screen remains unchanged and the pending Help copy remains behind Help.
+- Hotseat shows `COMPANIONS 1` (and alert styling) for one pending claim while the approval surface
+  remains absent until that button is pressed.
+- Zero pending claims retain the ordinary `COMPANIONS` control.
+
+**Gates:** focused CompanionSurfaces/AuthFlow/SnakeDraftRoomView suites, TypeScript, changed-file
+ESLint, production build, diff integrity, separate non-builder audit, then JK's same-device admission
+retry. No push, merge, or deploy.
+
+## SNAKE-COMPANION-LIVE-ROOM-PROPAGATION-42
+
+**Role:** Snake companion live-state builder.
+
+**Goal:** Every completed Hotseat MLB pick, trade, and correction must publish the authoritative room
+row before the UI reports the live action complete. A companion's private-board edit must never
+publish an older whole-room snapshot that can block that progress.
+
+**Allowed implementation files:**
+
+- `src/utils/leagueBuilderStorage.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/companion/companionFreshness.ts`
+- focused existing storage, room, and sync tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Preserve the existing five-second room/companion freshness loop, Supabase project/schema, room
+  row, independent board row, and explicit Hotseat authority.
+- Do not add a second Realtime transport, reduce the polling interval, or auto-flush ordinary board
+  reorder traffic.
+- Preserve trade guide/value law, pick legality, correction law, board revisions, privacy, companion
+  identity/admission, FIT, tax, archetypes, salary/IV, and FARM no-trade law.
+- If an authoritative action is saved locally but cannot be published, say exactly that; never invite
+  a duplicate pick or trade by falsely saying it was not saved.
+
+**Required red-first proof:**
+
+- A companion MLB board patch updates the local embedded copy and independent board row but queues
+  only the independent `snakeSeatBoards` cloud row, never `mlbDraftSessions`.
+- A completed live pick requests an immediate final sync flush after its authoritative atomic save.
+- A completed trade requests the same flush and returns the saved authoritative session.
+- An already-open Hotseat or companion adopts a newer standalone MLB/FARM board revision even when
+  the shared room id, revision, timestamp, and companion claims are unchanged.
+- Existing private-board persistence, pick advancement, trade execution, and correction behavior
+  remain green.
+
+**Gates:** focused persistence/room/sync suites, TypeScript, changed-file ESLint, production build,
+diff integrity, separate non-builder audit, then JK's one-trade/one-pick companion browser walk. No
+push, merge, or deploy.
+
+## SNAKE-COMPANION-HOTSEAT-REPUBLISH-43
+
+**Role:** Existing-room companion recovery builder.
+
+**Goal:** A completed Hotseat room action that predates Contract 42 must be recoverable in place.
+The commissioner can republish the exact current room without starting a new draft or repeating a
+pick/trade.
+
+**Allowed implementation files:**
+
+- `src/utils/syncEngine.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/src_figma/app/components/snake/companion/CompanionApprovalCard.tsx`
+- focused existing sync and companion tests
+- required finding/session/status records
+
+**Frozen behavior:**
+
+- Preserve normal stale-write rejection, the existing room row/schema, five-second companion pull,
+  and explicit Hotseat authority.
+- The recovery may rebase only the exact current `mlbDraftSessions` record against that record's
+  current server-received base. It must not rebase, discard, upload, or replace any unrelated row.
+- Preserve picks, trades, corrections, claims, boards, privacy, legality, money, FIT, tax,
+  archetypes, salary/IV, and FARM no-trade law.
+- Never tell the commissioner to repeat an already-saved action.
+
+**Required red-first proof:**
+
+- An old locally saved trade trapped behind a stale cloud room is republished and independently
+  verified from the exact cloud row.
+- An unrelated stale queued write remains queued and its cloud row remains unchanged.
+- A rejected atomic publish leaves the room write retryable.
+- A second companion device carrying the retired embedded-board whole-room write adopts the
+  commissioner publication, preserves its independent board, and leaves unrelated queued work.
+- An unpublished companion pick request is never retired by recovery.
+- An unpublished companion withdrawal or decline is never erased by a still-open published offer.
+- The Hotseat publish refuses to overwrite companion activity present in the exact current cloud row.
+- Hotseat exposes one `SYNC COMPANIONS` action with success, working, and retryable failure states.
+
+**Gates:** focused 250-test companion/room/sync matrix, TypeScript, changed-file ESLint, production
+build, diff integrity, separate non-builder audit, then JK's same-room recovery click. No push,
+merge, or deploy.
+
+## SNAKE-LATE-DRAFT-DECISION-TRUTH-44
+
+**Role:** Snake late-draft correctness and GM-decision builder.
+
+**Goal:** Every four- and eight-team room must remain finishable through 22 rounds. At every live
+turn the GM can immediately identify which available players preserve a legal affordable finish,
+see the projected tax/finish consequence before picking, and retain a useful Assistant GM board
+whenever any legal affordable completion exists.
+
+**Allowed implementation:** Snake Assistant, legal-finish and derived decision engines; main and
+companion Snake desks; private board schema only as needed for per-seat zero-interest state; focused
+engine/UI/browser tests; required finding/session/status records.
+
+**Frozen behavior:**
+
+- `STRONG/SOLID/WEAK FIT` remains identity-only under the ratified exact thresholds. Money or risk
+  may not relabel it. Add a distinct pick/finish state.
+- Salary is frozen IV. Current tax is exact roster tax. `TAX IF PICKED` is a signed current-pick
+  delta; projected finish tax and money must come from the exact legal-finish bill.
+- Never describe a signed remove-and-reinsert tax delta as a drafted player's salary or true cost.
+- A proved legal affordable completion outranks Assistant preference optimization. The Assistant may
+  say that preference optimization is limited, but it may not disappear while a valid 22 exists.
+- Zero-interest is private per-seat preference. It cannot delete a drafted player, break committed
+  roster truth, alter FIT/tax, leak to another seat, or weaken legality.
+- Keep all heavy calculations out of row render loops. Cache by stable team/session/player input,
+  cancel stale work, and preserve immediate sort/reorder/companion interaction.
+- Explanatory methodology stays behind Help. Visible status may name operational state and blockers.
+- Preserve pick/trade/correction, version-person uniqueness, companion privacy/admission/sync,
+  archetype, tax, cap, and FARM no-trade law.
+
+**Required proof:**
+
+- Red-first case where preferred Assistant optimization is unavailable but exact legal finish exists;
+  repaired result returns a legal solvent 22 containing every committed player.
+- At 19/22, all visible candidates receive stable `DRAFTABLE`, `OPEN`, or `BLOCKED` state without
+  one-by-one selection; at least one draftable candidate exists whenever the exact engine proves a
+  finish. Selected-card projected tax and money equal the pick validator.
+- Drafted roster rows never show negative salary/true cost; tax-core detail names actual tax rows and
+  projected consequences without false player attribution.
+- Four-team and eight-team deterministic real-player rooms complete all 22 rounds (88 and 176 picks)
+  with every team legal and affordable, Assistant availability at every turn, no stale drafted cards,
+  and no false final-round block.
+- Rating bars, zero-interest exclusion, chemistry trait counts, full clickable draft log, next-pick
+  risk, and companion on-clock colors receive focused UI proof.
+- Eight-team production-browser latency covers opening the desk, sorting/filtering, selecting a
+  player, advancing a pick, and companion refresh.
+
+**Gates:** focused red/green suites, four/eight-team completion journey, TypeScript, changed-file
+ESLint, production build/PWA, diff integrity, frozen diff for separate non-builder audit, then JK's
+real browser walk. No push, merge, or deploy.
+
+**First audit and repair:** The auditor blocked `df64b450` because zero-interest preceded legality,
+visible status did not classify every candidate, and the completion journey did not independently
+prove Assistant/certificate overlap plus final roster and money truth. The repaired contract treats
+zero-interest only as preference; a certified legal completion may override it. Every visible card is
+progressively classified off-thread from one stable room fingerprint, and selected/scarcity plan
+consequences use a separate worker. The 88/176 journey must pick from current Assistant/certificate
+intersection and independently recompute final person uniqueness, roster legality, salary, tax,
+all-in, and money left. Repaired builder gates are cumulative 614/614 plus the eight-team production
+browser latency pass; the same non-builder re-audit and JK's browser walk remain mandatory.
+
+**Second audit and repair:** The re-auditor blocked `72f7246c` because a conservative canonical
+search failure could be mislabeled `BLOCKED`, the module cache omitted cap/shape/construction truth,
+and Main/Companion still called the heavy legal-finish engine from render. `BLOCKED` is now limited
+to unavailable cards and independently necessary roster/supply impossibility; bounded uncertainty is
+`OPEN` and may reach the unchanged Hotseat mutation validator. The semantic key includes every
+classifier input. Progress chunks do not publish React state, and scarcity depth comes from the
+current validated shared certificate. Fresh required proof is 114/114 plus the green eight-team
+browser latency pass. The same non-builder final re-audit and JK's real browser walk remain
+mandatory.
+
+**Third audit and repair:** The auditor blocked `4242ca69` because one cheapest version per person
+cannot prove impossibility when historical versions have different roles, and the key omitted four
+proof-receipt fields. The heuristic hard blocker is removed; before 22 committed players, bounded
+failure is `OPEN`, while an already-full illegal roster remains exact `BLOCKED`. The complete proof
+object is now part of the stable fingerprint. Final non-builder re-audit and JK's browser walk remain
+mandatory.
+
+**Approved-minor regression and final-round repair:** The next audit approved `f06c6884` with one
+minor missing boundary test. That exact red test proved that the certificate itself still collapsed
+a cheaper SP sibling over the necessary CP version at the last seat. The final-round path must keep
+all version roles, allocate each person once across up to eight clubs, settle exact tax and money,
+and pass the existing independent validator before SUCCESS. One-club success is insufficient: the
+permanent regression requires eight simultaneous clubs and eight distinct assigned people.
+
+**No-blink proof lifecycle:** A room-log, advisor-log, board-copy, or other metadata-only session
+revision must not clear or restart an identical legal-finish proof. Main keys proof lifecycle to the
+complete canonical seating input. A genuinely changed roster, pool, version state, identity, cap, or
+budget still changes that key and requires fresh proof. Browser acceptance requires a stable
+DRAFTABLE-filter row set as well as latency; a row that appears, disappears, and reappears is a
+failure even if the eventual pick succeeds.
+
+**Final independent verdict:** Frozen commit `12efdbdf758c7d9b3490b5b909082b1f22ad5bc8`
+received **APPROVE — Major 0 / Minor 0** from the separate non-builder auditor. The engineering gate
+is closed. JK's real eight-team browser walk remains the sole product-acceptance gate; no push,
+merge, or deploy is authorized.
+
+## SNAKE-LARGE-SOURCE-CERTIFICATE-45
+
+**Goal:** An eight-team Snake room with a large selected source union must be certified or rejected
+for its actual legal, money, version, and chosen-identity truth. Card count alone may not turn a
+feasible room into UNKNOWN or freeze Draft Setup.
+
+**Frozen product law:**
+
+- Full Sources remains the exact selected source union after hand adds/removes and hard keeps.
+- One historical person can supply at most one drafted version, but construction may choose the
+  version whose real role and ratings satisfy the roster and identity.
+- Chosen-identity FIT and its existing `>=1.04` / `<=0.96` labels remain unchanged and separate from
+  tax. Strict positive source-relative embodiment remains required for setup SUCCESS.
+- A large-source search may use a deterministic room-scaled candidate union, but the immutable Full
+  Sources population remains the IV-floor and identity-embodiment reference.
+- SUCCESS requires 176 distinct people for eight clubs, eight legal 22s, exact shifted-cap tax,
+  salary-plus-tax affordability, the 90% IV floor, and positive chosen-identity embodiment through
+  the existing independent validator. Bounded failure remains honest UNKNOWN.
+- Named Tight/Competitive/Loose membership must retain the exact disjoint Full Sources support,
+  satisfy the existing anti-hoarding position floor, stay inside 212/238/264 respectively, and pass
+  validation against immutable Full Sources. Auto-widen and persisted actual-mode law are unchanged.
+- Once Full Sources assignments have been validated, pool shaping may carry that exact support
+  receipt and must not rerun the same identity extraction. Numeric shaping runs off the UI thread.
+- Help-button law remains canon. Visible failure copy may name an unresolved identity certificate;
+  it may not call a 2,001-card source scarce without a proved source shortage.
+
+**Required proof:** Exact production SML + MLB + all three Legends libraries; Full plus all three
+named presets; all 176 picks advanced through the trusted certificate; independent final person,
+roster, salary, tax, money, and identity checks; Mac/iPad setup; main-thread latency; complete Snake
+setup/room/companion/storage regression; TypeScript, lint, production build, diff integrity; then a
+separate non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or
+deploy is authorized.
+
+**First audit repair:** The 90% IV floor must be derived from exact immutable Full Sources, never the
+bounded construction shortlist. Reusable identity support is authority only when the independent
+validator mints a certificate fingerprinted to the exact Full Sources input; numeric shaping may
+skip extraction only with a second matching receipt over the exact universe, identities, tier,
+team count, budget, support ids, and certificate authority. Raw assignments or ids are not a receipt.
+Draft Setup owns cancellation across proof, shaping, and post-worker persistence; replacement or
+unmount must abort without stale pool writes. Permanent red/green tests must cover all four failure
+classes before final re-audit.
+
+**Second audit repair:** A matching source fingerprint is insufficient if the certificate's
+assignments can change independently. Bind the exact assignment payload to that source authority and
+verify both before reuse. Cancellation must be rechecked between each awaited add/remove/save stage
+in shaped and Full Sources builds; if the owning build is replaced or unmounted while one stage is
+pending, no subsequent membership or setup-persistence stage may begin. Permanent tests must alter
+only assignments and must pause both production paths inside add before abort.
+
+## SNAKE-RATING-ROOM-46
+
+**Goal:** Give every Snake GM an exact, compact view of how the current 22-player plan consumes each
+archetype-adjusted rating limit before or after tax begins.
+
+**Frozen product law:**
+
+- One canonical engine function owns row membership, role weighting, Two Way eligibility, used
+  points, allowed points, overage, and row tax; `luxuryTax` and the UI consume the same result.
+- USED is never clamped to LIMIT. A taxed row shows the complete accumulated top-N points and exact
+  points OVER, so the user can trace the cause instead of seeing a threshold-only summary.
+- Every row lists its exact contributors and weighted points. The currently selected player is
+  identified when that player is part of the row's top-N core.
+- My Board and Asst GM Board use identical systematic logic with their own 22-player inputs and the
+  active team's exact cap identity.
+- The panel is collapsed by default, uses labels/state/values on the main surface, and keeps
+  methodology behind the ratified Help control.
+- The calculation is bounded to 22 players times the configured rows. It performs no source-pool
+  scan, proof search, worker request, storage write, or network action.
+- Existing FIT, caps, archetypes, tax coefficients, SP/RP assignment, Two Way law, roster law,
+  salary/IV, draftability, and Assistant objectives remain unchanged.
+
+**Required proof:** row-ledger/tax parity; ordinary pitcher role weighting; Two Way no-duplication;
+archetype-shifted caps; My/Assistant rendering; accumulated over-limit points and contributor truth;
+Mac/iPad no-overflow; full Snake regression, TypeScript, lint, production build, and a separate
+non-builder audit. JK's browser walk remains the sole product gate. No push, merge, or deploy.
+
+## SNAKE-SYNC-QUOTA-RECOVERY-47
+
+**Goal:** Recover a legitimate large pending sync queue from browser quota pressure without choosing
+local or cloud as a whole-side winner and without deleting product truth.
+
+**Frozen law:**
+
+- `kbl-sync-queue` and its in-memory operations are authoritative pending mutations and must never
+  be cleared as quota recovery.
+- Per-row write-base overrides are rebuildable cloud-receipt metadata. Quota recovery may remove
+  only their persisted cache while retaining in-memory bases for the current drain.
+- Recovery drains the exact queue through the existing atomic incremental write path, then pulls
+  cloud receipt truth. It never invokes full Upload or Download replacement.
+- Overrides at or before the safe pull cursor are redundant and must be pruned so the cache cannot
+  grow without bound.
+- The special action is exposed only for a quota-class persistence failure. Every other sync error
+  retains existing fail-closed behavior.
+- No league, player, draft, auth, IndexedDB, localStorage product key, cloud row, conflict law,
+  queue coalescing, or Supabase schema/RLS behavior changes.
+
+**Required proof:** direct quota reproduction and complete queue drain; no Upload/Download call;
+ordinary sync regression; stale-write/conflict suite; TypeScript; changed-file lint; production/PWA
+build; separate non-builder audit; JK's live recovery remains the product gate. No push, merge, or
+deploy.
+
+**First audit repair:** The old durable queue may remain present until the atomic drain completes.
+Recovery must therefore retry derived-base and queue persistence after that key is gone; it must not
+report failure after accepted cloud writes merely because the pre-drain overlap prevented an early
+base-cache write. Success requires zero pending operations and both post-drain durability writes.
+
+**Second audit repair:** Cursor persistence is part of the durability boundary. It must fail closed
+if Supabase is unavailable, the user signs out, or the account changes, and no cursor-covered base
+may be pruned until the expected user's cursor is durably saved. The special UI action requires both
+an exact local queue/write-base persistence failure prefix and quota semantics; unrelated API or
+service quota errors retain ordinary sync behavior.
+
+**Third audit repair:** Expected-account binding is mandatory for every cursor save, including a
+destructive-download rollback. The rollback must carry the operation's starting account and reject
+before metadata persistence if the current session differs. “Prefix” is literal: quoted, wrapped, or
+embedded persistence wording must not expose the special recovery action.
+
+## SNAKE-SYNC-QUOTA-CONTINUATION-48
+
+**Goal:** Continue a partially drained large queue without hiding recovery, rebuilding quota-heavy
+derived bases too early, looping on conflicts, or choosing a whole-side winner.
+
+**Frozen law:**
+
+- Recovery availability is engine state, not parsing of whichever error string rendered last.
+- A large restored queue with no restored write bases remains eligible after reload.
+- Each continuation pass may remove only persisted derived bases and must durably save the shrinking
+  queue. In-memory bases and all pending/source/cloud product truth remain intact.
+- Retry while progress occurs; stop after two consecutive no-progress passes and preserve every
+  genuine stale conflict. Never auto-rebase or discard it.
+- At zero pending, pull cloud receipt truth, durably save the exact expected-account cursor, prune
+  cursor-covered bases, then persist only the remaining bases.
+- Recovery never calls full Upload or Download and never relaxes atomic stale-write protection.
+
+**Required proof:** transient batch finishes in one recovery call; real conflict remains queued and
+cloud-unchanged with recovery visible; reloaded large base-less queue is eligible; prior no-loss,
+account-binding, cursor-before-prune, ordinary sync, and destructive-path regressions; TypeScript;
+lint; production/PWA build; separate audit; JK's browser retry. No push, merge, or deploy.
+
+## SNAKE-SYNC-EXACT-RECONCILIATION-49
+
+**Goal:** Finish a restored queue whose operations are stale only because their cloud write bases
+were lost, without discarding or overwriting any genuine device/cloud difference.
+
+**Frozen law:**
+
+- A queue operation may retire as already satisfied only when the queued state, current local source
+  state, and current cloud state match exactly in target, normalized payload, and deletion state.
+- Current local source means the actual IndexedDB record or synced localStorage product key, not only
+  the persisted queue copy. An unreadable/missing source that disagrees with the queued tombstone,
+  concurrent replacement, or later local mutation is protected.
+- Cloud timestamps alone never authorize retirement. Different content, different tombstone state,
+  or a missing cloud row remains queued behind the unchanged atomic stale-write guard.
+- The smaller queue must be durably checkpointed before recovery reports progress. A checkpoint
+  failure restores retired in-memory entries and fails closed.
+- One expected account owns the complete recovery. Ordinary drains are blocked before that account
+  is captured; every recovery drain revalidates the same account before moving an operation
+  in-flight. Sign-out or account change before a drain, reconciliation, pull, or cursor save fails
+  closed.
+- Recovery may fetch current rows and current local fingerprints once after bounded no-progress
+  passes. It never invokes full Upload/Download, rebases a conflict, changes Supabase schema/RLS, or
+  changes product data outside the ordinary receipt pull after pending reaches zero.
+
+**Required proof:** exact localStorage and IndexedDB duplicates retire; mixed exact/different rows
+shrink only the exact subset; current-local drift preserves the queue and cloud; an account switch
+between recovery capture and the first drain writes nothing and leaves the queue durable; prior quota,
+stale-write, account, cursor, ordinary sync, and destructive-path regressions; TypeScript;
+changed-file lint; production/PWA build; separate non-builder audit; JK's live click remains the
+product gate. No push, merge, or deploy.
+
+## SNAKE-SYNC-CURRENT-LOCAL-REBASE-50
+
+**Goal:** Make explicit quota recovery finish still-current device writes without a full-cloud
+replacement or loss of unseen companion activity.
+
+**Frozen law:**
+
+- Exact queue/current-local/cloud matches retire first.
+- A remaining queued write is publishable only if it still exactly matches current local source
+  truth in payload and tombstone state.
+- Fetch the exact current cloud row and bind a new operation id and monotonic timestamp to that
+  received server base; the atomic RPC remains the authority and rejects a later cloud race.
+- Checkpoint the rebased queue before its drain. Account switch, concurrent queue replacement,
+  unreadable local scope, or missing safe cloud base fails closed.
+- A queued Snake room may publish only if the local room covers every cloud companion claim,
+  request, pick, trade, and open/removed offer represented by the shared-room contract.
+- Never invoke full Upload/Download or change unrelated cloud rows.
+
+**Required proof:** current IndexedDB and localStorage intent publish; exact duplicates retire;
+current-local drift, account switch, concurrent replacement, cloud race, and unseen companion intent
+stay queued/cloud-unchanged; focused tests; TypeScript; changed-file lint; production/PWA build;
+separate non-builder audit; JK's live click. No push, merge, or deploy.
+
+## SNAKE-LIVE-ROOM-AUTHORITY-51
+
+**Goal:** Replace the Snake companion room's whole-account backup sync path with one dedicated,
+revision-safe live-room authority that keeps public draft truth and private team data separate.
+
+**Frozen law:**
+
+- The Hotseat is the only writer of public room and draft state.
+- A companion submits a claim, board change, pick request, or trade request through a scoped live-room
+  operation. It never writes the public draft session.
+- The public room payload contains no private boards, private team logs, open trade negotiation data,
+  proof assignments, recovery snapshots, or companion capability data.
+- Each claimed team's live board has one durable authority: its private server row. The companion
+  may cache that row in memory. The host's local setup board is seed material only after transfer;
+  it is not a live mirror. The public room row contains no board copy.
+- Public draft actions and private-board edits use separate revision domains. A stale or missing
+  private board can never reject, delay, or roll back a valid public pick, trade, correction, pause,
+  completion, or order change.
+- The host may seed the exact setup board once when it approves a team's first companion claim. The
+  seed is insert-only, returns metadata only, and cannot read or overwrite an existing private board.
+  After that seed, only an approved device for that team may read or write the board.
+- Every companion derives drafted-player availability and its owned roster from the current public
+  session in memory. A public action performs no private-board write. A correction recomputes the
+  view from the saved private board and the corrected public state.
+- Every write requires an expected revision, an idempotency key, the signed-in account, and a
+  host/device/team capability check. Capability tokens are random, stored outside localStorage, and
+  hashed at rest on the server.
+- Public Realtime events contain only public metadata. A device uses a scoped RPC to read its own
+  claims, intents, and approved team boards.
+- Generic account backup sync does not transport open Snake room state or Snake seat boards. Its
+  outbox is account-bound and stored outside localStorage so Auth storage cannot lose its quota.
+- The supported eight-team topology is one Hotseat plus as many as three companion devices. A
+  companion can control more than one approved team. Additional devices fail closed.
+- Mac mini/Neo and laptop browsers with keyboard, mouse, or trackpad are the primary companion
+  target. The desktop layout uses available width, avoids nested scroll areas, and keeps one clear
+  main scroll path. Compact layouts are fallback surfaces.
+- FIT, tax, roster legality, archetype, Assistant GM, trade-value, FARM-trade, and Help-button law do
+  not change in this contract.
+
+**Required proof:** migration and RLS/RPC review; deterministic separate-client 2-device and
+Hotseat-plus-3-companion 8-team tests; concurrent public-pick/private-board independent-success
+proof; stale-board non-interference for picks, trades, corrections, and completion; claim, revoke,
+board, pick, trade, reconnect, idempotency, privacy, and overload tests; separate persistent Chrome-profile
+latency runs; TypeScript; changed-file lint; production/PWA build; a separate non-builder audit; and
+one preview for JK's browser walk. JK's walk is the sole product gate. No push, merge, or deploy.
+
+**Close record (2026-07-19):** Builder work is complete. A separate auditor returned **APPROVE —
+Major 0 / Minor 0** after the event-order, reconnect, migration-contract, auth, privacy, and
+public/private-authority repairs. Focused live-room proof is 188 passed / 32 skipped; combined
+live/auth proof is 73/73; targeted Snake UI/storage proof is 246/246; TypeScript, changed-file lint,
+production/PWA build, and diff integrity are green. Remote migration 009, deployment, the narrow old
+Snake test-state reset, and JK's real-device walk remain. No merge or deploy is authorized.
+
+## SNAKE-MLB-ATOMIC-FINALIZATION-52
+
+**Goal:** Make `CONFIRM MLB DRAFT` one resumable, all-or-nothing handoff from a completed public
+Snake draft to local league rosters.
+
+**Frozen law:**
+
+- The completed public live-room session and its immutable manifest are the draft authority.
+- One IndexedDB transaction must persist the exact RegisteredPool, frozen MLB session, independent
+  seat-board rows, every target MLB roster, every changed player assignment and settled salary, and
+  the valid MLB roster-handoff marker.
+- A missing target `TeamRoster` is created from the completed picks. A source roster is never used.
+- No player, roster, session, pool, board, or handoff write may survive an aborted transaction.
+- Retrying the same manifest is idempotent. It repairs a pre-contract partial roster/player commit
+  and returns the same durable handoff. It never creates a second draft or changes a completed pick.
+- Confirmation reads the current durable pool and player catalog. It does not trust a prior React
+  render snapshot.
+- The live room stays complete until local finalization and handoff verification succeed. Closing
+  the room is cleanup after success, not part of roster authority.
+- FIT, tax, archetypes, picks, trades, companion boards, farm rules, and Help-button law do not
+  change.
+
+**Allowed implementation files:**
+
+- `src/utils/leagueBuilderStorage.ts`
+- `src/utils/leagueBuilderAuctionPipeline.ts`
+- `src/src_figma/app/pages/SnakeDraftRoom.tsx`
+- `src/utils/tests/draftPipeline.integration.test.ts`
+- `src/utils/tests/snakeLiveRecovery.test.ts`
+- `src/src_figma/__tests__/pages/SnakeDraftRoom.completion.test.tsx`
+- this contract and the FINDING-247/session/audit records required by the standard ritual
+
+**Required proof:** Inject a write failure after the transaction starts and prove zero partial
+state; retry and double-confirm the same completed manifest; restore a completed live catalog with
+no roster rows and finalize it; complete exact four-team and eight-team 22-player rosters; prove all
+assignments, launch salaries, legality, and handoff readiness; run focused tests, TypeScript,
+changed-file lint, production build, separate non-builder audit, and JK's browser walk. No merge or
+production deploy is authorized.
+
+**Audit amendment 1:** Frozen builder commit `a1ffe606` was rejected with Major 1 / Minor 0. The
+transaction was correct, but a recovered completed room that was no longer readable could finish
+and verify the local handoff, then enter cleanup with no active room and falsely report failure.
+After a verified handoff, an absent room now means there is nothing left to close. A present open
+room still receives best-effort close. The product must navigate after either result. A focused UI
+test must cover the absent-room recovery receipt directly.
+
+**Independent close:** The same non-builder auditor rechecked exact repaired head `6c7b5714` and
+returned **APPROVE — Major 0 / Minor 0**. It confirmed the direct absent-room proof, the present-room
+best-effort close proof, the full atomic handoff contract, and no equivalent production cleanup
+branch. Independent completion, atomic pipeline, and recovered-origin proof is 37/37; TypeScript,
+repaired-file ESLint, and full-range diff integrity are green.
+
+## SNAKE-FARM-IDENTITY-PROSPECT-53
+
+**Route:** Codex 5.6 Sol | xhigh builder; separate read-only auditor | high reasoning effort.
+
+**Goal:** Preserve each club's selected farm identity from Snake setup through live-room recovery
+and farm-draft creation, and prove that hidden farm prospects use the canonical Standard prospect
+distribution rather than any Juiced legacy pool.
+
+**Frozen law:**
+
+- A new Snake MLB session freezes both the selected MLB identity and selected farm identity for
+  every drafting club before the first pick.
+- The immutable live-room catalog transports both identities. A recovery may fill a missing copy
+  from the other frozen copy, but conflicting copies fail closed.
+- Farm-draft creation uses the frozen MLB-session farm identity. A matching team copy is allowed as
+  a legacy fallback only. A mismatch, missing identity, duplicate club, or changed club set fails
+  closed.
+- Scout Reveal must not silently replace a missing farm identity with Generalist. A legacy room with
+  missing farm identity must show a generic repair control, save the user's choices to the team and
+  completed MLB session, and then use the normal scout and farm-draft path.
+- Farm pool generation stays Standard-only for v1. The exact grade distribution is A+ 0%, A 2%,
+  A- 5%, B+ 10%, B 15%, B- 15%, C+ 15%, C 18%, C- 12%, D 8%. Juiced and Nerfed farm generation
+  remain deferred. Generated true grades and ratings remain hidden from draft users.
+- The result must work for new and recovered leagues and for four- and eight-team Snake drafts. It
+  must not contain a room-specific team, league, or room-code repair.
+- No production deploy or merge is authorized. JK's browser walk remains the sole product gate.
+
+**Builder file surface:** `src/engines/snakeFarmSlots.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, `src/src_figma/app/pages/ScoutHire.tsx`,
+`src/src_figma/app/pages/SnakeDraftRoom.tsx`, `src/utils/leagueBuilderStorage.ts`,
+`src/utils/snakeLiveCatalog.ts`, and focused tests for these paths, farm pool generation, four/eight
+team flow, recovery, companion, and completed-draft continuation.
+
+**Required proof:** exact N=500 grade-distribution measurement; analyzer-grade parity; hidden-rating
+and no-A+ assertions; four-team and eight-team pool sizing; new-session identity freeze; catalog
+recovery; mismatch/missing fail-closed tests; Scout Reveal repair; MLB-to-FARM transition; eight-team
+season gauntlet; affected companion/completion regressions; TypeScript; changed-file ESLint;
+production/PWA build; diff integrity; separate non-builder audit. Use high reasoning effort.
+
+## SNAKE-FOUR-EIGHT-CERTIFICATION-54
+
+**Route:** Codex 5.6 Sol | max builder; separate Codex 5.6 Sol | max read-only auditor.
+
+**Goal:** Repair the false Snake Draft Setup identity-certificate failure for valid four-team and
+eight-team rooms. Use one production rule. Do not add a league-name, Test Mock, or room special case.
+
+**Exact red evidence:** The failing preview is deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9`
+from commit `3f2b30cdc50bc6c9a7f9d9129b69228fe6c522d3`. Its certification code is byte-identical to source
+commit `db8a6426314cef35f1aca15662bf736c8cc28244`. The production Test Mock source has 1,341 cards,
+851 distinct people, and four chosen MLB identities. The bounded union kept 242 cards. The
+Beewolves' Murderers' Row candidate was legal, solvent, and above its IV floor, but its identity
+embodiment was `-0.05`; SUCCESS requires a value greater than `0`.
+
+**Frozen law:**
+
+- FIT is identity-only. Tax remains separate.
+- Full Sources is the exact selected source union after overrides and hard keeps.
+- One person supplies at most one drafted version. Several cards for one person add no draft
+  capacity.
+- Named bounds, widening order, legal-finish meaning, readiness meaning, and actual-mode
+  persistence do not change.
+- Honest UNKNOWN cannot become SUCCESS. The independent validator remains the only SUCCESS
+  authority.
+- Four-team and eight-team rooms use the same proof with different inputs.
+- Proof work stays off the main thread. One stable fingerprint starts one job. A changed source,
+  club, identity, pool mode, or preset cancels stale work and rejects a late stale result.
+- A failure line names the exact club and missing resource only when the proof establishes that
+  cause. Bounded UNKNOWN stays club-neutral. Method details remain behind the ratified Help control.
+- JK's browser walk is the only product gate. The builder does not audit the builder diff.
+
+**Allowed implementation files:**
+
+- `src/engines/snakeSeatingProof.ts`
+- `src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`
+- `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`
+- focused engine, adapter, worker-client, Draft Setup, and browser tests for this contract
+- this contract and the FINDING-250 session, audit, and state records required by the session ritual
+
+**Forbidden:** FARM companion code or its active worktree; FIT, tax, cap, archetype, roster, pool
+bound, widening, source-selection, version-capacity, readiness, lock, or Start Draft law changes;
+merge; push; deploy; production promotion.
+
+**Required proof:** production-adapter four-team Full Sources and named-preset start; production-
+adapter eight-team Loose and Full Sources; duplicate-person capacity; true C, SP, RP, CP, SWING,
+identity, and money blockers; exact selected-source binding; accepted-preset persistence; complete
+fingerprint and cancellation coverage; no duplicate proof loop; TypeScript; changed-file ESLint;
+production/PWA build; real browser responsiveness and timing; diff integrity; then the separate
+read-only audit.
+
+**Audit route:** After the builder freezes the diff, use a separate Codex 5.6 Sol | max agent in
+read-only mode. It must cite every finding by file and line. It must return `APPROVE` or `BLOCK`.
+Only an `APPROVE` verdict permits one local preview for JK. It does not permit merge or deploy.
+
+**First audit repair:** The separate auditor returned BLOCK, Major 2 / Minor 1. Lock was not bound
+to the accepted source, controls, and membership; bounded UNKNOWN could name the first club and a
+seed-search detail as a proven cause; and one adapter component edit was outside the allowlist. The
+repair removes that component edit. Build acceptance now fingerprints exact source IDs and content,
+clubs and identities, requested and accepted mode/preset, extracted basis, membership IDs,
+provenance, and design pins. Lock requires that exact current fingerprint and saves the accepted
+basis and IDs. Source, club, identity, preset, mode, or content changes cancel stale work and clear
+acceptance. Target-pool free-agent membership does not remove a selected unassigned player from the
+source universe. Only a proven zero-variance identity cause may name a club; other bounded UNKNOWN
+results remain unresolved and club-neutral. Same-auditor re-audit is required.
+
+**Second audit repair:** The same auditor returned BLOCK, Major 1 / Minor 0. The accepted source-
+content key omitted `sourceId`, `versionGroupId`, and legacy `historicalSourceId`, although those
+fields define distinct-person grouping and sibling retirement. The key now includes all three
+normalized fields. Direct tests change each field after Build and prove that acceptance becomes
+stale, Lock stays disabled, no old pool locks, and the UI requires a new Build. Same-auditor re-audit
+was still required before a local preview.
+
+**Independent close:** The same non-builder auditor approved frozen diff hash
+`be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, Major 0 / Minor 0. It
+closed both prior audit blocks. One local production preview may serve JK's browser walk. This close
+does not authorize push, merge, Vercel deployment, or production promotion.
+
+## LEGENDS-NAMED-POOL-FLOW-55
+
+**Route:** Codex 5.6 Sol xhigh builder; separate read-only auditor.
+
+**Goal:** Repair FINDING-253 with the generic source-to-pool law in
+`spec-docs/contracts/CONTRACT_LEGENDS_NAMED_POOL_FLOW_2026-07-20.md`. The builder must carry one-
+person capacity into numeric shaping, shape named pools before proof, certify exact final membership,
+keep Full Sources optional, preserve honest UNKNOWN, and prove four/eight-team Legends-only flow plus
+all 24 identities. Do not change tax, cap, roster, identity thresholds, named target sizes, source
+selection, sibling retirement, or readiness meaning. The final auditor must cite code and return
+APPROVE or BLOCK. Only APPROVE permits one replacement preview for JK. No production promotion is
+authorized.
+
+**First audit repair:** The non-builder auditor blocked `7960b043`, Major 1 / Minor 1. Protected
+sibling cards still counted twice in position floors and curve accounting; two contract lines had
+trailing whitespace. The repair counts one version-group person once through floor availability,
+floor shortfalls, protected quotas, tail caps, and diagnostics while preserving every protected
+card. The wider gate also repaired a generic exact-versus-bounded scheduler boundary found by the
+four-team 440-player all-identity calibration. The same auditor must review the repaired frozen
+commit. Only APPROVE permits one replacement preview.
+
+**Independent close:** The same non-builder auditor approved repaired commit `1bac2cfe`, Major 0 /
+Minor 0. Its live gate passed 163/163 core tests and 4/4 exact-440 calibration tests. It confirmed
+that version-group people count once through floors, protected quotas, tail caps, bands, diagnostics,
+and named acceptance; that shape-first and wider-preset order remains intact; and that the unchanged
+independent validator still owns SUCCESS. This approval permits one replacement preview for JK. It
+does not authorize merge or production promotion.
+
+## SNAKE-NAMED-POOL-ROLE-LOCK-56
+
+**Route:** Codex 5.6 Sol xhigh builder; separate read-only auditor.
+
+**Goal:** Repair FINDING-254. A named Snake pool must keep its promised people count, use legal
+roster demand instead of archive percentages for pitcher roles, and carry one accepted proof from
+Build through Lock without a row-order mismatch. Full Sources must keep every selected card.
+
+**Frozen law:**
+
+- Tight, Competitive, and Loose normally select one card per version-group person. Full Sources
+  keeps all selected cards. A manual add can keep an additional sibling card.
+- Named pitcher targets use the legal nine-arm roster shape: four SP, one SP/RP, three RP, and one
+  CP. Real selected-source supply is a hard bound. This mix guides shaping; it is not a second hard
+  Lock law. When protected/source supply leaves a different mix, show the exact remove/add counts
+  and let the user amend the pool. Position floors and the final validator remain authoritative.
+- A named preset keeps its displayed target count. A position-floor repair swaps one unprotected
+  person for another at the count boundary; it does not silently grow the pool.
+- Numeric curve limits round to whole people: maximum shares use `ceil(cap × people)` and minimum
+  shares use `floor(target × people)`. Display the exact achieved percentage. This tolerance cannot
+  override legal roster, salary, tax, identity, distinct-person, or position-floor failures.
+- The accepted proof fingerprint and the Lock proof fingerprint use the same stable player order.
+  Source, club, identity, preset, mode, content, or membership changes still reject stale work.
+- FIT, tax, caps, archetype thresholds, roster law, source selection, widening order, and honest
+  UNKNOWN meaning do not change. JK's browser walk remains the product gate.
+
+**Allowed files:** `src/engines/poolFromDemand.ts`,
+`src/engines/__tests__/snakeLargeSourceSetup.test.ts`,
+`src/src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers.ts`,
+`src/src_figma/__tests__/pages/SnakeDraftSetupAdapter.test.tsx`,
+`src/src_figma/__tests__/pages/LeagueBuilderDraftSetup.poolLock.test.tsx`,
+`test-utils/journeys/15-snake-pool-performance.spec.ts`, and the FINDING-254 contract, finding,
+decision, audit, session, and current-state records required by the session ritual.
+
+**Required proof:** Exact 66-person two-team Legends Loose role counts; exact 132-person four-team
+Legends Loose; exact 264-person eight-team Legends Loose; all 24 identities in three eight-team
+rooms; all 835 cards in Full Sources; Build to Lock to Enter Draft in a real Mac browser; stable
+proof ordering and stale rejection; focused engine, adapter, worker, universe, and pool-lock tests;
+TypeScript; changed-file ESLint; production/PWA build; diff integrity; then a separate read-only
+audit. No merge or production promotion is authorized.
+
+**First audit repair:** The separate auditor returned BLOCK, Major 1 / Minor 1. The visible role
+note was calculated before later floor and identity repairs, so it could describe membership that
+was no longer on screen. Three internal upper-tail limits also rounded down even though the frozen
+whole-player law rounds maximum shares up. The repair removes any pre-repair role note and rebuilds
+one exact note from the final membership. All three maximum-count seams now use ceiling counts.
+Direct regressions prove stale advice replacement and one allowed whole player at a fractional cap.
+The same auditor must recheck the new frozen commit. No preview is permitted before APPROVE.
+
+**Independent close:** The same non-builder auditor reviewed repair commit `8960a4c1` and returned
+APPROVE, Major 0 / Minor 0. It confirmed that final membership owns the only role advisory, all
+maximum-tail seams use whole-person ceiling math, and the direct regressions fail under the old
+behavior. Its live gate passed 74/74 engine tests and exact 66/132/264-person Legends cases. One
+replacement preview is permitted for JK's browser walk. Merge and production promotion remain
+unauthorized.

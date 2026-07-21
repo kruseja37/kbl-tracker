@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { supabase } from '../../../supabase';
 
 import { HISTORICAL_ARCHETYPES } from '../../../data/historicalArchetypes';
 import {
@@ -16,12 +17,12 @@ import {
   buildFarmMoneyLedger,
   FARM_SNAKE_SESSION_NUMBER,
   farmPickSalary,
+  resolveFarmArchetypeIdsForSnakeTransition,
 } from '../../../engines/snakeFarmSlots';
 import {
   evaluateSnakeLegalFinish,
   evaluateSnakePlan,
   snakeMoneyNonnegative,
-  type SnakeLegalFinishBill,
 } from '../../../engines/snakeEconomics';
 import { applySnakePickWithCorrection, restoreLatestSnakeCorrection } from '../../../engines/snakeSession';
 import { primeSnakeGuideSeatingProof, seedSnakeGuideSeatingProof } from '../../../engines/snakeGuideTrade';
@@ -45,6 +46,7 @@ import { assembleBoard } from '../../../engines/rosterIntelligencePayload';
 import * as phaseFlags from '../../../utils/franchisePhase2Flags';
 import { useLeagueBuilderData, toConstructionPlayer } from '../../hooks/useLeagueBuilderData';
 import { SnakeDraftRoomView, type SnakeReviewCandidate } from '../components/snake/SnakeDraftRoomView';
+import { buildSnakePickTicker } from '../components/snake/snakePickTicker';
 import { SnakeDraftRecap } from '../components/snake/SnakeDraftRecap';
 import { PrivateDesk } from '../components/snake/desk/PrivateDesk';
 import { SelectedPlayerCard } from '../components/snake/desk/SelectedPlayerCard';
@@ -60,6 +62,7 @@ import {
   isCanonicalSnakeBoard,
   reconcileBoardAvailability,
   reorderSeatBoardRankings,
+  setSeatBoardZeroInterest,
   type AdvisorLogEntry,
   type BoardBackfillEvent,
   type DeskCandidate,
@@ -71,15 +74,14 @@ import {
   openRosterSlots,
   reconcileExistingSeatBoards,
   resolveLockedSeat,
-  updateSessionSeatBoard,
 } from '../components/snake/desk/deskRoomModel';
 import {
-  buildSelectedPlayerConsequence,
   buildSnakeAssistantBoardRequest,
   buildSnakeAssistantLivePlayer,
-  type SelectedPlayerConsequence,
 } from '../components/snake/desk/snakeDeskIntelligenceModel';
 import { useSnakeAssistantBoard } from '../components/snake/desk/useSnakeAssistantBoard';
+import { useSnakeSelectedConsequences } from '../components/snake/desk/useSnakeSelectedConsequences';
+import type { SnakeSelectedConsequencesWorkerRequest } from '../workers/snakeSelectedConsequences.worker';
 import { snakeBoardOverBudgetReason } from '../components/snake/desk/snakeDeskMoneyCopy';
 import {
   buildSnakeDecisionCandidateFacts,
@@ -93,12 +95,24 @@ import {
   buildSnakeRationalRiskRequest,
   useSnakeRationalRisks,
 } from '../components/snake/desk/useSnakeRationalRisks';
+import {
+  buildSnakePickFinishWorkerRequest,
+  useSnakePickFinishSafety,
+} from '../components/snake/desk/useSnakePickFinishSafety';
 import type { SnakeRankingView } from '../components/snake/desk/RankingsView';
 import { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId, type SnakeCompanionPickRequest, type SnakeOpenTradeOffer, type SnakeSeatBoardRecord } from '../../../utils/leagueBuilderStorage';
 import { SnakeCommissionerTrade } from '../components/snake/trade/SnakeCommissionerTrade';
 import { CompanionApprovalCard } from '../components/snake/companion/CompanionApprovalCard';
+import { useSnakeLiveHostRoom } from '../components/snake/companion/useSnakeLiveHostRoom';
+import { ensureCompanionRoom } from '../components/snake/companion/companionModel';
 import { SnakeTradeGuide } from '../components/snake/trade/SnakeTradeGuide';
-import { buildInitialSnakeSeatBoards } from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import {
+  rebuildPracticeSnakeSeatBoards,
+} from '../components/snake/setup/SnakeDraftSetupAdapter.helpers';
+import {
+  fingerprintSnakeSetupProofInput,
+  useSnakeSetupProofClient,
+} from '../components/snake/setup/snakeSetupProofClient';
 import {
   executeAskedPickTrade,
   guideForAskedPick,
@@ -108,6 +122,7 @@ import {
 } from '../components/snake/trade/tradeGuideModel';
 import { FarmPrivateDesk, FarmSelectedProspectCard } from '../components/snake/farm/FarmPrivateDesk';
 import {
+  buildFarmLivePrivateBoard,
   buildFarmFogCard,
   buildFarmPublicRosters,
   buildFarmScoutPressure,
@@ -129,12 +144,12 @@ import {
   getAllTeams,
   getScoutProfilesForLeague,
   getTeamRoster,
-  freezeMlbDraftRoomSessionWithRegisteredPool,
   patchMlbDraftSessionFarmSeatBoard,
   patchMlbDraftSessionSeatBoard,
-  assertCompanionPickRequestApprovable,
+  patchMlbDraftSessionSnakeCompanions,
   markSnakeRosterHandoff,
   recoverCanonicalMlbSnakePickOrder,
+  restoreSnakeLiveRoomLocally,
   saveMlbDraftRoomSession,
   updateMlbDraftSessionAtomically,
   resolveLeagueSalaryCap,
@@ -143,7 +158,7 @@ import {
   type LeagueBuilderScoutProfile,
 } from '../../../utils/leagueBuilderStorage';
 import type { ProspectScoutDescriptor } from '../../../utils/prospectScoutingDraftEngine';
-import { commitCompletedSnakeFarmSessionToLeagueRosters, commitCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
+import { commitCompletedSnakeFarmSessionToLeagueRosters, finalizeCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
 import { scoutHireRouteForLeague, staffHireRouteForLeague } from '../utils/draftRouting';
 import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snakeSounds';
 import {
@@ -167,6 +182,27 @@ import {
   rankExpectedTalentByIv,
   type DraftFreezePlayerMeta,
 } from '../../../utils/draftFreezeInputs';
+import { getOrCreateSnakeLiveDeviceId } from '../../../utils/snakeLiveCapabilityStore';
+import {
+  buildSnakeLiveCatalog,
+  buildSnakeLiveFarmCatalog,
+  readSnakeLiveCatalog,
+} from '../../../utils/snakeLiveCatalog';
+import {
+  SnakeLiveTransportError,
+  type SnakeLiveIntent,
+  type SnakeLiveJsonObject,
+} from '../../../utils/snakeLiveRoomTypes';
+import { createSnakeLiveRoomTransport } from '../../../utils/snakeLiveRoomTransport';
+import {
+  pendingSnakeLivePickIntentCount,
+  readSnakeLivePublicSession,
+} from '../../../utils/snakeLiveRoomSession';
+import {
+  buildSnakeLiveTradeActionPayload,
+  buildSnakeLiveTradePostPayload,
+  projectSnakeLiveTradeOffers,
+} from '../../../utils/snakeLiveTradeIntents';
 
 const SEASON_NUMBER = 1;
 const PRACTICE_SEASON_NUMBER = 99;
@@ -176,6 +212,36 @@ interface MainPrivateIdentity {
   leagueId: string;
   seasonNumber: number;
   teamId: string;
+}
+
+function LiveRoomRecoveryPanel(props: {
+  roomCode: string;
+  working: boolean;
+  error: string | null;
+  onRoomCodeChange: (value: string) => void;
+  onRestore: () => void;
+}) {
+  return <div className="mt-5 border-2 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-4">
+    <p className="text-xs font-black">RESTORE LIVE ROOM</p>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <input
+        aria-label="Live room code"
+        value={props.roomCode}
+        onChange={(event) => props.onRoomCodeChange(event.currentTarget.value.replace(/\D/g, '').slice(0, 4))}
+        inputMode="numeric"
+        placeholder="ROOM CODE"
+        className="min-h-11 w-40 border-2 border-[var(--ballpark-brass)] bg-black/30 px-3 font-mono text-sm uppercase"
+      />
+      <button
+        className="ballpark-press-button ballpark-press-gold min-h-11"
+        disabled={props.working}
+        onClick={props.onRestore}
+      >
+        {props.working ? 'RESTORING…' : 'RESTORE'}
+      </button>
+    </div>
+    {props.error ? <p className="mt-3 text-xs font-bold text-red-300">{props.error}</p> : null}
+  </div>;
 }
 
 interface MainPrivateGuard {
@@ -203,9 +269,65 @@ function fullName(firstName: string, lastName: string): string {
   return `${firstName} ${lastName}`.trim();
 }
 
+function snakeLiveJson(value: unknown): SnakeLiveJsonObject {
+  return JSON.parse(JSON.stringify(value)) as SnakeLiveJsonObject;
+}
+
+function snakeLivePublicActionSession(
+  session: LeagueBuilderMlbDraftSession,
+): LeagueBuilderMlbDraftSession {
+  const publicSession: LeagueBuilderMlbDraftSession = { ...session };
+  delete publicSession.seatBoards;
+  delete publicSession.farmSeatBoards;
+  delete publicSession.roomLogByTeamId;
+  delete publicSession.openTradeOffers;
+  delete publicSession.snakeCompanions;
+  delete publicSession.companionRoomPublication;
+  delete publicSession.liveRoomRecovery;
+  delete publicSession.correctionSnapshots;
+  delete publicSession.farmProspectSnapshot;
+  return session.snakeSetup
+    ? {
+        ...publicSession,
+        snakeSetup: {
+          ...session.snakeSetup,
+        seatingCertificate: undefined,
+        },
+      }
+    : publicSession;
+}
+
+function mergeLivePublicSession(
+  local: LeagueBuilderMlbDraftSession,
+  publicSession: LeagueBuilderMlbDraftSession,
+): LeagueBuilderMlbDraftSession {
+  if (local.id !== publicSession.id) throw new Error('THE LIVE ROOM DOES NOT MATCH THIS DRAFT.');
+  return {
+    ...local,
+    ...publicSession,
+    snakeSetup: publicSession.snakeSetup ? {
+      ...publicSession.snakeSetup,
+      ...(local.snakeSetup?.seatingCertificate
+        ? { seatingCertificate: local.snakeSetup.seatingCertificate }
+        : {}),
+    } : local.snakeSetup,
+    ...(local.seatBoards ? { seatBoards: local.seatBoards } : {}),
+    ...(local.farmSeatBoards ? { farmSeatBoards: local.farmSeatBoards } : {}),
+    ...(local.roomLogByTeamId ? { roomLogByTeamId: local.roomLogByTeamId } : {}),
+    openTradeOffers: [],
+    ...(local.correctionSnapshots ? { correctionSnapshots: local.correctionSnapshots } : {}),
+    ...(local.farmProspectSnapshot ? { farmProspectSnapshot: local.farmProspectSnapshot } : {}),
+    ...(local.snakeCompanions ? { snakeCompanions: local.snakeCompanions } : {}),
+    ...(local.companionRoomPublication
+      ? { companionRoomPublication: local.companionRoomPublication }
+      : {}),
+  };
+}
+
 const UNKNOWN_PLAYER = 'UNKNOWN PLAYER';
 const UNKNOWN_TEAM = 'UNKNOWN TEAM';
 const RECAP_CONFIRMATION_ERROR = 'THE DRAFT COULD NOT BE CONFIRMED. TRY AGAIN.';
+const MLB_RECAP_CONFIRMATION_ERROR = 'THE COMPLETED DRAFT IS SAFE. ROSTERS WERE NOT SAVED. TRY AGAIN.';
 const NEUTRAL_DRAFT_MODIFIERS = { loyalty: 50, ambition: 50, resilience: 50, charisma: 50 } as const;
 
 function draftFreezeMeta(players: readonly {
@@ -341,6 +463,10 @@ function FarmSnakeRoom() {
 
       let nextSession = stored;
       if (!storedFarm) {
+        const farmArchetypeIdByTeamId = resolveFarmArchetypeIdsForSnakeTransition({
+          mlbSession: stored,
+          teams: freshLeagueTeams,
+        });
         const recoveredMlbPickOrder = recoverCanonicalMlbSnakePickOrder(stored);
         const order = recoveredMlbPickOrder
           .filter((slot) => slot.round === 1)
@@ -351,7 +477,7 @@ function FarmSnakeRoom() {
           teamOrder: order,
           existingFarmRosterCountsByTeamId: Object.fromEntries(rosters.map(([teamId, roster]) => [teamId, roster?.farmRoster.length ?? 0])),
           farmBudgetsByTeamId: nextBudgets,
-          farmArchetypeIdByTeamId: Object.fromEntries(freshLeagueTeams.map((team) => [team.id, team.farmArchetypeKey])),
+          farmArchetypeIdByTeamId,
           prospectIds: nextPool.prospects.map((prospect) => prospect.id),
           prospects: nextPool.prospects,
           now,
@@ -401,6 +527,116 @@ function FarmSnakeRoom() {
     completedPicks: session?.completedPicks ?? [],
     prospects: farmPool?.prospects ?? [],
   }), [existingFarmRosterIdsByTeamId, farmPool, leagueTeams, players, session?.completedPicks]);
+  const farmLiveCatalogTeamIdsKey = session?.snakeSetup?.clubs.map((club) => club.teamId).join('\u0000') ?? '';
+  const farmLiveCatalogProspectIdsKey = session?.snakeSetup?.poolPlayerIds.join('\u0000') ?? '';
+  const farmLiveCatalog = useMemo(() => {
+    if (!league || !farmPool) return null;
+    const activeTeamIds = farmLiveCatalogTeamIdsKey ? farmLiveCatalogTeamIdsKey.split('\u0000') : [];
+    const activeProspectIds = farmLiveCatalogProspectIdsKey ? farmLiveCatalogProspectIdsKey.split('\u0000') : [];
+    try {
+      return buildSnakeLiveFarmCatalog({
+        league,
+        teams: leagueTeams,
+        prospects: farmPool.prospects,
+        existingFarmRostersByTeamId: rostersByTeamId,
+        activeTeamIds,
+        activeProspectIds,
+        farmTarget: FARM_AUCTION_ROSTER_SLOTS_PER_TEAM,
+      });
+    } catch {
+      return null;
+    }
+  }, [farmLiveCatalogProspectIdsKey, farmLiveCatalogTeamIdsKey, farmPool, league, leagueTeams, rostersByTeamId]);
+  const [hostDeviceId, setHostDeviceId] = useState<string | null>(null);
+  const farmLiveSessionId = session?.id ?? null;
+  const liveHost = useSnakeLiveHostRoom({
+    session,
+    hostDeviceId,
+    catalog: farmLiveCatalog,
+    enabled: Boolean(session?.snakeCompanions?.roomCode),
+  });
+  const liveHostRef = useRef(liveHost);
+  liveHostRef.current = liveHost;
+
+  useEffect(() => {
+    if (!farmLiveSessionId) {
+      setHostDeviceId(null);
+      return;
+    }
+    let cancelled = false;
+    void getOrCreateSnakeLiveDeviceId().then((deviceId) => {
+      if (!cancelled) setHostDeviceId(deviceId);
+    }).catch((cause) => {
+      if (!cancelled) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [farmLiveSessionId]);
+
+  useEffect(() => {
+    if (!session || session.snakeCompanions?.roomCode) return;
+    let cancelled = false;
+    void patchMlbDraftSessionSnakeCompanions({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      patch: (current, fresh) => ensureCompanionRoom(
+        { ...fresh, snakeCompanions: current },
+      ).snakeCompanions!,
+    }).then((saved) => {
+      if (!cancelled) setSession(saved);
+    }).catch((cause) => {
+      if (!cancelled) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [session]);
+
+  const mirrorFarmSessionLocally = useCallback(async (
+    next: LeagueBuilderMlbDraftSession,
+    options: { acceptLowerRevision?: boolean } = {},
+  ): Promise<LeagueBuilderMlbDraftSession> => {
+    setSession((current) => {
+      if (!options.acceptLowerRevision
+        && current?.id === next.id
+        && (current.revision ?? 0) > (next.revision ?? 0)) return current;
+      return next;
+    });
+    try {
+      const saved = await updateMlbDraftSessionAtomically(
+        next.leagueId,
+        next.seasonNumber,
+        (fresh) => ({
+          ...next,
+          farmSeatBoards: next.farmSeatBoards ?? fresh.farmSeatBoards,
+          farmProspectSnapshot: next.farmProspectSnapshot ?? fresh.farmProspectSnapshot,
+          snakeCompanions: fresh.snakeCompanions ?? next.snakeCompanions,
+        }),
+      );
+      setSession((current) => {
+        if (!options.acceptLowerRevision
+          && current?.id === saved.id
+          && (current.revision ?? 0) > (saved.revision ?? 0)) return current;
+        return saved;
+      });
+      setWriteNotice(null);
+      return saved;
+    } catch (cause) {
+      setWriteNotice(`THE LIVE FARM ROOM IS CURRENT. THE LOCAL BACKUP FAILED — ${cause instanceof Error ? cause.message : String(cause)}`);
+      return next;
+    }
+  }, []);
+
+  const farmLiveAdoptedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const remote = liveHost.publicSession;
+    const room = liveHost.room;
+    if (!session || !remote || !room || !liveHost.hostAccessReady || remote.id !== session.id) return;
+    const key = `${room.id}:${room.publicRevision}`;
+    if (farmLiveAdoptedKeyRef.current === key) return;
+    farmLiveAdoptedKeyRef.current = key;
+    const received = mergeLivePublicSession(session, remote);
+    setSession(received);
+    if (received.currentPickIndex >= received.pickOrder.length) setRecapOpen(true);
+    void mirrorFarmSessionLocally(received);
+  }, [liveHost.hostAccessReady, liveHost.publicSession, liveHost.room, mirrorFarmSessionLocally, session]);
   const ownedPicksByTeamId = useMemo(() => Object.fromEntries(leagueTeams.map((team) => [team.id,
     (session?.pickOrder ?? []).slice(session?.currentPickIndex ?? 0).filter((slot) => slot.teamId === team.id).map((slot) => slot.pick),
   ])), [leagueTeams, session]);
@@ -477,40 +713,188 @@ function FarmSnakeRoom() {
       if (wrote) setSession(saved);
     }).catch((cause) => setWriteNotice(cause instanceof Error ? cause.message : String(cause)));
   }, [deskTeam, farmAdvisorLogBySeat, session]);
-  const recordPick = useCallback(async (playerId: string) => {
-    if (!session || !currentSlot || !farmPool) return;
-    if (!deskTeam || !currentTeam || deskTeam.id !== currentTeam.id) throw new Error('Only the club on the clock can record this pick.');
-    if (!session.farmSeatBoards) throw new Error('The private farm boards are still opening.');
-    const prospect = farmPool.prospects.find((row) => row.id === playerId);
-    if (!prospect) throw new Error('That prospect is no longer in the farm pool.');
-    const saved = await updateMlbDraftSessionAtomically(session.leagueId, session.seasonNumber, (fresh) => {
-      const freshSlot = fresh.pickOrder[fresh.currentPickIndex];
-      if (!freshSlot || freshSlot.pick !== currentSlot.pick || freshSlot.teamId !== currentSlot.teamId) {
-        throw new Error('The farm draft moved before this pick could be saved.');
+  const recordPick = useCallback(async (
+    playerId: string,
+    companionRequest?: SnakeCompanionPickRequest,
+    companionIntent?: SnakeLiveIntent,
+  ) => {
+    if (!session || !farmPool) throw new Error('THE FARM SNAKE DRAFT IS NOT READY.');
+    const buildPick = (source: LeagueBuilderMlbDraftSession, reconcilePrivateBoards: boolean) => {
+      const slot = source.pickOrder[source.currentPickIndex];
+      const activeTeam = leagueTeams.find((team) => team.id === slot?.teamId);
+      if (!slot || !activeTeam) throw new Error('THE CLUB ON THE CLOCK IS NOT READY.');
+      const authorizedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      if (!authorizedTeamId || authorizedTeamId !== activeTeam.id) {
+        throw new Error('ONLY THE CLUB ON THE CLOCK CAN MAKE THIS PICK.');
       }
-      const picked = applySnakePickWithCorrection({
-        session: fresh,
+      if (source.completedPicks.some((pick) => pick.playerId === playerId)) {
+        throw new Error('THAT PROSPECT IS NO LONGER AVAILABLE.');
+      }
+      const prospect = farmPool.prospects.find((row) => row.id === playerId);
+      if (!prospect || !source.snakeSetup?.poolPlayerIds.includes(playerId)) {
+        throw new Error('THAT PROSPECT IS NOT IN THE FROZEN FARM POOL.');
+      }
+      const pickedWithVersionState = applySnakePickWithCorrection({
+        session: source,
         player: { playerId: prospect.id },
-        settledSalary: farmPickSalary(fresh, freshSlot.pick),
+        settledSalary: farmPickSalary(source, slot.pick),
         marginalTax: 0,
         versionPool: farmPool.prospects.map((row) => ({ playerId: row.id })),
       });
+      // FARM prospects are one-card identities. The shared MLB pick helper
+      // creates a version ledger, but FARM must not publish or persist it.
+      const picked = { ...pickedWithVersionState };
+      delete picked.versionState;
+      if (!reconcilePrivateBoards) return { next: picked, slot, activeTeam };
       const nextUnavailable = new Set(picked.completedPicks.map((pick) => pick.playerId));
       const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
-        picked.pickOrder.slice(picked.currentPickIndex).filter((slot) => slot.teamId === team.id).length,
+        picked.pickOrder.slice(picked.currentPickIndex).filter((row) => row.teamId === team.id).length,
       ]));
-      return reconcileFarmSeatBoards({
-        session: picked,
+      return {
+        next: reconcileFarmSeatBoards({
+          session: picked,
+          unavailableProspectIds: nextUnavailable,
+          remainingTurnsByTeamId: nextRemainingTurns,
+        }).session,
+        slot,
+        activeTeam,
+      };
+    };
+
+    const clickedRoom = liveHostRef.current.room;
+    const actionIncarnation = clickedRoom
+      ? `${clickedRoom.id}:${clickedRoom.publicRevision}`
+      : 'room-not-ready';
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      const requestedSlot = session.pickOrder[session.currentPickIndex];
+      const requestedPick = companionRequest?.pick ?? requestedSlot?.pick;
+      const requestedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      const alreadySaved = host.publicSession.completedPicks.find((pick) => (
+        pick.pick === requestedPick && pick.teamId === requestedTeamId
+      ));
+      if (alreadySaved?.playerId === playerId) {
+        const received = mergeLivePublicSession(session, host.publicSession);
+        await mirrorFarmSessionLocally(received);
+        if (companionIntent?.status === 'pending') {
+          await host.resolveIntent(companionIntent, 'accepted', `farm-pick-accepted:${companionIntent.id}`)
+            .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION RECEIPT NEEDS A REFRESH.'));
+        }
+        return;
+      }
+      const source = snakeLivePublicActionSession(mergeLivePublicSession(session, host.publicSession));
+      const result = buildPick(source, false);
+      if (companionRequest && companionIntent) {
+        const approved = host.claims.some((claim) => claim.deviceId === companionIntent.deviceId
+          && claim.teamId === companionIntent.teamId && claim.status === 'approved');
+        if (!approved
+          || companionIntent.kind !== 'pick'
+          || companionIntent.status !== 'pending'
+          || companionIntent.expectedRoomRevision !== host.room.publicRevision
+          || companionRequest.sessionRevision !== (source.revision ?? 0)
+          || companionRequest.pick !== result.slot.pick
+          || companionRequest.teamId !== result.activeTeam.id) {
+          throw new Error('THE COMPANION FARM PICK REQUEST IS STALE.');
+        }
+      }
+      try {
+        await host.publishSession({
+          session: snakeLivePublicActionSession(result.next),
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `farm-pick:${result.next.id}:${result.slot.pick}:${playerId}:${actionIncarnation}`,
+          eventKind: 'PICK_RECORDED',
+          publicEvent: { pick: result.slot.pick, teamId: result.activeTeam.id, playerId },
+          status: result.next.currentPickIndex >= result.next.pickOrder.length ? 'complete' : 'open',
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      const localPicked = mergeLivePublicSession(session, result.next);
+      const nextUnavailable = new Set(localPicked.completedPicks.map((pick) => pick.playerId));
+      const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
+        localPicked.pickOrder.slice(localPicked.currentPickIndex).filter((row) => row.teamId === team.id).length,
+      ]));
+      const localResult = reconcileFarmSeatBoards({
+        session: localPicked,
         unavailableProspectIds: nextUnavailable,
         remainingTurnsByTeamId: nextRemainingTurns,
-      }).session;
-    });
-    setSession(saved);
-  }, [currentSlot, currentTeam, deskTeam, farmPool, leagueTeams, session]);
+      });
+      await mirrorFarmSessionLocally({
+        ...localResult.session,
+        correctionSnapshots: result.next.correctionSnapshots,
+      });
+      if (companionIntent) {
+        await host.resolveIntent(companionIntent, 'accepted', `farm-pick-accepted:${companionIntent.id}`)
+          .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION RECEIPT NEEDS A REFRESH.'));
+      }
+    };
+    await publish(false);
+  }, [deskTeam, farmPool, leagueTeams, mirrorFarmSessionLocally, session]);
   const finishFarm = useCallback(() => {
     if (!session || session.currentPickIndex < session.pickOrder.length) return;
     setRecapOpen(true);
   }, [session]);
+  const correctLatestFarm = useCallback(async () => {
+    if (!session || !liveHostRef.current.room?.correctionAvailable) return;
+    const clickedRoom = liveHostRef.current.room;
+    const idempotencyKey = `farm-correct:${clickedRoom.id}:${clickedRoom.publicRevision}`;
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE FARM ROOM IS NOT READY.');
+      }
+      let restoredRoom;
+      try {
+        restoredRoom = await host.restorePreviousPublicState({
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey,
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      const restoredPublic = readSnakeLivePublicSession(restoredRoom);
+      const localBase = session.correctionSnapshots?.[0]
+        ? restoreLatestSnakeCorrection(session)
+        : session;
+      const received = mergeLivePublicSession(localBase, restoredPublic);
+      const nextUnavailable = new Set(received.completedPicks.map((pick) => pick.playerId));
+      const nextRemainingTurns = Object.fromEntries(leagueTeams.map((team) => [team.id,
+        received.pickOrder.slice(received.currentPickIndex).filter((slot) => slot.teamId === team.id).length,
+      ]));
+      const reconciled = reconcileFarmSeatBoards({
+        session: received,
+        unavailableProspectIds: nextUnavailable,
+        remainingTurnsByTeamId: nextRemainingTurns,
+      });
+      await mirrorFarmSessionLocally({
+        ...reconciled.session,
+        correctionSnapshots: [],
+      }, { acceptLowerRevision: true });
+      setRecapOpen(false);
+    };
+    await publish(false);
+  }, [leagueTeams, mirrorFarmSessionLocally, session]);
   const confirmFarm = useCallback(async () => {
     if (recapCommitInFlight.current || !league || !session || !farmPool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;
     recapCommitInFlight.current = true;
@@ -560,6 +944,12 @@ function FarmSnakeRoom() {
       });
       setSession(handedOff);
       await assertSnakeRosterHandoffReady(handedOff, 'FARM');
+      const activeLiveRoom = liveHostRef.current.room;
+      if (activeLiveRoom && activeLiveRoom.status !== 'closed') {
+        await liveHostRef.current.closeRoom(
+          `farm-handoff:${activeLiveRoom.id}:${activeLiveRoom.publicRevision}:${manifest.source.sessionId}`,
+        ).catch(() => undefined);
+      }
       navigate(staffHireRouteForLeague(league));
     } catch {
       setRecapError(RECAP_CONFIRMATION_ERROR);
@@ -626,6 +1016,9 @@ function FarmSnakeRoom() {
     onBack={session.draftManifest ? undefined : () => setRecapOpen(false)}
   />;
   const farmDraftComplete = session.currentPickIndex >= session.pickOrder.length;
+  const deskHasApprovedCompanion = Boolean(deskTeam && liveHost.claims.some((claim) => (
+    claim.teamId === deskTeam.id && claim.status === 'approved'
+  )));
   return <SnakeDraftRoomView
     onHome={() => navigate('/')}
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
@@ -635,9 +1028,9 @@ function FarmSnakeRoom() {
     rostersByTeamId={rostersByTeamId}
     ownedPicksByTeamId={ownedPicksByTeamId}
     activeSeatId={farmDraftComplete ? null : deskTeam?.id ?? null}
-    canDraftFromActiveSeat={!farmDraftComplete && Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
-    candidate={currentSlot && selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
-    selectedPlayerCard={currentSlot && selected && deskTeam ? <FarmSelectedProspectCard
+    canDraftFromActiveSeat={!farmDraftComplete && !deskHasApprovedCompanion && Boolean(deskBoard && deskTeam && currentTeam && deskTeam.id === currentTeam.id)}
+    candidate={!deskHasApprovedCompanion && currentSlot && selected ? { id: selected.id, name: selected.name, position: selected.position, consequence: `PICK ${currentSlot.pick} PAYS $${farmPickSalary(session, currentSlot.pick).toLocaleString()} — WHOEVER TAKES IT.`, privateNote: selected.scoutsCall } : null}
+    selectedPlayerCard={!deskHasApprovedCompanion && currentSlot && selected && deskTeam ? <FarmSelectedProspectCard
       card={selected}
       slotPick={currentSlot.pick}
       slotSalary={farmPickSalary(session, currentSlot.pick)}
@@ -645,12 +1038,12 @@ function FarmSnakeRoom() {
       teamName={deskTeam.name}
       teamLogoUrl={deskTeam.logoUrl}
     /> : undefined}
-    selectedFitLabel={selected ? `SCOUT · ${selected.scoutedGrade}` : null}
+    selectedFitLabel={!deskHasApprovedCompanion && selected ? `SCOUT · ${selected.scoutedGrade}` : null}
     draftActionLabel="DRAFT PROSPECT"
-    paused={Boolean(session.paused)} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
+    paused={false} soundsEnabled={soundsEnabled} correctionAvailable={Boolean(liveHost.room?.correctionAvailable)}
     hotseatNextName={hotseatPassName(session, currentTeam)}
     practiceMode={false}
-    privateDesk={currentSlot ? <FarmPrivateDesk
+    privateDesk={!deskHasApprovedCompanion && currentSlot ? <FarmPrivateDesk
       key={deskTeam?.id ?? 'none'}
       cards={cards}
       selectedId={selected?.id ?? null}
@@ -671,18 +1064,54 @@ function FarmSnakeRoom() {
         });
       }}
     /> : undefined}
-    roomHelpNotes={['SLOT SALARIES STAY WITH THE PICKS.']}
-    writeNotice={writeNotice}
-    onReloadRoom={async () => { setWriteNotice(null); await loadFarm(); }}
+    roomHelpNotes={deskHasApprovedCompanion ? [] : ['SLOT SALARIES STAY WITH THE PICKS.']}
+    writeNotice={writeNotice ?? liveHost.error}
+    onReloadRoom={async () => { setWriteNotice(null); await liveHost.refresh().catch(() => undefined); await loadFarm(); }}
     onDismissWriteNotice={() => setWriteNotice(null)}
-    onPauseChange={async (paused) => {
-      try {
-        await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
-      } catch (cause) {
-        setWriteNotice(cause instanceof Error ? cause.message : String(cause));
-        throw cause;
-      }
-    }}
+    companionApproval={<CompanionApprovalCard
+      roomCode={session.snakeCompanions?.roomCode ?? ''}
+      teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+      claims={liveHost.claims}
+      intents={liveHost.intents}
+      ready={liveHost.liveRoomReady}
+      working={liveHost.working}
+      liveError={liveHost.error}
+      playerName={(playerId) => farmPool.prospects.find((prospect) => prospect.id === playerId)
+        ? fullName(
+            farmPool.prospects.find((prospect) => prospect.id === playerId)!.firstName,
+            farmPool.prospects.find((prospect) => prospect.id === playerId)!.lastName,
+          )
+        : 'UNKNOWN PROSPECT'}
+      onResolveClaim={async (claim, status) => {
+        if (status === 'approved') {
+          const board = session.farmSeatBoards?.[claim.teamId];
+          const teamCards = allCardsByTeamId[claim.teamId];
+          if (!board || !teamCards) throw new Error('THE FARM BOARD IS NOT READY.');
+          await liveHost.seedBoard({
+            teamId: claim.teamId,
+            board: buildFarmLivePrivateBoard({
+              board,
+              cards: teamCards,
+              farmBudget: farmBudgets[claim.teamId] ?? 0,
+            }),
+          });
+        }
+        await liveHost.resolveClaim(
+          claim,
+          status,
+          `farm-claim:${claim.id}:${claim.revision}:${status}`,
+        );
+      }}
+      onApprovePick={(intent, request) => recordPick(request.playerId, request, intent)}
+      onRejectPick={async (intent) => {
+        await liveHost.resolveIntent(intent, 'rejected', `farm-pick-rejected:${intent.id}`);
+      }}
+    />}
+    pendingCompanionCount={liveHost.claims.filter((claim) => claim.status === 'pending').length}
+    pendingPickRequestCount={!liveHost.room
+      ? 0
+      : pendingSnakeLivePickIntentCount(liveHost.intents, liveHost.room.publicRevision)}
+    onPauseChange={() => undefined}
     onActiveSeatChange={setDeskTeamId}
     onRecordPick={async (playerId) => {
       try {
@@ -694,8 +1123,7 @@ function FarmSnakeRoom() {
     }}
     onCorrectLatest={async () => {
       try {
-        const restored = restoreLatestSnakeCorrection(session);
-        await persist(restored);
+        await correctLatestFarm();
       } catch (cause) {
         setWriteNotice(cause instanceof Error ? cause.message : String(cause));
         throw cause;
@@ -709,10 +1137,11 @@ function FarmSnakeRoom() {
 function MlbSnakeDraftRoom() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { runProof: runSnakeSetupProof } = useSnakeSetupProofClient();
   const {
     leagues,
     teams,
-    players,
+    players: localPlayers,
     isLoading,
     error,
     getRegisteredPool,
@@ -725,21 +1154,26 @@ function MlbSnakeDraftRoom() {
   }, [location.pathname, location.search]);
   const sessionSeasonNumber = practiceRequested ? PRACTICE_SEASON_NUMBER : SEASON_NUMBER;
   const requestedLeagueId = useMemo(() => new URLSearchParams(location.search).get('leagueId'), [location.search]);
-  const league = useMemo(
+  const recoveryRoomCodeParam = useMemo(() => new URLSearchParams(location.search).get('roomCode') ?? '', [location.search]);
+  const localLeague = useMemo(
     () => requestedLeagueId === null
       ? leagues[0] ?? null
       : leagues.find((entry) => entry.id === requestedLeagueId) ?? null,
     [leagues, requestedLeagueId],
   );
-  const leagueTeams = useMemo(() => league?.teamIds.flatMap((id) => {
+  const localLeagueTeams = useMemo(() => localLeague?.teamIds.flatMap((id) => {
     const team = teams.find((entry) => entry.id === id);
     return team ? [team] : [];
-  }) ?? [], [league, teams]);
-  const [pool, setPool] = useState<Awaited<ReturnType<typeof getRegisteredPool>>>(null);
+  }) ?? [], [localLeague, teams]);
+  const [localPool, setLocalPool] = useState<Awaited<ReturnType<typeof getRegisteredPool>>>(null);
   const [session, setSession] = useState<Awaited<ReturnType<typeof getMlbDraftSession>>>(null);
   const [loadDone, setLoadDone] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [recoveryRoomCode, setRecoveryRoomCode] = useState(recoveryRoomCodeParam);
+  const [recoveryWorking, setRecoveryWorking] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const [writeNotice, setWriteNotice] = useState<string | null>(null);
+  const [localMirrorWarning, setLocalMirrorWarning] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [soundsEnabled, setSoundsEnabled] = useState(loadSnakeSoundsEnabled);
   const [advisorLogBySeat, setAdvisorLogBySeat] = useState<Record<string, AdvisorLogEntry[]>>({});
@@ -770,7 +1204,6 @@ function MlbSnakeDraftRoom() {
   const [committingRecap, setCommittingRecap] = useState(false);
   const [practiceFastForward, setPracticeFastForward] = useState(false);
   const recapCommitInFlight = useRef(false);
-  const legalFinishCacheRef = useRef(new Map<string, SnakeLegalFinishBill>());
   const seatingPickProofCacheRef = useRef(new Map<string, SnakeSeatingProof>());
   const privateEpochRef = useRef(0);
   const privateRevealedRef = useRef(false);
@@ -800,6 +1233,84 @@ function MlbSnakeDraftRoom() {
     && sameMainPrivateIdentity(privateIdentityRef.current, guard.identity)
   ), []);
   const practiceMode = practiceRequested || Boolean(session?.workflowVersion.toLowerCase().includes('practice'));
+  const liveSessionActive = Boolean(session);
+  const liveCatalogPlayerIdsKey = session?.snakeSetup?.poolPlayerIds?.join('\u0000') ?? '';
+  const liveCatalogTeamIdsKey = session?.snakeSetup?.clubs.map((club) => club.teamId).join('\u0000') ?? '';
+  const liveCatalog = useMemo(() => {
+    if (!localLeague || !localPool) return null;
+    const activePoolPlayerIds = liveCatalogPlayerIdsKey
+      ? liveCatalogPlayerIdsKey.split('\u0000')
+      : [];
+    const selected = new Set(activePoolPlayerIds);
+    const activeTeamIds = liveCatalogTeamIdsKey ? liveCatalogTeamIdsKey.split('\u0000') : [];
+    const registeredPool = {
+      ...localPool,
+      players: localPool.players.filter((player) => selected.has(player.id)),
+    };
+    try {
+      return buildSnakeLiveCatalog({
+        league: localLeague,
+        teams: localLeagueTeams,
+        players: localPlayers,
+        registeredPool,
+        activeTeamIds,
+        activePoolPlayerIds,
+      });
+    } catch {
+      return null;
+    }
+  }, [liveCatalogPlayerIdsKey, liveCatalogTeamIdsKey, localLeague, localLeagueTeams, localPlayers, localPool]);
+  const [hostDeviceId, setHostDeviceId] = useState<string | null>(null);
+  const liveHost = useSnakeLiveHostRoom({
+    session,
+    hostDeviceId,
+    catalog: liveCatalog,
+    enabled: !practiceMode && liveSessionActive && Boolean(session?.snakeCompanions?.roomCode),
+  });
+  const cloudCatalog = useMemo(
+    () => liveHost.catalog ? readSnakeLiveCatalog(liveHost.catalog.catalog) : null,
+    [liveHost.catalog],
+  );
+  const useCloudCatalog = !practiceMode && Boolean(liveHost.room);
+  const { league, leagueTeams, players, pool } = useMemo(() => ({
+    league: useCloudCatalog ? cloudCatalog?.league ?? null : localLeague,
+    leagueTeams: useCloudCatalog ? cloudCatalog?.teams ?? [] : localLeagueTeams,
+    players: useCloudCatalog ? cloudCatalog?.players ?? [] : localPlayers,
+    pool: useCloudCatalog ? cloudCatalog?.registeredPool ?? null : localPool,
+  }), [cloudCatalog, localLeague, localLeagueTeams, localPlayers, localPool, useCloudCatalog]);
+  const liveHostRef = useRef(liveHost);
+  liveHostRef.current = liveHost;
+
+  useEffect(() => {
+    if (practiceMode || !liveSessionActive) {
+      setHostDeviceId(null);
+      return;
+    }
+    let cancelled = false;
+    void getOrCreateSnakeLiveDeviceId().then((deviceId) => {
+      if (!cancelled) setHostDeviceId(deviceId);
+    }).catch((cause) => {
+      if (!cancelled) setSyncError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [liveSessionActive, practiceMode]);
+
+  useEffect(() => {
+    if (practiceMode || !liveSessionActive || !session || session.snakeCompanions?.roomCode) return;
+    let cancelled = false;
+    void patchMlbDraftSessionSnakeCompanions({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      patch: (current, fresh) => ensureCompanionRoom(
+        { ...fresh, snakeCompanions: current },
+      ).snakeCompanions!,
+    }).then((saved) => {
+      if (!cancelled) setSession(saved);
+    }).catch((cause) => {
+      if (!cancelled) setSyncError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { cancelled = true; };
+  }, [liveSessionActive, practiceMode, session]);
 
   useEffect(() => {
     if (!privateDeskRevealed) {
@@ -815,21 +1326,21 @@ function MlbSnakeDraftRoom() {
     return () => globalThis.clearTimeout(id);
   }, [privateDeskRevealed]);
 
-  const loadSession = useCallback(async () => {
+  const loadSession = useCallback(async (leagueIdOverride?: string): Promise<boolean> => {
     setLoadDone(false);
     setActionError(null);
     try {
-      await syncEngine.pull({ throwOnError: true });
       const [freshLeagues, freshTeams, freshPlayers] = await Promise.all([
         getAllLeagueTemplates(),
         getAllTeams(),
         getAllPlayers(),
       ]);
-      const freshLeague = requestedLeagueId === null
+      const targetLeagueId = leagueIdOverride ?? requestedLeagueId;
+      const freshLeague = targetLeagueId === null
         ? freshLeagues[0] ?? null
-        : freshLeagues.find((entry) => entry.id === requestedLeagueId) ?? null;
+        : freshLeagues.find((entry) => entry.id === targetLeagueId) ?? null;
       if (!freshLeague) {
-        throw new Error(requestedLeagueId ? 'THE LEAGUE WAS NOT FOUND.' : 'NO LEAGUE IS AVAILABLE FOR THIS DRAFT.');
+        throw new Error(targetLeagueId ? 'THE LEAGUE WAS NOT FOUND.' : 'NO LEAGUE IS AVAILABLE FOR THIS DRAFT.');
       }
       if (freshLeague.draftFormat !== 'snake') throw new Error('THIS LEAGUE IS CONFIGURED FOR AN AUCTION DRAFT.');
       const [nextPool, nextSession] = await Promise.all([
@@ -837,24 +1348,71 @@ function MlbSnakeDraftRoom() {
         getMlbDraftSession(freshLeague.id, sessionSeasonNumber),
       ]);
       if (nextSession?.draftManifest) readSnakeDraftTruth(nextSession, 'MLB');
-      setPool(nextPool);
-      setSession(nextSession);
-      setRecapOpen(Boolean(nextSession && (nextSession.draftManifest || nextSession.currentPickIndex >= nextSession.pickOrder.length)));
+      const remote = !practiceMode ? liveHostRef.current.publicSession : null;
+      const received = nextSession && remote && nextSession.id === remote.id
+        ? mergeLivePublicSession(nextSession, remote)
+        : nextSession;
+      setLocalPool(nextPool);
+      setSession((current) => current && received && sameDraftSessionSnapshot(current, received)
+        ? current
+        : received);
+      setRecapOpen(Boolean(received && (received.draftManifest || received.currentPickIndex >= received.pickOrder.length)));
       void freshTeams;
       void freshPlayers;
       await refresh();
+      return true;
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : String(cause));
+      return false;
     } finally {
       setLoadDone(true);
     }
-  }, [getMlbDraftSession, getRegisteredPool, refresh, requestedLeagueId, sessionSeasonNumber]);
+  }, [getMlbDraftSession, getRegisteredPool, practiceMode, refresh, requestedLeagueId, sessionSeasonNumber]);
 
   useEffect(() => { void loadSession(); }, [loadSession]);
 
+  const recoverOpenLiveRoom = useCallback(async () => {
+    const roomCode = recoveryRoomCode.trim();
+    if (!/^\d{4}$/.test(roomCode)) {
+      setRecoveryError('ENTER THE FOUR-DIGIT ROOM CODE.');
+      return;
+    }
+    setRecoveryWorking(true);
+    setRecoveryError(null);
+    try {
+      if (!supabase) throw new Error('CLOUD SIGN-IN IS NOT CONFIGURED ON THIS PREVIEW.');
+      const { data: { session: cloudSession }, error: authError } = await supabase.auth.getSession();
+      if (authError) throw authError;
+      if (!cloudSession) throw new Error('SIGN IN TO CLOUD SYNC ON THIS PREVIEW, THEN TRY AGAIN.');
+      const transport = createSnakeLiveRoomTransport();
+      const room = await transport.findRoomByCode(roomCode);
+      if (!room || room.phase !== 'MLB') throw new Error('NO RECOVERABLE MLB LIVE ROOM MATCHES THIS CODE.');
+      const receipt = await transport.getCatalog(room.id);
+      const catalog = receipt ? readSnakeLiveCatalog(receipt.catalog) : null;
+      if (!catalog) throw new Error('THE LIVE ROOM CATALOG IS NOT AVAILABLE.');
+      const publicSession = readSnakeLivePublicSession(room);
+      await restoreSnakeLiveRoomLocally({
+        catalog,
+        session: publicSession,
+        recovery: { roomId: room.id, roomCode, publicRevision: room.publicRevision },
+      });
+      if (!await loadSession(catalog.league.id)) {
+        throw new Error('THE RESTORED LIVE ROOM COULD NOT OPEN.');
+      }
+      navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}`, { replace: true });
+    } catch (cause) {
+      setRecoveryError(cause instanceof Error ? cause.message : 'THE LIVE ROOM COULD NOT BE RESTORED HERE.');
+    } finally {
+      setRecoveryWorking(false);
+    }
+  }, [loadSession, navigate, recoveryRoomCode]);
+
   const refreshRoomTruth = useCallback(async () => {
     try {
-      await syncEngine.pull({ throwOnError: true });
+      if (!practiceMode && liveHostRef.current.hostAccessReady) {
+        await liveHostRef.current.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      }
       const freshLeagues = await getAllLeagueTemplates();
       const freshLeague = requestedLeagueId === null
         ? freshLeagues[0] ?? null
@@ -864,20 +1422,23 @@ function MlbSnakeDraftRoom() {
       setSyncError(null);
       if (!fresh) return;
       if (fresh.draftManifest) readSnakeDraftTruth(fresh, 'MLB');
+      const remote = !practiceMode ? liveHostRef.current.publicSession : null;
+      const received = remote ? mergeLivePublicSession(fresh, remote) : fresh;
       setSession((current) => {
-        if (!current) return fresh;
-        if ((fresh.revision ?? 0) < (current.revision ?? 0)) return current;
-        return sameDraftSessionSnapshot(current, fresh) ? current : fresh;
+        if (!current) return received;
+        if ((received.revision ?? 0) < (current.revision ?? 0)) return current;
+        return sameDraftSessionSnapshot(current, received) ? current : received;
       });
     } catch (cause) {
       const detail = cause instanceof Error ? cause.message : String(cause);
       setSyncError(`LIVE ROOM SYNC FAILED — ${detail}`);
     }
-  }, [getMlbDraftSession, requestedLeagueId, sessionSeasonNumber]);
+  }, [getMlbDraftSession, practiceMode, requestedLeagueId, sessionSeasonNumber]);
 
   useEffect(() => {
+    if (!practiceMode) return;
     return startSnakeRoomFreshness({ pullAndRefresh: refreshRoomTruth });
-  }, [refreshRoomTruth]);
+  }, [practiceMode, refreshRoomTruth]);
 
   const playerById = useMemo(() => new Map(players.map((player) => [player.id, player])), [players]);
   const activePoolRows = useMemo(() => {
@@ -898,6 +1459,13 @@ function MlbSnakeDraftRoom() {
     setDeskTeamId(draftingTeam?.id ?? null);
   }, [draftingTeam?.id, session?.currentPickIndex]);
   const deskTeam = leagueTeams.find((team) => team.id === deskTeamId) ?? draftingTeam;
+  const deskHasApprovedCompanion = Boolean(deskTeam && !practiceMode && liveHost.claims.some((claim) => (
+    claim.teamId === deskTeam.id && claim.status === 'approved'
+  )));
+  useEffect(() => {
+    if (deskHasApprovedCompanion) invalidatePrivateContext();
+  }, [deskHasApprovedCompanion, invalidatePrivateContext]);
+  const hotseatPrivateDeskActive = privateDeskActive && !deskHasApprovedCompanion;
   const completedPickByPlayerId = useMemo(() => new Map(
     (session?.completedPicks ?? []).map((pick) => [pick.playerId, pick]),
   ), [session?.completedPicks]);
@@ -948,7 +1516,7 @@ function MlbSnakeDraftRoom() {
   const deskAlignment = deskTeam
     ? liveAlignment.find((row) => row.teamId === deskTeam.id) ?? null
     : null;
-  const currentBoard = deskTeam ? session?.seatBoards?.[deskTeam.id] : null;
+  const currentBoard = deskTeam && !deskHasApprovedCompanion ? session?.seatBoards?.[deskTeam.id] : null;
   const defaultCandidateId = useMemo(() => {
     const ranked = [
       ...(currentBoard?.rankings.global ?? []),
@@ -1047,8 +1615,14 @@ function MlbSnakeDraftRoom() {
       versionState: session.versionState,
     };
   }, [leagueTeams, pool, poolById, seatingById, seatingPlayers, session, unavailable]);
+  const seatingProofInputKey = useMemo(() => (
+    seatingProofInput ? fingerprintSnakeSetupProofInput(seatingProofInput) : null
+  ), [seatingProofInput]);
+  const seatingProofInputRef = useRef(seatingProofInput);
+  seatingProofInputRef.current = seatingProofInput;
   const [seatingProofResult, setSeatingProofResult] = useState<SnakeSeatingProof | null>(null);
   useEffect(() => {
+    const seatingProofInput = seatingProofInputRef.current;
     if (!seatingProofInput) {
       setSeatingProofResult(null);
       return;
@@ -1076,7 +1650,7 @@ function MlbSnakeDraftRoom() {
       cancelled = true;
       globalThis.clearTimeout(id);
     };
-  }, [seatingProofInput, session?.snakeSetup?.seatingCertificate]);
+  }, [seatingProofInputKey, session?.snakeSetup?.seatingCertificate]);
   const deskRoomPlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -1085,6 +1659,23 @@ function MlbSnakeDraftRoom() {
     return deskPlayer ? [deskPlayer] : [];
   }), [activePoolRows, playerById, seatingById]);
   const deskRoomById = useMemo(() => new Map(deskRoomPlayers.map((player) => [player.playerId, player])), [deskRoomPlayers]);
+  const finishSafetyRequest = useMemo(() => {
+    if (!hotseatPrivateDeskActive || !deskTeam || !seatingProofInput || !seatingProofResult?.feasible) return null;
+    const availableIds = new Set(deskRoomPlayers
+      .filter((player) => !unavailable.has(player.playerId))
+      .map((player) => player.playerId));
+    return buildSnakePickFinishWorkerRequest({
+      current: seatingProofInput,
+      proof: seatingProofResult,
+      teamId: deskTeam.id,
+      candidatePlayerIds: [...new Set([
+        ...Object.values(currentBoard?.slots ?? {}),
+        ...(currentBoard?.rankings.global ?? []),
+        ...deskRoomPlayers.map((player) => player.playerId),
+      ].filter((playerId): playerId is string => Boolean(playerId) && availableIds.has(playerId)))],
+    });
+  }, [currentBoard, deskRoomPlayers, deskTeam, hotseatPrivateDeskActive, seatingProofInput, seatingProofResult, unavailable]);
+  const finishSafety = useSnakePickFinishSafety(finishSafetyRequest);
   const assistantLivePlayers = useMemo(() => activePoolRows.flatMap((row) => {
     const player = playerById.get(row.id);
     const seating = seatingById.get(row.id);
@@ -1099,6 +1690,7 @@ function MlbSnakeDraftRoom() {
   }), [activePoolRows, deskRoomById, playerById, seatingById]);
   const boardEligibilityCandidates = useMemo(() => deskRoomPlayers.map((player) => ({
     id: player.playerId,
+    iv: player.price,
     position: player.position,
     eligiblePositions: player.eligiblePositions,
     rosterShape: player.shape,
@@ -1144,50 +1736,13 @@ function MlbSnakeDraftRoom() {
         blockReason: 'DRAFTED ROSTER DATA IS INCOMPLETE.',
       };
     }
-    const spent = teamPicks.reduce((sum, pick) => sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? 0), 0);
-    const remaining = seatingPlayers.filter((row) => row.playerId !== candidateId && !unavailable.has(row.playerId));
-    const marginalTax = auctionMarginalTaxWithCaps(
-      roster.map((entry) => entry.construction),
-      model.construction,
-      currentLocked?.capIdentity,
-      snakeLuxuryCaps(pool.luxuryCaps),
-    );
-    const cacheKey = `${deskTeam.id}:${session.revision ?? 0}:${candidateId}`;
-    let bill = legalFinishCacheRef.current.get(cacheKey);
-    if (!bill) {
-      bill = evaluateSnakeLegalFinish({
-        currentRoster: [...roster, model],
-        committedSpent: spent + priced.iv,
-        availablePool: remaining,
-        budget: pool.tierCap,
-        baseCaps: pool.luxuryCaps,
-        realTeamCount: leagueTeams.length,
-        capIdentity: currentLocked?.capIdentity,
-      });
-      legalFinishCacheRef.current.set(cacheKey, bill);
-    }
-    const pickProofKey = `${deskTeam.id}:${session.revision ?? 0}:${candidateId}`;
-    let simultaneous = seatingPickProofCacheRef.current.get(pickProofKey) ?? null;
-    if (!simultaneous && seatingProofInput && seatingProofResult?.feasible) {
-      simultaneous = proveSnakePickKeepsAllClubsSeated({
-        current: seatingProofInput,
-        teamId: deskTeam.id,
-        player: model,
-        allInCost: priced.iv + marginalTax,
-        currentProof: seatingProofResult,
-      });
-      seatingPickProofCacheRef.current.set(pickProofKey, simultaneous);
-    }
-    const blockReason = !bill.feasible
-      ? 'THIS PICK LEAVES NO LEGAL 22.'
-      : !snakeMoneyNonnegative(bill.legalFinishCushion) && bill.affordability === 'BLOCKED'
-        ? `YOU NEED $${Math.abs(Math.round(bill.legalFinishCushion)).toLocaleString()} MORE TO FINISH A LEGAL 22.`
-        : !simultaneous?.feasible
-          ? simultaneous?.message ?? 'THIS PICK BREAKS THE SHARED DRAFT PLAN.'
-        : null;
-    const line = blockReason ?? (bill.affordability === 'OPEN'
-      ? 'FINISH COST CHECK OPEN.'
-      : `AFTER THIS PICK AND A LEGAL FINISH: $${Math.round(bill.legalFinishCushion).toLocaleString()} LEFT.`);
+    const finish = finishSafety.rows.get(candidateId);
+    const blockReason = !finish
+      ? finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'
+      : finish.status === 'BLOCKED' ? finish.message : null;
+    const line = blockReason ?? (finish?.status === 'DRAFTABLE'
+      ? `LEGAL 22 · $${Math.round(finish.finalSalary!).toLocaleString()} SALARY · $${Math.round(finish.finalTax!).toLocaleString()} TAX · $${Math.round(finish.moneyLeft!).toLocaleString()} LEFT.`
+      : finish?.message ?? 'FINISH PROOF UNAVAILABLE.');
     return {
       id: player.id,
       name: fullName(player.firstName, player.lastName),
@@ -1195,7 +1750,7 @@ function MlbSnakeDraftRoom() {
       consequence: line,
       blockReason,
     };
-  }, [candidateId, completedPickByPlayerId, currentLocked, deskTeam, draftedTeamNameByPlayerId, leagueTeams.length, playerById, pool, poolById, seatingById, seatingPlayers, seatingProofInput, seatingProofResult, session, unavailable]);
+  }, [candidateId, completedPickByPlayerId, deskTeam, draftedTeamNameByPlayerId, finishSafety, playerById, pool, poolById, seatingById, session]);
 
   const activePlanBroken = useMemo(() => {
     if (!session || !draftingTeam || !currentSlot || !seatingProofResult) return false;
@@ -1218,14 +1773,23 @@ function MlbSnakeDraftRoom() {
     team.id,
     (session?.pickOrder ?? []).slice(session?.currentPickIndex ?? 0).filter((slot) => slot.teamId === team.id).map((slot) => slot.pick),
   ])), [leagueTeams, session]);
-  const ticker = useMemo(() => [...(session?.completedPicks ?? [])].reverse().map((pick) => {
-    const player = playerById.get(pick.playerId);
-    return {
-      id: `${pick.round}-${pick.pick}-${pick.playerId}`,
-      teamId: pick.teamId,
-      text: `PICK #${pick.pick} · ${(leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM).toUpperCase()} SELECTED ${(player ? fullName(player.firstName, player.lastName) : UNKNOWN_PLAYER).toUpperCase()}`,
-    };
-  }), [leagueTeams, playerById, session]);
+  const liveTradeProjection = useMemo(() => (
+    practiceMode
+      ? {
+          openOffers: session?.openTradeOffers ?? [],
+          executableOffers: (session?.openTradeOffers ?? []).filter((offer) => offer.buyerNod && offer.sellerNod),
+          invalidIntentIds: [],
+        }
+      : projectSnakeLiveTradeOffers(liveHost.intents, liveHost.room?.publicRevision ?? -1)
+  ), [liveHost.intents, liveHost.room?.publicRevision, practiceMode, session?.openTradeOffers]);
+  const ticker = useMemo(() => buildSnakePickTicker({
+    picks: session?.completedPicks ?? [],
+    players,
+    teams: leagueTeams,
+    versionState: session?.versionState,
+    unknownPlayer: UNKNOWN_PLAYER,
+    unknownTeam: UNKNOWN_TEAM,
+  }), [leagueTeams, players, session?.completedPicks, session?.versionState]);
   const latestPick = session?.completedPicks.at(-1);
   const currentBoardPlayerIds = new Set([
     ...(currentBoard?.rankings.global ?? []),
@@ -1240,18 +1804,110 @@ function MlbSnakeDraftRoom() {
     setSession(saved);
     return saved;
   }, [session?.revision]);
-  const planBrokenPauseRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!activePlanBroken || !session || session.paused || !currentSlot) return;
-    const key = `${session.id}:${session.revision ?? 0}:${currentSlot.pick}`;
-    if (planBrokenPauseRef.current === key) return;
-    planBrokenPauseRef.current = key;
-    setWriteNotice('PLAN BROKEN — NO PICK LEAVES A LEGAL, AFFORDABLE 22. THE ROOM IS PAUSED.');
-    void persist({ ...session, paused: true, revision: (session.revision ?? 0) + 1 }).catch((cause) => {
-      planBrokenPauseRef.current = null;
-      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+
+  const mirrorLiveSessionLocally = useCallback(async (
+    next: LeagueBuilderMlbDraftSession,
+    options: { acceptLowerRevision?: boolean } = {},
+  ): Promise<LeagueBuilderMlbDraftSession> => {
+    setSession((current) => {
+      if (!options.acceptLowerRevision
+        && current?.id === next.id
+        && (current.revision ?? 0) > (next.revision ?? 0)) return current;
+      return next;
     });
-  }, [activePlanBroken, currentSlot, persist, session]);
+    if (next.currentPickIndex >= next.pickOrder.length) setRecapOpen(true);
+    try {
+      const saved = await updateMlbDraftSessionAtomically(
+        next.leagueId,
+        next.seasonNumber,
+        (fresh) => ({
+          ...next,
+          seatBoards: next.seatBoards ?? fresh.seatBoards,
+          snakeCompanions: fresh.snakeCompanions ?? next.snakeCompanions,
+        }),
+      );
+      setSession((current) => {
+        if (!options.acceptLowerRevision
+          && current?.id === saved.id
+          && (current.revision ?? 0) > (saved.revision ?? 0)) return current;
+        return saved;
+      });
+      setLocalMirrorWarning(null);
+      return saved;
+    } catch (cause) {
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      setLocalMirrorWarning(`THE LIVE ROOM IS CURRENT. THE LOCAL BACKUP FAILED — ${detail}`);
+      return next;
+    }
+  }, []);
+
+  const liveAdoptionRef = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const liveAdoptedKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    const remote = liveHost.publicSession;
+    const liveRoom = liveHost.room;
+    if (practiceMode || !session || !remote || !liveRoom || !liveHost.hostAccessReady) return;
+    if (remote.id !== session.id) return;
+    const key = `${liveRoom.id}:${liveRoom.publicRevision}`;
+    if (liveAdoptedKeyRef.current === key || liveAdoptionRef.current?.key === key) return;
+    const received = mergeLivePublicSession(session, remote);
+    liveAdoptedKeyRef.current = key;
+    setSession(received);
+    if (received.currentPickIndex >= received.pickOrder.length) setRecapOpen(true);
+    const promise = updateMlbDraftSessionAtomically(
+      session.leagueId,
+      session.seasonNumber,
+      (fresh) => mergeLivePublicSession(fresh, remote),
+    ).then((saved) => {
+      if (liveAdoptedKeyRef.current !== key) return;
+      setSession((current) => {
+        if (current?.id === saved.id && (current.revision ?? 0) > (saved.revision ?? 0)) return current;
+        return saved;
+      });
+      if (saved.currentPickIndex >= saved.pickOrder.length) setRecapOpen(true);
+      setLocalMirrorWarning(null);
+      setSyncError(null);
+    }).catch((cause) => {
+      if (liveAdoptedKeyRef.current === key) {
+        setLocalMirrorWarning(`THE LIVE ROOM IS CURRENT. THE LOCAL BACKUP FAILED — ${cause instanceof Error ? cause.message : String(cause)}`);
+      }
+    }).finally(() => {
+      if (liveAdoptionRef.current?.promise === promise) liveAdoptionRef.current = null;
+    });
+    liveAdoptionRef.current = { key, promise };
+  }, [
+    liveHost.hostAccessReady,
+    liveHost.publicSession,
+    liveHost.room,
+    practiceMode,
+    session,
+  ]);
+
+  const saveSeatBoard = useCallback(async (input: {
+    teamId: string;
+    board: SnakeSeatBoardRecord;
+    expectedBoardRevision: number;
+    actionKey: string;
+  }): Promise<LeagueBuilderMlbDraftSession> => {
+    if (!session) throw new Error('THE DRAFT ROOM IS NOT READY.');
+    const claimed = !practiceMode && liveHostRef.current.claims.some((claim) => (
+      claim.teamId === input.teamId && claim.status === 'approved'
+    ));
+    if (claimed) {
+      throw new Error('THIS PRIVATE BOARD BELONGS TO A COMPANION DEVICE.');
+    }
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: session.leagueId,
+      seasonNumber: session.seasonNumber,
+      teamId: input.teamId,
+      board: input.board,
+      expectedBoardRevision: input.expectedBoardRevision,
+    });
+    setSession(saved);
+    return saved;
+  }, [practiceMode, session]);
+
+  const planBrokenPauseRef = useRef<string | null>(null);
 
   const rememberBackfillEvents = useCallback((eventsByTeamId: Record<string, BoardBackfillEvent[]>) => {
     if (Object.keys(eventsByTeamId).length === 0) return;
@@ -1274,7 +1930,9 @@ function MlbSnakeDraftRoom() {
   useEffect(() => {
     if (backfillToastCount <= backfillToastCountRef.current) return;
     backfillToastCountRef.current = backfillToastCount;
-    setWriteNotice('DRAFT BOARD UPDATED — A TARGET WAS TAKEN.');
+    setWriteNotice((current) => current?.startsWith('THE LIVE ROOM IS CURRENT. THE LOCAL BACKUP FAILED')
+      ? current
+      : 'DRAFT BOARD UPDATED — A TARGET WAS TAKEN.');
   }, [backfillToastCount]);
 
   const reconcileAllExistingBoards = useCallback((source: NonNullable<typeof session>) => {
@@ -1292,17 +1950,14 @@ function MlbSnakeDraftRoom() {
     const reconciled = reconcileAllExistingBoards(session);
     rememberBackfillEvents(reconciled.eventsByTeamId);
     if (!reconciled.changed) return;
+    if (!practiceMode) return;
     void persist(reconciled.session).catch((cause) => {
       setWriteNotice(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [boardEligibilityCandidates.length, persist, reconcileAllExistingBoards, rememberBackfillEvents, session]);
-
-  const acceptCompanionSession = useCallback((saved: NonNullable<typeof session>) => {
-    setSession(saved);
-  }, []);
+  }, [boardEligibilityCandidates.length, persist, practiceMode, reconcileAllExistingBoards, rememberBackfillEvents, session]);
 
   const rationalRiskRequest = useMemo(() => {
-    if (!privateDeskActive || !session || !pool || !deskTeam) return null;
+    if (!hotseatPrivateDeskActive || !session || !pool || !deskTeam) return null;
     const available = deskRoomPlayers.filter((player) => !unavailable.has(player.playerId));
     const seats = buildRationalSeats({
       teams: leagueTeams,
@@ -1324,7 +1979,7 @@ function MlbSnakeDraftRoom() {
       baseCaps: pool.luxuryCaps,
       realTeamCount: leagueTeams.length,
     });
-  }, [candidateId, currentBoard, deskRoomById, deskRoomPlayers, deskTeam, leagueTeams, pool, privateDeskActive, session, unavailable]);
+  }, [candidateId, currentBoard, deskRoomById, deskRoomPlayers, deskTeam, hotseatPrivateDeskActive, leagueTeams, pool, session, unavailable]);
   const rationalRiskState = useSnakeRationalRisks(rationalRiskRequest);
   const askedRiskIds = useMemo(
     () => new Set(rationalRiskRequest?.input.askedPlayerIds ?? []),
@@ -1332,7 +1987,7 @@ function MlbSnakeDraftRoom() {
   );
 
   const deskState = useMemo(() => {
-    if (!privateDeskActive || !session || !pool || !deskTeam) return null;
+    if (!hotseatPrivateDeskActive || !session || !pool || !deskTeam) return null;
     const locked = currentLocked ?? resolveLockedSeat({ team: deskTeam, session });
     const caps = snakeLuxuryCaps(pool.luxuryCaps);
     const seats = buildRationalSeats({ teams: leagueTeams, session, playersById: deskRoomById, budget: pool.tierCap });
@@ -1342,9 +1997,6 @@ function MlbSnakeDraftRoom() {
     const teamPicks = session.completedPicks.filter((pick) => pick.teamId === deskTeam.id);
     const draftedStoredPlayers = teamPicks.flatMap((pick) => playerById.get(pick.playerId) ?? []);
     const draftedPlayersComplete = draftedStoredPlayers.length === teamPicks.length && ownSeat.roster.length === teamPicks.length;
-    const draftedMoneyComplete = draftedPlayersComplete && teamPicks.every((pick) => Number.isFinite(
-      pick.settledSalary ?? poolById.get(pick.playerId)?.iv,
-    ));
     const draftedChemistry = buildChemistryStrip(draftedPlayersComplete ? draftedStoredPlayers : null);
     const openSlots = openRosterSlots(session, deskTeam.id);
     const available = deskRoomPlayers.filter((player) => !unavailable.has(player.playerId));
@@ -1396,6 +2048,7 @@ function MlbSnakeDraftRoom() {
         ? completedPick.settledSalary ?? player.price
         : player.price;
       const risk = riskById.get(player.playerId);
+      const finish = finishSafety.rows.get(player.playerId);
       return [{
         id: player.playerId,
         name: fullName(player.stored.firstName, player.stored.lastName).toUpperCase(),
@@ -1407,6 +2060,7 @@ function MlbSnakeDraftRoom() {
         versionGroupId: player.versionGroupId,
         advisorWorth: advisorWorth!,
         iv: player.price,
+        salary: displayedSalary,
         marginalTax,
         trueCost: displayedSalary + marginalTax,
         archetypeChip: locked.archetypeName,
@@ -1428,7 +2082,9 @@ function MlbSnakeDraftRoom() {
           : rationalRiskState.status === 'unavailable'
             ? 'NEXT-TURN RISK IS UNAVAILABLE.'
             : 'NEXT-TURN RISK CALCULATING.',
-        legalFinishLine: '',
+        legalFinishLine: completedPick ? '' : finish?.message
+          ?? (finishSafety.status === 'pending' ? 'FINISH CHECK CALCULATING.' : 'FINISH PROOF UNAVAILABLE.'),
+        finishStatus: completedPick ? undefined : finish?.status ?? 'OPEN',
         construction: player.construction,
         drafted: Boolean(completedPick),
         draftedByActiveTeam,
@@ -1461,17 +2117,11 @@ function MlbSnakeDraftRoom() {
           capIdentity: locked.capIdentity,
         })
       : null;
-    const cheapestFinish = draftedMoneyComplete ? evaluateSnakeLegalFinish({
-      currentRoster: ownSeat.roster,
-      committedSpent: ownSeat.committedSpent,
-      availablePool: available,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: locked.capIdentity,
-    }) : null;
+    const certifiedCompletionPlayerIds = seatingProofResult?.feasible
+      ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds ?? []
+      : [];
     const cheapestFinishDepthByPlayerId = new Map<string, number>();
-    for (const playerId of cheapestFinish?.completionPlayerIds ?? []) {
+    for (const playerId of certifiedCompletionPlayerIds) {
       const completionPlayer = deskRoomById.get(playerId);
       if (!completionPlayer) continue;
       cheapestFinishDepthByPlayerId.set(playerId, canonicalSnakeRoleDepth(
@@ -1562,11 +2212,11 @@ function MlbSnakeDraftRoom() {
       activeLog,
       availability,
       slotDepth,
-      taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps }) : [],
+      taxCoreRows: board ? buildTaxCoreRows({ candidates: displayCandidates, boardPlayerIds: Object.values(board.slots), caps, capIdentity: locked.capIdentity }) : [],
     };
-  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, leagueTeams, playerById, pool, poolById, privateDeskActive, rationalRiskState.risks, rationalRiskState.status, session, unavailable]);
+  }, [askedRiskIds, backfillEventsBySeat, boardEligibilityCandidates, boardUnavailable, candidateId, completedPickByPlayerId, currentBoard, currentLocked, deskRoomById, deskRoomPlayers, deskTeam, draftedTeamNameByPlayerId, finishSafety, hotseatPrivateDeskActive, leagueTeams, playerById, pool, rationalRiskState.risks, rationalRiskState.status, seatingProofResult, session, unavailable]);
 
-  const assistantIdentity = useMemo(() => session && deskTeam && deskState?.board && privateDeskActive ? {
+  const assistantIdentity = useMemo(() => session && deskTeam && deskState?.board && hotseatPrivateDeskActive ? {
     sessionId: session.id,
     sessionRevision: session.revision ?? 0,
     teamId: deskTeam.id,
@@ -1574,9 +2224,9 @@ function MlbSnakeDraftRoom() {
     deviceId: `main:${session.id}`,
     privateEpoch: privateEpochRef.current,
     boardRevision: deskState.board.revision,
-  } : null, [deskState?.board, deskTeam, privateDeskActive, session]);
+  } : null, [deskState?.board, deskTeam, hotseatPrivateDeskActive, session]);
   const assistantRequest = useMemo(() => {
-    if (!privateDeskActive || !session || !pool || !league || !deskTeam || !deskState?.board
+    if (!hotseatPrivateDeskActive || !session || !pool || !league || !deskTeam || !deskState?.board
       || !deskState.assistantWorthComplete || !assistantIdentity) return null;
     const archetypeId = session.snakeSetup?.clubs.find((club) => club.teamId === deskTeam.id)?.archetypeId
       ?? deskTeam.mlbArchetypeKey;
@@ -1597,16 +2247,29 @@ function MlbSnakeDraftRoom() {
         archetype: historical ? historicalToSimArchetype(historical) : { name: 'Balanced', rawShift: {} },
         ownBandPriorities: deskState.locked.priorities,
         gmRankOverrides: deskState.board.rankings,
+        zeroInterestPlayerIds: deskState.board.rankings.zeroInterestPlayerIds,
+        certifiedCompletionPlayerIds: seatingProofResult?.feasible
+          ? seatingProofResult.assignments.find((assignment) => assignment.teamId === deskTeam.id)?.playerIds
+          : undefined,
         tier: league.tier ?? 'juiced',
         budget: pool.tierCap,
         baseCaps: pool.luxuryCaps,
         realTeamCount: leagueTeams.length,
         capIdentity: deskState.locked.capIdentity,
       },
-      savedDesignSlots: deskTeam.rosterDesign?.slots,
+      savedDesignSlots: localLeagueTeams.find((team) => team.id === deskTeam.id)?.rosterDesign?.slots,
     });
-  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, deskState, deskTeam, league, leagueTeams.length, pool, privateDeskActive, session]);
+  }, [assistantIdentity, assistantLivePlayers, assistantOptimizePlayerId, deskState, deskTeam, hotseatPrivateDeskActive, league, leagueTeams.length, localLeagueTeams, pool, seatingProofResult, session]);
   const assistantBoardState = useSnakeAssistantBoard(assistantRequest);
+  const assistantTaxCoreRows = useMemo(() => {
+    if (assistantBoardState.status !== 'ready' || !assistantBoardState.board || !deskState || !pool) return [];
+    return buildTaxCoreRows({
+      candidates: deskState.candidates,
+      boardPlayerIds: assistantBoardState.board.slots.map((slot) => slot.playerId),
+      caps: snakeLuxuryCaps(pool.luxuryCaps),
+      capIdentity: deskState.locked.capIdentity,
+    });
+  }, [assistantBoardState.board, assistantBoardState.status, deskState, pool]);
   const consequencePlayers = useMemo(() => {
     const candidateById = new Map((deskState?.candidates ?? []).map((entry) => [entry.id, entry]));
     return assistantLivePlayers.flatMap((player) => {
@@ -1619,64 +2282,34 @@ function MlbSnakeDraftRoom() {
       }] : [];
     });
   }, [assistantLivePlayers, deskState?.candidates]);
-  const selectedConsequence = useMemo<SelectedPlayerConsequence | null>(() => {
-    if (!privateDeskActive || !assistantIdentity || !session || !pool || !deskTeam || !deskState?.board) return null;
-    return buildSelectedPlayerConsequence({
-      identity: assistantIdentity,
-      selectedPlayerId: candidateId,
-      teamId: deskTeam.id,
-      board: deskState.board,
-      designSlots: deskTeam.rosterDesign?.slots,
-      players: consequencePlayers,
-      completedPicks: session.completedPicks.map((pick) => ({
-        teamId: pick.teamId,
-        playerId: pick.playerId,
-        settledSalary: pick.settledSalary,
-      })),
-      versionState: session.versionState,
-      versionSelections: session.snakeSetup?.versionSelections,
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: deskState.locked.capIdentity,
-    });
-  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskActive, session]);
-
   const selectedRisk = useMemo(() => rationalRiskState.status === 'ready' && candidateId
     ? rationalRiskState.risks?.find((row) => row.playerId === candidateId) ?? null
     : null, [candidateId, rationalRiskState.risks, rationalRiskState.status]);
   const selectedScarcity = useMemo(() => rationalRiskState.status === 'ready' && candidateId
     ? rationalRiskState.scarcity?.filter((row) => row.playerId === candidateId) ?? null
     : null, [candidateId, rationalRiskState.scarcity, rationalRiskState.status]);
-  const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
-    playerId: candidateId ?? '',
-    candidate: deskState?.selectedCandidate ?? null,
-    consequence: selectedConsequence,
-  }), [candidateId, deskState?.selectedCandidate, selectedConsequence]);
-  const replacementDecisionFacts = useMemo(() => {
-    if (!privateDeskActive || !assistantIdentity || !session || !pool
-      || !deskTeam || !deskState?.board || !candidateId || !selectedScarcity) return null;
-    const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
-    const replacementIds = [...new Set(selectedScarcity.flatMap((row) => (
-      row.replacementState === 'AVAILABLE'
-      && row.replacementPlayerId
-      && row.replacementPlayerId !== candidateId
-      && !unavailable.has(row.replacementPlayerId)
-        ? [row.replacementPlayerId]
-        : []
-    )))];
-    return replacementIds.flatMap((replacementId) => {
-      const consequence = buildSelectedPlayerConsequence({
+  const replacementConsequencePlayerIds = useMemo(() => [...new Set((selectedScarcity ?? []).flatMap((row) => (
+    row.replacementState === 'AVAILABLE'
+    && row.replacementPlayerId
+    && row.replacementPlayerId !== candidateId
+    && !unavailable.has(row.replacementPlayerId)
+      ? [row.replacementPlayerId]
+      : []
+  )))], [candidateId, selectedScarcity, unavailable]);
+  const consequenceRequest = useMemo<SnakeSelectedConsequencesWorkerRequest | null>(() => {
+    if (!hotseatPrivateDeskActive || !assistantIdentity || !session || !pool || !deskTeam || !deskState?.board || !candidateId) return null;
+    const selectedPlayerIds = [candidateId, ...replacementConsequencePlayerIds];
+    return {
+      key: `snake-consequence:${assistantIdentity.sessionId}:${assistantIdentity.sessionRevision}:${assistantIdentity.teamId}:${assistantIdentity.boardRevision}:${selectedPlayerIds.join(',')}`,
+      selectedPlayerIds,
+      input: {
         identity: assistantIdentity,
-        selectedPlayerId: replacementId,
         teamId: deskTeam.id,
-        board: deskState.board!,
-        designSlots: deskTeam.rosterDesign?.slots,
+        board: deskState.board,
+        designSlots: localLeagueTeams.find((team) => team.id === deskTeam.id)?.rosterDesign?.slots,
         players: consequencePlayers,
         completedPicks: session.completedPicks.map((pick) => ({
-          teamId: pick.teamId,
-          playerId: pick.playerId,
-          settledSalary: pick.settledSalary,
+          teamId: pick.teamId, playerId: pick.playerId, settledSalary: pick.settledSalary,
         })),
         versionState: session.versionState,
         versionSelections: session.snakeSetup?.versionSelections,
@@ -1684,14 +2317,31 @@ function MlbSnakeDraftRoom() {
         baseCaps: pool.luxuryCaps,
         realTeamCount: leagueTeams.length,
         capIdentity: deskState.locked.capIdentity,
-      });
+      },
+    };
+  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, hotseatPrivateDeskActive, leagueTeams.length, localLeagueTeams, pool, replacementConsequencePlayerIds, session]);
+  const consequenceState = useSnakeSelectedConsequences(consequenceRequest);
+  const selectedConsequence = candidateId
+    ? consequenceState.consequenceByPlayerId.get(candidateId) ?? null
+    : null;
+  const selectedDecisionFacts = useMemo(() => buildSnakeDecisionCandidateFacts({
+    playerId: candidateId ?? '',
+    candidate: deskState?.selectedCandidate ?? null,
+    consequence: selectedConsequence,
+  }), [candidateId, deskState?.selectedCandidate, selectedConsequence]);
+  const replacementDecisionFacts = useMemo(() => {
+    if (!hotseatPrivateDeskActive || !assistantIdentity || !session || !pool
+      || !deskTeam || !deskState?.board || !candidateId || !selectedScarcity) return null;
+    const candidatesById = new Map(deskState.candidates.map((candidate) => [candidate.id, candidate]));
+    return replacementConsequencePlayerIds.flatMap((replacementId) => {
+      const consequence = consequenceState.consequenceByPlayerId.get(replacementId) ?? null;
       return buildSnakeDecisionCandidateFacts({
         playerId: replacementId,
         candidate: candidatesById.get(replacementId) ?? null,
         consequence,
       }) ?? [];
     });
-  }, [assistantIdentity, candidateId, consequencePlayers, deskState, deskTeam, leagueTeams.length, pool, privateDeskActive, selectedScarcity, session, unavailable]);
+  }, [assistantIdentity, candidateId, consequenceState.consequenceByPlayerId, deskState, deskTeam, hotseatPrivateDeskActive, pool, replacementConsequencePlayerIds, selectedScarcity, session]);
   const assistantPriorityPlayerIds = assistantBoardState.status === 'ready'
     ? assistantBoardState.board?.playerIds ?? null
     : null;
@@ -1768,10 +2418,13 @@ function MlbSnakeDraftRoom() {
     if (session.draftManifest || session.currentPickIndex >= session.pickOrder.length) return;
     const needsSeed = !currentBoard;
     if (!needsSeed) return;
-    void persist(updateSessionSeatBoard(session, deskTeam.id, deskState.board)).catch((cause) => {
+    void updateMlbDraftSessionAtomically(session.leagueId, session.seasonNumber, (fresh) => ({
+      ...fresh,
+      seatBoards: { ...(fresh.seatBoards ?? {}), [deskTeam.id]: deskState.board! },
+    })).then(setSession).catch((cause) => {
       setWriteNotice(cause instanceof Error ? cause.message : String(cause));
     });
-  }, [currentBoard, deskTeam, deskState, persist, session]);
+  }, [currentBoard, deskTeam, deskState, session]);
 
   useEffect(() => {
     if (!deskTeam || !deskState) return;
@@ -1817,7 +2470,6 @@ function MlbSnakeDraftRoom() {
       return {
         ...fresh,
         roomLogByTeamId: { ...fresh.roomLogByTeamId, [deskTeam.id]: next.slice(0, 100) },
-        revision: (fresh.revision ?? 0) + 1,
       };
     }).then((saved) => {
       if (wrote) setSession(saved);
@@ -1825,14 +2477,14 @@ function MlbSnakeDraftRoom() {
   }, [deskState, deskTeam, session]);
 
   const selectCandidate = useCallback((playerId: string) => {
-    if ((unavailable.has(playerId) && !ownCommittedPlayerIds.has(playerId))
+    if ((unavailable.has(playerId) && !completedPickByPlayerId.has(playerId))
       || !playerById.has(playerId)
       || !poolById.has(playerId)) return;
     if (deskTeam) {
       setAssistantOptimizePlayerId(null);
       setSelectedPlayerIdByTeam((current) => ({ ...current, [deskTeam.id]: playerId }));
     }
-  }, [deskTeam, ownCommittedPlayerIds, playerById, poolById, unavailable]);
+  }, [completedPickByPlayerId, deskTeam, playerById, poolById, unavailable]);
 
   const reorderRanking = useCallback(async (view: SnakeRankingView, orderedIds: readonly string[]) => {
     if (!session || !deskTeam || !deskState?.board) return;
@@ -1845,6 +2497,7 @@ function MlbSnakeDraftRoom() {
       orderedIds,
       candidates: boardEligibilityCandidates,
       unavailablePlayerIds: boardUnavailable,
+      committedPlayerIds: ownCommittedPlayerIds,
     });
     if (!reordered.board) {
       if (privateContextIsCurrent(guard)) {
@@ -1856,12 +2509,11 @@ function MlbSnakeDraftRoom() {
     }
     let saved: LeagueBuilderMlbDraftSession;
     try {
-      saved = await patchMlbDraftSessionSeatBoard({
-        leagueId: session.leagueId,
-        seasonNumber: session.seasonNumber,
+      saved = await saveSeatBoard({
         teamId: deskTeam.id,
         board: reordered.board,
         expectedBoardRevision: deskState.board.revision,
+        actionKey: `reorder:${session.id}:${deskTeam.id}:${deskState.board.revision}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
       });
     } catch (cause) {
       if (privateContextIsCurrent(guard)) {
@@ -1879,7 +2531,7 @@ function MlbSnakeDraftRoom() {
       identity: guard.identity,
       changedSlotCount: reordered.changedSlotCount,
     });
-  }, [boardEligibilityCandidates, boardUnavailable, capturePrivateContext, deskTeam, deskState, privateContextIsCurrent, session]);
+  }, [boardEligibilityCandidates, boardUnavailable, capturePrivateContext, deskTeam, deskState, ownCommittedPlayerIds, privateContextIsCurrent, saveSeatBoard, session]);
 
   const undoBoardUpdate = useCallback(async () => {
     if (!session || !deskTeam || !boardUndo || boardUndo.teamId !== deskTeam.id || undoOperationRef.current) return;
@@ -1907,12 +2559,11 @@ function MlbSnakeDraftRoom() {
     undoOperationRef.current = operation;
     setUndoWorking(true);
     try {
-      const saved = await patchMlbDraftSessionSeatBoard({
-        leagueId: session.leagueId,
-        seasonNumber: session.seasonNumber,
+      const saved = await saveSeatBoard({
         teamId: deskTeam.id,
         board: restoredBoard,
         expectedBoardRevision: currentBoard.revision,
+        actionKey: `undo:${session.id}:${deskTeam.id}:${currentBoard.revision}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
       });
       setSession(saved);
       if (privateContextIsCurrent(guard)) setBoardUndo(null);
@@ -1926,7 +2577,7 @@ function MlbSnakeDraftRoom() {
         setUndoWorking(false);
       }
     }
-  }, [boardEligibilityCandidates, boardUndo, capturePrivateContext, deskTeam, privateContextIsCurrent, session]);
+  }, [boardEligibilityCandidates, boardUndo, capturePrivateContext, deskTeam, privateContextIsCurrent, saveSeatBoard, session]);
 
   const keepSelectedConsequence = useCallback(async () => {
     if (selectedConsequence?.status !== 'ready' || !session || !deskTeam || !deskState?.board) return;
@@ -1946,25 +2597,15 @@ function MlbSnakeDraftRoom() {
       return;
     }
     try {
-      await syncEngine.pull({ throwOnError: true });
-      const fresh = await getMlbDraftSession(session.leagueId, session.seasonNumber);
-      if (!fresh
-        || (fresh.revision ?? 0) !== previewIdentity.sessionRevision
-        || fresh.seatBoards?.[deskTeam.id]?.revision !== previewIdentity.boardRevision) {
-        setWriteNotice('THE DRAFT MOVED BEFORE THIS BOARD CHANGE COULD BE SAVED. RELOAD THE ROOM.');
-        await refreshRoomTruth();
-        return;
-      }
       if (!privateContextIsCurrent(guard)) {
         await refreshRoomTruth();
         return;
       }
-      const saved = await patchMlbDraftSessionSeatBoard({
-        leagueId: session.leagueId,
-        seasonNumber: session.seasonNumber,
+      const saved = await saveSeatBoard({
         teamId: deskTeam.id,
         board: selectedConsequence.board,
         expectedBoardRevision: deskState.board.revision,
+        actionKey: `keep:${session.id}:${deskTeam.id}:${deskState.board.revision}:${globalThis.crypto?.randomUUID?.() ?? Date.now()}`,
       });
       if (!privateContextIsCurrent(guard)) {
         await refreshRoomTruth();
@@ -1977,121 +2618,245 @@ function MlbSnakeDraftRoom() {
         await refreshRoomTruth();
       }
     }
-  }, [boardEligibilityCandidates, capturePrivateContext, deskState?.board, deskTeam, getMlbDraftSession, privateContextIsCurrent, refreshRoomTruth, selectedConsequence, session]);
+  }, [boardEligibilityCandidates, capturePrivateContext, deskState?.board, deskTeam, privateContextIsCurrent, refreshRoomTruth, saveSeatBoard, selectedConsequence, session]);
 
-  const recordPick = useCallback(async (playerId: string, companionRequest?: SnakeCompanionPickRequest) => {
-    if (!session) throw new Error('The MLB snake draft session is no longer available.');
-    if (!pool) throw new Error('The registered MLB draft pool is no longer available.');
-    if (!draftingTeam) throw new Error('The active MLB draft team is no longer available.');
-    const authorizedTeamId = companionRequest?.teamId ?? deskTeam?.id;
-    if (!authorizedTeamId || authorizedTeamId !== draftingTeam.id) throw new Error('Only the club on the clock can record this pick.');
-    if (unavailable.has(playerId)) throw new Error('The selected player is no longer available.');
-    const player = seatingById.get(playerId);
-    const priced = poolById.get(playerId);
-    if (!player) throw new Error('The selected player is not in the active MLB draft model.');
-    if (!priced) throw new Error('The selected player has no frozen MLB draft price.');
-    const teamPicks = session.completedPicks.filter((pick) => pick.teamId === draftingTeam.id);
-    const existingPlayers = teamPicks.flatMap((pick) => {
-      const row = seatingById.get(pick.playerId);
-      return row ? [row] : [];
-    });
-    if (existingPlayers.length !== teamPicks.length) throw new Error('The drafted roster data is incomplete.');
-    const committedSpent = teamPicks.reduce((sum, pick) => (
-      sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? Number.NaN)
-    ), 0);
-    if (!Number.isFinite(committedSpent)) throw new Error('The drafted roster money is incomplete.');
-    const finish = evaluateSnakeLegalFinish({
-      currentRoster: [...existingPlayers, player],
-      committedSpent: committedSpent + priced.iv,
-      availablePool: seatingPlayers.filter((row) => row.playerId !== playerId && !unavailable.has(row.playerId)),
-      budget: pool.tierCap,
-      baseCaps: pool.luxuryCaps,
-      realTeamCount: leagueTeams.length,
-      capIdentity: resolveLockedSeat({ team: draftingTeam, session }).capIdentity,
-    });
-    if (!finish.feasible
-      || (!snakeMoneyNonnegative(finish.legalFinishCushion) && finish.affordability === 'BLOCKED')) {
-      throw new Error('THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.');
-    }
-    const existing = teamPicks.flatMap((pick) => {
-      const row = seatingById.get(pick.playerId);
-      return row ? [row.construction] : [];
-    });
-    const caps = snakeLuxuryCaps(pool.luxuryCaps);
-    const marginalTax = auctionMarginalTaxWithCaps(
-      existing,
-      player.construction,
-      resolveLockedSeat({ team: draftingTeam, session }).capIdentity,
-      caps,
-    );
-    if (!seatingProofInput || !seatingProofResult?.feasible) {
-      throw new Error('The shared draft seating proof is not ready.');
-    }
-    const pickProofKey = `${draftingTeam.id}:${session.revision ?? 0}:${playerId}`;
-    let simultaneous = seatingPickProofCacheRef.current.get(pickProofKey);
-    if (!simultaneous) {
-      simultaneous = proveSnakePickKeepsAllClubsSeated({
-        current: seatingProofInput,
-        teamId: draftingTeam.id,
-        player,
-        allInCost: priced.iv + marginalTax,
-        currentProof: seatingProofResult,
+  const setSelectedZeroInterest = useCallback(async (zeroInterest: boolean) => {
+    if (!candidateId || !session || !deskTeam || !deskState?.board) return;
+    const guard = capturePrivateContext();
+    if (!guard || guard.identity.teamId !== deskTeam.id) return;
+    const nextBoard = setSeatBoardZeroInterest(deskState.board, candidateId, zeroInterest);
+    try {
+      const saved = await saveSeatBoard({
+        teamId: deskTeam.id,
+        board: nextBoard,
+        expectedBoardRevision: deskState.board.revision,
+        actionKey: `interest:${session.id}:${deskTeam.id}:${deskState.board.revision}:${candidateId}:${zeroInterest ? 'zero' : 'restore'}`,
       });
-      seatingPickProofCacheRef.current.set(pickProofKey, simultaneous);
+      if (privateContextIsCurrent(guard)) {
+        setSession(saved);
+        setAssistantOptimizePlayerId(null);
+      }
+    } catch (cause) {
+      if (privateContextIsCurrent(guard)) setWriteNotice(cause instanceof Error ? cause.message : String(cause));
     }
-    if (!simultaneous.feasible) throw new Error(simultaneous.message);
-    const seatingCertificate = {
-      feasible: true as const,
-      assignments: simultaneous.assignments,
-      shortfall: null,
-      message: simultaneous.message,
-    };
-    setPrivateDeskRevealed(false);
-    let backfillEvents: Record<string, BoardBackfillEvent[]> = {};
-    const expectedSlot = session.pickOrder[session.currentPickIndex];
-    const saved = await updateMlbDraftSessionAtomically(session.leagueId, session.seasonNumber, (fresh) => {
-      const freshSlot = fresh.pickOrder[fresh.currentPickIndex];
-      if (!expectedSlot || !freshSlot || freshSlot.pick !== expectedSlot.pick || freshSlot.teamId !== expectedSlot.teamId) {
-        throw new Error('The draft moved before this pick could be saved.');
+  }, [candidateId, capturePrivateContext, deskState?.board, deskTeam, privateContextIsCurrent, saveSeatBoard, session]);
+
+  const recordPick = useCallback(async (
+    playerId: string,
+    companionRequest?: SnakeCompanionPickRequest,
+    companionIntent?: SnakeLiveIntent,
+  ) => {
+    if (!session) throw new Error('THE MLB SNAKE DRAFT IS NOT READY.');
+    if (!pool) throw new Error('THE MLB DRAFT POOL IS NOT READY.');
+    if (!seatingProofInput || !seatingProofResult?.feasible) {
+      throw new Error('THE SHARED DRAFT PROOF IS NOT READY.');
+    }
+
+    const buildPick = (source: LeagueBuilderMlbDraftSession, reconcilePrivateBoards: boolean) => {
+      const slot = source.pickOrder[source.currentPickIndex];
+      const activeTeam = leagueTeams.find((team) => team.id === slot?.teamId);
+      if (!slot || !activeTeam) throw new Error('THE CLUB ON THE CLOCK IS NOT READY.');
+      const authorizedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      if (!authorizedTeamId || authorizedTeamId !== activeTeam.id) {
+        throw new Error('ONLY THE CLUB ON THE CLOCK CAN MAKE THIS PICK.');
       }
-      if (companionRequest) {
-        assertCompanionPickRequestApprovable({
-          session: fresh,
-          request: companionRequest,
-          teamId: freshSlot.teamId,
-          playerId,
-          pick: freshSlot.pick,
+      const sourceUnavailable = new Set(source.completedPicks.map((pick) => pick.playerId));
+      for (const id of unavailableVersionPlayerIds(source.versionState)) sourceUnavailable.add(id);
+      if (sourceUnavailable.has(playerId)) throw new Error('THE PLAYER IS NO LONGER AVAILABLE.');
+      const player = seatingById.get(playerId);
+      const priced = poolById.get(playerId);
+      if (!player || !priced) throw new Error('THE PLAYER IS NOT IN THE FROZEN DRAFT POOL.');
+      const teamPicks = source.completedPicks.filter((pick) => pick.teamId === activeTeam.id);
+      const existingPlayers = teamPicks.flatMap((pick) => {
+        const row = seatingById.get(pick.playerId);
+        return row ? [row] : [];
+      });
+      if (existingPlayers.length !== teamPicks.length) throw new Error('THE DRAFTED ROSTER DATA IS INCOMPLETE.');
+      const committedSpent = teamPicks.reduce((sum, pick) => (
+        sum + (pick.settledSalary ?? poolById.get(pick.playerId)?.iv ?? Number.NaN)
+      ), 0);
+      if (!Number.isFinite(committedSpent)) throw new Error('THE DRAFTED ROSTER MONEY IS INCOMPLETE.');
+      const locked = resolveLockedSeat({ team: activeTeam, session: source });
+      const finish = evaluateSnakeLegalFinish({
+        currentRoster: [...existingPlayers, player],
+        committedSpent: committedSpent + priced.iv,
+        availablePool: seatingPlayers.filter((row) => row.playerId !== playerId && !sourceUnavailable.has(row.playerId)),
+        budget: pool.tierCap,
+        baseCaps: pool.luxuryCaps,
+        realTeamCount: leagueTeams.length,
+        capIdentity: locked.capIdentity,
+      });
+      if (!finish.feasible
+        || (!snakeMoneyNonnegative(finish.legalFinishCushion) && finish.affordability === 'BLOCKED')) {
+        throw new Error('THIS PICK LEAVES NO LEGAL, AFFORDABLE 22.');
+      }
+      const marginalTax = auctionMarginalTaxWithCaps(
+        existingPlayers.map((row) => row.construction),
+        player.construction,
+        locked.capIdentity,
+        snakeLuxuryCaps(pool.luxuryCaps),
+      );
+      const pickProofKey = `${activeTeam.id}:${source.revision ?? 0}:${playerId}`;
+      let simultaneous = seatingPickProofCacheRef.current.get(pickProofKey);
+      if (!simultaneous) {
+        simultaneous = proveSnakePickKeepsAllClubsSeated({
+          current: seatingProofInput,
+          teamId: activeTeam.id,
+          player,
+          allInCost: priced.iv + marginalTax,
+          currentProof: seatingProofResult,
         });
+        seatingPickProofCacheRef.current.set(pickProofKey, simultaneous);
       }
-      const freshWithoutPickRequest = fresh.snakeCompanions?.pickRequest ? {
-        ...fresh,
-        snakeCompanions: {
-          ...fresh.snakeCompanions,
-          pickRequest: undefined,
-        },
-      } : fresh;
+      if (!simultaneous.feasible) throw new Error(simultaneous.message);
+      const seatingCertificate = {
+        feasible: true as const,
+        assignments: simultaneous.assignments,
+        shortfall: null,
+        message: simultaneous.message,
+      };
       const next = applySnakePickWithCorrection({
-        session: freshWithoutPickRequest,
+        session: source,
         player,
         settledSalary: priced.iv,
         marginalTax,
         versionPool: seatingPlayers,
       });
-      const reconciled = reconcileAllExistingBoards(next);
-      backfillEvents = reconciled.eventsByTeamId;
-      if (!reconciled.session.snakeSetup) throw new Error('The frozen snake setup is missing.');
-      return {
-        ...reconciled.session,
-        snakeSetup: {
-          ...reconciled.session.snakeSetup,
+      if (!next.snakeSetup) throw new Error('THE FROZEN SNAKE SETUP IS MISSING.');
+      if (!reconcilePrivateBoards) {
+        return {
+          next: {
+            ...next,
+            snakeSetup: { ...next.snakeSetup, seatingCertificate },
+          },
+          activeTeam,
+          slot,
           seatingCertificate,
+          backfillEvents: {} as Record<string, BoardBackfillEvent[]>,
+        };
+      }
+      const reconciled = reconcileAllExistingBoards(next);
+      if (!reconciled.session.snakeSetup) throw new Error('THE FROZEN SNAKE SETUP IS MISSING.');
+      return {
+        next: {
+          ...reconciled.session,
+          snakeSetup: { ...reconciled.session.snakeSetup, seatingCertificate },
         },
+        activeTeam,
+        slot,
+        seatingCertificate,
+        backfillEvents: reconciled.eventsByTeamId,
       };
-    });
-    rememberBackfillEvents(backfillEvents);
-    setSeatingProofResult(seatingCertificate);
-    setSession(saved);
-  }, [deskTeam, draftingTeam, leagueTeams.length, pool, poolById, reconcileAllExistingBoards, rememberBackfillEvents, seatingById, seatingPlayers, seatingProofInput, seatingProofResult, session, unavailable]);
+    };
+
+    setPrivateDeskRevealed(false);
+    if (practiceMode) {
+      const outcome: { result?: ReturnType<typeof buildPick> } = {};
+      const saved = await updateMlbDraftSessionAtomically(session.leagueId, session.seasonNumber, (fresh) => {
+        outcome.result = buildPick(fresh, true);
+        return outcome.result.next;
+      });
+      if (!outcome.result) throw new Error('THE PICK DID NOT SAVE.');
+      rememberBackfillEvents(outcome.result.backfillEvents);
+      setSeatingProofResult(outcome.result.seatingCertificate);
+      setSession(saved);
+      return;
+    }
+
+    const clickedRoom = liveHostRef.current.room;
+    const actionIncarnation = clickedRoom
+      ? `${clickedRoom.id}:${clickedRoom.publicRevision}`
+      : 'room-not-ready';
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const requestedSlot = session.pickOrder[session.currentPickIndex];
+      const requestedPick = companionRequest?.pick ?? requestedSlot?.pick;
+      const requestedTeamId = companionRequest?.teamId ?? deskTeam?.id;
+      const alreadySaved = host.publicSession.completedPicks.find((pick) => (
+        pick.pick === requestedPick && pick.teamId === requestedTeamId
+      ));
+      if (alreadySaved?.playerId === playerId) {
+        const received = mergeLivePublicSession(session, host.publicSession);
+        let localReceived = received;
+        try {
+          const reconciled = reconcileAllExistingBoards(received);
+          localReceived = reconciled.session;
+          rememberBackfillEvents(reconciled.eventsByTeamId);
+        } catch {
+          setWriteNotice('THE PICK IS LIVE. THE HOTSEAT BOARD NEEDS A REFRESH.');
+        }
+        await mirrorLiveSessionLocally(localReceived);
+        if (companionIntent?.status === 'pending') {
+          await host.resolveIntent(companionIntent, 'accepted', `pick-accepted:${companionIntent.id}`)
+            .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION REQUEST RECEIPT NEEDS A REFRESH.'));
+        }
+        return;
+      }
+      const source = snakeLivePublicActionSession(mergeLivePublicSession(session, host.publicSession));
+      const result = buildPick(source, false);
+      if (companionRequest && companionIntent) {
+        const approved = host.claims.some((claim) => claim.deviceId === companionIntent.deviceId
+          && claim.teamId === companionIntent.teamId && claim.status === 'approved');
+        if (!approved
+          || companionIntent.status !== 'pending'
+          || companionIntent.expectedRoomRevision !== host.room.publicRevision
+          || companionRequest.sessionRevision !== (source.revision ?? 0)
+          || companionRequest.pick !== result.slot.pick
+          || companionRequest.teamId !== result.activeTeam.id) {
+          throw new Error('THE COMPANION PICK REQUEST IS STALE.');
+        }
+      }
+      try {
+        await host.publishSession({
+          session: snakeLivePublicActionSession(result.next),
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `pick:${result.next.id}:${result.slot.pick}:${playerId}:${actionIncarnation}`,
+          eventKind: 'PICK_RECORDED',
+          publicEvent: { pick: result.slot.pick, teamId: result.activeTeam.id, playerId },
+          status: result.next.currentPickIndex >= result.next.pickOrder.length ? 'complete' : 'open',
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      setSeatingProofResult(result.seatingCertificate);
+      const localPicked: LeagueBuilderMlbDraftSession = {
+        ...mergeLivePublicSession(session, result.next),
+        correctionSnapshots: result.next.correctionSnapshots,
+      };
+      let localNext = localPicked;
+      try {
+        const reconciled = reconcileAllExistingBoards(localPicked);
+        localNext = reconciled.session;
+        rememberBackfillEvents(reconciled.eventsByTeamId);
+      } catch {
+        setWriteNotice('THE PICK IS LIVE. THE HOTSEAT BOARD NEEDS A REFRESH.');
+      }
+      await mirrorLiveSessionLocally({
+        ...localNext,
+        snakeSetup: localNext.snakeSetup ? {
+          ...localNext.snakeSetup,
+          seatingCertificate: result.seatingCertificate,
+        } : result.next.snakeSetup,
+      });
+      if (companionIntent) {
+        await host.resolveIntent(companionIntent, 'accepted', `pick-accepted:${companionIntent.id}`)
+          .catch(() => setWriteNotice('THE PICK IS LIVE. THE COMPANION REQUEST RECEIPT NEEDS A REFRESH.'));
+      }
+    };
+    await publish(false);
+  }, [deskTeam, leagueTeams, mirrorLiveSessionLocally, pool, poolById, practiceMode, reconcileAllExistingBoards, rememberBackfillEvents, seatingById, seatingPlayers, seatingProofInput, seatingProofResult, session]);
 
   useEffect(() => {
     if (!practiceMode || !session || session.paused || !draftingTeam || !deskTeam || deskTeam.id !== draftingTeam.id) return;
@@ -2120,7 +2885,12 @@ function MlbSnakeDraftRoom() {
         ...session,
         completedPicks: [],
         currentPickIndex: 0,
-        seatBoards: buildInitialSnakeSeatBoards({ teams: leagueTeams, players, pool }),
+        seatBoards: await rebuildPracticeSnakeSeatBoards({
+          teams: leagueTeams,
+          players,
+          pool,
+          runProof: runSnakeSetupProof,
+        }),
         versionState: undefined,
         correctionSnapshots: [],
         trades: [],
@@ -2142,7 +2912,7 @@ function MlbSnakeDraftRoom() {
     } finally {
       setCommittingRecap(false);
     }
-  }, [leagueTeams, persist, players, pool, practiceMode, session]);
+  }, [leagueTeams, persist, players, pool, practiceMode, runSnakeSetupProof, session]);
 
   const confirmMlb = useCallback(async () => {
     if (recapCommitInFlight.current || !league || !session || !pool || (!session.draftManifest && session.currentPickIndex < session.pickOrder.length)) return;
@@ -2150,96 +2920,229 @@ function MlbSnakeDraftRoom() {
     setCommittingRecap(true);
     setRecapError(null);
     try {
+      if (!practiceMode && liveHostRef.current.hostAccessReady) {
+        await liveHostRef.current.refresh().catch(() => undefined);
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+      }
       const freshSession = await getMlbDraftSession(league.id, sessionSeasonNumber);
       if (!freshSession) throw new Error('THE COMPLETED DRAFT SESSION COULD NOT BE RELOADED.');
-      if (!freshSession.draftManifest && freshSession.currentPickIndex < freshSession.pickOrder.length) {
+      const freshPool = await getRegisteredPool(league.id);
+      if (!freshPool) throw new Error('THE COMPLETED DRAFT POOL COULD NOT BE RELOADED.');
+      const freshPlayers = await getAllPlayers();
+      let liveRoom = practiceMode ? null : liveHostRef.current.room;
+      let livePublicSession = practiceMode ? null : liveHostRef.current.publicSession;
+      if (!practiceMode && (!liveRoom || !livePublicSession)) {
+        const recovery = freshSession.liveRoomRecovery;
+        if (!recovery) throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
+        const recoveredRoom = await createSnakeLiveRoomTransport().getRoom(recovery.roomId);
+        if (recoveredRoom) {
+          const recoveredSession = readSnakeLivePublicSession(recoveredRoom);
+          if (recoveredSession.id !== freshSession.id) throw new Error('THE RECOVERED LIVE ROOM DOES NOT MATCH THIS DRAFT.');
+          liveRoom = recoveredRoom;
+          livePublicSession = recoveredSession;
+        } else {
+          // The recovery receipt was created from the server's immutable public
+          // snapshot. A completed draft can still be finalized when the room is
+          // no longer available for a read-only refresh.
+          livePublicSession = freshSession;
+        }
+      }
+      if (!practiceMode && !livePublicSession) throw new Error('THE LIVE DRAFT IS NOT COMPLETE.');
+      const completionSource = practiceMode
+        ? freshSession
+        : snakeLivePublicActionSession(livePublicSession!);
+      if (!completionSource.draftManifest
+        && completionSource.currentPickIndex < completionSource.pickOrder.length) {
         throw new Error('THE DRAFT IS NOT COMPLETE.');
       }
-      const mlbMeta = draftFreezeMeta(players);
+      const draftedPlayerIds = [...new Set(completionSource.completedPicks.map((pick) => pick.playerId))];
+      const localPlayerById = new Map(freshPlayers.map((player) => [player.id, player]));
+      const canonicalDraftedPlayers = draftedPlayerIds.map((playerId) => {
+        const player = localPlayerById.get(playerId);
+        if (!player) throw new Error(`THE LOCAL PLAYER RECORD IS MISSING FOR ${playerId}.`);
+        return player;
+      });
+      const mlbMeta = draftFreezeMeta(canonicalDraftedPlayers);
       const mlbInputs = buildDraftFreezeInputs({
         mlbSession: null,
-        mlbSnakeSession: freshSession,
-        mlbRegisteredPool: pool,
+        mlbSnakeSession: completionSource,
+        mlbRegisteredPool: freshPool,
         farmSession: null,
         metaByPlayerId: mlbMeta,
       });
       const mlbAlignment = buildSnakeDraftAlignmentInputs({
-        session: freshSession,
-        playersById: new Map(players.map((player) => [player.id, player])),
+        session: completionSource,
+        playersById: new Map(canonicalDraftedPlayers.map((player) => [player.id, player])),
       });
       const mlbFreeze = computeDraftFreeze(mlbInputs, { snakeFanMoraleAlignment: mlbAlignment });
-      const activeMlbIds = new Set(freshSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id));
+      const activeMlbIds = new Set(completionSource.snakeSetup?.poolPlayerIds ?? freshPool.players.map((player) => player.id));
       const mlbExpectedRanks = rankExpectedTalentByIv(
-        pool.players.filter((player) => activeMlbIds.has(player.id)),
+        freshPool.players.filter((player) => activeMlbIds.has(player.id)),
       );
       const frozen = freezeSnakeDraftSession({
-        session: freshSession,
+        session: completionSource,
         expectedPhase: 'MLB',
-        poolPlayerIds: freshSession.snakeSetup?.poolPlayerIds ?? pool.players.map((player) => player.id),
-        salaryByPlayerId: new Map(pool.players.map((player) => [player.id, player.iv])),
-        frozenAt: new Date().toISOString(),
+        poolPlayerIds: completionSource.snakeSetup?.poolPlayerIds ?? freshPool.players.map((player) => player.id),
+        salaryByPlayerId: new Map(freshPool.players.map((player) => [player.id, player.iv])),
+        frozenAt: freshSession.draftManifest?.frozenAt
+          ?? (Number.isFinite(Date.parse(completionSource.lastModified))
+            ? completionSource.lastModified
+            : new Date().toISOString()),
         moraleSnapshot: buildSnakeDraftMoraleSnapshot({
           freeze: mlbFreeze,
           expectedTalentRankByPlayerId: mlbExpectedRanks,
           includeFan: true,
         }),
       });
-      const persisted = frozen === freshSession ? freshSession : await freezeMlbDraftRoomSessionWithRegisteredPool({
-        session: frozen,
-        registeredPool: pool,
-        expectedRevision: freshSession.revision ?? 0,
-      });
-      setSession(persisted);
-      await commitCompletedSnakeSessionToLeagueRosters({ leagueId: league.id, session: persisted, pool });
-      const manifest = readSnakeDraftTruth(persisted, 'MLB').manifest!;
-      const handedOff = await markSnakeRosterHandoff({
+      const boundedFrozen = practiceMode ? frozen : mergeLivePublicSession(freshSession, frozen);
+      const finalized = await finalizeCompletedSnakeSessionToLeagueRosters({
         leagueId: league.id,
-        seasonNumber: sessionSeasonNumber,
-        phase: 'MLB',
-        sourceSessionId: manifest.source.sessionId,
-        manifestPoolIdentity: manifest.pool.identity,
+        session: freshSession.draftManifest ? freshSession : boundedFrozen,
+        pool: freshPool,
+        expectedRevision: freshSession.revision ?? 0,
         committedAt: new Date().toISOString(),
       });
-      setSession(handedOff);
-      await assertSnakeRosterHandoffReady(handedOff, 'MLB');
+      setSession(finalized.session);
+      await assertSnakeRosterHandoffReady(finalized.session, 'MLB');
+      const manifest = readSnakeDraftTruth(finalized.session, 'MLB').manifest!;
+      const activeLiveRoom = liveHostRef.current.room;
+      if (!practiceMode && activeLiveRoom && activeLiveRoom.status !== 'closed') {
+        await liveHostRef.current.closeRoom(
+          `handoff:${activeLiveRoom.id}:${activeLiveRoom.publicRevision}:${manifest.source.sessionId}`,
+        ).catch(() => undefined);
+      }
       navigate(scoutHireRouteForLeague(league));
-    } catch {
-      setRecapError(RECAP_CONFIRMATION_ERROR);
+    } catch (cause) {
+      console.error('MLB snake draft finalization failed.', cause);
+      setRecapError(MLB_RECAP_CONFIRMATION_ERROR);
     } finally {
       recapCommitInFlight.current = false;
       setCommittingRecap(false);
     }
-  }, [getMlbDraftSession, league, navigate, players, pool, session, sessionSeasonNumber]);
+  }, [getMlbDraftSession, getRegisteredPool, league, navigate, pool, practiceMode, session, sessionSeasonNumber]);
 
   const setPaused = useCallback(async (paused: boolean) => {
     if (!session) return;
-    try {
+    if (practiceMode) {
       await persist({ ...session, paused, revision: (session.revision ?? 0) + 1 });
-    } catch (cause) {
-      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
-      throw cause;
+      return;
     }
-  }, [persist, session]);
-  const correctLatest = useCallback(async () => {
-    if (!session?.correctionSnapshots?.[0]) return;
-    const correctedTradeId = session.correctionSnapshots[0].action === 'trade' ? session.trades?.at(-1)?.id : null;
-    const restored = restoreLatestSnakeCorrection(session);
-    const liveOwnerBefore = session.pickOrder[session.currentPickIndex]?.teamId ?? null;
-    const liveOwnerAfter = restored.pickOrder[restored.currentPickIndex]?.teamId ?? null;
+    const publish = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const source = mergeLivePublicSession(session, host.publicSession);
+      if (source.paused === paused) {
+        await mirrorLiveSessionLocally(source);
+        return;
+      }
+      const next = {
+        ...source,
+        paused,
+        openTradeOffers: [],
+        revision: (source.revision ?? 0) + 1,
+      };
+      try {
+        await host.publishSession({
+          session: snakeLivePublicActionSession(next),
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `pause:${next.id}:${host.room.publicRevision}:${paused ? 'on' : 'off'}`,
+          eventKind: 'PAUSE_CHANGED',
+          publicEvent: { paused },
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      await mirrorLiveSessionLocally(next);
+    };
     try {
-      await persist(restored);
+      await publish(false);
     } catch (cause) {
       setWriteNotice(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     }
-    if (correctedTradeId) {
+  }, [mirrorLiveSessionLocally, persist, practiceMode, session]);
+
+  useEffect(() => {
+    if (!activePlanBroken || !session || session.paused || !currentSlot) return;
+    const key = `${session.id}:${session.revision ?? 0}:${currentSlot.pick}`;
+    if (planBrokenPauseRef.current === key) return;
+    planBrokenPauseRef.current = key;
+    setWriteNotice('PLAN BROKEN — NO PICK LEAVES A LEGAL, AFFORDABLE 22. THE ROOM IS PAUSED.');
+    void setPaused(true).catch((cause) => {
+      planBrokenPauseRef.current = null;
+      setWriteNotice(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, [activePlanBroken, currentSlot, session, setPaused]);
+
+  const correctLatest = useCallback(async () => {
+    if (!session) return;
+    if (practiceMode) {
+      if (!session.correctionSnapshots?.[0]) return;
+      await persist(restoreLatestSnakeCorrection(session));
+      return;
+    }
+    if (!liveHostRef.current.room?.correctionAvailable) return;
+    const clickedRoom = liveHostRef.current.room;
+    const idempotencyKey = `correct:${clickedRoom.id}:${clickedRoom.publicRevision}`;
+    const publish = async (retry: boolean): Promise<{
+      correctedTradeId: string | null;
+      livePickMoved: boolean;
+    }> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const source = mergeLivePublicSession(session, host.publicSession);
+      const liveOwnerBefore = source.pickOrder[source.currentPickIndex]?.teamId ?? null;
+      let restoredRoom;
+      try {
+        restoredRoom = await host.restorePreviousPublicState({
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey,
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') {
+          return publish(true);
+        }
+        throw cause;
+      }
+      const restored = readSnakeLivePublicSession(restoredRoom);
+      const correctedTradeId = (source.trades?.length ?? 0) > (restored.trades?.length ?? 0)
+        ? source.trades?.at(-1)?.id ?? null
+        : null;
+      const liveOwnerAfter = restored.pickOrder[restored.currentPickIndex]?.teamId ?? null;
+      await mirrorLiveSessionLocally({
+        ...mergeLivePublicSession(session, restored),
+        correctionSnapshots: [],
+      }, { acceptLowerRevision: true });
+      return { correctedTradeId, livePickMoved: liveOwnerBefore !== liveOwnerAfter };
+    };
+    const result = await publish(false);
+    if (result.correctedTradeId) {
       setTradeReceiptsBySeat((current) => Object.fromEntries(Object.entries(current).map(([teamId, entries]) => [
         teamId,
-        entries.filter((entry) => !entry.key.startsWith(`trade:${correctedTradeId}:`)),
+        entries.filter((entry) => !entry.key.startsWith(`trade:${result.correctedTradeId}:`)),
       ])));
-      if (liveOwnerBefore !== liveOwnerAfter) setLivePickMoveRevision((revision) => revision + 1);
     }
-  }, [persist, session]);
+    if (result.livePickMoved) setLivePickMoveRevision((revision) => revision + 1);
+  }, [mirrorLiveSessionLocally, persist, practiceMode, session]);
 
   const askTradeGuide = useCallback((buyerTeamId: string, targetPick: number) => {
     if (!session || !seatingProofInput) {
@@ -2250,77 +3153,252 @@ function MlbSnakeDraftRoom() {
 
   const postTradeOffer = useCallback(async (proposal: Parameters<typeof executeAskedPickTrade>[0]['proposal']) => {
     if (!session) return;
-    await persist(postSnakeTradeOffer({ session, phase: 'MLB', proposal, postedAt: new Date().toISOString() }));
-  }, [persist, session]);
+    if (practiceMode) {
+      await persist(postSnakeTradeOffer({ session, phase: 'MLB', proposal, postedAt: new Date().toISOString() }));
+      return;
+    }
+    const submit = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) throw new Error('THE LIVE ROOM IS NOT READY.');
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const source = snakeLivePublicActionSession(mergeLivePublicSession(session, host.publicSession));
+      const staged = postSnakeTradeOffer({
+        session: { ...source, openTradeOffers: [] },
+        phase: 'MLB',
+        proposal: { ...proposal, sessionRevision: source.revision ?? 0 },
+        postedAt: new Date().toISOString(),
+      });
+      const offer = staged.openTradeOffers?.[0];
+      if (!offer) throw new Error('THE PICK OFFER COULD NOT BE BUILT.');
+      try {
+        await host.submitTradeIntent({
+          teamId: offer.buyerTeamId,
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `trade:post:${host.room.id}:${host.room.publicRevision}:${offer.id}`,
+          payload: buildSnakeLiveTradePostPayload(offer),
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') return submit(true);
+        throw cause;
+      }
+    };
+    await submit(false);
+  }, [persist, practiceMode, session]);
 
   const nodTradeOffer = useCallback(async (offerId: string, teamId: string) => {
     if (!session) return;
-    await persist(nodSnakeTradeOffer(session, offerId, teamId));
-  }, [persist, session]);
+    if (practiceMode) {
+      await persist(nodSnakeTradeOffer(session, offerId, teamId));
+      return;
+    }
+    const submit = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room) throw new Error('THE LIVE ROOM IS NOT READY.');
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const offer = projectSnakeLiveTradeOffers(host.intents, host.room.publicRevision)
+        .openOffers.find((row) => row.id === offerId);
+      if (!offer) throw new Error('THAT OFFER IS NO LONGER OPEN.');
+      try {
+        await host.submitTradeIntent({
+          teamId,
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `trade:nod:${host.room.id}:${host.room.publicRevision}:${offer.id}:${teamId}`,
+          payload: buildSnakeLiveTradeActionPayload('NOD', offer),
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') return submit(true);
+        throw cause;
+      }
+    };
+    await submit(false);
+  }, [persist, practiceMode, session]);
 
   const closeTradeOffer = useCallback(async (offerId: string, action: 'WITHDRAWN' | 'DECLINED') => {
     if (!session) return;
-    const offer = session.openTradeOffers?.find((row) => row.id === offerId);
-    let next = closeSnakeTradeOffer(session, offerId);
-    if (offer) {
-      for (const teamId of [offer.buyerTeamId, offer.sellerTeamId]) {
-        next = appendSnakeRoomLog({
-          session: next,
-          teamId,
-          entry: { id: `${offer.id}:${action}:${teamId}`, kind: 'TRADE', text: `THE PICK OFFER WAS ${action}.`, createdAt: new Date().toISOString(), actionable: false },
-        });
+    if (practiceMode) {
+      const offer = session.openTradeOffers?.find((row) => row.id === offerId);
+      let next = closeSnakeTradeOffer(session, offerId);
+      if (offer) {
+        for (const teamId of [offer.buyerTeamId, offer.sellerTeamId]) {
+          next = appendSnakeRoomLog({
+            session: next,
+            teamId,
+            entry: { id: `${offer.id}:${action}:${teamId}`, kind: 'TRADE', text: `THE PICK OFFER WAS ${action}.`, createdAt: new Date().toISOString(), actionable: false },
+          });
+        }
       }
+      await persist(next);
+      return;
     }
-    await persist(next);
-  }, [persist, session]);
+    const submit = async (retry: boolean): Promise<void> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room) throw new Error('THE LIVE ROOM IS NOT READY.');
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room) throw new Error('THE LIVE ROOM IS NOT READY.');
+      }
+      const offer = projectSnakeLiveTradeOffers(host.intents, host.room.publicRevision)
+        .openOffers.find((row) => row.id === offerId);
+      if (!offer) throw new Error('THAT OFFER IS NO LONGER OPEN.');
+      const intentAction = action === 'WITHDRAWN' ? 'WITHDRAW' : 'DECLINE';
+      const teamId = intentAction === 'WITHDRAW' ? offer.buyerTeamId : offer.sellerTeamId;
+      try {
+        await host.submitTradeIntent({
+          teamId,
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `trade:${intentAction.toLowerCase()}:${host.room.id}:${host.room.publicRevision}:${offer.id}:${teamId}`,
+          payload: buildSnakeLiveTradeActionPayload(intentAction, offer),
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') return submit(true);
+        throw cause;
+      }
+    };
+    await submit(false);
+  }, [persist, practiceMode, session]);
 
   const executeTrade = useCallback(async (offer: SnakeOpenTradeOffer): Promise<ExecutedAskedPickTrade> => {
     if (!session || !seatingProofInput) {
       return { valid: false, message: 'The draft moved on — refresh.', session: null, livePickMoved: false, receipts: [] };
     }
-    const proposal = proposalFromOpenSnakeOffer(session, offer);
-    const result = executeAskedPickTrade({ session, pickValueChart, seatingProofInput, proposal });
-    if (!result.valid || !result.session) return result;
-    let logged = result.session;
-    for (const receipt of result.receipts) {
-      logged = appendSnakeRoomLog({
-        session: logged,
-        teamId: receipt.teamId,
-        entry: { id: `${offer.id}:executed:${receipt.teamId}`, kind: 'TRADE', text: receipt.text, createdAt: new Date().toISOString(), actionable: true },
+    const applyReceipts = (result: ExecutedAskedPickTrade, saved: LeagueBuilderMlbDraftSession) => {
+      const tradeId = saved.trades?.at(-1)?.id ?? `revision-${saved.revision ?? 0}`;
+      setTradeReceiptsBySeat((current) => {
+        const next = { ...current };
+        for (const receipt of result.receipts) {
+          next[receipt.teamId] = [
+            ...(next[receipt.teamId] ?? []),
+            { key: `trade:${tradeId}:${receipt.teamId}`, text: receipt.text, actionable: true },
+          ];
+        }
+        return next;
       });
+      if (result.livePickMoved) setLivePickMoveRevision((revision) => revision + 1);
+    };
+    const executeAgainst = (source: LeagueBuilderMlbDraftSession, currentOffer: SnakeOpenTradeOffer) => {
+      const proposal = proposalFromOpenSnakeOffer({ ...source, openTradeOffers: [currentOffer] }, currentOffer);
+      const result = executeAskedPickTrade({
+        session: { ...source, openTradeOffers: [currentOffer] },
+        pickValueChart,
+        seatingProofInput,
+        proposal,
+      });
+      if (!result.valid || !result.session) return { result, logged: null };
+      let logged: LeagueBuilderMlbDraftSession = { ...result.session, openTradeOffers: [] };
+      for (const receipt of result.receipts) {
+        logged = appendSnakeRoomLog({
+          session: logged,
+          teamId: receipt.teamId,
+          entry: { id: `${currentOffer.id}:executed:${receipt.teamId}`, kind: 'TRADE', text: receipt.text, createdAt: new Date().toISOString(), actionable: true },
+        });
+      }
+      return { result, logged };
+    };
+    if (practiceMode) {
+      const applied = executeAgainst(session, offer);
+      if (!applied.logged) return applied.result;
+      const saved = await persist(applied.logged);
+      applyReceipts(applied.result, saved);
+      return { ...applied.result, session: saved };
     }
+    const publish = async (retry: boolean): Promise<ExecutedAskedPickTrade> => {
+      let host = liveHostRef.current;
+      if (!host.liveRoomReady || !host.room || !host.publicSession) {
+        return { valid: false, message: 'THE LIVE ROOM IS NOT READY.', session: null, livePickMoved: false, receipts: [] };
+      }
+      if (retry) {
+        await host.refresh();
+        await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
+        host = liveHostRef.current;
+        if (!host.room || !host.publicSession) {
+          return { valid: false, message: 'THE LIVE ROOM IS NOT READY.', session: null, livePickMoved: false, receipts: [] };
+        }
+      }
+      const projection = projectSnakeLiveTradeOffers(host.intents, host.room.publicRevision);
+      const currentOffer = projection.executableOffers.find((row) => row.id === offer.id);
+      if (!currentOffer) {
+        return { valid: false, message: 'BOTH CLUBS MUST NOD BEFORE THE COMMISSIONER CAN EXECUTE.', session: null, livePickMoved: false, receipts: [] };
+      }
+      const source = snakeLivePublicActionSession(mergeLivePublicSession(session, host.publicSession));
+      const applied = executeAgainst(source, currentOffer);
+      if (!applied.logged) return applied.result;
+      try {
+        await host.publishSession({
+          session: snakeLivePublicActionSession(applied.logged),
+          expectedRoomRevision: host.room.publicRevision,
+          idempotencyKey: `trade:execute:${host.room.id}:${host.room.publicRevision}:${currentOffer.id}`,
+          eventKind: 'TRADE_EXECUTED',
+          publicEvent: {
+            offerId: currentOffer.id,
+            buyerTeamId: currentOffer.buyerTeamId,
+            sellerTeamId: currentOffer.sellerTeamId,
+            targetPick: currentOffer.targetPick,
+          },
+        });
+      } catch (cause) {
+        if (!retry && cause instanceof SnakeLiveTransportError && cause.code === 'stale-revision') return publish(true);
+        throw cause;
+      }
+      const saved = await mirrorLiveSessionLocally({
+        ...mergeLivePublicSession(session, applied.logged),
+        correctionSnapshots: applied.logged.correctionSnapshots,
+        roomLogByTeamId: {
+          ...session.roomLogByTeamId,
+          ...applied.logged.roomLogByTeamId,
+        },
+      });
+      applyReceipts(applied.result, saved);
+      const related = host.intents.filter((intent) => intent.kind === 'trade'
+        && intent.expectedRoomRevision === host.room!.publicRevision
+        && intent.payload.offerId === currentOffer.id
+        && intent.status === 'pending');
+      await Promise.all(related.map((intent) => host.resolveIntent(
+        intent,
+        'accepted',
+        `trade-accepted:${currentOffer.id}:${intent.id}`,
+      ).catch(() => undefined)));
+      return { ...applied.result, session: saved };
+    };
     try {
-      await persist(logged);
+      return await publish(false);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setWriteNotice(message);
       return { valid: false, message: 'THE TRADE WAS NOT SAVED. TRY AGAIN.', session: null, livePickMoved: false, receipts: [] };
     }
-    const tradeId = logged.trades?.at(-1)?.id ?? `revision-${logged.revision ?? 0}`;
-    setTradeReceiptsBySeat((current) => {
-      const next = { ...current };
-      for (const receipt of result.receipts) {
-        next[receipt.teamId] = [
-          ...(next[receipt.teamId] ?? []),
-          { key: `trade:${tradeId}:${receipt.teamId}`, text: receipt.text, actionable: true },
-        ];
-      }
-      return next;
-    });
-    if (result.livePickMoved) setLivePickMoveRevision((revision) => revision + 1);
-    return { ...result, session: logged };
-  }, [persist, pickValueChart, seatingProofInput, session]);
+  }, [mirrorLiveSessionLocally, persist, pickValueChart, practiceMode, seatingProofInput, session]);
+
+  const liveRoomRecoveryPanel = !practiceMode ? <LiveRoomRecoveryPanel
+    roomCode={recoveryRoomCode}
+    working={recoveryWorking}
+    error={recoveryError}
+    onRoomCodeChange={setRecoveryRoomCode}
+    onRestore={() => void recoverOpenLiveRoom()}
+  /> : null;
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">SNAKE DRAFT</h1><p className="mt-4">THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></div></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadSession()}>RETRY</button></div></main>;
-  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p></div></main>;
+  if (error || actionError) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM COULD NOT OPEN</h1><p className="mt-4 uppercase">{actionError ?? error}</p>{liveRoomRecoveryPanel}<div className="mt-5 flex flex-wrap gap-3"><button className="ballpark-press-button ballpark-press-lg ballpark-press-default min-h-11" onClick={() => navigate('/')}>HOME / SIGN IN</button><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadSession()}>RETRY</button></div></div></main>;
+  if (!league || !pool || !session) return <main className="ballpark-page"><div className="ballpark-panel"><h1 className="ballpark-title">THE ROOM IS NOT READY</h1><p className="mt-4">{snakeRoomMissingLegCopy({ league: Boolean(league), pool: Boolean(pool), session: Boolean(session) })}</p>{liveRoomRecoveryPanel}<div className="mt-5 flex flex-wrap gap-3"><button className="ballpark-press-button ballpark-press-lg ballpark-press-default min-h-11" onClick={() => navigate('/')}>HOME / SIGN IN</button><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadSession()}>RETRY</button></div></div></main>;
 
   const mlbRecapPicks = session.draftManifest
     ? readSnakeDraftTruth(session, 'MLB').completedPicks
     : session.completedPicks;
   if (recapOpen) return <SnakeDraftRecap
     phase="MLB"
+    roomCode={session.snakeCompanions?.roomCode ?? session.liveRoomRecovery?.roomCode}
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     picks={mlbRecapPicks.map((pick) => {
       const player = playerById.get(pick.playerId);
@@ -2358,10 +3436,10 @@ function MlbSnakeDraftRoom() {
       publicTruthByTeamId={publicTruthByTeamId}
       activeSeatId={deskTeam?.id ?? null}
       consolidatedMlb
-      canDraftFromActiveSeat={Boolean(deskTeam && draftingTeam && deskTeam.id === draftingTeam.id)}
-      candidate={candidate}
-      candidateProfile={candidateId ? playerById.get(candidateId) ?? null : null}
-      selectedPlayerCard={deskState?.selectedCandidate && deskTeam && candidateId && playerById.get(candidateId) ? ((draftAction) => (
+      canDraftFromActiveSeat={Boolean(!deskHasApprovedCompanion && deskTeam && draftingTeam && deskTeam.id === draftingTeam.id)}
+      candidate={deskHasApprovedCompanion ? null : candidate}
+      candidateProfile={!deskHasApprovedCompanion && candidateId ? playerById.get(candidateId) ?? null : null}
+      selectedPlayerCard={!deskHasApprovedCompanion && deskState?.selectedCandidate && deskTeam && candidateId && playerById.get(candidateId) ? ((draftAction) => (
         <SelectedPlayerCard
           player={playerById.get(candidateId)!}
           candidate={deskState.selectedCandidate!}
@@ -2373,13 +3451,15 @@ function MlbSnakeDraftRoom() {
             setAssistantOptimizeRevision((revision) => revision + 1);
           }}
           onKeep={() => { void keepSelectedConsequence(); }}
+          zeroInterest={deskState.board?.rankings.zeroInterestPlayerIds?.includes(candidateId) ?? false}
+          onSetZeroInterest={(zeroInterest) => { void setSelectedZeroInterest(zeroInterest); }}
           decision={draftDecision}
           onTradeDecision={prefillTradeDecision}
           actionConsequence={candidate?.consequence}
           blockReason={candidate?.blockReason}
           draftAction={draftAction}
         />
-      )) : candidate && deskTeam ? ((draftAction) => (
+      )) : !deskHasApprovedCompanion && candidate && deskTeam ? ((draftAction) => (
         <section className="mb-3 border-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3" data-testid="selected-player-card">
           <p className="text-[10px] font-black tracking-[0.16em] text-[var(--ballpark-brass)]">SELECTED PLAYER</p>
           <h2 className="text-xl font-black uppercase">{candidate.name}</h2>
@@ -2387,7 +3467,7 @@ function MlbSnakeDraftRoom() {
           <div className="mt-3">{draftAction}</div>
         </section>
       )) : undefined}
-      selectedFitLabel={deskState?.selectedCandidate
+      selectedFitLabel={!deskHasApprovedCompanion && deskState?.selectedCandidate
         ? `FIT · ${selectedConsequence?.status === 'ready'
           ? selectedConsequence.after.fitWord
           : deskState.selectedCandidate.fitWord}`
@@ -2395,15 +3475,19 @@ function MlbSnakeDraftRoom() {
       draftActionLabel="DRAFT PLAYER"
       paused={Boolean(session.paused)}
       soundsEnabled={soundsEnabled}
-      correctionAvailable={Boolean(session.correctionSnapshots?.[0])}
+      correctionAvailable={practiceMode
+        ? Boolean(session.correctionSnapshots?.[0])
+        : Boolean(liveHost.room?.correctionAvailable)}
       tradeRevision={session.trades?.length ?? 0}
       livePickMoveRevision={livePickMoveRevision}
-      hotseatNextName={hotseatPassName(session, draftingTeam)}
+      hotseatNextName={deskHasApprovedCompanion
+        ? null
+        : hotseatPassName(session, draftingTeam) ?? draftingTeam?.name ?? null}
       practiceMode={practiceMode}
       practiceFastForward={practiceFastForward}
       privateSnipeKey={privateSnipeKey}
       dangerKey={candidate?.blockReason ? `${candidate.id}:${candidate.blockReason}` : null}
-      privateDesk={deskState?.board ? ((showHelp) => (<>
+      privateDesk={!deskHasApprovedCompanion && deskState?.board ? ((showHelp) => (<>
         {boardUndo
           && privateDeskRevealed
           && sameMainPrivateIdentity(boardUndo.identity, currentPrivateIdentity)
@@ -2463,6 +3547,7 @@ function MlbSnakeDraftRoom() {
             ...(advisorLogBySeat[deskTeam?.id ?? ''] ?? []).filter((entry) => !(session.roomLogByTeamId?.[deskTeam?.id ?? ''] ?? []).some((row) => row.id.endsWith(`:${entry.key}`))),
           ]}
           taxCoreRows={deskState.taxCoreRows}
+          assistantTaxCoreRows={assistantTaxCoreRows}
           slotDepth={deskState.slotDepth}
           assistantBoard={assistantBoardState}
           assistantOptimizationKey={assistantOptimizePlayerId
@@ -2482,6 +3567,17 @@ function MlbSnakeDraftRoom() {
           onReorderOverall={(orderedIds) => {
             void reorderRanking('OVERALL', orderedIds);
           }}
+          draftLog={session.completedPicks.map((pick) => {
+            const pickedPlayer = playerById.get(pick.playerId);
+            return {
+              pick: pick.pick,
+              teamName: leagueTeams.find((team) => team.id === pick.teamId)?.name ?? UNKNOWN_TEAM,
+              playerId: pick.playerId,
+              playerName: pickedPlayer ? fullName(pickedPlayer.firstName, pickedPlayer.lastName).toUpperCase() : UNKNOWN_PLAYER,
+              position: pickedPlayer?.primaryPosition ?? '—',
+            };
+          })}
+          teamColors={deskTeam?.colors}
           tradeGuide={<SnakeTradeGuide
             showHelp={showHelp}
             teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
@@ -2491,7 +3587,7 @@ function MlbSnakeDraftRoom() {
             privateScopeKey={currentPrivateScopeKey}
             onAsk={askTradeGuide}
             onPost={postTradeOffer}
-            openOffers={(session.openTradeOffers ?? []).filter((offer) => offer.phase === 'MLB' && (offer.buyerTeamId === deskTeam?.id || offer.sellerTeamId === deskTeam?.id))}
+            openOffers={liveTradeProjection.openOffers.filter((offer) => offer.phase === 'MLB' && (offer.buyerTeamId === deskTeam?.id || offer.sellerTeamId === deskTeam?.id))}
             onNod={nodTradeOffer}
             onClose={closeTradeOffer}
             onFailure={refreshRoomTruth}
@@ -2504,7 +3600,7 @@ function MlbSnakeDraftRoom() {
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
         ownedPicksByTeamId={ownedPicksByTeamId}
         sessionRevision={session.revision ?? 0}
-        openOffers={(session.openTradeOffers ?? []).filter((offer) => offer.phase === 'MLB')}
+        openOffers={liveTradeProjection.openOffers.filter((offer) => offer.phase === 'MLB')}
         onAsk={askTradeGuide}
         onPost={postTradeOffer}
         onNod={nodTradeOffer}
@@ -2512,20 +3608,50 @@ function MlbSnakeDraftRoom() {
         onExecute={executeTrade}
         onFailure={refreshRoomTruth}
       />}
-      roomHelpNotes={candidate ? ['THIS PLAYER IS SELECTED FROM YOUR PRIVATE DRAFT DESK.'] : []}
-      writeNotice={writeNotice ?? syncError}
-      onReloadRoom={async () => { setWriteNotice(null); setSyncError(null); await refreshRoomTruth(); }}
-      onDismissWriteNotice={() => { setWriteNotice(null); setSyncError(null); }}
+      roomHelpNotes={!deskHasApprovedCompanion && candidate ? ['THIS PLAYER IS SELECTED FROM YOUR PRIVATE DRAFT DESK.'] : []}
+      writeNotice={localMirrorWarning ?? writeNotice ?? syncError}
+      onReloadRoom={async () => { setLocalMirrorWarning(null); setWriteNotice(null); setSyncError(null); await refreshRoomTruth(); }}
+      onDismissWriteNotice={() => { setLocalMirrorWarning(null); setWriteNotice(null); setSyncError(null); }}
       companionApproval={practiceMode ? undefined : <CompanionApprovalCard
-        session={session}
+        roomCode={session.snakeCompanions?.roomCode ?? ''}
         teams={leagueTeams.map((team) => ({ id: team.id, name: team.name }))}
+        claims={liveHost.claims}
+        intents={liveHost.intents}
+        ready={liveHost.liveRoomReady}
+        working={liveHost.working}
+        liveError={liveHost.error}
         playerName={(playerId) => {
           const player = playerById.get(playerId);
           return player ? fullName(player.firstName, player.lastName) : 'UNKNOWN PLAYER';
         }}
-        onApprovePick={(request) => recordPick(request.playerId, request)}
-        onChange={acceptCompanionSession}
+        onResolveClaim={async (claim, status) => {
+          if (status === 'approved') {
+            const board = session.seatBoards?.[claim.teamId];
+            if (!board) throw new Error('THE TEAM BOARD IS NOT READY.');
+            const designSlots = localLeagueTeams.find((team) => team.id === claim.teamId)?.rosterDesign?.slots;
+            await liveHost.seedBoard({
+              teamId: claim.teamId,
+              board: snakeLiveJson({
+                ...board,
+                ...(designSlots ? { designSlots } : {}),
+              }),
+            });
+          }
+          await liveHost.resolveClaim(
+            claim,
+            status,
+            `claim:${claim.id}:${claim.revision}:${status}`,
+          );
+        }}
+        onApprovePick={(intent, request) => recordPick(request.playerId, request, intent)}
+        onRejectPick={async (intent) => {
+          await liveHost.resolveIntent(intent, 'rejected', `pick-rejected:${intent.id}`);
+        }}
       />}
+      pendingCompanionCount={practiceMode ? 0 : liveHost.claims.filter((claim) => claim.status === 'pending').length}
+      pendingPickRequestCount={practiceMode || !liveHost.room
+        ? 0
+        : pendingSnakeLivePickIntentCount(liveHost.intents, liveHost.room.publicRevision)}
       onPauseChange={setPaused}
       onPracticeFastForwardChange={setPracticeFastForward}
       onRecordPick={async (playerId) => {

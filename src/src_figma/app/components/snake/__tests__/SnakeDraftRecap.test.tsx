@@ -16,6 +16,7 @@ describe('SnakeDraftRecap', () => {
   it('keeps missing money unknown while preserving explicit zero, signed tax, order, and team counts', () => {
     render(<SnakeDraftRecap
       phase="MLB"
+      roomCode="4352"
       teams={teams}
       picks={[
         { pick: 2, teamId: 'a', playerId: 'p2', playerName: 'Second Pick', salary: 0, tax: 0 },
@@ -25,6 +26,8 @@ describe('SnakeDraftRecap', () => {
       committing={false}
       onConfirm={vi.fn()}
     />);
+
+    expect(screen.getByText('ROOM CODE 4352')).toBeInTheDocument();
 
     const teamSections = screen.getAllByRole('region', { name: /draft recap/i });
     expect(teamSections).toHaveLength(2);

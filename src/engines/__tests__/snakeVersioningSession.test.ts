@@ -22,6 +22,7 @@ import {
   countUniqueVersionHumans,
   deriveVersionGroupId,
   retireDraftedVersion,
+  unavailableVersionPlayerIds,
 } from '../snakeVersioning';
 
 function session(): LeagueBuilderMlbDraftSession {
@@ -76,18 +77,25 @@ describe('snake version identity and session v2', () => {
     expect(countUniqueVersionHumans(cards)).toBe(1);
   });
 
-  test('drafting one card retires the other cards in its version group', () => {
+  test('drafting Career retires Peak and Draft Pool but keeps the chosen card', () => {
     const result = retireDraftedVersion({
       state: { draftedPlayerIdByGroupId: {}, retiredPlayerIdsByGroupId: {} },
-      drafted: { playerId: 'ruth-1927', sourceId: 'lahman:ruthba01' },
+      drafted: {
+        playerId: 'ruth-career',
+        sourceId: 'historical:ruthba01',
+        versionGroupId: 'historical:ruthba01',
+      },
       pool: [
-        { playerId: 'ruth-1927', sourceId: 'lahman:ruthba01' },
-        { playerId: 'ruth-1918', sourceId: 'lahman:ruthba01' },
+        { playerId: 'ruth-career', sourceId: 'historical:ruthba01', versionGroupId: 'historical:ruthba01' },
+        { playerId: 'ruth-peak', sourceId: 'historical:ruthba01', versionGroupId: 'historical:ruthba01' },
+        { playerId: 'ruth-draft', sourceId: 'historical:ruthba01', versionGroupId: 'historical:ruthba01' },
         { playerId: 'gehrig', sourceId: 'lahman:gehrilo01' },
       ],
     });
-    expect(result.retiredPlayerIds).toEqual(['ruth-1918']);
-    expect(result.state.draftedPlayerIdByGroupId['source:ruthba01']).toBe('ruth-1927');
+    expect(result.retiredPlayerIds).toEqual(['ruth-draft', 'ruth-peak']);
+    expect(result.state.draftedPlayerIdByGroupId['historical:ruthba01']).toBe('ruth-career');
+    expect(unavailableVersionPlayerIds(result.state)).toEqual(new Set(['ruth-draft', 'ruth-peak']));
+    expect(unavailableVersionPlayerIds(result.state)).not.toContain('ruth-career');
   });
 
   test('correction restores byte-identical prior session state', () => {

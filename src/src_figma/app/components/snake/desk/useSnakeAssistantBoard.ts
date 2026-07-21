@@ -18,7 +18,6 @@ import {
 import { isLegalRoster } from '../../../../../data/rosterConstruction';
 import { evaluateSnakePlan } from '../../../../../engines/snakeEconomics';
 import { snakeMoneyNonnegative } from '../../../../../engines/snakeMoney';
-import { isDesignPlayerEligibleForSlot } from '../../../../../engines/rosterDesignFeasibility';
 import { deriveVersionGroupId, unavailableVersionPlayerIds } from '../../../../../engines/snakeVersioning';
 import { buildChemistryStrip } from './draftTruthModel';
 
@@ -117,8 +116,6 @@ function readyBoardMatchesRequest(
     const selectedId = selectedByGroup[deriveVersionGroupId(playerVersionIdentity(player))];
     return !selectedId || selectedId === player.playerId;
   });
-  const versionValidGroups = versionValidPool.map((player) => deriveVersionGroupId(playerVersionIdentity(player)));
-  if (new Set(versionValidGroups).size !== versionValidGroups.length) return false;
   const pickedIds = new Set(input.completedPicks.map((pick) => pick.playerId));
   const draftedGroups = new Set(input.completedPicks.map((pick) => (
     deriveVersionGroupId(playerVersionIdentity(poolById.get(pick.playerId)!))
@@ -143,18 +140,10 @@ function readyBoardMatchesRequest(
   const selectedGroups = currentPlayers.map((player) => deriveVersionGroupId(playerVersionIdentity(player)));
   if (new Set(selectedGroups).size !== selectedGroups.length
     || !isLegalRoster(currentPlayers.map((player) => player.seating.shape))) return false;
-  const designById = new Map(input.slots.map((slot) => [canonicalSnakeAssistantSlotId(slot.slotId), slot]));
-  if (designById.size !== 22 || board.slots.some((slot) => {
-    const design = designById.get(canonicalSnakeAssistantSlotId(slot.slotId));
-    const player = poolById.get(slot.playerId);
-    return !design || !player || !isDesignPlayerEligibleForSlot(design, {
-      profile: {
-        isPitcher: player.seating.shape.isPitcher,
-        primaryPosition: player.seating.shape.position,
-      },
-      slotPlayer: player.seating.shape,
-    });
-  })) return false;
+  // Slot labels are a desk projection of a legally certified 22, not a second roster law.
+  // Surplus starters/closers and Two Way catchers can make an exact legal roster that the rigid
+  // preference frame cannot express one player at a time. Membership legality above is canonical.
+  if (new Set(input.slots.map((slot) => canonicalSnakeAssistantSlotId(slot.slotId))).size !== 22) return false;
   const selectedPin = input.selectedPinPlayerId ?? null;
   const expectedPinnedIds = new Set([
     ...ownPickById.keys(),
@@ -166,10 +155,6 @@ function readyBoardMatchesRequest(
     || new Set(board.recommendationOrder).size !== board.recommendationOrder.length
     || board.recommendationOrder.some((playerId) => !allowedIds.has(playerId))
     || board.playerIds.some((playerId) => !board.recommendationOrder.includes(playerId))) return false;
-  const recommendationGroups = board.recommendationOrder.map((playerId) => (
-    deriveVersionGroupId(playerVersionIdentity(poolById.get(playerId)!))
-  ));
-  if (new Set(recommendationGroups).size !== recommendationGroups.length) return false;
   let plan;
   try {
     plan = evaluateSnakePlan({
@@ -250,10 +235,11 @@ function validReadyBoard(value: unknown, request: SnakeAssistantBoardRequest): v
     || !finiteLedger(board)) return false;
   const families = new Set<string>();
   for (const row of board.chemistry) {
-    if (!row || typeof row !== 'object' || !hasExactKeys(row, ['family', 'word', 'count', 'tier'])
+    if (!row || typeof row !== 'object' || !hasExactKeys(row, ['family', 'word', 'count', 'traitCount', 'tier'])
       || typeof row.family !== 'string' || families.has(row.family)
       || row.word !== canonicalChemistryWord(row.family)
       || !Number.isInteger(row.count) || row.count! < 0
+      || !Number.isInteger(row.traitCount) || row.traitCount! < 0
       || !['L1', 'L2', 'L3'].includes(row.tier ?? '')) return false;
     families.add(row.family);
   }

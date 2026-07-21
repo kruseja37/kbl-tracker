@@ -62,20 +62,34 @@ export function isPlayerInLeaguePool(player: Player, leagueId: string): boolean 
  * Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §2/§7): which league ids
  * feed a league's draft-pool extraction.
  *
- * Returns `null` for "unfiltered" — an absent `sourceLeagueIds` means ALL leagues are checked and
- * the universe filter is skipped entirely, which is provably byte-identical to the pre-feature
- * behavior (extraction always drew from every player row in the app). Captain correction
- * 2026-07-08 post-audit: the earlier own-league-only default was a contract framing error, not a
- * JK ruling — it silently excluded every other league's players (e.g. the ~440 SMB4 'sml' seed
- * players) from a brand-new league's very first extraction.
+ * Returns `null` when the user has not saved an explicit source set. The Draft Setup caller then
+ * resolves that state to every known EXTERNAL source league. It never treats the target league as
+ * a source because target assignments are the output of this workflow.
  *
  * An explicit array (any content) is the curated state and IS filtered. An explicit empty array
- * is a real, distinct state (JK ruling 2026-07-08: a user may un-check every league, including
- * their own) and must NOT be treated as "absent" — it resolves to free-agents-only, because
- * never-claimed players bypass the filter (see isPlayerInSourceUniverse).
+ * is a real, distinct state and must NOT be treated as "absent". It resolves to unassigned players
+ * only when that separate source switch is on.
  */
 export function resolveSourceLeagueIds(league: Pick<LeagueTemplate, 'sourceLeagueIds'>): string[] | null {
   return league.sourceLeagueIds ?? null;
+}
+
+/**
+ * The league being drafted is the pool OUTPUT. It is never one of its own source shelves.
+ * Older setup records can contain the target id because Draft Setup used to list every league,
+ * including itself. Keep those rows readable, but remove the circular source before any proof,
+ * count, or build consumes it.
+ */
+export function resolveExternalDraftSourceLeagueIds(input: {
+  configuredSourceLeagueIds: readonly string[] | null;
+  availableLeagueIds: readonly string[];
+  targetLeagueId: string;
+}): string[] {
+  const configured = input.configuredSourceLeagueIds ?? input.availableLeagueIds;
+  const available = new Set(input.availableLeagueIds);
+  return sortedUniqueIds(configured.filter((leagueId) => (
+    leagueId !== input.targetLeagueId && available.has(leagueId)
+  )));
 }
 
 export function resolveIncludeUnassignedSourcePlayers(
@@ -109,6 +123,26 @@ export function isPlayerInSourceUniverse(
     return includeUnassignedSourcePlayers;
   }
   return sourceLeagueIds.some((leagueId) => isPlayerInLeaguePool(player, leagueId));
+}
+
+/**
+ * Source-universe membership for a specific draft target. The target assignment is output
+ * membership written by the pool builder, not evidence that the player belongs to a source.
+ * Ignoring that assignment prevents a completed build from feeding itself on the next render.
+ */
+export function isPlayerInExternalDraftSourceUniverse(input: {
+  player: Player;
+  sourceLeagueIds: readonly string[];
+  targetLeagueId: string;
+  includeUnassignedSourcePlayers?: boolean;
+}): boolean {
+  const externalAssignments = (input.player.leagueAssignments ?? [])
+    .filter((assignment) => assignment.leagueId !== input.targetLeagueId);
+  if (externalAssignments.length === 0) {
+    return input.includeUnassignedSourcePlayers ?? true;
+  }
+  const selectedSourceIds = new Set(input.sourceLeagueIds);
+  return externalAssignments.some((assignment) => selectedSourceIds.has(assignment.leagueId));
 }
 
 function sortedUniqueIds(ids: readonly string[] | undefined): string[] {

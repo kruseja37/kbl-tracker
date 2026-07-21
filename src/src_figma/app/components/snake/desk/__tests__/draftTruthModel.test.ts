@@ -68,11 +68,17 @@ describe('snake draft truth model', () => {
   });
 
   it('always returns all five chemistry families in the approved stable order for plan and drafted memberships', () => {
-    const plan = buildChemistryStrip([player('p1', 'Crafty'), player('p2', 'Crafty')]);
-    const drafted = buildChemistryStrip([player('d1', 'Competitive')]);
+    const plan = buildChemistryStrip([
+      { ...player('p1', 'Crafty'), trait1: 'Stealer' },
+      player('p2', 'Crafty'),
+    ]);
+    const drafted = buildChemistryStrip([{ ...player('d1', 'Competitive'), trait1: 'Big Hack', trait2: 'Tough Out' }]);
     expect(plan.map((row) => row.word)).toEqual(['Competitive', 'Spirited', 'Crafty', 'Scholarly', 'Disciplined']);
     expect(plan.map((row) => row.count)).toEqual([0, 0, 2, 0, 0]);
+    expect(plan.find((row) => row.family === 'CRA')?.traitCount).toBe(1);
     expect(drafted.map((row) => row.count)).toEqual([1, 0, 0, 0, 0]);
+    expect(drafted.find((row) => row.family === 'CMP')?.traitCount).toBe(1);
+    expect(drafted.reduce((sum, row) => sum + (row.traitCount ?? 0), 0)).toBe(2);
   });
 
   it('uses shared chemistry advice for exact 2-to-3 and 6-to-7 selected-player crossings', () => {

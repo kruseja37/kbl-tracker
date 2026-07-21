@@ -635,7 +635,7 @@ describe('shared snake rational-risk worker seam', () => {
     expect(JSON.stringify(built.input)).not.toMatch(/seatBoards|farmSeatBoards|private-log|roomCode|correction/i);
   });
 
-  test('labels an unfinished worker read as calculating rather than safe', () => {
+  test('does not repeat an unfinished worker state on every player row', () => {
     cleanup();
     render(<DeskCandidateRow candidate={{
       id: 'player-a',
@@ -653,11 +653,11 @@ describe('shared snake rational-risk worker seam', () => {
       construction: { id: 'player-a', isPitcher: false, bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50 } },
     }} />);
 
-    expect(screen.getByText(/CALCULATING/)).toBeInTheDocument();
+    expect(screen.queryByText(/CALCULATING/)).not.toBeInTheDocument();
     expect(screen.queryByText(/SAFE TO WAIT/)).not.toBeInTheDocument();
   });
 
-  test('labels a failed worker read as unavailable rather than safe or calculating', () => {
+  test('does not repeat a failed worker state on every player row', () => {
     cleanup();
     render(<DeskCandidateRow candidate={{
       id: 'player-a',
@@ -675,7 +675,28 @@ describe('shared snake rational-risk worker seam', () => {
       construction: { id: 'player-a', isPitcher: false, bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50 } },
     }} />);
 
-    expect(screen.getByText(/RISK UNAVAILABLE/)).toBeInTheDocument();
+    expect(screen.queryByText(/RISK UNAVAILABLE/)).not.toBeInTheDocument();
     expect(screen.queryByText(/SAFE TO WAIT|CALCULATING/)).not.toBeInTheDocument();
+  });
+
+  test('shows a real LIKELY_GONE row in red without relying on reason copy', () => {
+    cleanup();
+    render(<DeskCandidateRow candidate={{
+      id: 'player-a',
+      name: 'Player A',
+      position: 'C',
+      advisorWorth: 10,
+      iv: 10,
+      marginalTax: 0,
+      trueCost: 10,
+      archetypeChip: 'BALANCED',
+      fitWord: 'SOLID FIT',
+      risk: 'LIKELY_GONE',
+      riskReason: '2 CLUBS COULD SELECT THIS PLAYER BEFORE YOUR TURN.',
+      legalFinishLine: '',
+      construction: { id: 'player-a', isPitcher: false, bat: { POW: 50, CON: 50, SPD: 50, FLD: 50, ARM: 50 } },
+    }} />);
+
+    expect(screen.getByText('LIKELY GONE')).toHaveClass('text-[var(--ballpark-status-red-bright)]');
   });
 });

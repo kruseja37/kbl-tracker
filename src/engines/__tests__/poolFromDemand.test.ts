@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildNumericPoolShapeDiagnostics,
   countCellMatches,
+  createPoolIdentitySupportReceipt,
   DEFAULT_POOL_SIZE_MULTIPLIER,
   DEFAULT_POOL_QUALITY_CENTER,
   derivePoolQualityTuning,
@@ -18,6 +19,7 @@ import {
   POOL_QUALITY_CENTER_STOPS,
   POOL_SIZE_MULTIPLIER_STOPS,
   repairG1PoolForSizing,
+  refreshRoleBalanceAdvisories,
   resolvePoolQualityCenter,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
@@ -267,6 +269,44 @@ describe('hard legality versus competitive position depth', () => {
     expect(evaluateCompetitivePositionSupplyFloors(closerShapes, teamCount).find((row) => row.position === 'CP'))
       .toMatchObject({ needed: 27, available: 22, missing: 5 });
   });
+
+  it('counts protected alternate cards as one person in position supply and floor repair', () => {
+    const teamCount = 1;
+    const target = floorTarget(teamCount, 'CF');
+    const career = hitter('CF', MIDDLE_CORE, 10_000, {
+      id: 'floor-legend-career',
+      versionGroupId: 'floor-legend-person',
+    });
+    const peak = {
+      ...career,
+      id: 'floor-legend-peak',
+      versionGroupId: 'floor-legend-person',
+    };
+    const otherPeople = Array.from({ length: target.needed - 1 }, (_, index) => hitter(
+      'CF',
+      MIDDLE_CORE,
+      11_000 + index,
+      {
+        id: `floor-other-cf-${index}`,
+        versionGroupId: `floor-other-person-${index}`,
+      },
+    ));
+
+    expect(evaluatePositionSupplyFloors([career, peak], teamCount).find((row) => row.position === 'CF'))
+      .toMatchObject({ available: 1 });
+    expect(evaluateCompetitivePositionSupplyFloors([career, peak], teamCount).find((row) => row.position === 'CF'))
+      .toMatchObject({ available: 1, missing: target.needed - 1 });
+
+    const repaired = enforcePositionSupplyFloors({
+      universe: [career, peak, ...otherPeople],
+      players: [career, peak],
+      teams: teamCount,
+      fitOf: () => 0,
+    });
+    expect(repaired.injectedIds).toHaveLength(target.needed - 1);
+    expect(repaired.floors.find((row) => row.position === 'CF'))
+      .toMatchObject({ available: target.needed, missing: 0 });
+  });
 });
 
 function hardFloorUniverse(teamCount: number, cpCount = floorTarget(teamCount, 'CP').needed): DemandUniversePlayer[] {
@@ -433,6 +473,33 @@ describe('extractPoolFromDemand', () => {
     expect(result.injectedIds).toEqual([]);
     expect(result.shortfalls).toEqual([]);
     expect(result.players.map((player) => player.id)).toEqual(beforeIds);
+  });
+
+  it('does not grow an exact named pool when no safe position-floor swap exists', () => {
+    const teamCount = 1;
+    const source = hardFloorUniverse(teamCount);
+    const missingCloser = source.find((player) => isCloser(player))!;
+    const selected = source.filter((player) => player.id !== missingCloser.id);
+    const replacementBody = arm('SP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000);
+    replacementBody.id = 'floor-protected-extra-sp';
+    selected.push(replacementBody);
+
+    const result = enforcePositionSupplyFloors({
+      universe: [...source, replacementBody],
+      players: selected,
+      teams: teamCount,
+      fitOf: () => 0,
+      protectedIds: new Set(selected.map((player) => player.id)),
+      maxPeople: selected.length,
+    });
+
+    expect(result.players).toHaveLength(selected.length);
+    expect(result.injectedIds).toEqual([]);
+    expect(result.evictedIds).toEqual([]);
+    expect(result.floors.find((floor) => floor.position === 'CP')?.missing).toBe(1);
+    expect(result.shortfalls.find((shortfall) => shortfall.position === 'CP')).toBeDefined();
+    expect(result.messages.some((message) => message.includes('without growing the exact named pool'))).toBe(true);
+    expect(result.messages.some((message) => message.includes('position supply floor added'))).toBe(false);
   });
 
   it('is deterministic: identical inputs produce the identical pool', () => {
@@ -689,6 +756,155 @@ describe('extractPoolFromDemand', () => {
     expect(first.diagnostics.middleMassShare).toBeGreaterThanOrEqual(0.70);
     expect(first.diagnostics.lowTailShare).toBeLessThanOrEqual(0.10);
     expect(first.diagnostics.poolSlackFactor).toBeCloseTo(1.25);
+  });
+
+  it('counts alternate source cards as one person while it shapes a numeric pool', () => {
+    const source = exactCurveSource().flatMap((player, index) => {
+      const versionGroupId = `legend-person-${index}`;
+      return [
+        { ...player, id: `${player.id}-career`, versionGroupId },
+        { ...player, id: `${player.id}-peak`, versionGroupId, iv: player.iv + 1, salary: player.salary + 1 },
+      ];
+    });
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 80,
+      requiredRosterDemand: 64,
+      fitOf: () => 0,
+    });
+
+    expect(source).toHaveLength(200);
+    expect(shaped.players).toHaveLength(80);
+    expect(new Set(shaped.players.map((player) => player.versionGroupId))).toHaveLength(80);
+  });
+
+  it('keeps protected alternate cards but counts their shared person once against the target', () => {
+    const base = exactCurveSource();
+    const first = { ...base[0], id: 'protected-career', versionGroupId: 'protected-person' };
+    const second = { ...base[0], id: 'protected-peak', versionGroupId: 'protected-person' };
+    const source = [first, second, ...base.slice(1).map((player, index) => ({
+      ...player,
+      versionGroupId: `other-person-${index}`,
+    }))];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [first, second],
+      protectedIds: new Set([first.id, second.id]),
+      targetSize: 20,
+      requiredRosterDemand: 16,
+      fitOf: () => 0,
+    });
+
+    expect(shaped.players.map((player) => player.id)).toEqual(expect.arrayContaining([first.id, second.id]));
+    expect(new Set(shaped.players.map((player) => player.versionGroupId))).toHaveLength(20);
+    expect(shaped.players).toHaveLength(21);
+  });
+
+  it('counts protected alternate cards once in curve caps and diagnostics', () => {
+    const highCareer = hitter('SS', HIGH_TAIL, 20_000, {
+      id: 'curve-legend-career',
+      versionGroupId: 'curve-legend-person',
+    });
+    const highPeak = {
+      ...highCareer,
+      id: 'curve-legend-peak',
+      versionGroupId: 'curve-legend-person',
+    };
+    const middlePeople = shapedHitters('curve-middle', 9, MIDDLE_CORE).map((player, index) => ({
+      ...player,
+      versionGroupId: `curve-middle-person-${index}`,
+    }));
+    const players = [highCareer, highPeak, ...middlePeople];
+    const diagnostics = buildNumericPoolShapeDiagnostics({
+      players,
+      hardKeepPlayers: [highCareer, highPeak],
+      requiredRosterDemand: 8,
+      targetSize: 10,
+    });
+
+    expect(players).toHaveLength(11);
+    expect(diagnostics.poolSize).toBe(10);
+    expect(diagnostics.hardKeepCount).toBe(1);
+    expect(diagnostics.highTailShare).toBeCloseTo(0.1);
+    expect(Object.values(diagnostics.finalPoolByBand).reduce((sum, count) => sum + count, 0)).toBe(10);
+
+    const shaped = shapePoolByNumericGrade({
+      universe: players,
+      currentPlayers: [highCareer, highPeak],
+      protectedIds: new Set([highCareer.id, highPeak.id]),
+      targetSize: 10,
+      requiredRosterDemand: 8,
+      fitOf: () => 0,
+    });
+    expect(shaped.diagnostics.poolSize).toBe(10);
+    expect(shaped.diagnostics.highTailShare).toBeCloseTo(0.1);
+    expect(shaped.diagnostics.messages).not.toEqual(expect.arrayContaining([
+      expect.stringContaining('high-tail cap still exceeds'),
+    ]));
+  });
+
+  it('uses whole-player ceiling counts for maximum high and superstar shares', () => {
+    const tuning = {
+      ...POOL_BALANCE_PRESETS.balanced,
+      highTailCap: 0.20,
+      superstarTailCap: 0.04,
+      windows: POOL_BALANCE_PRESETS.balanced.windows.map((window) => ({
+        ...window,
+        targetShare: window.id === 'middle-core' ? 0.80 : window.id === 'ultra-high-tail' ? 0.20 : 0,
+      })),
+    };
+    const source = [
+      ...shapedHitters('ceil-middle', 8, MIDDLE_CORE),
+      ...shapedHitters('ceil-superstar', 2, HIGH_BAT),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 5,
+      requiredRosterDemand: 4,
+      fitOf: () => 0,
+      tuning,
+    });
+
+    const superstarCount = Math.round(shaped.diagnostics.superstarTailShare * shaped.diagnostics.poolSize);
+    expect(superstarCount).toBe(1);
+    expect(superstarCount).toBeLessThanOrEqual(Math.ceil(tuning.superstarTailCap * shaped.diagnostics.poolSize));
+    expect(shaped.diagnostics.messages.join(' ')).not.toContain('superstar cap swapped');
+  });
+
+  it('replaces stale role advice with advice from the exact final membership', () => {
+    const finalPlayers = legalOneTeamPool();
+    const removedReliever = finalPlayers.find((player) => player.role === 'RP')!;
+    const extraCloser = arm('CP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000);
+    const preRepairPlayers = [
+      ...finalPlayers.filter((player) => player.id !== removedReliever.id),
+      extraCloser,
+    ];
+    const universe = finalPlayers;
+    const staleMessages = refreshRoleBalanceAdvisories({
+      messages: ['keep this diagnostic'],
+      players: preRepairPlayers,
+      universe,
+      targetSize: 22,
+      teams: 1,
+      fitOf: () => 0,
+      qualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    });
+    expect(staleMessages).toContain('Remove 1 CP and add 1 RP to balance rosters.');
+
+    const refreshedMessages = refreshRoleBalanceAdvisories({
+      messages: staleMessages,
+      players: finalPlayers,
+      universe,
+      targetSize: 22,
+      teams: 1,
+      fitOf: () => 0,
+      qualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    });
+    expect(refreshedMessages).toEqual(['keep this diagnostic']);
   });
 
   it('balanced preset matches the default numeric-grade supply curve', () => {
@@ -1051,7 +1267,10 @@ describe('extractPoolFromDemand', () => {
 
     expect(first.players.map((player) => player.id)).toEqual(same.players.map((player) => player.id));
     expect(rerolled.players.map((player) => player.id)).not.toEqual(first.players.map((player) => player.id));
-    expect(rerolled.diagnostics.highTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.balanced.highTailCap);
+    expect(rerolled.diagnostics.highTailShare).toBeLessThanOrEqual(
+      Math.ceil(POOL_BALANCE_PRESETS.balanced.highTailCap * rerolled.diagnostics.poolSize)
+        / rerolled.diagnostics.poolSize,
+    );
     expect(rerolled.diagnostics.middleMassShare).toBeGreaterThanOrEqual(POOL_BALANCE_PRESETS.balanced.targetMiddleMass);
   });
 
@@ -1163,6 +1382,120 @@ describe('extractPoolFromDemand', () => {
     const result = trimPoolToTarget(players, new Set(['reserved', 'claimed', 'floor', 'pinned']), () => 0, 1);
     expect(result.evicted.map((player) => player.id)).toEqual(['loose']);
     expect(result.kept.map((player) => player.id).sort()).toEqual(['claimed', 'floor', 'pinned', 'reserved']);
+  });
+
+  it('trims unprotected quota overfill when protected distribution stays below the numeric target', () => {
+    n = 0;
+    const protectedPlayers = Array.from({ length: 10 }, (_, index) => hitter('SS', MIDDLE_CORE, 10_000 + index, {
+      id: `certificate-ss-${index}`,
+    } as Partial<DemandUniversePlayer>));
+    const source = [
+      ...protectedPlayers,
+      ...Array.from({ length: 8 }, (_, index) => hitter('SS', index % 2 === 0 ? LOW_TAIL : HIGH_TAIL, 20_000 + index)),
+      ...Array.from({ length: 16 }, (_, index) => hitter('CF', index % 2 === 0 ? MIDDLE_LOW : MIDDLE_HIGH, 30_000 + index)),
+    ];
+    const protectedIds = new Set(protectedPlayers.map((player) => player.id));
+    const shape = () => shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: protectedPlayers,
+      protectedIds,
+      targetSize: 12,
+      requiredRosterDemand: 10,
+      fitOf: (player) => numericGradeForPoolShape(player),
+    });
+
+    const first = shape();
+    const second = shape();
+
+    expect(first.players).toHaveLength(12);
+    expect(protectedPlayers.every((player) => first.players.some((candidate) => candidate.id === player.id))).toBe(true);
+    expect(first.players.map((player) => player.id)).toEqual(second.players.map((player) => player.id));
+    expect(first.diagnostics.messages.some((message) => message.includes('trimmed') && message.includes('unprotected'))).toBe(true);
+    expect(first.diagnostics.quotaShortfalls.length).toBeGreaterThan(0);
+  });
+
+  it('preserves every chosen-identity claim across Tight, Competitive, and Loose shaping', () => {
+    const source = universe();
+    for (const poolSizeMultiplier of [1.2, 1.35, 1.5]) {
+      const result = extractPoolFromDemand(source, [], archetypes, 'standard', {
+        teams: 2,
+        budgetPerTeam: 5_000_000,
+        poolSizeMultiplier,
+        preserveSelectedIdentityClaims: true,
+      });
+      const selected = new Set(result.players.map((player) => player.id));
+      expect(result.floors.claimedIds.length).toBeGreaterThan(0);
+      expect(result.floors.claimedIds.every((id) => selected.has(id))).toBe(true);
+      expect(result.floors.verdicts.every((verdict) => verdict.band !== 'LOCKED')).toBe(true);
+    }
+  });
+
+  it('skips duplicate identity extraction only for a receipt bound to the exact shaping universe', () => {
+    const source = universe();
+    const supportIds = source.slice(0, 44).map((player) => player.id);
+    const receipt = createPoolIdentitySupportReceipt({
+      universe: source,
+      selectedArchetypes: archetypes,
+      tier: 'standard',
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      playerIds: supportIds,
+      authorityFingerprint: 'validated-full-source-proof',
+    });
+    const certified = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      identitySupportReceipt: receipt,
+      preserveSelectedIdentityClaims: false,
+    });
+    const supportSignature = [...supportIds].sort().join('|');
+    expect([...certified.floors.claimedIds].sort().join('|')).toBe(supportSignature);
+
+    const rawOnly = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      preserveSelectedIdentityClaims: false,
+    });
+    expect([...rawOnly.floors.claimedIds].sort().join('|')).not.toBe(supportSignature);
+
+    const changedSource = source.map((player, index) => index === 0
+      ? { ...player, iv: player.iv + 1 }
+      : player);
+    const tampered = extractPoolFromDemand(changedSource, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.5,
+      identitySupportIds: supportIds,
+      identitySupportReceipt: receipt,
+      preserveSelectedIdentityClaims: false,
+    });
+    expect([...tampered.floors.claimedIds].sort().join('|')).not.toBe(supportSignature);
+  });
+
+  it('does not let a manual removal silently defeat a chosen identity claim', () => {
+    const source = universe();
+    const baseline = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.2,
+      preserveSelectedIdentityClaims: true,
+    });
+    const claimedId = baseline.floors.claimedIds[0];
+    expect(claimedId).toBeDefined();
+
+    const result = extractPoolFromDemand(source, [], archetypes, 'standard', {
+      teams: 2,
+      budgetPerTeam: 5_000_000,
+      poolSizeMultiplier: 1.2,
+      excludedIds: [claimedId],
+      preserveSelectedIdentityClaims: true,
+    });
+    expect(result.players.map((player) => player.id)).toContain(claimedId);
+    expect(result.sizing?.messages.some((message) => message.includes('chosen club identities require'))).toBe(true);
   });
 
   it('uses salary-desc then id-asc only inside equal-fit trim ties', () => {
@@ -1520,7 +1853,7 @@ describe('extractPoolFromDemand', () => {
   });
 
   it('force-includes pins, protects them from trim, and withholds excludes', () => {
-    const source = universe();
+    const source = [...universe(), ...shapedHitters('manual-headroom', 30, MIDDLE_CORE)];
     // Keep source headroom in this pin/exclude fixture; the production 1.50 default deliberately
     // consumes its entire tiny universe and would leave no outside player to pin.
     const fixtureMultiplier = 1.25;
@@ -1529,15 +1862,11 @@ describe('extractPoolFromDemand', () => {
       budgetPerTeam: 5_000_000,
       poolSizeMultiplier: fixtureMultiplier,
     });
-    const excluded = baseline.players.find((candidate) => {
-      const trial = extractPoolFromDemand(source, [designAsking('team-a', 'SS', 'Defensive-Wizard')], archetypes, 'standard', {
-        teams: 4,
-        budgetPerTeam: 5_000_000,
-        poolSizeMultiplier: fixtureMultiplier,
-        excludedIds: [candidate.id],
-      });
-      return !trial.players.some((player) => player.id === candidate.id);
-    })?.id;
+    // Use ordinary middle-band headroom. The former search reran full shaping once per player and
+    // made this amendment assertion scale with the fixture size instead of testing one edit.
+    const excluded = [...baseline.players]
+      .reverse()
+      .find((candidate) => candidate.id.startsWith('manual-headroom-'))?.id;
     expect(excluded).toBeDefined();
     const pinned = source.find((player) => !baseline.players.some((kept) => kept.id === player.id));
     expect(pinned).toBeDefined();

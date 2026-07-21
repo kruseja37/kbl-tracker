@@ -4,6 +4,123 @@
 (`SESSION_LOG.md` 2026-07-11 entries, `CURRENT_STATE.md`, `DECISIONS_LOG.md`), landed via commit
 `d6c7ec49` "walkthrough wave 1". This brief is a POINTER, not the authority.**
 
+## INDEPENDENTLY APPROVED / REPLACEMENT PREVIEW READY (2026-07-20; FINDING-253)
+- Three Legends libraries contain 835 cards for 345 people. Tight, Competitive, and Loose now count
+  one person once, shape the named pool before proof, and use Full Sources only as a final fallback.
+- Four-team Loose is 132 people. Eight-team Loose is 264 people. Both pass the independent final
+  proof and the balanced curve limits. Three eight-team rooms cover all 24 identities.
+- The first auditor blocked `7960b043`, Major 1 / Minor 1, because protected sibling cards still
+  inflated floors and curve counts. That path is repaired and directly tested.
+- A separate calibration boundary is also repaired: safe source-by-club workloads use exact search;
+  larger workloads use bounded search; the independent validator still owns SUCCESS.
+- The same auditor approved repaired commit `1bac2cfe`, Major 0 / Minor 0, after an independent
+  163/163 core gate and 4/4 exact-440 calibration. Preview deployment
+  `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY and serves the KBL app. **Next:** JK's four-team and
+  eight-team Legends-source browser walk. Production is unchanged.
+
+## INDEPENDENTLY APPROVED / MIGRATION APPLIED / PREVIEW PENDING (2026-07-20; FINDING-249)
+- FARM now uses the dedicated Snake live-room authority instead of the old Hotseat-only path.
+  Hotseat alone writes public picks, order, rosters, and completion. An approved companion writes
+  only its private fogged scout board and sends a pick request for Hotseat confirmation.
+- The first separate audit blocked `256962dd`, Major 3 / Minor 0. UI-only trade removal did not stop
+  raw FARM trade or pause RPC calls; extra catalog fields could leak private data; and correction
+  used local state instead of the cloud recovery slot.
+- The first repair rejected FARM trade and pause actions, added exact catalog field allowlists, and
+  moved correction to the cloud recovery slot. The same auditor then blocked `1e53eb8f`, Major 2 /
+  Minor 0: SQL did not require scalar identity values, and `PICK_RECORDED` did not prove one legal
+  state transition. The second repair aligns TypeScript, the server model, and SQL. It accepts one
+  next pick only and rejects changes to pause, trades, order, version state, or other session facts.
+  The final frozen code head `7a44d2b6` received **APPROVE — Major 0 / Minor 0** from the same
+  read-only auditor. Independent proof passed 33/33 focused tests, 227/227 broad Snake live-room
+  tests, TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build.
+- Migration `20260720213000_farm_snake_live_catalog.sql` extends the installed live-room catalog
+  validator to FARM. It is applied; local and remote histories match and linked-schema lint reports
+  no errors. The combined FINDING-249/250 code head `e8c7ee59` received a separate **APPROVE — Major
+  0 / Minor 0** verdict. **Next:** push the integrated branch and create one preview. JK's browser
+  walk remains the product gate.
+
+## INDEPENDENTLY APPROVED / PREVIEW PENDING (2026-07-20; FINDING-250)
+- The exact failing preview is commit `3f2b30cd`; its certification code matches isolated source
+  `db8a6426`. The valid four-club room has 1,341 cards and 851 distinct people.
+- Root cause: card count selected the large-source pruning path, then a six-card identity-role fit
+  depth under-sampled Murderers' Row. The proof correctly refused to change UNKNOWN to SUCCESS.
+- The generic repair counts people at the cutoff and keeps at least half a legal roster per fit
+  lens. Four-team and eight-team rooms still use the same proof. FIT, tax, sources, named bounds,
+  roster law, and Start Draft meaning did not change.
+- The first auditor returned BLOCK, Major 2 / Minor 1. The repaired diff binds Lock to the exact
+  accepted source, club, preset, basis, and membership fingerprint; keeps bounded UNKNOWN club-
+  neutral; and removes one out-of-contract adapter edit. Target-pool free-agent assignments no
+  longer change the selected source universe.
+- The same auditor next returned BLOCK, Major 1 / Minor 0. The accepted source key now includes
+  `sourceId`, `versionGroupId`, and legacy `historicalSourceId`. Changing any one after Build blocks
+  Lock until a new Build succeeds.
+- Production-input proof is 12/12 and other focused proof is 100/100, for 112/112 affected tests.
+  Career, Peak, and Draft cards count as
+  one person; choosing one retires the other two in the live room. TypeScript, changed-file lint,
+  production/PWA build, diff integrity, exact four/eight-team browser paths, and four-team Lock and
+  Start are green.
+- The same auditor approved frozen diff hash `be166c0e`, **Major 0 / Minor 0**, and closed both prior
+  audit blocks. One local production preview is live at `http://127.0.0.1:4173/` and returned HTTP
+  200.
+- The combined FINDING-249/250 integration auditor approved exact code head `e8c7ee59`, **Major 0 /
+  Minor 0**. Combined proof passed 187/187 focused tests, TypeScript, changed-file lint, the
+  2,744-module production/PWA build, and all four browser journeys. **Next:** push one integrated
+  branch, create one matching preview, then JK runs the four-team, eight-team, and FARM companion
+  walk. JK's browser walk remains the sole product gate.
+
+## INDEPENDENTLY APPROVED / FARM IDENTITY PREVIEW READY / JK WALK PENDING (2026-07-20; FINDING-248)
+- New and recovered Snake drafts now carry each club's frozen farm identity from Draft Setup through
+  the live catalog, recovery, Scout Reveal, and farm-session creation. Missing, conflicting,
+  duplicate, or changed club truth fails closed.
+- Legacy completed drafts that lack farm identity get one generic Snake-only repair before scouts
+  are built. Auction's Generalist fallback is unchanged.
+- The production farm-pool path is the canonical Standard-only prospect generator, not a Juiced
+  legacy mode. N=500 matched every grade bucket exactly, with zero A+ players. True grades and
+  ratings remain hidden from public room and fog-board models.
+- Exact code head `914e35e9` passed builder gates and a separate read-only audit, **Major 0 / Minor
+  0**. Preview `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY and passed the remote root, deployed-bundle,
+  and Chrome smoke. **Next:** JK tests one new and one recovered Snake league. No merge or production
+  promotion is authorized.
+
+## INDEPENDENTLY APPROVED / NEW PREVIEW NOT AUTHORIZED (2026-07-19; FINDING-246)
+- JK's completed four-team browser walk produced five exact follow-ups: position-first starting
+  slots, distinct public-pick and companion-submit sounds, red `LIKELY GONE`, no pitcher-FLD tax,
+  and a reliable completed-draft roster handoff.
+- Frozen `aeeb00a2` was rejected Major 3 / Minor 1. The repair now keys red risk to the real
+  `LIKELY_GONE` state, keys the host cue only to current pending pick intent, preserves a position
+  leader through a legal six-committed-depth edge, and keeps Two Way hitter FLD active under saved
+  legacy caps while pitcher FLD stays retired.
+- Frozen repair head `70fde7dc` passed the same non-builder auditor with **APPROVE — Major 0 /
+  Minor 0** and an independent 160/160 focused gate. The builder's focused repair set is 148/148.
+  The full production-shape gate also completed both
+  four- and eight-team rooms, all 176 eight-team picks, all four pool presets at Standard and Nerfed,
+  and a ready Assistant GM on every turn. TypeScript, changed-file lint, and diff integrity are
+  green. The 2,744-module production/PWA build is green. Only an explicitly authorized push and new
+  preview remain before JK's browser re-walk.
+- Current tax law has 17 active rows: five hitter rows; rotation POW/CON/SPD plus VEL/JNK/ACC; and
+  bullpen POW/CON/SPD plus VEL/JNK/ACC. Ordinary pitcher FLD remains salary/IV value but creates no
+  tax. A true Two Way player's position-player FLD still enters the hitter row at full use.
+- No merge, push, deployment, or product acceptance is authorized by this repair.
+
+## VERIFIED / JK RE-WALK OPEN (2026-07-16; WALKTHROUGH WAVE 2)
+- The live decision desk now keeps committed roster truth ahead of projections: the highest-IV
+  owned closer owns CP, other owned closers remain legal depth, complete saved boards are repaired
+  on reopen, and undrafted extra closers do not enter normal completed plans.
+- Owned players remain on both private 22s as team-colored `ROSTER` rows; rival picks leave private
+  actionable boards and Player Pool. Player Pool adds local fit filtering and Board/Fit/IV/signed
+  Tax If Picked/True Cost/rating views. Snake IV is salary, so no duplicate Salary sort exists;
+  only `TOP` writes to the current Overall or position board.
+- Repeated per-player unavailable/calculating copy is gone. Only actionable player risk remains;
+  Assistant methodology and diagnostics stay behind Help, and the live title is `ASST GM 22`.
+- Focused gates are 139/139 plus lifecycle 36/36; the post-audit closer gate is 67/67 and the
+  main/companion gate is 45/45. TypeScript, changed-file lint, production build, and diff integrity
+  are green. Mac/iPad checks found no overflow or console errors; sorts measured 38-61 ms, filters
+  22-83 ms, and contextual `TOP` 279 ms.
+- A separate auditor found one complete-saved-board CP bypass, verified narrow repair `8a2602eb`,
+  then returned **APPROVE with zero findings**. No merge or deploy is authorized here. **Next move:**
+  update PR #115 and return the room to JK for browser walkthrough wave 2; that walk is the sole
+  product-acceptance gate.
+
 ## BUILDER COMPLETE / AUDIT PENDING (2026-07-16; RELEASE-SUITE REPAIR)
 - The isolated release-suite failures are repaired without weakening production validation. The
   identity builder now keeps legality, solvency, and IV floor first, then requires a feasible
@@ -78,7 +195,7 @@
   selection are Flamethrowers +30% rotation POW/CON and HDH +40% rotation CON. Bash Brothers +15%
   rotation POW and Launch & Leather +10% rotation POW/CON already remained visible and are unchanged.
 - Ordinary RP/CP hitting was explicitly checked and is not taxed as everyday offense. RP
-  POW/CON/SPD/FLD exposure is `.08/.08/.16/.06`; CP is `.05/.05/.11/.05`. Two Way relievers are
+  POW/CON/SPD exposure is `.08/.08/.16`; CP is `.05/.05/.11`. Pitcher FLD is not taxed. Two Way relievers are
   full-use hitters but are excluded from bullpen secondary rows, so the same rating is never charged
   twice. No bullpen-hitting archetype axis exists and none was added.
 - The retune changes no base cap, tax coefficient, salary/IV, roster law, optimizer objective,
@@ -91,9 +208,9 @@
 - **Current thread move:** JK walks actual Draft Setup and Snake Room on Mac/iPad. Browser acceptance
   remains JK's gate; no agent visual pass can close it. The Standard/Nerfed archetype presentation
   built from `9e5901d7` is economically stale and must be regenerated from this final tax model.
-- Ordinary pitcher POW/CON/SPD/FLD now enters tax and identity math at canonical role exposure rather
-  than everyday-player strength. Tax FLD follows defensive start/range exposure; salary/IV keeps its
-  separate full pitcher-FLD value. Pitcher ARM remains excluded.
+- Ordinary pitcher POW/CON/SPD now enters tax and identity math at canonical role exposure rather
+  than everyday-player strength. Pitcher FLD remains salary/IV value but does not enter tax.
+  Pitcher ARM remains excluded.
 - A true Two Way pitcher's POW/CON/SPD/FLD enters hitter rows at full use, while VEL/JNK/ACC enters
   exactly one pitching group. The same batting ratings never enter pitcher-secondary rows. SP/RP
   assignment is roster-level and settlement-exact: pure SPs fill the rotation first, only needed
@@ -131,8 +248,8 @@
 - Assistant GM is explicit and enforced: legality/solvency first, archetype identity next, then
   contextual value, while literal frozen IV stays at least 90% of the best-IV legal build. My Board
   remains the GM's own order. Source-player roster/IV edits immediately retire stale advisor reads.
-- Pitcher POW/CON/SPD/FLD are not free bonuses under current canon: the base top-four rotation and
-  bullpen rows tax them. Pitcher ARM is excluded; archetypes shift hitter rows and pitcher
+- Pitcher POW/CON/SPD are not free bonuses under current canon: the base top-four rotation and
+  bullpen rows tax them. Pitcher FLD and ARM are excluded from tax; archetypes shift hitter rows and pitcher
   VEL/JNK/ACC only. The POW/CON rows now use a quadratic ramp instead of a linear cliff at all three
   tiers; caps, top-four grouping, coefficients, adders, and every other tax row are unchanged. New
   or rebuilt pools receive the curve; locked/saved drafts keep their frozen `luxuryCaps`.

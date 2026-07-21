@@ -79,6 +79,8 @@ export interface SnakeDraftRoomViewProps {
   tradeGuide?: HelpAwareRoomContent;
   commissionerTrade?: HelpAwareRoomContent;
   companionApproval?: ReactNode;
+  pendingCompanionCount?: number;
+  pendingPickRequestCount?: number;
   roomHelpNotes?: readonly string[];
   writeNotice?: string | null;
   onReloadRoom?: () => void | Promise<void>;
@@ -131,6 +133,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const armedCandidate = useRef<SnakeReviewCandidate | null>(null);
   const stateRef = useRef(state);
   const priorLivePickMoveRevision = useRef(props.livePickMoveRevision ?? props.tradeRevision ?? 0);
+  const priorPublicPickIndex = useRef(props.currentPickIndex);
+  const priorPendingPickRequestCount = useRef(Math.max(0, Math.floor(props.pendingPickRequestCount ?? 0)));
   const soundPlayer = useMemo(() => createSnakeSoundPlayer(props.soundsEnabled), [props.soundsEnabled]);
   const currentOrder = props.order[props.currentPickIndex];
   const currentTeam = props.teams.find((team) => team.id === currentOrder?.teamId);
@@ -141,6 +145,8 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
   const farmMode = props.draftActionLabel === 'DRAFT PROSPECT';
   const activeSeatOnClock = Boolean(props.activeSeatId && currentOrder?.teamId === props.activeSeatId);
   const draftComplete = props.currentPickIndex >= props.order.length;
+  const pendingCompanionCount = Math.max(0, Math.floor(props.pendingCompanionCount ?? 0));
+  const pendingPickRequestCount = Math.max(0, Math.floor(props.pendingPickRequestCount ?? 0));
   const orderWindow = useMemo(() => {
     if (props.order.length <= 7) return props.order.map((slot, index) => ({ slot, index }));
     const liveIndex = Math.min(Math.max(props.currentPickIndex, 0), props.order.length - 1);
@@ -222,6 +228,16 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
     }
     if (props.activeSeatId && currentOrder?.teamId === props.activeSeatId) soundPlayer.play('turn');
   }, [coverPrivateSeat, currentOrder?.teamId, props.activeSeatId, props.candidate?.id, props.currentPickIndex, props.hotseatNextName, soundPlayer]);
+
+  useEffect(() => {
+    if (props.currentPickIndex > priorPublicPickIndex.current) soundPlayer.play('drafted');
+    priorPublicPickIndex.current = props.currentPickIndex;
+  }, [props.currentPickIndex, soundPlayer]);
+
+  useEffect(() => {
+    if (pendingPickRequestCount > priorPendingPickRequestCount.current) soundPlayer.play('request');
+    priorPendingPickRequestCount.current = pendingPickRequestCount;
+  }, [pendingPickRequestCount, soundPlayer]);
 
   useEffect(() => {
     const nextRevision = props.livePickMoveRevision ?? props.tradeRevision ?? 0;
@@ -447,7 +463,10 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           </button> : null}
           {!props.consolidatedMlb && !draftComplete && props.tradeGuide && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'GUIDE' ? null : 'GUIDE')}>THE GUIDE</button>}
           {!draftComplete && props.commissionerTrade && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'TRADE' ? null : 'TRADE')}>TRADE</button>}
-          {!draftComplete && props.companionApproval && <button className="ballpark-press-button ballpark-press-sm ballpark-press-default min-h-11" onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}>COMPANIONS</button>}
+          {!draftComplete && props.companionApproval && <button
+            className={`ballpark-press-button ballpark-press-sm min-h-11 ${pendingCompanionCount > 0 ? 'ballpark-press-gold' : 'ballpark-press-default'}`}
+            onClick={() => setOpenRoomTool((current) => current === 'COMPANIONS' ? null : 'COMPANIONS')}
+          >COMPANIONS{pendingCompanionCount > 0 ? ` ${pendingCompanionCount}` : ''}</button>}
         </div>
       </header>
 
@@ -530,7 +549,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
         </div>
       </section>
 
-      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,30vw)]" data-testid="room-layout">
+      <div className="snake-room-layout grid min-w-0 gap-5" data-testid="room-layout">
         <section className="ballpark-panel min-w-0 overflow-x-clip overflow-y-visible" aria-label="Private seat">
           <div
             className="ballpark-panel-strip sticky top-0 z-20 mb-3 flex min-h-11 items-center justify-between gap-3"
@@ -565,7 +584,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           ) : !props.activeSeatId ? <p>NO SEAT IS ACTIVE.</p> : revealed && !effectivePendingSeatId ? (
             props.consolidatedMlb ? (
               <div
-                className="snake-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
+                className="snake-private-workspace snake-host-private-workspace grid h-[calc(100vh-5rem)] min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-x-clip overflow-y-visible [overflow-anchor:none] lg:h-[calc(100vh-8rem)] lg:grid-cols-[minmax(280px,0.8fr)_minmax(360px,1.2fr)] lg:grid-rows-none"
                 data-testid="private-workspace-layout"
               >
                 <div className="snake-selected-pane sticky top-3 z-10 max-h-[42vh] min-w-0 self-start overflow-y-auto overscroll-contain [overflow-anchor:none] lg:top-20 lg:max-h-[calc(100vh-22rem)]" data-testid="selected-player-pane">
@@ -583,7 +602,7 @@ export function SnakeDraftRoomView(props: SnakeDraftRoomViewProps) {
           )}
         </section>
 
-        <aside className="space-y-5 self-start xl:sticky xl:top-4">
+        <aside className="snake-room-aside space-y-5 self-start">
           <section className="ballpark-panel" aria-label="Draft ritual">
           <div className="ballpark-panel-strip">
             <span className="font-bold">{state.phase}</span>

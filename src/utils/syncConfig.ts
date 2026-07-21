@@ -58,10 +58,8 @@ export const SYNC_REGISTRY: Record<string, Record<string, string | string[]>> = 
     rulesPresets: 'id',
     teamRosters: 'teamId',
     registeredPools: 'leagueId',
-    mlbDraftSessions: 'id',
     scoutProfiles: 'id',
     startupDraftSessions: 'id',
-    snakeSeatBoards: 'id',
     auctionSessions: 'id',
   },
   'kbl-event-log': {
@@ -202,6 +200,21 @@ export function shouldSyncLocalStorageKey(key: string): boolean {
     SYNCED_LOCAL_STORAGE_KEYS.includes(key) ||
     SYNCED_LOCAL_STORAGE_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
+}
+
+/**
+ * Return true only for stores owned by the generic account backup service.
+ * Active snake rooms and private seat boards use the dedicated live-room
+ * service. They must not enter the generic backup queue.
+ */
+export function shouldUseGenericSyncStore(dbName: string, storeName: string): boolean {
+  return Object.prototype.hasOwnProperty.call(SYNC_REGISTRY[dbName] ?? {}, storeName);
+}
+
+/** Return true for live-draft stores that no longer use generic backup sync. */
+export function isRetiredGenericSyncStore(dbName: string, storeName: string): boolean {
+  return dbName === 'kbl-league-builder'
+    && (storeName === 'mlbDraftSessions' || storeName === 'snakeSeatBoards');
 }
 
 /**

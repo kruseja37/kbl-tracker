@@ -13,6 +13,17 @@ import { persistScoutHiresForLeague } from "../../app/utils/draftStaffingPersist
 
 const mockNavigate = vi.fn();
 const mockRefresh = vi.fn(async () => undefined);
+const mockUpdateTeam = vi.fn(async () => undefined);
+const storageMocks = vi.hoisted(() => ({
+  updateMlbDraftSessionAtomically: vi.fn(async (
+    _leagueId: string,
+    _seasonNumber: number,
+    update: (session: Record<string, unknown>) => Record<string, unknown>,
+  ) => update({
+    id: "completed-mlb-snake",
+    snakeSetup: { clubs: [{ teamId: "team-a", hotseat: true }] },
+  })),
+}));
 
 vi.mock("react-router", () => ({
   useNavigate: () => mockNavigate,
@@ -35,6 +46,7 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
   return {
     ...actual,
     getMlbDraftSession: vi.fn(async () => ({ id: "completed-mlb-snake" })),
+    updateMlbDraftSessionAtomically: storageMocks.updateMlbDraftSessionAtomically,
     getScoutProfilesForLeague: vi.fn(async () => [
       {
         id: "live-scout-league-page-1",
@@ -109,6 +121,7 @@ function mockLeagueData(league = makeLeague(), team = makeTeam("team-a")) {
     isLoading: false,
     error: null,
     refresh: mockRefresh,
+    updateTeam: mockUpdateTeam,
   } as unknown as UseLeagueBuilderDataReturn);
 }
 
@@ -215,5 +228,51 @@ describe("ScoutHire", () => {
     expect(first[0].weaknesses).toEqual(["power", "contact"]);
     expect(different[0].specialties).toEqual(["power"]);
     expect(different[0].weaknesses).toEqual(["contact", "speed"]);
+  });
+
+  test("blocks false Generalist scouts and repairs a missing frozen farm identity", async () => {
+    mockLeagueData(
+      makeLeague({ draftFormat: "snake" }),
+      { ...makeTeam("team-a"), farmArchetypeKey: undefined },
+    );
+    render(<ScoutHire />);
+
+    expect(await screen.findByText("FARM IDENTITIES MISSING")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Confirm Scouts/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("GENERALIST")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: /Farm identity for Page Caps/i }), {
+      target: { value: "web-gems" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "SAVE FARM IDENTITIES" }));
+
+    await waitFor(() => expect(storageMocks.updateMlbDraftSessionAtomically).toHaveBeenCalledOnce());
+    expect(mockUpdateTeam).toHaveBeenCalledWith(expect.objectContaining({
+      id: "team-a",
+      farmArchetypeKey: "web-gems",
+    }));
+    expect(mockRefresh).toHaveBeenCalled();
+    const update = storageMocks.updateMlbDraftSessionAtomically.mock.calls[0][2];
+    expect(update({
+      snakeSetup: { clubs: [{ teamId: "team-a", hotseat: true }] },
+    })).toEqual(expect.objectContaining({
+      snakeSetup: {
+        clubs: [expect.objectContaining({ teamId: "team-a", farmArchetypeId: "web-gems" })],
+      },
+    }));
+  });
+
+  test("does not apply the Snake legacy repair gate to an auction scout reveal", async () => {
+    mockLeagueData(
+      makeLeague({ draftFormat: "auction" }),
+      { ...makeTeam("team-a"), farmArchetypeKey: undefined },
+    );
+    render(<ScoutHire />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Confirm Scouts/i })).toBeEnabled();
+    });
+    expect(screen.getByText("GENERALIST")).toBeInTheDocument();
+    expect(screen.queryByText("FARM IDENTITIES MISSING")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "SAVE FARM IDENTITIES" })).not.toBeInTheDocument();
   });
 });

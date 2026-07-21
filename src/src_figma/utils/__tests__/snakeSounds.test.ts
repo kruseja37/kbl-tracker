@@ -11,12 +11,14 @@ import {
 describe('snake sounds', () => {
   beforeEach(() => vi.restoreAllMocks());
 
-  it('maps only the five allowed sounds to room events', () => {
+  it('maps the room sounds, including distinct public-pick and companion-request cues', () => {
     expect(snakeSoundForRoomEvent('NAVIGATE')).toBe('nav');
     expect(snakeSoundForRoomEvent('PICK_RECORDED')).toBe('gavel');
     expect(snakeSoundForRoomEvent('YOUR_TURN')).toBe('turn');
     expect(snakeSoundForRoomEvent('PRIVATE_SNIPE')).toBe('snipe');
     expect(snakeSoundForRoomEvent('DANGER')).toBe('danger');
+    expect(snakeSoundForRoomEvent('PLAYER_DRAFTED')).toBe('drafted');
+    expect(snakeSoundForRoomEvent('COMPANION_PICK_SENT')).toBe('request');
   });
 
   it('uses WebAudio when enabled and stays silent when disabled', () => {

@@ -38,6 +38,8 @@ export function SelectedPlayerCard(props: {
   teamName: string;
   onOptimizeAround?: () => void;
   onKeep?: () => void;
+  zeroInterest?: boolean;
+  onSetZeroInterest?: (zeroInterest: boolean) => void;
   /** Legacy preview seam only. Production undo is owned by the revision-safe board transaction banner. */
   onRevert?: () => void;
   decision?: SnakeDraftDecision | null;
@@ -58,6 +60,18 @@ export function SelectedPlayerCard(props: {
   const ratings = profile.fullRatings
     ? RATINGS.flatMap(([key, label]) => profile.fullRatings![key] !== 0 ? [{ key, label, value: profile.fullRatings![key] }] : [])
     : [];
+  const nextPickRiskReason = props.candidate.riskReason
+    ?? (props.candidate.hasNextPick ? props.candidate.risk.replaceAll('_', ' ') : '—');
+  const nextPickRiskText = props.candidate.riskPending
+    ? 'CALCULATING'
+    : props.candidate.riskUnavailable
+      ? 'UNAVAILABLE'
+      : props.candidate.risk === 'LIKELY_GONE'
+        ? `LIKELY GONE · ${nextPickRiskReason}`
+        : nextPickRiskReason;
+  const likelyGone = !props.candidate.riskPending
+    && !props.candidate.riskUnavailable
+    && props.candidate.risk === 'LIKELY_GONE';
   const consequence = props.consequence;
   const decision = props.decision?.playerId === props.candidate.id ? props.decision : null;
   const decisionLabel = decision?.kind === 'TAKE_NOW'
@@ -130,14 +144,23 @@ export function SelectedPlayerCard(props: {
           <div key={rating.key} className="border-2 border-[var(--ballpark-panel-border)] p-1 text-center">
             <p className="text-[9px] font-bold text-[var(--ballpark-brass)]">{rating.label}</p>
             <strong className="text-xs">{rating.value}</strong>
+            <span className="mt-1 block h-1.5 bg-[var(--ballpark-page-bg)]" aria-hidden="true">
+              <span
+                className="block h-full bg-[var(--ballpark-brass)]"
+                style={{ width: `${Math.max(0, Math.min(100, rating.value))}%` }}
+              />
+            </span>
           </div>
         ))}
       </div>
       {profile.fullRatings?.arsenal.length ? <p className="mt-2 text-xs font-bold">ARSENAL · {profile.fullRatings.arsenal.join(' · ')}</p> : null}
+      <p className={`mt-3 border-2 border-[var(--ballpark-panel-border)] p-2 text-[10px] font-black ${likelyGone ? 'text-[var(--ballpark-status-red-bright)]' : ''}`} data-testid="selected-player-next-pick-risk">
+        NEXT PICK · {nextPickRiskText}
+      </p>
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-        <p><span className="block text-[9px] font-bold">SALARY</span><strong>${Math.round(props.candidate.iv).toLocaleString()}</strong></p>
-        <p><span className="block text-[9px] font-bold">TAX IMPACT</span><strong>{props.candidate.consequencesKnown === false ? '—' : `${props.candidate.marginalTax >= 0 ? '+' : '−'}$${Math.round(Math.abs(props.candidate.marginalTax)).toLocaleString()}`}</strong></p>
-        <p><span className="block text-[9px] font-bold">TRUE COST</span><strong>{props.candidate.consequencesKnown === false ? '—' : `$${Math.round(props.candidate.trueCost).toLocaleString()}`}</strong></p>
+        <p><span className="block text-[9px] font-bold">SALARY</span><strong>${Math.round(props.candidate.salary ?? props.candidate.iv).toLocaleString()}</strong></p>
+        <p><span className="block text-[9px] font-bold">TAX IMPACT</span><strong>{props.candidate.drafted ? 'SEE TAX CORE' : props.candidate.consequencesKnown === false ? '—' : `${props.candidate.marginalTax >= 0 ? '+' : '−'}$${Math.round(Math.abs(props.candidate.marginalTax)).toLocaleString()}`}</strong></p>
+        <p><span className="block text-[9px] font-bold">TRUE COST</span><strong>{props.candidate.drafted ? '—' : props.candidate.consequencesKnown === false ? '—' : `$${Math.round(props.candidate.trueCost).toLocaleString()}`}</strong></p>
         <p><span className="block text-[9px] font-bold">MY BOARD</span><strong>{consequence?.status === 'already-on-board' ? 'ON BOARD' : consequence?.status === 'ready' ? `REPLACES ${consequence.displacedSlotId}` : '—'}</strong></p>
       </div>
       {consequence?.status === 'ready' ? <div className="mt-3 border-t-4 border-[var(--ballpark-panel-border)] pt-3" data-testid="selected-player-consequence">
@@ -150,19 +173,28 @@ export function SelectedPlayerCard(props: {
           <span>ALL-IN</span><strong>{money(consequence.before.ledger.allIn)}</strong><strong>{money(consequence.after.ledger.allIn)}</strong>
           <span>LEFT</span><strong>{money(consequence.before.ledger.moneyLeft)}</strong><strong>{money(consequence.after.ledger.moneyLeft)}</strong>
           <span>LEGAL FINISH</span><strong>{legalFinishLabel(consequence.before.legalFinish)}</strong><strong>{legalFinishLabel(consequence.after.legalFinish)}</strong>
+          <span>FINAL SALARY</span><strong>{money(consequence.before.legalFinish.projectedSalary ?? null)}</strong><strong>{money(consequence.after.legalFinish.projectedSalary ?? null)}</strong>
+          <span>FINAL TAX</span><strong>{money(consequence.before.legalFinish.projectedTax ?? null)}</strong><strong>{money(consequence.after.legalFinish.projectedTax ?? null)}</strong>
+          <span>FINAL ALL-IN</span><strong>{money(consequence.before.legalFinish.projectedAllIn ?? null)}</strong><strong>{money(consequence.after.legalFinish.projectedAllIn ?? null)}</strong>
         </div>
         <div className="mt-2 grid grid-cols-1 gap-1 text-[10px] sm:grid-cols-5" aria-label="Selected player chemistry consequences">
           {consequence.before.chemistry.map((row, index) => {
             const after = consequence.after.chemistry[index];
-            return <p key={row.family} className="border-2 border-[var(--ballpark-panel-border)] p-1 font-black">{row.word.toUpperCase()} {row.count ?? '—'} · {row.tier ?? '—'} → {after?.count ?? '—'} · {after?.tier ?? '—'}</p>;
+            return <p key={row.family} className="border-2 border-[var(--ballpark-panel-border)] p-1 font-black">{row.word.toUpperCase()} {row.count ?? '—'} · {row.tier ?? '—'} → {after?.count ?? '—'} · {after?.tier ?? '—'}<span className="block opacity-75">TRAITS {row.traitCount ?? '—'} → {after?.traitCount ?? '—'}</span></p>;
           })}
         </div>
-      </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : <p className="mt-3 font-black">BOARD CONSEQUENCES —</p>}
+      </div> : consequence?.status === 'already-on-board' ? <p className="mt-3 border-2 border-[var(--ballpark-status-green)] p-2 font-black text-[var(--ballpark-status-green)]">ON MY BOARD</p> : null}
       <div className="sticky bottom-0 -mx-3 -mb-3 mt-3 flex flex-wrap gap-2 border-t-4 border-[var(--ballpark-brass)] bg-[var(--ballpark-well)] p-3">
         {decision?.kind === 'TRADE_TO_PICK' ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" onClick={() => props.onTradeDecision?.(decision)}>TRADE TO #{decision.targetPick}</button> : null}
         {decisionLabel ? <span className="flex min-h-11 items-center border-2 border-[var(--ballpark-brass)] px-3 text-xs font-black" data-testid="selected-player-decision">{decisionLabel}</span> : null}
         {props.onOptimizeAround ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-action min-h-11" onClick={props.onOptimizeAround}>OPTIMIZE AROUND</button> : null}
         {consequence?.status === 'ready' && props.onKeep ? <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold min-h-11" onClick={props.onKeep}>KEEP ON MY BOARD</button> : null}
+        {props.onSetZeroInterest && !props.candidate.drafted ? <button
+          type="button"
+          className={`ballpark-press-button ballpark-press-sm min-h-11 ${props.zeroInterest ? 'ballpark-press-action' : 'ballpark-press-default'}`}
+          aria-pressed={props.zeroInterest}
+          onClick={() => props.onSetZeroInterest?.(!props.zeroInterest)}
+        >{props.zeroInterest ? 'RESTORE INTEREST' : 'ZERO INTEREST'}</button> : null}
       </div>
       </div>
     </section>

@@ -33,6 +33,7 @@ import {
   saveRegisteredPool,
   saveMlbDraftRoomSession,
   saveMlbDraftSession,
+  SNAKE_SEAT_BOARD_AUTHORITY_FORMAT,
   updateMlbDraftSessionAtomically,
   type LeagueBuilderMlbDraftSession,
   type FarmSeatBoardRecord,
@@ -165,6 +166,20 @@ async function getRawSessionAndBoards(sessionId: string): Promise<string> {
 
 function seatBoardStoreId(sessionId: string, phase: 'MLB' | 'FARM', teamId: string): string {
   return `${sessionId}::${phase.toLowerCase()}-seat::${teamId}`;
+}
+
+function legacyRawSession(
+  session: LeagueBuilderMlbDraftSession,
+): LeagueBuilderMlbDraftSession {
+  const legacy = structuredClone(session);
+  delete legacy.seatBoardAuthorityFormat;
+  return legacy;
+}
+
+function expectStandaloneAuthority(session: LeagueBuilderMlbDraftSession | undefined): void {
+  expect(session?.seatBoardAuthorityFormat).toBe(SNAKE_SEAT_BOARD_AUTHORITY_FORMAT);
+  expect(session).not.toHaveProperty('seatBoards');
+  expect(session).not.toHaveProperty('farmSeatBoards');
 }
 
 async function resetStorage(): Promise<void> {
@@ -489,13 +504,105 @@ describe('PERFROOM room-session persistence', () => {
     })).rejects.toThrow('invalid next revision');
   });
 
+  test('an independent seat-board patch queues only its board row and never an older whole-room snapshot', async () => {
+    await saveMlbDraftSession({
+      ...sessionWithFrozenClubs('team-a'),
+      seatBoards: { 'team-a': board(1, 'embedded-board-1') },
+    });
+    syncMockState.upsert.mockClear();
+    syncMockState.suppressed = false;
+
+    const saved = await patchMlbDraftSessionSeatBoard({
+      leagueId: 'perfroom-league',
+      teamId: 'team-a',
+      board: board(2, 'companion-board-2'),
+      expectedBoardRevision: 1,
+    });
+
+    expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'companion-board-2'));
+    expect(syncMockState.upsert).toHaveBeenCalledWith(
+      'kbl-league-builder',
+      'snakeSeatBoards',
+      expect.stringContaining('::mlb-seat::team-a'),
+      expect.objectContaining({
+        teamId: 'team-a',
+        revision: 2,
+        board: board(2, 'companion-board-2'),
+      }),
+    );
+    expect(syncMockState.upsert).not.toHaveBeenCalledWith(
+      'kbl-league-builder',
+      'mlbDraftSessions',
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  test('an embedded-only legacy board is staged before the room is stripped', async () => {
+    const legacy = {
+      ...session(),
+      seatBoards: { 'team-a': board(12, 'legacy-only') },
+    };
+    await putRawRecord('mlbDraftSessions', legacy);
+    syncMockState.upsert.mockClear();
+    syncMockState.suppressed = false;
+
+    const loaded = await getMlbDraftSession(legacy.leagueId, legacy.seasonNumber);
+
+    expect(loaded?.seatBoards?.['team-a']).toEqual(board(12, 'legacy-only'));
+    const rawSession = await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', legacy.id);
+    const rawBoard = await getRawRecord<SnakeSeatBoardStoreRecord>(
+      'snakeSeatBoards',
+      seatBoardStoreId(legacy.id, 'MLB', 'team-a'),
+    );
+    expectStandaloneAuthority(rawSession);
+    expect(rawBoard?.board).toEqual(board(12, 'legacy-only'));
+    const boardSyncOrder = syncMockState.upsert.mock.invocationCallOrder.find((_, index) => (
+      syncMockState.upsert.mock.calls[index]?.[1] === 'snakeSeatBoards'
+    ));
+    const roomSyncOrder = syncMockState.upsert.mock.invocationCallOrder.find((_, index) => (
+      syncMockState.upsert.mock.calls[index]?.[1] === 'mlbDraftSessions'
+    ));
+    expect(boardSyncOrder!).toBeLessThan(roomSyncOrder!);
+  });
+
+  test('standalone-only and equal-identical legacy boards migrate without a second authority', async () => {
+    const standaloneOnly = session();
+    const standaloneId = seatBoardStoreId(standaloneOnly.id, 'MLB', 'team-a');
+    await putRawRecord('mlbDraftSessions', standaloneOnly);
+    await putRawRecord('snakeSeatBoards', {
+      id: standaloneId,
+      sessionId: standaloneOnly.id,
+      leagueId: standaloneOnly.leagueId,
+      seasonNumber: standaloneOnly.seasonNumber,
+      teamId: 'team-a',
+      phase: 'MLB',
+      board: board(7, 'standalone-only'),
+      revision: 7,
+      lastModified: standaloneOnly.lastModified,
+    } satisfies SnakeSeatBoardStoreRecord);
+
+    expect((await getMlbDraftSession(standaloneOnly.leagueId, 1))?.seatBoards?.['team-a'])
+      .toEqual(board(7, 'standalone-only'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', standaloneOnly.id));
+
+    const equalIdentical = {
+      ...legacyRawSession((await getMlbDraftSession(standaloneOnly.leagueId, 1))!),
+      seatBoards: { 'team-a': board(7, 'standalone-only') },
+    };
+    await putRawRecord('mlbDraftSessions', equalIdentical);
+    expect((await getMlbDraftSession(equalIdentical.leagueId, 1))?.seatBoards?.['team-a'])
+      .toEqual(board(7, 'standalone-only'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', equalIdentical.id));
+  });
+
   test('embedded rev2 beats standalone rev1 and the successful rev3 write converges both copies', async () => {
     const stored = await saveMlbDraftSession({
       ...session(),
       seatBoards: { 'team-a': board(1, 'standalone-old') },
     });
     await putRawRecord('mlbDraftSessions', {
-      ...stored,
+      ...legacyRawSession(stored),
       seatBoards: { 'team-a': board(2, 'embedded-new') },
     });
 
@@ -513,7 +620,7 @@ describe('PERFROOM room-session persistence', () => {
       'snakeSeatBoards',
       seatBoardStoreId(stored.id, 'MLB', 'team-a'),
     );
-    expect(rawSession?.seatBoards?.['team-a']).toEqual(board(3, 'converged'));
+    expectStandaloneAuthority(rawSession);
     expect(rawBoard?.board).toEqual(board(3, 'converged'));
   });
 
@@ -523,6 +630,7 @@ describe('PERFROOM room-session persistence', () => {
       seatBoards: { 'team-a': board(1, 'embedded-old') },
     });
     const rowId = seatBoardStoreId(stored.id, 'MLB', 'team-a');
+    await putRawRecord('mlbDraftSessions', legacyRawSession(stored));
     const rawBoard = await getRawRecord<Record<string, unknown>>('snakeSeatBoards', rowId);
     await putRawRecord('snakeSeatBoards', {
       ...rawBoard,
@@ -541,7 +649,7 @@ describe('PERFROOM room-session persistence', () => {
 
     const rawSession = await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stored.id);
     const convergedRow = await getRawRecord<{ board: SnakeSeatBoardRecord }>('snakeSeatBoards', rowId);
-    expect(rawSession?.seatBoards?.['team-a']).toEqual(board(3, 'converged'));
+    expectStandaloneAuthority(rawSession);
     expect(convergedRow?.board).toEqual(board(3, 'converged'));
   });
 
@@ -551,6 +659,7 @@ describe('PERFROOM room-session persistence', () => {
       seatBoards: { 'team-a': board(2, 'embedded') },
     });
     const rowId = seatBoardStoreId(stored.id, 'MLB', 'team-a');
+    await putRawRecord('mlbDraftSessions', legacyRawSession(stored));
     const rawBoard = await getRawRecord<Record<string, unknown>>('snakeSeatBoards', rowId);
     await putRawRecord('snakeSeatBoards', {
       ...rawBoard,
@@ -587,8 +696,7 @@ describe('PERFROOM room-session persistence', () => {
     const saved = await saveMlbDraftSession({ ...stale, paused: true });
 
     expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'standalone-new'));
-    expect((await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stale.id))?.seatBoards?.['team-a'])
-      .toEqual(board(2, 'standalone-new'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stale.id));
     expect((await getRawRecord<SnakeSeatBoardStoreRecord>('snakeSeatBoards', rowId))?.board)
       .toEqual(board(2, 'standalone-new'));
   });
@@ -614,8 +722,7 @@ describe('PERFROOM room-session persistence', () => {
     const saved = await saveMlbDraftSession(candidate);
 
     expect(saved.seatBoards?.['team-a']).toEqual(board(2, 'standalone-first'));
-    expect((await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', candidate.id))?.seatBoards?.['team-a'])
-      .toEqual(board(2, 'standalone-first'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', candidate.id));
     expect((await getRawRecord<SnakeSeatBoardStoreRecord>('snakeSeatBoards', rowId))?.board)
       .toEqual(board(2, 'standalone-first'));
   });
@@ -626,6 +733,7 @@ describe('PERFROOM room-session persistence', () => {
       seatBoards: { 'team-a': board(2, 'embedded') },
     });
     const rowId = seatBoardStoreId(stored.id, 'MLB', 'team-a');
+    await putRawRecord('mlbDraftSessions', legacyRawSession(stored));
     const rawBoard = await getRawRecord<SnakeSeatBoardStoreRecord>('snakeSeatBoards', rowId);
     await putRawRecord('snakeSeatBoards', {
       ...rawBoard,
@@ -663,7 +771,8 @@ describe('PERFROOM room-session persistence', () => {
       farmSeatBoards: { 'team-a': farmBoard(1, 'wrong-phase') },
     }))).rejects.toThrow(/MLB phase/i);
 
-    const completed = { ...base, currentPickIndex: base.pickOrder.length };
+    const rawBase = (await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', base.id))!;
+    const completed = { ...rawBase, currentPickIndex: base.pickOrder.length };
     await putRawRecord('mlbDraftSessions', completed);
     const sessionBefore = await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', base.id);
     const rowId = seatBoardStoreId(base.id, 'MLB', 'team-a');
@@ -853,8 +962,9 @@ describe('PERFROOM room-session persistence', () => {
       ...session(),
       seatBoards: { 'team-a': board(1, 'authoritative') },
     });
+    const rawInitial = (await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', initial.id))!;
     await putRawRecord('mlbDraftSessions', {
-      ...initial,
+      ...rawInitial,
       draftManifest: {},
     });
     const rawBefore = await getRawSessionAndBoards(initial.id);
@@ -922,7 +1032,13 @@ describe('PERFROOM room-session persistence', () => {
       seatBoards: { 'team-a': board(1, 'authoritative') },
     });
     const authoritative = prepare(initial);
-    if (authoritative !== initial) await putRawRecord('mlbDraftSessions', authoritative);
+    if (authoritative !== initial) {
+      const rawInitial = (await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', initial.id))!;
+      await putRawRecord('mlbDraftSessions', {
+        ...rawInitial,
+        currentPickIndex: authoritative.currentPickIndex,
+      });
+    }
     const rawBefore = await getRawSessionAndBoards(initial.id);
 
     await expect(updateMlbDraftSessionAtomically(initial.leagueId, initial.seasonNumber, (working) => {
@@ -1055,14 +1171,13 @@ describe('PERFROOM room-session persistence', () => {
       expectedBoardRevision: 2,
       board: farmBoard(3, 'converged'),
     });
-    expect((await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stored.id))?.farmSeatBoards?.['team-a'])
-      .toEqual(farmBoard(3, 'converged'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stored.id));
     expect((await getRawRecord<{ board: FarmSeatBoardRecord }>('snakeSeatBoards', rowId))?.board)
       .toEqual(farmBoard(3, 'converged'));
 
     const rawSession = await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stored.id);
     await putRawRecord('mlbDraftSessions', {
-      ...rawSession,
+      ...legacyRawSession({ ...stored, ...rawSession }),
       farmSeatBoards: { 'team-a': farmBoard(3, 'embedded-conflict') },
     });
     await expect(getMlbDraftSession(stored.leagueId, 2)).rejects.toThrow(/corrupt/i);
@@ -1485,8 +1600,7 @@ describe('PERFROOM room-session persistence', () => {
     const saved = await saveMlbDraftSession({ ...stale, paused: true });
 
     expect(saved.farmSeatBoards?.['team-a']).toEqual(farmBoard(2, 'standalone-new'));
-    expect((await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stale.id))?.farmSeatBoards?.['team-a'])
-      .toEqual(farmBoard(2, 'standalone-new'));
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', stale.id));
     expect((await getRawRecord<SnakeSeatBoardStoreRecord>('snakeSeatBoards', rowId))?.board)
       .toEqual(farmBoard(2, 'standalone-new'));
   });
@@ -1538,7 +1652,8 @@ describe('PERFROOM room-session persistence', () => {
       expectedBoardRevision: 1, board: farmBoard(2, 'not-frozen'),
     })).rejects.toThrow(/frozen FARM snake clubs/i);
 
-    await putRawRecord('mlbDraftSessions', { ...farm, currentPickIndex: 1 });
+    const rawFarm = (await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', farm.id))!;
+    await putRawRecord('mlbDraftSessions', { ...rawFarm, currentPickIndex: 1 });
     await expect(patchMlbDraftSessionFarmSeatBoard({
       leagueId: farm.leagueId, seasonNumber: 2, teamId: 'team-a',
       expectedBoardRevision: 1, board: farmBoard(2, 'after-complete'),
@@ -1595,6 +1710,62 @@ describe('PERFROOM room-session persistence', () => {
     expect(stored?.completedPicks).toEqual([expect.objectContaining({ playerId: 'picked' })]);
     expect(stored?.seatBoards?.['team-a']).toEqual(board(2, 'a-2'));
     expect(stored?.seatBoards?.['team-b']).toEqual(board(2, 'b-2'));
+  });
+
+  test('a companion rev12-to-13 edit and a Hotseat rev12-to-13 pick cannot create two board authorities', async () => {
+    const base = await saveMlbDraftSession({
+      ...session(),
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-a' },
+        { round: 1, pick: 2, teamId: 'team-a' },
+      ],
+      seatBoards: { 'team-a': board(12, 'shared-rev-12') },
+    });
+
+    const results = await Promise.allSettled([
+      patchMlbDraftSessionSeatBoard({
+        leagueId: base.leagueId,
+        teamId: 'team-a',
+        board: board(13, 'companion-rev-13'),
+        expectedBoardRevision: 12,
+      }),
+      saveMlbDraftRoomSession({
+        ...base,
+        completedPicks: [{ round: 1, pick: 1, teamId: 'team-a', playerId: 'drafted-player' }],
+        currentPickIndex: 1,
+        seatBoards: { 'team-a': board(13, 'hotseat-rev-13') },
+        revision: 1,
+      }, 0),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1);
+
+    let current = (await getMlbDraftSession(base.leagueId, 1))!;
+    const rawAfterRace = await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', base.id);
+    expectStandaloneAuthority(rawAfterRace);
+    expect((await getRawRecord<SnakeSeatBoardStoreRecord>(
+      'snakeSeatBoards',
+      seatBoardStoreId(base.id, 'MLB', 'team-a'),
+    ))?.board).toEqual(current.seatBoards?.['team-a']);
+
+    if (current.completedPicks.length === 0) {
+      current = await saveMlbDraftRoomSession({
+        ...current,
+        completedPicks: [{ round: 1, pick: 1, teamId: 'team-a', playerId: 'drafted-player' }],
+        currentPickIndex: 1,
+        seatBoards: { 'team-a': board(14, 'hotseat-retry-rev-14') },
+        revision: 1,
+      }, 0);
+    }
+
+    expect(current.completedPicks).toEqual([expect.objectContaining({ playerId: 'drafted-player' })]);
+    expect(current.currentPickIndex).toBe(1);
+    expectStandaloneAuthority(await getRawRecord<LeagueBuilderMlbDraftSession>('mlbDraftSessions', base.id));
+    expect((await getRawRecord<SnakeSeatBoardStoreRecord>(
+      'snakeSeatBoards',
+      seatBoardStoreId(base.id, 'MLB', 'team-a'),
+    ))?.board).toEqual(current.seatBoards?.['team-a']);
   });
 
   test('a stale phone board cannot resurrect a player after the main room reconciles that seat', async () => {

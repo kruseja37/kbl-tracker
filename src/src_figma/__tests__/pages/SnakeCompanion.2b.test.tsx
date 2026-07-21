@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   currentSession: null as unknown,
   patchBoard: vi.fn(),
   refresh: vi.fn(async () => undefined),
-  pull: vi.fn(async () => undefined),
   assistantRequests: [] as Array<{ key: string; input: Record<string, unknown> }>,
   assistantResults: [] as Array<Record<string, unknown>>,
   mainSave: vi.fn(),
@@ -22,6 +21,12 @@ const mocks = vi.hoisted(() => ({
   companionFreshnessRefresh: null as null | (() => void | Promise<void>),
   mainFreshnessRefresh: null as null | (() => void | Promise<void>),
   freshData: null as null | Record<string, unknown>,
+  liveIntents: [] as Array<Record<string, unknown>>,
+  liveIntentSequence: 0,
+  liveAutoResumed: false,
+  liveBoardDesignSlots: null as Array<Record<string, unknown>> | null,
+  soundEvents: [] as string[],
+  forceOpenFinishSafety: false,
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -43,12 +48,289 @@ vi.mock('../../../engines/rosterIntelligencePayload', async (importOriginal) => 
       .filter((row) => row.playerId !== mocks.omitContextPlayerId),
   };
 });
-vi.mock('../../../utils/syncEngine', () => ({ syncEngine: { pull: mocks.pull } }));
+vi.mock('../../app/components/snake/companion/useSnakeLiveCompanionRoom', async () => {
+  const React = await import('react');
+  const { buildSnakeLiveCatalog } = await import('../../../utils/snakeLiveCatalog');
+
+  function roomId(source: LeagueBuilderMlbDraftSession): string {
+    return `live:${source.id}`;
+  }
+
+  function liveClaims(source: LeagueBuilderMlbDraftSession) {
+    const id = roomId(source);
+    return (source.snakeCompanions?.claims ?? []).map((claim) => ({
+      id: claim.claimId ?? `claim:${claim.deviceId}:${claim.teamId}`,
+      roomId: id,
+      requestKey: claim.claimId ?? `claim:${claim.deviceId}:${claim.teamId}`,
+      deviceId: claim.deviceId,
+      gmName: claim.gmName,
+      teamId: claim.teamId,
+      status: claim.status,
+      revision: claim.claimVersion ?? 1,
+      createdAt: source.createdDate,
+      resolvedAt: claim.status === 'pending' ? null : source.lastModified,
+    }));
+  }
+
+  function liveBoards(source: LeagueBuilderMlbDraftSession) {
+    const id = roomId(source);
+    return Object.fromEntries(Object.entries(source.seatBoards ?? {}).map(([teamId, record]) => [teamId, {
+      roomId: id,
+      teamId,
+      boardRevision: record.revision,
+      board: {
+        ...structuredClone(record) as unknown as Record<string, unknown>,
+        ...(mocks.liveBoardDesignSlots ? { designSlots: structuredClone(mocks.liveBoardDesignSlots) } : {}),
+      },
+      updatedByDeviceId: 'ipad-a',
+      updatedAt: source.lastModified,
+    }]));
+  }
+
+  function publicSession(source: LeagueBuilderMlbDraftSession): LeagueBuilderMlbDraftSession {
+    const publicState = structuredClone(source);
+    delete publicState.seatBoards;
+    delete publicState.farmSeatBoards;
+    return publicState;
+  }
+
+  return {
+    useSnakeLiveCompanionRoom: () => {
+      const [version, setVersion] = React.useState(0);
+      const [disconnected, setDisconnected] = React.useState(false);
+      const [snapshotSource, setSnapshotSource] = React.useState(
+        () => mocks.currentSession as LeagueBuilderMlbDraftSession | null,
+      );
+      const catalogRef = React.useRef<{
+        roomId: string;
+        catalogRevision: number;
+        catalog: Record<string, unknown>;
+        createdAt: string;
+      } | null>(null);
+      const refresh = React.useCallback(async () => {
+        await mocks.refresh();
+        setSnapshotSource(mocks.currentSession as LeagueBuilderMlbDraftSession | null);
+        setVersion((value) => value + 1);
+      }, []);
+
+      React.useEffect(() => {
+        const refreshCurrent = async () => {
+          setSnapshotSource(mocks.currentSession as LeagueBuilderMlbDraftSession | null);
+          setVersion((value) => value + 1);
+        };
+        mocks.companionFreshnessRefresh = refreshCurrent;
+        return () => {
+          if (mocks.companionFreshnessRefresh === refreshCurrent) mocks.companionFreshnessRefresh = null;
+        };
+      }, []);
+
+      const source = disconnected ? null : snapshotSource;
+      if (source && !catalogRef.current) {
+        const selectedIds = new Set(source.snakeSetup?.poolPlayerIds ?? pool.players.map((row) => row.id));
+        catalogRef.current = {
+          roomId: roomId(source),
+          catalogRevision: 1,
+          catalog: buildSnakeLiveCatalog({
+            league,
+            teams,
+            players: mocks.data.players as Player[],
+            registeredPool: {
+              ...pool,
+              players: pool.players.filter((row) => selectedIds.has(row.id)),
+            },
+            activeTeamIds: source.snakeSetup?.clubs.map((club) => club.teamId) ?? league.teamIds,
+            activePoolPlayerIds: source.snakeSetup?.poolPlayerIds ?? [],
+          }),
+          createdAt: source.createdDate,
+        };
+      }
+      const liveSnapshot = React.useMemo(() => {
+        void version;
+        if (!source) return null;
+        const id = roomId(source);
+        const claims = liveClaims(source);
+        return {
+          id,
+          claims,
+          room: {
+            id,
+            ownerUserId: 'owner',
+            sessionId: source.id,
+            roomCode: source.snakeCompanions?.roomCode ?? '',
+            phase: 'MLB' as const,
+            status: source.currentPickIndex >= source.pickOrder.length ? 'complete' as const : 'open' as const,
+            publicRevision: source.revision ?? 0,
+            publicState: {},
+            hostDeviceId: 'host',
+            createdAt: source.createdDate,
+            updatedAt: source.lastModified,
+          },
+          publicSession: publicSession(source),
+          boardsByTeamId: liveBoards(source),
+          intents: [...mocks.liveIntents],
+        };
+      }, [source, version]);
+      if (!source) {
+        return {
+          room: null,
+          catalog: null,
+          activeRoomId: null,
+          publicSession: null,
+          deviceId: disconnected ? null : 'ipad-a',
+          claims: [],
+          intents: [],
+          boardsByTeamId: {},
+          events: [],
+          status: 'idle',
+          subscriptionStatus: null,
+          error: null,
+          working: false,
+          accessReady: false,
+          resumedFromCapability: false,
+          refresh,
+          claimDesk: async () => [],
+          writeBoard: async () => { throw new Error('THE LIVE ROOM IS NOT AVAILABLE.'); },
+          submitIntent: async () => { throw new Error('THE LIVE ROOM IS NOT AVAILABLE.'); },
+          disconnect: async () => setDisconnected(true),
+        };
+      }
+
+      if (!liveSnapshot) throw new Error('THE LIVE ROOM IS NOT AVAILABLE.');
+      const { id, claims, room } = liveSnapshot;
+
+      return {
+        room,
+        catalog: catalogRef.current,
+        activeRoomId: id,
+        publicSession: liveSnapshot.publicSession,
+        deviceId: 'ipad-a',
+        claims,
+        intents: liveSnapshot.intents,
+        boardsByTeamId: liveSnapshot.boardsByTeamId,
+        events: [],
+        status: claims.some((claim) => claim.status === 'approved') ? 'live' : 'waiting',
+        subscriptionStatus: 'SUBSCRIBED',
+        error: null,
+        working: false,
+        accessReady: true,
+        resumedFromCapability: mocks.liveAutoResumed,
+        refresh,
+        claimDesk: async (gmName: string, suppliedRoomCode: string) => {
+          if (suppliedRoomCode !== room.roomCode) throw new Error('ROOM CODE DOES NOT MATCH.');
+          setDisconnected(false);
+          return claims.filter((claim) => claim.gmName === gmName);
+        },
+        writeBoard: async (input: {
+          teamId: string;
+          expectedBoardRevision: number;
+          board: Record<string, unknown>;
+        }) => {
+          const saved = await mocks.patchBoard({
+            deviceId: 'ipad-a',
+            teamId: input.teamId,
+            expectedBoardRevision: input.expectedBoardRevision,
+            board: input.board,
+          }) as LeagueBuilderMlbDraftSession;
+          const record = saved.seatBoards?.[input.teamId];
+          if (!record) throw new Error('THE PRIVATE BOARD WAS NOT SAVED.');
+          setSnapshotSource((current) => current ? {
+            ...current,
+            seatBoards: { ...current.seatBoards, [input.teamId]: record },
+          } : current);
+          setVersion((value) => value + 1);
+          return {
+            roomId: id,
+            teamId: input.teamId,
+            boardRevision: record.revision,
+            board: structuredClone(record) as unknown as Record<string, unknown>,
+            updatedByDeviceId: 'ipad-a',
+            updatedAt: saved.lastModified,
+          };
+        },
+        submitIntent: async (input: {
+          teamId: string;
+          kind: 'pick' | 'trade';
+          expectedRoomRevision?: number;
+          payload: Record<string, unknown>;
+          idempotencyKey?: string;
+        }) => {
+          mocks.liveIntentSequence += 1;
+          const intent = {
+            id: `intent:${mocks.liveIntentSequence}`,
+            roomId: id,
+            idempotencyKey: input.idempotencyKey ?? `intent:${mocks.liveIntentSequence}`,
+            deviceId: 'ipad-a',
+            teamId: input.teamId,
+            kind: input.kind,
+            status: 'pending' as const,
+            intentRevision: 1,
+            expectedRoomRevision: input.expectedRoomRevision ?? room.publicRevision,
+            payload: structuredClone(input.payload),
+            createdAt: source.lastModified,
+            resolvedAt: null,
+          };
+          mocks.liveIntents.push(intent);
+          setVersion((value) => value + 1);
+          return intent;
+        },
+        disconnect: async () => {
+          setDisconnected(true);
+          setVersion((value) => value + 1);
+        },
+      };
+    },
+  };
+});
 vi.mock('../../utils/snakeSounds', () => ({
-  loadSnakeSoundsEnabled: () => false,
+  loadSnakeSoundsEnabled: () => true,
   saveSnakeSoundsEnabled: vi.fn(),
-  createSnakeSoundPlayer: () => ({ play: vi.fn() }),
+  createSnakeSoundPlayer: () => ({ play: (sound: string) => mocks.soundEvents.push(sound) }),
 }));
+vi.mock('../../app/components/snake/desk/useSnakeSelectedConsequences', async () => {
+  const model = await import('../../app/components/snake/desk/snakeDeskIntelligenceModel');
+  return {
+    useSnakeSelectedConsequences: (request: import('../../app/workers/snakeSelectedConsequences.worker').SnakeSelectedConsequencesWorkerRequest | null) => {
+      if (!request) return { status: 'idle', consequenceByPlayerId: new Map() };
+      const results = request.selectedPlayerIds.map((selectedPlayerId) => model.buildSelectedPlayerConsequence({
+        ...request.input,
+        selectedPlayerId,
+      }));
+      return {
+        status: 'ready',
+        consequenceByPlayerId: new Map(results.map((result) => [result.selectedPlayerId, result])),
+      };
+    },
+  };
+});
+vi.mock('../../app/components/snake/desk/useSnakePickFinishSafety', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../app/components/snake/desk/useSnakePickFinishSafety')>();
+  const seating = await import('../../../engines/snakeSeatingProof');
+  return {
+    ...actual,
+    useSnakePickFinishSafety: (request: import('../../app/workers/snakePickFinish.worker').SnakePickFinishWorkerRequest | null) => {
+      if (mocks.forceOpenFinishSafety) {
+        const openRow = (playerId: string) => ({
+          playerId,
+          status: 'OPEN' as const,
+          message: 'FINISH PROOF UNAVAILABLE.',
+          finalSalary: null,
+          finalTax: null,
+          moneyLeft: null,
+        });
+        const rows = new Map((request?.candidatePlayerIds ?? []).map((playerId) => [playerId, openRow(playerId)]));
+        const getKnownRow = rows.get.bind(rows);
+        rows.get = (playerId: string) => getKnownRow(playerId) ?? openRow(playerId);
+        return {
+          status: 'ready',
+          rows,
+        };
+      }
+      if (!request) return { status: 'idle', rows: new Map() };
+      const rows = seating.createSnakePickFinishSafetyClassifier(request)(request.candidatePlayerIds);
+      return { status: 'ready', rows: new Map(rows.map((row) => [row.playerId, row])) };
+    },
+  };
+});
 vi.mock('../../app/components/snake/companion/companionFreshness', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app/components/snake/companion/companionFreshness')>();
   return {
@@ -207,6 +489,8 @@ const league: LeagueTemplate = {
 const teams: Team[] = ['a', 'b'].map((id) => ({
   id, name: `Club ${id.toUpperCase()}`, abbreviation: id.toUpperCase(), location: 'Test', nickname: 'Club',
   colors: { primary: '#234f32', secondary: '#f5d77a' }, stadium: 'Test Park', controlledBy: 'human',
+  mlbArchetypeKey: id === 'a' ? 'bash-brothers' : 'whiteyball',
+  farmArchetypeKey: id === 'a' ? 'web-gems' : 'bomba-squad',
   leagueIds: [league.id], createdDate: '2026-07-12', lastModified: '2026-07-12',
 }));
 
@@ -267,7 +551,15 @@ function session(): LeagueBuilderMlbDraftSession {
       { round: 2, pick: 3, teamId: 'a' }, { round: 2, pick: 4, teamId: 'b' },
     ], completedPicks: [], currentPickIndex: 0,
     revision: 4, seatBoards: { a: board('a-only'), b: board('b-only') },
-    snakeSetup: { poolPlayerIds: players.map((row) => row.id), versionSelections: {}, clubs: [{ teamId: 'a', gmName: 'Alex', hotseat: false }, { teamId: 'b', gmName: 'Blair', hotseat: false }], orderSeed: 'seed' },
+    snakeSetup: {
+      poolPlayerIds: players.map((row) => row.id),
+      versionSelections: {},
+      clubs: [
+        { teamId: 'a', gmName: 'Alex', hotseat: false, archetypeId: 'bash-brothers', farmArchetypeId: 'web-gems' },
+        { teamId: 'b', gmName: 'Blair', hotseat: false, archetypeId: 'whiteyball', farmArchetypeId: 'bomba-squad' },
+      ],
+      orderSeed: 'seed',
+    },
     snakeCompanions: { roomCode: '4821', claims: [{ deviceId: 'ipad-a', gmName: 'Alex', teamId: 'a', status: 'approved' }] },
     createdDate: '2026-07-12', lastModified: '2026-07-12',
   };
@@ -305,12 +597,37 @@ function selectMainTeam(teamId: string): void {
   fireEvent.change(screen.getByRole('combobox', { name: 'TEAM' }), { target: { value: teamId } });
 }
 
+function companionBoardSlot(slotId: SnakeBoardSlotId): HTMLElement {
+  const row = screen.getByTestId('my-board-view').querySelector<HTMLElement>(`[data-board-slot="${slotId}"]`);
+  expect(row).not.toBeNull();
+  return row!;
+}
+
+function sessionWithDualAsSavedFirstBaseman(): LeagueBuilderMlbDraftSession {
+  const source = session();
+  const saved = source.seatBoards!.a;
+  source.seatBoards = {
+    ...source.seatBoards,
+    a: {
+      ...saved,
+      slots: { ...saved.slots, '1B': 'dual' },
+      rankings: {
+        ...saved.rankings,
+        byPosition: {
+          ...saved.rankings.byPosition,
+          '1B': ['dual', 'one-b', 'flex-2'],
+        },
+      },
+    },
+  };
+  return source;
+}
+
 describe('SNAKE-MOCK-2B companion board parity', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('kbl-snake-companion-device-id', 'ipad-a');
     mocks.patchBoard.mockReset();
-    mocks.pull.mockClear();
     mocks.freshData = null;
     mocks.refresh.mockReset().mockImplementation(async () => {
       if (mocks.freshData) mocks.data = { ...mocks.data, ...mocks.freshData };
@@ -327,10 +644,44 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.manualGuidePromise = null;
     mocks.companionFreshnessRefresh = null;
     mocks.mainFreshnessRefresh = null;
+    mocks.liveIntents.length = 0;
+    mocks.liveIntentSequence = 0;
+    mocks.liveAutoResumed = false;
+    mocks.liveBoardDesignSlots = null;
+    mocks.soundEvents.length = 0;
+    mocks.forceOpenFinishSafety = false;
     mocks.mainSave.mockReset().mockImplementation(async (next) => next);
     prepare();
   });
   afterEach(() => cleanup());
+
+  test('an auto-resumed approved desk stays covered until live refresh succeeds', async () => {
+    mocks.liveAutoResumed = true;
+    mocks.refresh.mockRejectedValueOnce(new Error('LIVE REFRESH FAILED.'));
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    await waitFor(() => expect(screen.getByTestId('snake-companion-covered')).toHaveTextContent('LIVE REFRESH FAILED.'));
+    expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+  });
+
+  test('a privacy-cover storage read failure keeps an approved desk covered', async () => {
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('STORAGE IS UNAVAILABLE.');
+    });
+    try {
+      render(<SnakeCompanion />);
+      expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
+      expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
+    } finally {
+      getItem.mockRestore();
+    }
+  });
 
   test('recurring pulls leave the frozen player and pool authority in memory', async () => {
     render(<SnakeCompanion />);
@@ -349,11 +700,205 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body).toHaveTextContent('dual Player');
   });
 
+  test('an already-open companion adopts a standalone board revision even when room metadata is unchanged', async () => {
+    const source = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const freshBoard = {
+      ...structuredClone(source.seatBoards!.a),
+      rankings: {
+        ...structuredClone(source.seatBoards!.a.rankings),
+        global: ['catcher', ...source.seatBoards!.a.rankings.global.filter((id) => id !== 'catcher')],
+      },
+      revision: 2,
+    };
+    mocks.currentSession = {
+      ...source,
+      seatBoards: { ...source.seatBoards, a: freshBoard },
+    };
+
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    expect(mocks.patchBoard.mock.calls[0][0]).toMatchObject({
+      teamId: 'a',
+      expectedBoardRevision: 2,
+    });
+  });
+
+  test('an already-open companion advances the live pick and removes the drafted player on its recurring pull', async () => {
+    const source = structuredClone(mocks.currentSession as LeagueBuilderMlbDraftSession);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.getByRole('button', { name: /SELECT DUAL PLAYER/ })).toBeInTheDocument();
+
+    mocks.currentSession = {
+      ...source,
+      completedPicks: [{
+        round: 1,
+        pick: 1,
+        teamId: 'b',
+        playerId: 'dual',
+        settledSalary: 10_100,
+        marginalTax: 0,
+      }],
+      currentPickIndex: 1,
+      revision: source.revision + 1,
+      lastModified: '2026-07-12T00:00:01.000Z',
+    };
+
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(screen.getByText('CLUB B SELECTED DUAL PLAYER')).toBeInTheDocument());
+    expect(screen.getByTestId('companion-live-strip')).toHaveTextContent('CLUB A · PICK 2');
+    expect(screen.queryByRole('button', { name: /SELECT DUAL PLAYER/ })).not.toBeInTheDocument();
+  });
+
+  test('plays the request cue after sending a pick and the draft cue after the public pick advances', async () => {
+    const source = session();
+    source.completedPicks = [{
+      round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+    }];
+    source.currentPickIndex = 1;
+    mocks.forceOpenFinishSafety = true;
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(mocks.soundEvents).toEqual([]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: /SELECT ONE-B PLAYER/ }));
+    const sendPick = await screen.findByRole('button', { name: 'SEND PICK TO HOTSEAT' });
+    await waitFor(() => expect(sendPick).toBeEnabled());
+    fireEvent.click(sendPick);
+
+    await waitFor(() => expect(mocks.liveIntents).toHaveLength(1));
+    expect(mocks.soundEvents).toEqual(['request']);
+
+    mocks.currentSession = {
+      ...source,
+      completedPicks: [
+        ...source.completedPicks,
+        { round: 1, pick: 2, teamId: 'a', playerId: 'one-b', settledSalary: 10_300, marginalTax: 0 },
+      ],
+      currentPickIndex: 2,
+      revision: source.revision + 1,
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(mocks.soundEvents).toEqual(['request', 'drafted']));
+  });
+
+  test('a rival public pick removes the player from the displayed board without a private write', async () => {
+    const source = sessionWithDualAsSavedFirstBaseman();
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(companionBoardSlot('1B')).toHaveTextContent('DUAL PLAYER');
+
+    mocks.currentSession = {
+      ...source,
+      completedPicks: [{
+        round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+      }],
+      currentPickIndex: 1,
+      revision: source.revision + 1,
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(companionBoardSlot('1B')).toHaveTextContent('ONE-B PLAYER'));
+    expect(companionBoardSlot('1B')).not.toHaveTextContent('DUAL PLAYER');
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+    expect(source.seatBoards!.a.slots['1B']).toBe('dual');
+  });
+
+  test('an own public pick joins the displayed roster without a private write', async () => {
+    const source = session();
+    source.completedPicks = [{
+      round: 1, pick: 2, teamId: 'a', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+    }];
+    source.currentPickIndex = 2;
+    prepare(source);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+
+    const rosterRows = [...screen.getByTestId('my-board-view').querySelectorAll<HTMLElement>('[data-board-state="ROSTER"]')];
+    expect(rosterRows.some((row) => row.textContent?.includes('DUAL PLAYER'))).toBe(true);
+    expect(Object.values(source.seatBoards!.a.slots)).not.toContain('dual');
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+  });
+
+  test('a public correction restores the saved player in the displayed board', async () => {
+    const saved = sessionWithDualAsSavedFirstBaseman();
+    const drafted = {
+      ...saved,
+      completedPicks: [{
+        round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+      }],
+      currentPickIndex: 1,
+      revision: saved.revision + 1,
+    };
+    prepare(drafted);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(companionBoardSlot('1B')).toHaveTextContent('ONE-B PLAYER');
+
+    mocks.currentSession = {
+      ...drafted,
+      completedPicks: [],
+      currentPickIndex: 0,
+      revision: drafted.revision + 1,
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    await waitFor(() => expect(companionBoardSlot('1B')).toHaveTextContent('DUAL PLAYER'));
+    expect(mocks.patchBoard).not.toHaveBeenCalled();
+  });
+
+  test('a correction restores the saved player after one user edit and public refreshes add no write', async () => {
+    const saved = sessionWithDualAsSavedFirstBaseman();
+    const drafted = {
+      ...saved,
+      completedPicks: [{
+        round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0,
+      }],
+      currentPickIndex: 1,
+      revision: saved.revision + 1,
+    };
+    prepare(drafted);
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    expect(companionBoardSlot('1B')).toHaveTextContent('ONE-B PLAYER');
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const storedEdit = mocks.patchBoard.mock.calls[0][0].board as SnakeSeatBoardRecord;
+    expect(storedEdit.slots['1B']).toBe('dual');
+
+    const editedPublic = mocks.currentSession as LeagueBuilderMlbDraftSession;
+    mocks.currentSession = {
+      ...editedPublic,
+      completedPicks: [],
+      currentPickIndex: 0,
+      revision: (editedPublic.revision ?? 0) + 1,
+    };
+    await act(async () => { await mocks.companionFreshnessRefresh?.(); });
+
+    fireEvent.click(screen.getByRole('button', { name: 'MY BOARD' }));
+    await waitFor(() => expect(companionBoardSlot('1B')).toHaveTextContent('DUAL PLAYER'));
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
+  });
+
   test('an unrequested player-pool row never inherits another player risk calculation', async () => {
     mocks.riskMode = 'SAFE';
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'NEXT' }));
 
     const unrequested = screen.getByRole('button', { name: /SELECT FLEX-8 PLAYER/i });
     expect(unrequested).not.toHaveTextContent('CALCULATING');
@@ -408,6 +953,26 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body.textContent).not.toMatch(/\b(?:he|she|him|her)\b/i);
   });
 
+  test('uses private design slots for advice and preserves them through board edits', async () => {
+    mocks.liveBoardDesignSlots = [{ slotId: '1B', kind: 'pos', position: '1B' }];
+    prepare();
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+
+    await waitFor(() => expect(mocks.assistantRequests.length).toBeGreaterThan(0));
+    const assistantInput = mocks.assistantRequests.at(-1)!.input;
+    expect(assistantInput.slots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ slotId: '1B', kind: 'pos', position: '1B' }),
+    ]));
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    fireEvent.click(screen.getAllByRole('button', { name: /^Move .* down$/ })[0]);
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalled());
+    expect(mocks.patchBoard.mock.calls[0][0].board).toMatchObject({
+      designSlots: [{ slotId: '1B', kind: 'pos', position: '1B' }],
+    });
+  });
+
   test('fails money, chemistry, and persistence closed for a complete nine-hitter, thirteen-pitcher refit', async () => {
     const source = session();
     source.snakeSetup!.poolPlayerIds = Object.values(slots);
@@ -419,8 +984,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     render(<SnakeCompanion />);
     expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
-    expect(screen.getByTestId('plan-truth-strip')).not.toHaveTextContent('Competitive22');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.queryByTestId('selected-player-consequence')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
@@ -447,13 +1011,17 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(screen.getByRole('button', { name: 'ASST GM BOARD' })).toHaveAttribute('aria-pressed', 'true');
     const keep = await screen.findByRole('button', { name: 'KEEP ON MY BOARD' });
     const current = mocks.currentSession as LeagueBuilderMlbDraftSession;
-    mocks.currentSession = { ...current, revision: (current.revision ?? 0) + 1 };
-    const pullCountBeforeKeep = mocks.pull.mock.calls.length;
+    mocks.currentSession = {
+      ...current,
+      seatBoards: {
+        ...current.seatBoards,
+        a: { ...current.seatBoards!.a, revision: current.seatBoards!.a.revision + 1 },
+      },
+    };
     fireEvent.click(keep);
 
     expect(await screen.findByText('THE DRAFT MOVED ON — REFRESH')).toBeInTheDocument();
-    expect(mocks.patchBoard).not.toHaveBeenCalled();
-    expect(mocks.pull.mock.calls.length).toBeGreaterThan(pullCountBeforeKeep);
+    expect(mocks.patchBoard).toHaveBeenCalledTimes(1);
     expect(mocks.refresh).toHaveBeenCalled();
   });
 
@@ -476,6 +1044,34 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(write.board.revision).toBe(original.revision + 1);
     expect(await screen.findByText('ON MY BOARD')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'KEEP ON MY BOARD' })).not.toBeInTheDocument();
+  });
+
+  test('stores and restores zero-interest through the approved companion seat only', async () => {
+    render(<SnakeCompanion />);
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const original = structuredClone((mocks.currentSession as LeagueBuilderMlbDraftSession).seatBoards!.a);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'ZERO INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(1));
+    const excluded = mocks.patchBoard.mock.calls[0][0] as {
+      deviceId: string;
+      teamId: string;
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(excluded).toMatchObject({ deviceId: 'ipad-a', teamId: 'a', expectedBoardRevision: original.revision });
+    expect(excluded.board.rankings.zeroInterestPlayerIds).toEqual(['dual']);
+    expect(excluded.board.slots).toEqual(original.slots);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'RESTORE INTEREST' }));
+    await waitFor(() => expect(mocks.patchBoard).toHaveBeenCalledTimes(2));
+    const restored = mocks.patchBoard.mock.calls[1][0] as {
+      expectedBoardRevision: number;
+      board: SnakeSeatBoardRecord;
+    };
+    expect(restored.expectedBoardRevision).toBe(excluded.board.revision);
+    expect(restored.board.rankings.zeroInterestPlayerIds).toEqual([]);
+    expect(restored.board.slots).toEqual(original.slots);
   });
 
   test('actual main and companion page requests match, and Optimize pins the selected player through the derived board', async () => {
@@ -509,14 +1105,15 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.assistantResults.length = 0;
     localStorage.removeItem('kbl-snake-companion-device-covered');
     prepare(session());
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
     await screen.findByTestId('private-draft-desk');
     await waitFor(() => expect(mocks.assistantRequests.some((request) => request.input.teamId === 'a')).toBe(true));
     const mainRequest = mocks.assistantRequests.filter((request) => request.input.teamId === 'a').at(-1)!;
-    expect(mainRequest.input).toEqual(companionRequest.input);
+    expect(mainRequest.input).toMatchObject(companionRequest.input);
+    expect(JSON.stringify(companionRequest.input)).not.toContain('hiddenPersonalityModifiers');
   }, 10_000);
 
   test.each([
@@ -545,7 +1142,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.assistantRequests.length = 0;
     mocks.assistantResults.length = 0;
     prepare(structuredClone(source));
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
@@ -583,7 +1180,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     mocks.guideRequests.length = 0;
     mocks.manualGuideCalls.length = 0;
     prepare(structuredClone(source));
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
@@ -606,7 +1203,19 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(companionPublicSession.revision).toBe(4);
     expect(mainPublicSession.revision).toBe((mocks.currentSession as LeagueBuilderMlbDraftSession).revision);
     companionPublicSession.revision = mainPublicSession.revision;
-    expect(mainInput).toEqual(companionInput);
+    const {
+      seatingProofInput: companionProof,
+      ...companionDecisionInput
+    } = companionInput as { seatingProofInput: { pool: unknown; clubs: Array<{ teamId: string }> } } & Record<string, unknown>;
+    const {
+      seatingProofInput: mainProof,
+      ...mainDecisionInput
+    } = mainInput as { seatingProofInput: { pool: unknown; clubs: Array<{ teamId: string }> } } & Record<string, unknown>;
+    expect(mainDecisionInput).toEqual(companionDecisionInput);
+    expect(mainProof.pool).toEqual(companionProof.pool);
+    expect(mainProof.clubs.map((club) => club.teamId).sort()).toEqual(
+      companionProof.clubs.map((club) => club.teamId).sort(),
+    );
   }, 15_000);
 
   test('cover nulls the companion rational-risk request and same-seat return cannot resurrect ready pre-cover advice', async () => {
@@ -650,6 +1259,31 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(document.body.innerHTML).not.toContain(missingPlayerId);
   });
 
+  test('companion keeps an own pick on the private board with team branding and removes it from the pool', async () => {
+    const source = session();
+    source.completedPicks = [
+      { round: 1, pick: 1, teamId: 'b', playerId: 'dual', settledSalary: 10_100, marginalTax: 0 },
+      { round: 1, pick: 2, teamId: 'a', playerId: 'closer', settledSalary: 11_700, marginalTax: 0 },
+    ];
+    source.currentPickIndex = 2;
+    prepare(source);
+    render(<SnakeCompanion />);
+
+    expect(await screen.findByTestId('snake-companion-frame')).toBeInTheDocument();
+    const committed = screen.getByRole('button', { name: /SELECT CLOSER PLAYER/ });
+    expect(committed.closest('[data-board-state]')).toHaveAttribute('data-board-state', 'ROSTER');
+    expect(committed).toHaveTextContent('ROSTER');
+    expect(committed).toHaveStyle({
+      borderLeftColor: '#234f32',
+      borderLeftWidth: '8px',
+      boxShadow: 'inset 0 -3px 0 #f5d77a',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'PLAYER POOL' }));
+    expect(screen.queryByRole('button', { name: /SELECT CLOSER PLAYER/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /SELECT DUAL PLAYER/ })).not.toBeInTheDocument();
+  });
+
   test('generic assistant failure and malformed guide state remain neutral on both pages', async () => {
     mocks.riskMode = 'URGENT';
     mocks.guideMode = 'MALFORMED';
@@ -665,7 +1299,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
 
     cleanup();
     prepare(structuredClone(source));
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
@@ -720,7 +1354,7 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     prepare(session());
     const revised = deferred<unknown>();
     mocks.manualGuidePromise = revised.promise;
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     selectMainTeam('a');
     fireEvent.click(await screen.findByRole('button', { name: 'REVEAL CLUB A SEAT' }));
@@ -754,14 +1388,14 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     expect(mocks.assistantRequests).toHaveLength(0);
     expect(mocks.assistantResults).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
-    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
+    expect(screen.getByText('ASST GM 22 UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByTestId('assistant-plan-truth-strip')).not.toBeInTheDocument();
   });
 
   test('main emits no assistant request, result, or board when one live player lacks contextual advisor worth', async () => {
     mocks.omitContextPlayerId = 'dual';
     prepare(session());
-    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}`]}><SnakeDraftRoom /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={[`/snake-room?leagueId=${league.id}&practice=1`]}><SnakeDraftRoom /></MemoryRouter>);
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
     await act(async () => {
       selectMainTeam('a');
@@ -777,8 +1411,8 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     await act(async () => {
       fireEvent.click(assistantTab);
     });
-    expect(screen.getByText('ASST GM BOARD UNAVAILABLE')).toHaveAttribute('role', 'status');
-    expect(screen.queryByText('ASST GM 22')).not.toBeInTheDocument();
+    expect(screen.getByText('ASST GM 22 UNAVAILABLE')).toHaveAttribute('role', 'status');
+    expect(screen.queryByTestId('assistant-plan-truth-strip')).not.toBeInTheDocument();
   });
 
   test('one device switches between two approved desks only through cover and keeps both boards isolated', async () => {
@@ -985,10 +1619,9 @@ describe('SNAKE-MOCK-2B companion board parity', () => {
     fireEvent.click(screen.getByRole('button', { name: 'COVER THIS DEVICE' }));
     expect(await screen.findByTestId('snake-companion-covered')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'FORGET ROOM' }));
-    expect(screen.getByTestId('snake-companion-covered')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'FORGET ROOM' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO DESK' }));
     expect(await screen.findByRole('heading', { name: 'CLAIM YOUR PRIVATE DESK' })).toBeInTheDocument();
+    expect(screen.queryByTestId('snake-companion-covered')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'RETURN TO DESK' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('snake-companion-frame')).not.toBeInTheDocument();
 
     const input = mocks.patchBoard.mock.calls[0][0] as { teamId: string; board: SnakeSeatBoardRecord };

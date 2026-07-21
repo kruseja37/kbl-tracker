@@ -27,6 +27,7 @@ export function ChemistryStrip({
             <p className={`${compact ? 'whitespace-nowrap' : 'break-words'} text-[10px] font-black uppercase leading-tight text-[var(--ballpark-brass)] sm:text-xs`}>{row.word}</p>
             <p className={`${compact ? 'shrink-0' : 'mt-1'} text-sm font-black`}>{row.count === null ? '—' : row.count} · {row.tier ?? '—'}</p>
           </div>
+          <p className="mt-1 text-[9px] font-black text-[var(--ballpark-chalk)]/75">TRAITS {row.traitCount ?? '—'}</p>
         </div>
       ))}
     </div>

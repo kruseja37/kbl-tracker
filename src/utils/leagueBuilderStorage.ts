@@ -25,8 +25,11 @@ import type { BalanceMode, RegisteredPool, TeamCapIdentity } from '../engines/le
 import type { SnakePoolAssemblyMode } from '../engines/snakePoolAssembly';
 import type { CpuShillAuctionSession } from '../engines/cpuShillBidding';
 import type { DesignSlot } from '../engines/rosterDesignFeasibility';
+import type { SnakeBoardSlotId } from '../engines/snakeBoardSlots';
+import { toRosterSlotPlayer } from '../engines/rosterNeed';
 import type { TaxonomyPosition } from '../data/playerArchetypeTaxonomy';
 import type { TierKey } from '../data/tierParams';
+import { isLegalRoster } from '../data/rosterConstruction';
 import type { OptimalLineupSnapshot } from '../types/managerWpa';
 import type { ParkFactors } from '../types/war';
 import type { ParkDimensions } from '../data/parkLookup';
@@ -35,6 +38,7 @@ import type { RebrandRelocationMarker } from '../engines/franchiseRebrandCascade
 import { trackFieldChanges, type EditHistoryEntry } from './editHistoryTracker';
 import type { FarmAuctionPool } from './farmAuctionPool';
 import type { HiddenPersonalityModifiers } from './prospectScoutingDraftEngine';
+import type { SnakeLiveCatalogData } from './snakeLiveCatalog';
 import {
   markOptimalLineupSnapshotsStaleForChange,
   OPTIMAL_LINEUP_SNAPSHOT_FIELDS,
@@ -57,6 +61,7 @@ import {
 export type { EditHistoryEntry } from './editHistoryTracker';
 export type { EraFlavor, FameTier, PlayerArchetype } from '../types/reporter';
 export { FAME_TIER_LABEL } from '../types/reporter';
+export { SNAKE_BOARD_SLOT_IDS, type SnakeBoardSlotId } from '../engines/snakeBoardSlots';
 
 const DB_NAME = 'kbl-league-builder';
 const DB_VERSION = 10;
@@ -166,11 +171,9 @@ export interface LeagueTemplate {
     poolSizeMultiplier: number;
     shills?: number;
     identityByTeamId: Record<string, string | null>;
-    /** Sorted sourceLeagueIds at extraction time (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08 §8) — feeds
-     * poolBasisStaleLines so a source-league change is flagged the same way a cap/dial/shill/
-     * identity change already is. Absent = extracted from the unfiltered universe (a pre-feature
-     * record or an untouched post-feature default — the two are equivalent, so legacy records
-     * never retro-nag). */
+    /** Sorted external sourceLeagueIds at extraction time. The target league is never stored here.
+     * This feeds poolBasisStaleLines so a source change is flagged like a cap/dial/shill/identity
+     * change. Absent means the untouched default of every known external source. */
     sourceLeagueIds?: string[];
     /** Whether globally unassigned players were part of the extracted source universe. */
     includeUnassignedSourcePlayers?: boolean;
@@ -199,15 +202,11 @@ export interface LeagueTemplate {
   poolFirstGenerationNonce?: number;
   /** Full reversible card set captured before snake version trimming at lock. */
   snakeVersionSourcePlayerIds?: string[];
-  /** Draft-available player universe (DRAFT_POOL_UNIVERSE_SPEC_2026-07-08): which leagues' player
-   * pools feed this league's draft extraction. Absent field = UNFILTERED — all leagues checked, the
-   * universe filter skipped entirely, byte-identical to pre-feature behavior (see
-   * resolveSourceLeagueIds in leagueBuilderPoolBuilder.ts; captain correction 2026-07-08
-   * post-audit — an earlier own-league-only default was a contract framing error, not a JK
-   * ruling). The field becomes an explicit array on the first user toggle and is filtered from
-   * then on. An explicit empty array is a real, distinct state (the user unchecked every league,
-   * including their own — resolves to unclaimed free agents only) and must NOT be treated as
-   * "absent" / defaulted back. */
+  /** External leagues whose player pools feed this league's draft extraction. The current target
+   * league is pool output and is always excluded at read time, including from older saved arrays.
+   * An absent field means every known external source. The first user toggle writes an explicit
+   * array. An explicit empty array stays empty and uses only the separate unassigned source when
+   * that switch is on. */
   sourceLeagueIds?: string[];
   /** Backward-compatible default true; false makes checked source leagues exact. */
   includeUnassignedSourcePlayers?: boolean;
@@ -377,14 +376,6 @@ export interface LeagueBuilderStartupDraftSession {
   lastModified: string;
 }
 
-export const SNAKE_BOARD_SLOT_IDS = [
-  'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'BACKUP_C',
-  'SP1', 'SP2', 'SP3', 'SP4', 'RP1', 'RP2', 'RP3', 'CP',
-  'FLEX1', 'FLEX2', 'FLEX3', 'FLEX4', 'SWING',
-] as const;
-
-export type SnakeBoardSlotId = (typeof SNAKE_BOARD_SLOT_IDS)[number];
-
 export interface SnakeSeatBoardRecord {
   /** Exactly one unique player id per canonical 22-man board slot. */
   slots: Record<SnakeBoardSlotId, string>;
@@ -393,6 +384,8 @@ export interface SnakeSeatBoardRecord {
     global?: string[];
     byPosition?: Partial<Record<TaxonomyPosition, string[]>>;
     frozenPlayerIds?: string[];
+    /** Private hard pass: excluded from this seat's Assistant board, never from the public pool. */
+    zeroInterestPlayerIds?: string[];
   };
   /** Last-write-wins revision scoped to this seat record. */
   revision: number;
@@ -418,6 +411,8 @@ export interface SnakeSeatBoardStoreRecord {
   revision: number;
   lastModified: string;
 }
+
+export const SNAKE_SEAT_BOARD_AUTHORITY_FORMAT = 'snake-seat-boards-standalone-v1' as const;
 
 export interface SnakeVersionState {
   draftedPlayerIdByGroupId: Record<string, string>;
@@ -450,6 +445,19 @@ export interface SnakeRoomLogRecord {
   createdAt: string;
   actionable: boolean;
   expired?: boolean;
+}
+
+/**
+ * Explicit Hotseat authority for recovering companions from the retired
+ * whole-room board writer. This marker is additive and room-scoped; ordinary
+ * cloud pulls never receive permission to discard a pending room write.
+ */
+export interface SnakeCompanionRoomPublication {
+  formatVersion: 'snake-companion-room-publication-v1';
+  publicationId: string;
+  supersedesRevision: number;
+  publishedRevision: number;
+  publishedAt: string;
 }
 
 export interface SnakeDraftCorrectionSnapshot {
@@ -585,6 +593,11 @@ export interface LeagueBuilderMlbDraftSession {
   seatBoards?: Record<string, SnakeSeatBoardRecord>;
   /** Optional so old FARM sessions seed deterministically on first use. */
   farmSeatBoards?: Record<string, FarmSeatBoardRecord>;
+  /**
+   * Persisted rows with this marker never contain seatBoards or farmSeatBoards.
+   * Reads hydrate those compatibility maps from snakeSeatBoards only.
+   */
+  seatBoardAuthorityFormat?: typeof SNAKE_SEAT_BOARD_AUTHORITY_FORMAT;
   versionState?: SnakeVersionState;
   /** Confirmation-time immutable truth. Optional so all pre-manifest sessions remain loadable. */
   draftManifest?: SnakeDraftManifest;
@@ -600,6 +613,8 @@ export interface LeagueBuilderMlbDraftSession {
       teamId: string;
       gmName?: string;
       hotseat: boolean;
+      /** Frozen farm identity selected before MLB draft start. */
+      farmArchetypeId?: string;
       archetypeId?: string;
     }>;
     /** The visible shuffle seed shown on the ORDER card. */
@@ -647,6 +662,18 @@ export interface LeagueBuilderMlbDraftSession {
       /** Revision observed before this request was committed. */
       sessionRevision: number;
     };
+  };
+  /** Hotseat-issued recovery authority for legacy companion room queues. */
+  companionRoomPublication?: SnakeCompanionRoomPublication;
+  /**
+   * One-browser recovery receipt for a cloud-backed room opened from a new
+   * preview origin. It is local-only and never grants host control.
+   */
+  liveRoomRecovery?: {
+    roomId: string;
+    roomCode: string;
+    publicRevision: number;
+    recoveredAt: string;
   };
   paused?: boolean;
   correctionSnapshots?: SnakeDraftCorrectionSnapshot[];
@@ -1491,6 +1518,203 @@ export async function getRegisteredPool(leagueId: string): Promise<RegisteredPoo
 
     request.onsuccess = () => resolve(request.result || null);
     request.onerror = () => reject(request.error);
+  });
+}
+
+export interface SnakeLiveRoomLocalRecoveryResult {
+  leagueId: string;
+  restoredLeague: boolean;
+  restoredTeams: number;
+  restoredPlayers: number;
+  restoredPool: boolean;
+  restoredSession: boolean;
+}
+
+function sameRecoveryPool(left: RegisteredPool, right: RegisteredPool): boolean {
+  if (left.leagueId !== right.leagueId || left.players.length !== right.players.length) return false;
+  const rightById = new Map(right.players.map((player) => [player.id, player]));
+  return left.players.every((player) => {
+    const other = rightById.get(player.id);
+    return Boolean(other && other.iv === player.iv && other.salary === player.salary);
+  });
+}
+
+/**
+ * Restore the public, immutable catalog and public draft snapshot of one open
+ * Snake room into this browser only.  This deliberately bypasses generic Cloud
+ * Sync: the live-room service is the source and this mirror must not create a
+ * second large sync queue or overwrite another device's League Builder data.
+ */
+export async function restoreSnakeLiveRoomLocally(input: {
+  catalog: SnakeLiveCatalogData;
+  session: LeagueBuilderMlbDraftSession;
+  recovery: {
+    roomId: string;
+    roomCode: string;
+    publicRevision: number;
+  };
+}): Promise<SnakeLiveRoomLocalRecoveryResult> {
+  const { catalog, session, recovery } = input;
+  if (catalog.league.id !== session.leagueId
+    || session.id !== createMlbDraftSessionId(session.leagueId, session.seasonNumber)
+    || (session.draftPhase && session.draftPhase !== 'MLB')
+    || !recovery.roomId.trim()
+    || !/^\d{4}$/.test(recovery.roomCode)
+    || !Number.isInteger(recovery.publicRevision)
+    || recovery.publicRevision < 0) {
+    throw new Error('THE LIVE ROOM CATALOG DOES NOT MATCH ITS MLB DRAFT SESSION.');
+  }
+  const poolIds = new Set(catalog.registeredPool.players.map((player) => player.id));
+  const teamIds = new Set(catalog.league.teamIds);
+  if (poolIds.size !== catalog.players.length
+    || catalog.players.some((player) => !poolIds.has(player.id))
+    || session.pickOrder.some((pick) => !teamIds.has(pick.teamId))
+    || session.completedPicks.some((pick) => !poolIds.has(pick.playerId) || !teamIds.has(pick.teamId))) {
+    throw new Error('THE LIVE ROOM CATALOG IS INCOMPLETE.');
+  }
+
+  const recoveryLeague = structuredClone(catalog.league) as LeagueTemplate;
+  const sessionClubByTeamId = new Map(
+    (session.snakeSetup?.clubs ?? []).map((club) => [club.teamId, club]),
+  );
+  const recoveryTeams = catalog.teams.map((team) => {
+    const sessionFarmArchetypeId = sessionClubByTeamId.get(team.id)?.farmArchetypeId;
+    if (team.farmArchetypeKey && sessionFarmArchetypeId
+      && team.farmArchetypeKey !== sessionFarmArchetypeId) {
+      throw new Error(`THE LIVE ROOM FARM IDENTITY DOES NOT MATCH ${team.name}.`);
+    }
+    return ({
+      ...structuredClone(team),
+      ...(team.farmArchetypeKey || !sessionFarmArchetypeId
+        ? {}
+        : { farmArchetypeKey: sessionFarmArchetypeId }),
+    // Stadium data is intentionally absent from the public live catalog. This
+    // fallback is only used when the source team is not already in this browser.
+      stadium: 'Recovery Park',
+      leagueIds: [...team.leagueIds],
+    }) as Team;
+  });
+  const recoveryPlayers = catalog.players.map((player) => ({
+    ...structuredClone(player),
+    leagueAssignments: [],
+  }) as Player);
+  const recoveryPool = structuredClone(catalog.registeredPool) as RegisteredPool;
+  const recoveredFarmArchetypeByTeamId = new Map(
+    recoveryTeams.flatMap((team) => team.farmArchetypeKey ? [[team.id, team.farmArchetypeKey] as const] : []),
+  );
+  const recoverySession: LeagueBuilderMlbDraftSession = {
+    ...(structuredClone(session) as LeagueBuilderMlbDraftSession),
+    ...(session.snakeSetup ? {
+      snakeSetup: {
+        ...structuredClone(session.snakeSetup),
+        clubs: session.snakeSetup.clubs.map((club) => ({
+          ...club,
+          ...(!club.farmArchetypeId && recoveredFarmArchetypeByTeamId.has(club.teamId)
+            ? { farmArchetypeId: recoveredFarmArchetypeByTeamId.get(club.teamId)! }
+            : {}),
+        })),
+      },
+    } : {}),
+    liveRoomRecovery: {
+      roomId: recovery.roomId,
+      roomCode: recovery.roomCode,
+      publicRevision: recovery.publicRevision,
+      recoveredAt: nowISO(),
+    },
+  };
+  const db = await initLeagueBuilderDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([
+      STORES.LEAGUE_TEMPLATES,
+      STORES.GLOBAL_TEAMS,
+      STORES.GLOBAL_PLAYERS,
+      STORES.REGISTERED_POOLS,
+      STORES.MLB_DRAFT_SESSIONS,
+    ], 'readwrite');
+    const leagues = tx.objectStore(STORES.LEAGUE_TEMPLATES);
+    const teams = tx.objectStore(STORES.GLOBAL_TEAMS);
+    const players = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const pools = tx.objectStore(STORES.REGISTERED_POOLS);
+    const sessions = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const leagueRead = leagues.get(recoveryLeague.id);
+    const poolRead = pools.get(recoveryPool.leagueId);
+    const sessionRead = sessions.get(recoverySession.id);
+    let reads = 0;
+    let restoredLeague = false;
+    let restoredPool = false;
+    let restoredSession = false;
+    let restoredTeams = 0;
+    let restoredPlayers = 0;
+
+    const fail = (message: string) => {
+      reject(new Error(message));
+      tx.abort();
+    };
+    const writeWhenReady = () => {
+      reads += 1;
+      if (reads !== 3) return;
+      const existingPool = poolRead.result as RegisteredPool | undefined;
+      const existingSession = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+      if (existingPool && !sameRecoveryPool(existingPool, recoveryPool)) {
+        fail('THIS BROWSER ALREADY HAS A DIFFERENT DRAFT POOL FOR THIS LEAGUE.');
+        return;
+      }
+      if (existingSession && (
+        existingSession.createdDate !== recoverySession.createdDate
+        || existingSession.seed !== recoverySession.seed
+      )) {
+        fail('THIS BROWSER ALREADY HAS A DIFFERENT DRAFT RUN FOR THIS LEAGUE.');
+        return;
+      }
+      if (!leagueRead.result) {
+        leagues.put(recoveryLeague);
+        restoredLeague = true;
+      }
+      if (!existingPool) {
+        pools.put(recoveryPool);
+        restoredPool = true;
+      }
+      if (!existingSession) {
+        sessions.put(recoverySession);
+        restoredSession = true;
+      }
+      for (const team of recoveryTeams) {
+        const request = teams.get(team.id);
+        request.onsuccess = () => {
+          if (!request.result) {
+            teams.put(team);
+            restoredTeams += 1;
+          }
+        };
+      }
+      for (const player of recoveryPlayers) {
+        const request = players.get(player.id);
+        request.onsuccess = () => {
+          if (!request.result) {
+            players.put(player);
+            restoredPlayers += 1;
+          }
+        };
+      }
+    };
+
+    leagueRead.onsuccess = writeWhenReady;
+    poolRead.onsuccess = writeWhenReady;
+    sessionRead.onsuccess = writeWhenReady;
+    leagueRead.onerror = () => fail('THE LOCAL LEAGUE RECORD COULD NOT BE READ.');
+    poolRead.onerror = () => fail('THE LOCAL DRAFT POOL COULD NOT BE READ.');
+    sessionRead.onerror = () => fail('THE LOCAL DRAFT SESSION COULD NOT BE READ.');
+    tx.oncomplete = () => resolve({
+      leagueId: recoveryLeague.id,
+      restoredLeague,
+      restoredTeams,
+      restoredPlayers,
+      restoredPool,
+      restoredSession,
+    });
+    tx.onerror = () => reject(tx.error ?? new Error('THE LIVE ROOM COULD NOT BE RESTORED HERE.'));
+    tx.onabort = () => reject(tx.error ?? new Error('THE LIVE ROOM RESTORE STOPPED.'));
   });
 }
 
@@ -2466,14 +2690,75 @@ export async function getMlbDraftSession(
   const db = await initLeagueBuilderDatabase();
   const id = createMlbDraftSessionId(leagueId, seasonNumber);
 
-  const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readonly');
-  const [stored, boardRows] = await Promise.all([
-    requestToPromise(tx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(id)),
-    requestToPromise(tx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id)),
+  const readTx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readonly');
+  const [initialStored, initialBoardRows] = await Promise.all([
+    requestToPromise(readTx.objectStore(STORES.MLB_DRAFT_SESSIONS).get(id)),
+    requestToPromise(readTx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id)),
   ]);
-  const session = stored as LeagueBuilderMlbDraftSession | undefined;
-  if (!session) return null;
-  return hydrateIndependentSeatBoards(session, boardRows as SnakeSeatBoardStoreRecord[]);
+  const initialSession = initialStored as LeagueBuilderMlbDraftSession | undefined;
+  if (!initialSession) return null;
+  if (initialSession.seatBoardAuthorityFormat !== undefined) {
+    return hydrateIndependentSeatBoards(
+      initialSession,
+      initialBoardRows as SnakeSeatBoardStoreRecord[],
+    );
+  }
+
+  let hydrated: LeagueBuilderMlbDraftSession | null = null;
+  let persistedMigration: LeagueBuilderMlbDraftSession | null = null;
+  let rowsToWrite: SnakeSeatBoardStoreRecord[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readwrite');
+    const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
+    const sessionRead = sessionStore.get(id);
+    const boardsRead = boardStore.index('sessionId').getAll(id);
+    let reads = 0;
+    const apply = () => {
+      reads += 1;
+      if (reads !== 2) return;
+      try {
+        const stored = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+        if (!stored) return;
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(stored, standaloneRows);
+        const prepared = prepareSeatBoardPersistence({
+          preAction: undefined,
+          proposed: current,
+          standaloneRows,
+          modifiedAt: nowISO(),
+        });
+        hydrated = prepared.session;
+        rowsToWrite = prepared.rowsToWrite;
+        const needsRoomMigration = !structurallyEqual(stored, prepared.persistedSession);
+        for (const row of rowsToWrite) boardStore.put(row);
+        if (needsRoomMigration) {
+          persistedMigration = prepared.persistedSession;
+          sessionStore.put(prepared.persistedSession);
+        }
+      } catch (error) {
+        reject(error);
+        tx.abort();
+      }
+    };
+    sessionRead.onsuccess = apply;
+    boardsRead.onsuccess = apply;
+    sessionRead.onerror = () => reject(sessionRead.error);
+    boardsRead.onerror = () => reject(boardsRead.error);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} migration was aborted.`));
+  });
+  if (!syncEngine.isSuppressed()) {
+    for (const row of rowsToWrite) {
+      syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+    }
+    const migrationToSync = persistedMigration as LeagueBuilderMlbDraftSession | null;
+    if (migrationToSync) {
+      syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', migrationToSync.id, migrationToSync);
+    }
+  }
+  return hydrated;
 }
 
 function hydrateIndependentSeatBoards(
@@ -2481,6 +2766,7 @@ function hydrateIndependentSeatBoards(
   rows: SnakeSeatBoardStoreRecord[],
 ): LeagueBuilderMlbDraftSession {
   assertFarmSessionHasNoTradeState(session);
+  assertPersistedSeatBoardAuthorityShape(session);
   validateEmbeddedSeatBoardAuthority(session);
   const sessionPhase = validatedSnakeSessionPhase(session);
   const frozenTeamIds = validatedFrozenSnakeTeamIds(session);
@@ -2526,7 +2812,7 @@ function hydrateIndependentSeatBoards(
     if (resolved) farmSeatBoards[teamId] = resolved as FarmSeatBoardRecord;
   }
   return {
-    ...session,
+    ...stripSeatBoardsForPersistence(session),
     ...(Object.keys(seatBoards).length > 0 ? { seatBoards } : {}),
     ...(Object.keys(farmSeatBoards).length > 0 ? { farmSeatBoards } : {}),
   };
@@ -2554,6 +2840,31 @@ function seatBoardCorruptionError(phase: 'MLB' | 'FARM', teamId: string, revisio
   return new Error(
     `${label} ${teamId} is corrupted: embedded and standalone copies share revision ${revision} but differ.`,
   );
+}
+
+function assertPersistedSeatBoardAuthorityShape(session: LeagueBuilderMlbDraftSession): void {
+  const format = session.seatBoardAuthorityFormat;
+  if (format !== undefined && format !== SNAKE_SEAT_BOARD_AUTHORITY_FORMAT) {
+    throw new Error('The snake session is corrupted: its seat-board authority format is unknown.');
+  }
+  if (
+    format === SNAKE_SEAT_BOARD_AUTHORITY_FORMAT
+    && (session.seatBoards !== undefined || session.farmSeatBoards !== undefined)
+  ) {
+    throw new Error('The snake session is corrupted: a standalone-authority room contains embedded seat boards.');
+  }
+}
+
+function stripSeatBoardsForPersistence(
+  session: LeagueBuilderMlbDraftSession,
+): LeagueBuilderMlbDraftSession {
+  const persisted = {
+    ...session,
+    seatBoardAuthorityFormat: SNAKE_SEAT_BOARD_AUTHORITY_FORMAT,
+  };
+  delete persisted.seatBoards;
+  delete persisted.farmSeatBoards;
+  return persisted;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -2661,6 +2972,7 @@ function validateSeatBoardPayload(
     if (!isRecord(value.rankings)) throw malformed();
     if (value.rankings.global !== undefined && !isStringArray(value.rankings.global)) throw malformed();
     if (value.rankings.frozenPlayerIds !== undefined && !isStringArray(value.rankings.frozenPlayerIds)) throw malformed();
+    if (value.rankings.zeroInterestPlayerIds !== undefined && !isStringArray(value.rankings.zeroInterestPlayerIds)) throw malformed();
     if (value.rankings.byPosition !== undefined && (
       !isRecord(value.rankings.byPosition)
       || !Object.values(value.rankings.byPosition).every(isStringArray)
@@ -2766,7 +3078,11 @@ function prepareSeatBoardPersistence(input: {
   proposed: LeagueBuilderMlbDraftSession;
   standaloneRows: SnakeSeatBoardStoreRecord[];
   modifiedAt: string;
-}): { session: LeagueBuilderMlbDraftSession; rowsToWrite: SnakeSeatBoardStoreRecord[] } {
+}): {
+  session: LeagueBuilderMlbDraftSession;
+  persistedSession: LeagueBuilderMlbDraftSession;
+  rowsToWrite: SnakeSeatBoardStoreRecord[];
+} {
   const proposedPhase = validatedSnakeSessionPhase(input.proposed);
   const preActionPhase = input.preAction ? validatedSnakeSessionPhase(input.preAction) : undefined;
   if (preActionPhase && proposedPhase !== preActionPhase) {
@@ -2788,7 +3104,12 @@ function prepareSeatBoardPersistence(input: {
     preAction: input.preAction,
     initialSession: input.proposed,
   }) as LeagueBuilderMlbDraftSession['farmSeatBoards'];
-  const session = { ...input.proposed, seatBoards, farmSeatBoards };
+  const session = {
+    ...input.proposed,
+    seatBoardAuthorityFormat: SNAKE_SEAT_BOARD_AUTHORITY_FORMAT,
+    seatBoards,
+    farmSeatBoards,
+  };
   if (!seatBoards) delete session.seatBoards;
   if (!farmSeatBoards) delete session.farmSeatBoards;
   validateEmbeddedSeatBoardAuthority(session);
@@ -2815,7 +3136,61 @@ function prepareSeatBoardPersistence(input: {
       lastModified: input.modifiedAt,
     });
   }
-  return { session, rowsToWrite };
+  return {
+    session,
+    persistedSession: stripSeatBoardsForPersistence(session),
+    rowsToWrite,
+  };
+}
+
+/**
+ * Convert backup or transport records to the single persisted board authority.
+ * The function rejects ambiguous equal-revision conflicts.
+ */
+export function normalizeSnakeSeatBoardAuthorityRecords(input: {
+  sessions: unknown[];
+  boardRows: unknown[];
+  modifiedAt: string;
+}): { sessions: LeagueBuilderMlbDraftSession[]; boardRows: SnakeSeatBoardStoreRecord[] } {
+  const sessions = input.sessions.map((value) => {
+    if (!isRecord(value) || typeof value.id !== 'string') {
+      throw new Error('A backed-up snake session is malformed.');
+    }
+    return value as unknown as LeagueBuilderMlbDraftSession;
+  });
+  const boardRows = input.boardRows.map((value) => {
+    if (!isRecord(value) || typeof value.sessionId !== 'string') {
+      throw new Error('A backed-up snake seat-board row is malformed.');
+    }
+    return value as unknown as SnakeSeatBoardStoreRecord;
+  });
+  const rowsBySessionId = new Map<string, SnakeSeatBoardStoreRecord[]>();
+  for (const row of boardRows) {
+    const rows = rowsBySessionId.get(row.sessionId) ?? [];
+    rows.push(row);
+    rowsBySessionId.set(row.sessionId, rows);
+  }
+  const finalRowsById = new Map(boardRows.map((row) => [row.id, row]));
+  const normalizedSessions = sessions.map((stored) => {
+    if (stored.seatBoards === undefined && stored.farmSeatBoards === undefined) {
+      assertPersistedSeatBoardAuthorityShape(stored);
+      return stripSeatBoardsForPersistence(stored);
+    }
+    const standaloneRows = rowsBySessionId.get(stored.id) ?? [];
+    const current = hydrateIndependentSeatBoards(stored, standaloneRows);
+    const prepared = prepareSeatBoardPersistence({
+      preAction: undefined,
+      proposed: current,
+      standaloneRows,
+      modifiedAt: input.modifiedAt,
+    });
+    for (const row of prepared.rowsToWrite) finalRowsById.set(row.id, row);
+    return prepared.persistedSession;
+  });
+  return {
+    sessions: normalizedSessions,
+    boardRows: [...finalRowsById.values()],
+  };
 }
 
 export interface SaveMlbDraftSessionOptions {
@@ -2868,6 +3243,7 @@ export async function saveMlbDraftSession(
     const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
     const boardsRead = boardStore.index('sessionId').getAll(id);
     let fullSession: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSession: LeagueBuilderMlbDraftSession | null = null;
     let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
     let staleTransitionBoardRows: SnakeSeatBoardStoreRecord[] = [];
     let completedReads = 0;
@@ -2915,18 +3291,21 @@ export async function saveMlbDraftSession(
           ...(farmProspectSnapshot ? { farmProspectSnapshot } : {}),
         };
         assertFarmSessionHasNoTradeState(proposed, existing);
+        const initialCandidate = { ...proposed };
+        delete initialCandidate.seatBoardAuthorityFormat;
         const prepared = prepareSeatBoardPersistence({
           preAction: existing,
-          proposed: existing ? proposed : hydrateIndependentSeatBoards(proposed, authoritativeStandaloneRows),
+          proposed: existing ? proposed : hydrateIndependentSeatBoards(initialCandidate, authoritativeStandaloneRows),
           standaloneRows: authoritativeStandaloneRows,
           modifiedAt: now,
         });
         fullSession = prepared.session;
+        persistedSession = prepared.persistedSession;
         boardRowsWritten = prepared.rowsToWrite;
         staleTransitionBoardRows = createsFarmAuthority ? standaloneRows : [];
         for (const row of staleTransitionBoardRows) boardStore.delete(row.id);
-        store.put(fullSession);
         for (const row of boardRowsWritten) boardStore.put(row);
+        store.put(persistedSession);
       } catch (error) {
         reject(error);
         tx.abort();
@@ -2939,7 +3318,7 @@ export async function saveMlbDraftSession(
     mlbAuthorityRead.onerror = () => reject(mlbAuthorityRead.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!fullSession) {
+      if (!fullSession || !persistedSession) {
         reject(new Error(`MLB draft session ${id} was not saved.`));
         return;
       }
@@ -2950,10 +3329,10 @@ export async function saveMlbDraftSession(
             syncEngine.remove('kbl-league-builder', 'snakeSeatBoards', row.id);
           }
         }
-        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', fullSession.id, fullSession);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
         }
+        syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSession.id, persistedSession);
       }
       resolve(fullSession);
     };
@@ -2980,6 +3359,7 @@ export async function updateMlbDraftSessionAtomically(
     const read = store.get(id);
     const boardsRead = tx.objectStore(STORES.SNAKE_SEAT_BOARDS).index('sessionId').getAll(id);
     let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
     let sessionWritten = false;
     const boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
     let completedReads = 0;
@@ -3019,12 +3399,16 @@ export async function updateMlbDraftSessionAtomically(
           modifiedAt: now,
         });
         saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
         boardRowsWritten.push(...prepared.rowsToWrite);
-        sessionWritten = !structurallyEqual(stored, saved);
-        if (sessionWritten && !callbackChanged) saved = { ...saved, lastModified: now };
-        if (sessionWritten) store.put(saved);
+        sessionWritten = !structurallyEqual(stored, persistedSaved);
+        if (sessionWritten && !callbackChanged) {
+          saved = { ...saved, lastModified: now };
+          persistedSaved = { ...persistedSaved, lastModified: now };
+        }
         const seatBoardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
         for (const row of boardRowsWritten) seatBoardStore.put(row);
+        if (sessionWritten) store.put(persistedSaved);
       } catch (error) {
         reject(error);
         tx.abort();
@@ -3035,14 +3419,16 @@ export async function updateMlbDraftSessionAtomically(
     read.onerror = () => reject(read.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!saved) {
+      if (!saved || !persistedSaved) {
         reject(new Error(`MLB draft session ${id} was not updated.`));
         return;
       }
       if (!syncEngine.isSuppressed()) {
-        if (sessionWritten) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+        }
+        if (sessionWritten) {
+          syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved.id, persistedSaved);
         }
       }
       resolve(saved);
@@ -3075,13 +3461,15 @@ async function patchIndependentSeatBoard(input: {
   const now = nowISO();
   let record: SnakeSeatBoardStoreRecord | null = null;
   let savedSession: LeagueBuilderMlbDraftSession | null = null;
+  let persistedMigration: LeagueBuilderMlbDraftSession | null = null;
+  let recordsToSync: SnakeSeatBoardStoreRecord[] = [];
 
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction([STORES.MLB_DRAFT_SESSIONS, STORES.SNAKE_SEAT_BOARDS], 'readwrite');
     const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
     const sessionRead = sessionStore.get(sessionId);
     const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
-    const boardRead = boardStore.get(boardId);
+    const boardsRead = boardStore.index('sessionId').getAll(sessionId);
     let completedReads = 0;
     const apply = () => {
       completedReads += 1;
@@ -3089,19 +3477,13 @@ async function patchIndependentSeatBoard(input: {
       try {
         const session = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
         if (!session) throw new Error(`MLB draft session ${sessionId} does not exist.`);
-        authorizeSeatBoardWrite(session, input.phase, input.teamId);
-        input.authorize?.(session);
-        const storedRecord = boardRead.result as SnakeSeatBoardStoreRecord | undefined;
-        const embeddedBoard = input.phase === 'MLB'
-          ? session.seatBoards?.[input.teamId]
-          : session.farmSeatBoards?.[input.teamId];
-        const currentBoard = resolveAuthoritativeSeatBoard(
-          embeddedBoard,
-          storedRecord,
-          input.phase,
-          input.teamId,
-          session,
-        );
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(session, standaloneRows);
+        authorizeSeatBoardWrite(current, input.phase, input.teamId);
+        input.authorize?.(current);
+        const currentBoard = input.phase === 'MLB'
+          ? current.seatBoards?.[input.teamId]
+          : current.farmSeatBoards?.[input.teamId];
         if (!currentBoard || currentBoard.revision !== input.expectedBoardRevision) {
           throw new Error(`${input.phase === 'FARM' ? 'Farm seat' : 'Seat'} board ${input.teamId} changed before it could be saved.`);
         }
@@ -3122,26 +3504,36 @@ async function patchIndependentSeatBoard(input: {
         };
         savedSession = input.phase === 'MLB'
           ? {
-              ...session,
-              seatBoards: { ...(session.seatBoards ?? {}), [input.teamId]: input.board },
-              lastModified: now,
+              ...current,
+              seatBoards: { ...(current.seatBoards ?? {}), [input.teamId]: input.board },
             }
           : {
-              ...session,
-              farmSeatBoards: { ...(session.farmSeatBoards ?? {}), [input.teamId]: input.board },
-              lastModified: now,
+              ...current,
+              farmSeatBoards: { ...(current.farmSeatBoards ?? {}), [input.teamId]: input.board },
             };
-        sessionStore.put(savedSession);
-        boardStore.put(record);
+        const migration = prepareSeatBoardPersistence({
+          preAction: undefined,
+          proposed: current,
+          standaloneRows,
+          modifiedAt: now,
+        });
+        persistedMigration = structurallyEqual(session, migration.persistedSession)
+          ? null
+          : migration.persistedSession;
+        const rowsById = new Map(migration.rowsToWrite.map((row) => [row.id, row]));
+        rowsById.set(record.id, record);
+        recordsToSync = [...rowsById.values()];
+        for (const row of recordsToSync) boardStore.put(row);
+        if (persistedMigration) sessionStore.put(persistedMigration);
       } catch (error) {
         reject(error);
         tx.abort();
       }
     };
     sessionRead.onsuccess = apply;
-    boardRead.onsuccess = apply;
+    boardsRead.onsuccess = apply;
     sessionRead.onerror = () => reject(sessionRead.error);
-    boardRead.onerror = () => reject(boardRead.error);
+    boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error ?? new Error(`Seat board ${input.teamId} update was aborted.`));
@@ -3152,8 +3544,13 @@ async function patchIndependentSeatBoard(input: {
   if (!syncedRecord) throw new Error(`Seat board ${input.teamId} was not saved.`);
   if (!syncedSession) throw new Error(`MLB draft session ${sessionId} was not updated.`);
   if (!syncEngine.isSuppressed()) {
-    syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', syncedSession.id, syncedSession);
-    syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', syncedRecord.id, syncedRecord);
+    for (const row of recordsToSync) {
+      syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+    }
+    const migrationToSync = persistedMigration as LeagueBuilderMlbDraftSession | null;
+    if (migrationToSync) {
+      syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', migrationToSync.id, migrationToSync);
+    }
   }
   const hydrated = await getMlbDraftSession(input.leagueId, input.seasonNumber);
   if (!hydrated) throw new Error(`MLB draft session ${sessionId} does not exist.`);
@@ -3713,6 +4110,7 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
     let currentPool: RegisteredPool | null = null;
     let reads = 0;
     let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
     let sessionWritten = false;
     let poolWritten = false;
     let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
@@ -3734,10 +4132,11 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
             modifiedAt: now,
           });
           saved = prepared.session;
+          persistedSaved = prepared.persistedSession;
           boardRowsWritten = prepared.rowsToWrite;
-          sessionWritten = !structurallyEqual(currentSession, saved);
-          if (sessionWritten) sessionStore.put(saved);
           for (const row of boardRowsWritten) boardStore.put(row);
+          sessionWritten = !structurallyEqual(currentSession, persistedSaved);
+          if (sessionWritten) sessionStore.put(persistedSaved);
           return;
         }
         if ((current.revision ?? 0) !== input.expectedRevision) {
@@ -3765,10 +4164,11 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
           modifiedAt: now,
         });
         saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
         boardRowsWritten = prepared.rowsToWrite;
-        sessionStore.put(saved);
-        sessionWritten = true;
         for (const row of boardRowsWritten) boardStore.put(row);
+        sessionStore.put(persistedSaved);
+        sessionWritten = true;
         poolStore.put(input.registeredPool);
         poolWritten = true;
       } catch (error) {
@@ -3783,18 +4183,277 @@ export async function freezeMlbDraftRoomSessionWithRegisteredPool(input: {
     poolRead.onerror = () => reject(poolRead.error);
     boardsRead.onerror = () => reject(boardsRead.error);
     tx.oncomplete = () => {
-      if (!saved) return reject(new Error(`MLB draft session ${id} was not frozen.`));
+      if (!saved || !persistedSaved) return reject(new Error(`MLB draft session ${id} was not frozen.`));
       if (!syncEngine.isSuppressed()) {
         if (poolWritten) syncEngine.upsert('kbl-league-builder', 'registeredPools', input.registeredPool.leagueId, input.registeredPool);
-        if (sessionWritten) syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', saved.id, saved);
         for (const row of boardRowsWritten) {
           syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+        }
+        if (sessionWritten) {
+          syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved.id, persistedSaved);
         }
       }
       resolve(saved);
     };
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} freeze was aborted.`));
+  });
+}
+
+export interface MlbSnakeDraftFinalizationResult {
+  session: LeagueBuilderMlbDraftSession;
+  committedPlayerIds: string[];
+  teamRosterCounts: Record<string, number>;
+}
+
+/**
+ * Final MLB Snake boundary. The manifest, pool, private-board rows, team
+ * rosters, player assignments, settled salaries, and handoff marker commit in
+ * one transaction. A retry of the same manifest converges on the same state.
+ */
+export async function finalizeMlbSnakeDraftAtomically(input: {
+  session: LeagueBuilderMlbDraftSession;
+  registeredPool: RegisteredPool;
+  expectedRevision: number;
+  committedAt: string;
+}): Promise<MlbSnakeDraftFinalizationResult> {
+  const candidateTruth = readSnakeDraftTruth(input.session, 'MLB');
+  if (!candidateTruth.manifest) {
+    throw new Error('The completed MLB snake draft has no frozen manifest.');
+  }
+  if (candidateTruth.completedPicks.length !== candidateTruth.pickOrder.length) {
+    throw new Error('Cannot finalize MLB snake rosters until every pick is recorded.');
+  }
+  if (!Number.isFinite(Date.parse(input.committedAt))) {
+    throw new Error('The MLB snake roster handoff time is invalid.');
+  }
+  assertRegisteredPoolMatchesMlbManifest(input.registeredPool, input.session);
+
+  const teamIds = candidateTruth.lockedClubs.map((club) => club.teamId);
+  const teamIdSet = new Set(teamIds);
+  if (teamIds.length === 0 || teamIdSet.size !== teamIds.length) {
+    throw new Error('The MLB snake authority has no canonical frozen clubs.');
+  }
+  const picksByTeamId = new Map<string, typeof candidateTruth.completedPicks>();
+  const pickedPlayerIds = new Set<string>();
+  for (const pick of candidateTruth.completedPicks) {
+    if (!teamIdSet.has(pick.teamId)) {
+      throw new Error(`The completed MLB snake draft contains an unknown team ${pick.teamId}.`);
+    }
+    if (pickedPlayerIds.has(pick.playerId)) {
+      throw new Error(`Snake draft player "${pick.playerId}" appears in more than one completed pick.`);
+    }
+    if (!Number.isFinite(pick.launchSalary) || pick.launchSalary < 0) {
+      throw new Error(`Snake draft player "${pick.playerId}" has no finite frozen salary.`);
+    }
+    pickedPlayerIds.add(pick.playerId);
+    picksByTeamId.set(pick.teamId, [...(picksByTeamId.get(pick.teamId) ?? []), pick]);
+  }
+
+  const db = await initLeagueBuilderDatabase();
+  const id = createMlbDraftSessionId(input.session.leagueId, input.session.seasonNumber);
+  const now = nowISO();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([
+      STORES.MLB_DRAFT_SESSIONS,
+      STORES.REGISTERED_POOLS,
+      STORES.SNAKE_SEAT_BOARDS,
+      STORES.TEAM_ROSTERS,
+      STORES.GLOBAL_PLAYERS,
+    ], 'readwrite');
+    const sessionStore = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+    const poolStore = tx.objectStore(STORES.REGISTERED_POOLS);
+    const boardStore = tx.objectStore(STORES.SNAKE_SEAT_BOARDS);
+    const rosterStore = tx.objectStore(STORES.TEAM_ROSTERS);
+    const playerStore = tx.objectStore(STORES.GLOBAL_PLAYERS);
+    const sessionRead = sessionStore.get(id);
+    const poolRead = poolStore.get(input.session.leagueId);
+    const boardsRead = boardStore.index('sessionId').getAll(id);
+    const rostersRead = rosterStore.getAll();
+    const playersRead = playerStore.getAll();
+    let reads = 0;
+    let saved: LeagueBuilderMlbDraftSession | null = null;
+    let persistedSaved: LeagueBuilderMlbDraftSession | null = null;
+    let sessionWritten = false;
+    let poolWritten = false;
+    let boardRowsWritten: SnakeSeatBoardStoreRecord[] = [];
+    let rostersWritten: TeamRoster[] = [];
+    let playersWritten: Player[] = [];
+
+    const fail = (cause: unknown) => {
+      reject(cause);
+      try { tx.abort(); } catch { /* the transaction already stopped */ }
+    };
+    const finishRead = () => {
+      reads += 1;
+      if (reads !== 5) return;
+      try {
+        const rawCurrent = sessionRead.result as LeagueBuilderMlbDraftSession | undefined;
+        const currentPool = poolRead.result as RegisteredPool | undefined;
+        if (!rawCurrent || !currentPool) {
+          throw new Error('The completed snake draft session or RegisteredPool is missing.');
+        }
+        if (!structurallyEqual(currentPool, input.registeredPool)) {
+          throw new Error('The player pool changed before confirmation. Refresh and review the final pool.');
+        }
+        const standaloneRows = boardsRead.result as SnakeSeatBoardStoreRecord[];
+        const current = hydrateIndependentSeatBoards(rawCurrent, standaloneRows);
+        let frozenSession: LeagueBuilderMlbDraftSession;
+        if (current.draftManifest) {
+          assertRegisteredPoolMatchesMlbManifest(currentPool, current);
+          const currentTruth = readSnakeDraftTruth(current, 'MLB');
+          if (!structurallyEqual(currentTruth.manifest, candidateTruth.manifest)) {
+            throw new Error('The saved frozen draft does not match this completed live room.');
+          }
+          frozenSession = current;
+        } else {
+          if ((current.revision ?? 0) !== input.expectedRevision) {
+            throw new Error('The draft moved before confirmation could be saved. Refresh and try again.');
+          }
+          frozenSession = {
+            ...input.session,
+            id: current.id,
+            leagueId: current.leagueId,
+            seasonNumber: current.seasonNumber,
+            createdDate: current.createdDate,
+            lastModified: now,
+            snakeCompanions: current.snakeCompanions ?? input.session.snakeCompanions,
+            seatBoards: mergeFreshSeatBoards(current.seatBoards, input.session.seatBoards),
+            farmSeatBoards: mergeFreshFarmSeatBoards(current.farmSeatBoards, input.session.farmSeatBoards),
+            revision: Math.max(input.session.revision ?? 0, (current.revision ?? 0) + 1),
+          };
+          poolStore.put(input.registeredPool);
+          poolWritten = true;
+        }
+
+        const withHandoff = frozenSession.rosterHandoff
+          ? frozenSession
+          : {
+              ...frozenSession,
+              rosterHandoff: buildSnakeRosterHandoff(frozenSession, 'MLB', input.committedAt),
+              lastModified: now,
+              revision: (frozenSession.revision ?? 0) + 1,
+            };
+        validateSnakeRosterHandoff(withHandoff, 'MLB');
+        const prepared = prepareSeatBoardPersistence({
+          preAction: current,
+          proposed: withHandoff,
+          standaloneRows,
+          modifiedAt: now,
+        });
+        saved = prepared.session;
+        persistedSaved = prepared.persistedSession;
+        boardRowsWritten = prepared.rowsToWrite;
+
+        const allPlayers = playersRead.result as Player[];
+        const playerById = new Map(allPlayers.map((player) => [player.id, player]));
+        for (const teamId of teamIds) {
+          const picks = picksByTeamId.get(teamId) ?? [];
+          const rosterPlayers = picks.map((pick) => playerById.get(pick.playerId));
+          if (rosterPlayers.some((player) => !player)) {
+            throw new Error(`The completed MLB snake roster for ${teamId} is missing player data.`);
+          }
+          if (!isLegalRoster(rosterPlayers.map((player) => toRosterSlotPlayer({
+            primaryPosition: player!.primaryPosition,
+            secondaryPosition: player!.secondaryPosition ?? null,
+            traits: [player!.trait1, player!.trait2],
+          })))) {
+            throw new Error(`The completed MLB snake roster for ${teamId} is not a legal 22-player roster.`);
+          }
+        }
+
+        const rosterByTeamId = new Map((rostersRead.result as TeamRoster[]).map((roster) => [roster.teamId, roster]));
+        rostersWritten = teamIds.flatMap((teamId) => {
+          const playerIds = (picksByTeamId.get(teamId) ?? []).map((pick) => pick.playerId);
+          const currentRoster = rosterByTeamId.get(teamId) ?? createEmptyTeamRoster(teamId);
+          const candidateRoster: TeamRoster = { ...currentRoster, mlbRoster: playerIds };
+          return structurallyEqual(currentRoster, candidateRoster)
+            ? []
+            : [{ ...candidateRoster, lastModified: now }];
+        });
+
+        const pickByPlayerId = new Map(candidateTruth.completedPicks.map((pick) => [pick.playerId, pick]));
+        playersWritten = allPlayers.flatMap((player) => {
+          const pick = pickByPlayerId.get(player.id);
+          let candidate: Player | null = null;
+          if (pick) {
+            candidate = {
+              ...player,
+              salary: pick.launchSalary,
+              settledSalary: pick.launchSalary,
+              leagueAssignments: [
+                ...(player.leagueAssignments ?? []).filter((row) => row.leagueId !== input.session.leagueId),
+                { leagueId: input.session.leagueId, teamId: pick.teamId, rosterStatus: 'MLB' },
+              ],
+            };
+          } else if ((player.leagueAssignments ?? []).some((row) => (
+            row.leagueId === input.session.leagueId && row.rosterStatus === 'MLB' && Boolean(row.teamId)
+          ))) {
+            const { settledSalary: _settledSalary, ...withoutSettlement } = player;
+            void _settledSalary;
+            candidate = {
+              ...withoutSettlement,
+              leagueAssignments: (player.leagueAssignments ?? []).map((row) => (
+                row.leagueId === input.session.leagueId && row.rosterStatus === 'MLB'
+                  ? { ...row, teamId: '', rosterStatus: 'FREE_AGENT' as const }
+                  : row
+              )),
+            } as Player;
+          }
+          return candidate && !structurallyEqual(player, candidate)
+            ? [{ ...candidate, lastModified: now }]
+            : [];
+        });
+
+        for (const row of boardRowsWritten) boardStore.put(row);
+        for (const roster of rostersWritten) rosterStore.put(roster);
+        for (const player of playersWritten) playerStore.put(player);
+        sessionWritten = !structurallyEqual(rawCurrent, persistedSaved);
+        if (sessionWritten) sessionStore.put(persistedSaved);
+      } catch (cause) {
+        fail(cause);
+      }
+    };
+
+    for (const request of [sessionRead, poolRead, boardsRead, rostersRead, playersRead]) {
+      request.onsuccess = finishRead;
+      request.onerror = () => fail(request.error ?? new Error('MLB draft finalization read failed.'));
+    }
+    tx.oncomplete = () => {
+      if (!saved || !persistedSaved) {
+        reject(new Error(`MLB draft session ${id} was not finalized.`));
+        return;
+      }
+      if (!syncEngine.isSuppressed()) {
+        void syncEngine.batchMutations(async () => {
+          if (poolWritten) {
+            syncEngine.upsert('kbl-league-builder', 'registeredPools', input.registeredPool.leagueId, input.registeredPool);
+          }
+          for (const row of boardRowsWritten) {
+            syncEngine.upsert('kbl-league-builder', 'snakeSeatBoards', row.id, row);
+          }
+          for (const roster of rostersWritten) {
+            syncEngine.upsert('kbl-league-builder', 'teamRosters', roster.teamId, roster);
+          }
+          for (const player of playersWritten) {
+            syncEngine.upsert('kbl-league-builder', 'globalPlayers', player.id, player);
+          }
+          if (sessionWritten) {
+            syncEngine.upsert('kbl-league-builder', 'mlbDraftSessions', persistedSaved!.id, persistedSaved);
+          }
+        }).catch((cause) => {
+          console.error('MLB snake roster handoff backup sync did not queue.', cause);
+        });
+      }
+      resolve({
+        session: saved,
+        committedPlayerIds: candidateTruth.completedPicks.map((pick) => pick.playerId),
+        teamRosterCounts: Object.fromEntries(teamIds.map((teamId) => [teamId, (picksByTeamId.get(teamId) ?? []).length])),
+      });
+    };
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error(`MLB draft session ${id} finalization was aborted.`));
   });
 }
 
@@ -4610,20 +5269,41 @@ async function seedFromSMB4DatabaseWrites(clearExisting: boolean): Promise<{ tea
 
   await initLeagueBuilderDatabase();
 
+  const preservedTeamLeagueIds = new Map<string, string[]>();
+  const preservedPlayerAssignments = new Map<string, NonNullable<Player['leagueAssignments']>>();
+  const userLeagueTeamIds = new Set<string>();
+
   if (clearExisting) {
     // Only remove SML teams/players — preserve other leagues (e.g., MLB)
     const smlTeamIds = new Set(Object.values(SMB4_TEAMS).map(t => t.id).filter(id => id !== 'free-agent'));
     const existingTeams = await getAllTeams();
     const existingPlayers = await getAllPlayers();
+    const existingLeagues = await getAllLeagueTemplates();
+    for (const league of existingLeagues) {
+      if (league.sourceLibrary || league.id === 'sml' || league.id === 'mlb') continue;
+      for (const teamId of league.teamIds) userLeagueTeamIds.add(teamId);
+    }
 
     for (const t of existingTeams) {
       if (smlTeamIds.has(t.id)) {
-        await deleteTeam(t.id);
+        preservedTeamLeagueIds.set(t.id, (t.leagueIds ?? []).filter((leagueId) => leagueId !== 'sml'));
       }
     }
     for (const p of existingPlayers) {
-      if (p.leagueAssignments?.some(a => a.leagueId === 'sml') || (p.leagueAssignments?.[0]?.teamId && smlTeamIds.has(p.leagueAssignments[0].teamId))) {
-        await deletePlayer(p.id);
+      const stockPlayer = SMB4_PLAYERS[p.id];
+      const isOwnedSmb4Player = Boolean(stockPlayer) && p.sourceDatabase === 'SMB4';
+      const isLegacySmb4Player = Boolean(stockPlayer)
+        && !p.sourceDatabase
+        && Boolean(p.leagueAssignments?.some((assignment) => (
+          assignment.leagueId === 'sml' && assignment.teamId === stockPlayer.teamId
+        )));
+      if (isOwnedSmb4Player || isLegacySmb4Player) {
+        preservedPlayerAssignments.set(
+          p.id,
+          (p.leagueAssignments ?? [])
+            .filter((assignment) => assignment.leagueId !== 'sml')
+            .map((assignment) => ({ ...assignment })),
+        );
       }
     }
   }
@@ -4637,19 +5317,36 @@ async function seedFromSMB4DatabaseWrites(clearExisting: boolean): Promise<{ tea
   for (const teamData of Object.values(SMB4_TEAMS)) {
     if (teamData.id === 'free-agent') continue; // Skip free agent pool
 
-    const team = convertTeam(teamData);
+    const convertedTeam = convertTeam(teamData);
+    const team = {
+      ...convertedTeam,
+      leagueIds: Array.from(new Set([
+        ...(convertedTeam.leagueIds ?? []),
+        ...(preservedTeamLeagueIds.get(convertedTeam.id) ?? []),
+      ])),
+    };
     seededTeams.push(await saveTeam(team));
     teamCount++;
   }
 
   // Seed players
   for (const playerData of Object.values(SMB4_PLAYERS)) {
-    const player = convertPlayer(playerData);
+    const convertedPlayer = convertPlayer(playerData);
+    const player = {
+      ...convertedPlayer,
+      leagueAssignments: [
+        ...(convertedPlayer.leagueAssignments ?? []),
+        ...(preservedPlayerAssignments.get(convertedPlayer.id) ?? []),
+      ],
+    };
     seededPlayers.push(await savePlayer(player));
     playerCount++;
   }
 
   for (const team of seededTeams) {
+    // A stock club can be reused by a user league. Its one durable roster is shared by team ID,
+    // so refreshing the closed SML source must not replace that user's roster construction.
+    if (userLeagueTeamIds.has(team.id)) continue;
     const teamPlayers = seededPlayers.filter((player) =>
       player.leagueAssignments?.some((assignment) => assignment.teamId === team.id),
     );

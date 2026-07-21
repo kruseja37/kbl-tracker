@@ -1,14 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const patchCompanions = vi.hoisted(() => vi.fn());
-
-vi.mock('../../../../../../utils/leagueBuilderStorage', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../../../utils/leagueBuilderStorage')>();
-  return { ...actual, patchMlbDraftSessionSnakeCompanions: patchCompanions };
-});
-
-import type { LeagueBuilderMlbDraftSession } from '../../../../../../utils/leagueBuilderStorage';
+import type { SnakeLiveClaim, SnakeLiveIntent } from '../../../../../../utils/snakeLiveRoomTypes';
 import { CompanionApprovalCard } from '../CompanionApprovalCard';
 import {
   companionRoomCodeFromSearch,
@@ -19,18 +12,44 @@ import { CompanionClaimScreen } from '../CompanionClaimScreen';
 import { CompanionSignInScreen } from '../CompanionSignInScreen';
 import { SnakeCompanionFrame } from '../SnakeCompanionFrame';
 
-const session = {
-  id: 'session', leagueId: 'league', seasonNumber: 1, seed: 'seed', workflowVersion: 'snake-v2',
-  engineMethodVersion: 'snake-v2', tier: 'standard', balanceMode: 'balanced', rounds: 22,
-  pickOrder: [], completedPicks: [], currentPickIndex: 0, createdDate: '', lastModified: '', revision: 1,
-  snakeCompanions: {
-    roomCode: '4821',
-    claims: [
-      { deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status: 'pending' },
-      { deviceId: 'ipad-b', gmName: 'Blair', teamId: 'team-b', status: 'approved' },
-    ],
-  },
-} satisfies LeagueBuilderMlbDraftSession;
+function liveClaim(overrides: Partial<SnakeLiveClaim> = {}): SnakeLiveClaim {
+  return {
+    id: 'claim-a',
+    roomId: 'room-a',
+    requestKey: 'request-a',
+    deviceId: 'mac-a',
+    gmName: 'Alex',
+    teamId: 'team-a',
+    status: 'pending',
+    revision: 1,
+    createdAt: '2026-07-19T12:00:00.000Z',
+    resolvedAt: null,
+    ...overrides,
+  };
+}
+
+function livePickIntent(overrides: Partial<SnakeLiveIntent> = {}): SnakeLiveIntent {
+  return {
+    id: 'intent-a',
+    roomId: 'room-a',
+    idempotencyKey: 'pick-a',
+    deviceId: 'mac-a',
+    teamId: 'team-a',
+    kind: 'pick',
+    status: 'pending',
+    intentRevision: 1,
+    expectedRoomRevision: 4,
+    payload: {
+      playerId: 'player-a',
+      pick: 1,
+      submittedAt: '2026-07-19T12:00:00.000Z',
+      sessionRevision: 3,
+    },
+    createdAt: '2026-07-19T12:00:00.000Z',
+    resolvedAt: null,
+    ...overrides,
+  };
+}
 
 describe('S5 companion surfaces', () => {
   beforeEach(() => {
@@ -46,49 +65,96 @@ describe('S5 companion surfaces', () => {
     const fetchMock = vi.mocked(globalThis.fetch).mockResolvedValue(new Response(JSON.stringify({
       origin: 'http://192.168.68.54:5173',
     }), { headers: { 'Content-Type': 'application/json' } }));
-    const onChange = vi.fn();
-    patchCompanions.mockImplementation(async (input) => ({
-      ...session,
-      snakeCompanions: input.patch(session.snakeCompanions, session),
-    }));
+    const pending = liveClaim();
+    const approved = liveClaim({
+      id: 'claim-b',
+      requestKey: 'request-b',
+      deviceId: 'mac-b',
+      gmName: 'Blair',
+      teamId: 'team-b',
+      status: 'approved',
+      resolvedAt: '2026-07-19T12:01:00.000Z',
+    });
+    const onResolveClaim = vi.fn().mockResolvedValue(undefined);
     render(<CompanionApprovalCard
-      session={session}
+      roomCode="4821"
       teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
-      onChange={onChange}
+      claims={[pending, approved]}
+      intents={[]}
+      ready
+      onResolveClaim={onResolveClaim}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
     />);
     expect(screen.getByText('ROOM CODE 4821')).toBeInTheDocument();
-    expect(screen.queryByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).not.toBeInTheDocument();
+    expect(screen.queryByText("USE THIS CODE ON THE LEAGUE OWNER'S SIGNED-IN DEVICES.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
     expect(screen.getByText('FINDING THE SHAREABLE ADDRESS…')).toBeInTheDocument();
     expect(await screen.findByTestId('companion-join-url')).toHaveTextContent('http://192.168.68.54:5173/snake-companion?room=4821');
-    expect(screen.getByText("USE THIS CODE ONLY ON THE LEAGUE OWNER'S SIGNED-IN DEVICES AT THE TABLE.")).toBeInTheDocument();
+    expect(screen.getByText("USE THIS CODE ON THE LEAGUE OWNER'S SIGNED-IN DEVICES.")).toBeInTheDocument();
     expect(screen.getByText('ALEX · 1 TEAM')).toBeInTheDocument();
     expect(screen.getByText('KODIAKS')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE KODIAKS' }));
-    await waitFor(() => expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      snakeCompanions: expect.objectContaining({ claims: expect.arrayContaining([expect.objectContaining({ deviceId: 'ipad-a', status: 'approved' })]) }),
-    })));
+    await waitFor(() => expect(onResolveClaim).toHaveBeenCalledWith(pending, 'approved'));
     fireEvent.click(screen.getByRole('button', { name: 'REFUSE' }));
-    fireEvent.click(screen.getByRole('button', { name: 'REVOKE BLAIR' }));
-    await waitFor(() => expect(onChange).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(onResolveClaim).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'RETURN TO HOTSEAT' })).not.toBeDisabled());
+    fireEvent.click(screen.getByRole('button', { name: 'RETURN TO HOTSEAT' }));
+    await waitFor(() => expect(onResolveClaim).toHaveBeenCalledTimes(3));
+    expect(onResolveClaim).toHaveBeenNthCalledWith(2, pending, 'revoked');
+    expect(onResolveClaim).toHaveBeenNthCalledWith(3, approved, 'revoked');
     expect(fetchMock).toHaveBeenCalledWith('/__kbl/companion-address', expect.objectContaining({ cache: 'no-store' }));
   });
 
-  it('groups one device request as a clear multi-team package while keeping per-team decisions', async () => {
-    const packageSession = {
-      ...session,
-      snakeCompanions: {
-        roomCode: '4821',
-        claims: [
-          { claimId: 'a', deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const },
-          { claimId: 'b', deviceId: 'ipad-a', gmName: 'Alex', teamId: 'team-b', status: 'pending' as const },
-        ],
-      },
-    };
+  it('shows live service state and has no manual companion sync action', async () => {
     render(<CompanionApprovalCard
-      session={packageSession}
+      roomCode="4821"
       teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
-      onChange={vi.fn()}
+      claims={[]}
+      intents={[]}
+      ready
+      onResolveClaim={vi.fn()}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
+    />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('LIVE');
+    expect(screen.queryByRole('button', { name: /SYNC COMPANIONS/i })).not.toBeInTheDocument();
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+  });
+
+  it('blocks approvals until the live room and private boards are ready', async () => {
+    render(<CompanionApprovalCard
+      roomCode="4821"
+      teams={[{ id: 'team-a', name: 'Kodiaks' }]}
+      claims={[liveClaim()]}
+      intents={[]}
+      ready={false}
+      liveError="THE LIVE BOARD IS NOT READY."
+      onResolveClaim={vi.fn()}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
+    />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('CONNECTING');
+    expect(screen.getByRole('alert')).toHaveTextContent('THE LIVE BOARD IS NOT READY.');
+    expect(screen.getByRole('button', { name: 'APPROVE KODIAKS' })).toBeDisabled();
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
+  });
+
+  it('groups one device request as a clear multi-team package while keeping per-team decisions', async () => {
+    render(<CompanionApprovalCard
+      roomCode="4821"
+      teams={[{ id: 'team-a', name: 'Kodiaks' }, { id: 'team-b', name: 'Comets' }]}
+      claims={[
+        liveClaim(),
+        liveClaim({ id: 'claim-b', requestKey: 'request-b', teamId: 'team-b' }),
+      ]}
+      intents={[]}
+      ready
+      onResolveClaim={vi.fn()}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
     />);
 
     expect(screen.getByTestId('companion-pending-package')).toHaveTextContent('ALEX · 2 TEAMS');
@@ -101,28 +167,34 @@ describe('S5 companion surfaces', () => {
 
   it('shows the exact companion choice and sends approval through the main pick callback', async () => {
     const onApprovePick = vi.fn().mockResolvedValue(undefined);
-    const withPickRequest = {
-      ...session,
-      pickOrder: [{ round: 1, pick: 1, teamId: 'team-b' }],
-      snakeCompanions: {
-        ...session.snakeCompanions,
-        pickRequest: {
-          id: 'request-1', teamId: 'team-b', playerId: 'player-b', pick: 1,
-          submittedAt: '2026-07-14T12:00:00.000Z', deviceId: 'ipad-b', sessionRevision: 1,
-        },
+    const intent = livePickIntent({
+      id: 'request-1',
+      deviceId: 'mac-b',
+      teamId: 'team-b',
+      payload: {
+        playerId: 'player-b',
+        pick: 1,
+        submittedAt: '2026-07-14T12:00:00.000Z',
+        sessionRevision: 1,
       },
-    } satisfies LeagueBuilderMlbDraftSession;
+    });
     render(<CompanionApprovalCard
-      session={withPickRequest}
+      roomCode="4821"
       teams={[{ id: 'team-b', name: 'Comets' }]}
+      claims={[liveClaim({ deviceId: 'mac-b', teamId: 'team-b', status: 'approved' })]}
+      intents={[intent]}
+      ready
       playerName={(playerId) => playerId === 'player-b' ? 'Punchie Patterson' : 'Unknown Player'}
       onApprovePick={onApprovePick}
-      onChange={vi.fn()}
+      onResolveClaim={vi.fn()}
+      onRejectPick={vi.fn()}
     />);
 
     expect(screen.getByTestId('companion-pick-request')).toHaveTextContent('#1 · COMETS · PUNCHIE PATTERSON');
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE PICK' }));
-    await waitFor(() => expect(onApprovePick).toHaveBeenCalledWith(withPickRequest.snakeCompanions.pickRequest));
+    await waitFor(() => expect(onApprovePick).toHaveBeenCalledWith(intent, expect.objectContaining({
+      id: 'request-1', teamId: 'team-b', playerId: 'player-b', pick: 1,
+    })));
   });
 
   it('accepts only LAN-safe http companion origins', () => {
@@ -169,58 +241,35 @@ describe('S5 companion surfaces', () => {
   });
 
   it('cannot approve a stale pending row after that seat was replaced', async () => {
-    const stale = {
-      ...session,
-      snakeCompanions: {
-        roomCode: '4821',
-        claims: [{ claimId: 'old-claim', claimVersion: 1, deviceId: 'ipad-old', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const }],
-      },
-    };
-    const fresh = {
-      ...stale,
-      snakeCompanions: {
-        roomCode: '4821',
-        claims: [
-          { ...stale.snakeCompanions.claims[0], status: 'revoked' as const, claimVersion: 2 },
-          { claimId: 'new-claim', claimVersion: 1, deviceId: 'ipad-new', gmName: 'Alex', teamId: 'team-a', status: 'pending' as const },
-        ],
-      },
-    };
-    const onChange = vi.fn();
-    patchCompanions.mockImplementation(async (input) => ({
-      ...fresh,
-      snakeCompanions: input.patch(fresh.snakeCompanions, fresh),
-    }));
+    const stale = liveClaim({ id: 'old-claim', deviceId: 'mac-old' });
+    const onResolveClaim = vi.fn().mockRejectedValue(new Error('THAT COMPANION REQUEST IS STALE. REFRESH.'));
     render(<CompanionApprovalCard
-      session={stale}
+      roomCode="4821"
       teams={[{ id: 'team-a', name: 'Kodiaks' }]}
-      onChange={onChange}
+      claims={[stale]}
+      intents={[]}
+      ready
+      onResolveClaim={onResolveClaim}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
     />);
 
     fireEvent.click(screen.getByRole('button', { name: 'APPROVE KODIAKS' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('THAT COMPANION REQUEST IS STALE. REFRESH.');
-    expect(onChange).not.toHaveBeenCalled();
-    expect(fresh.snakeCompanions.claims.find((claim) => claim.claimId === 'old-claim')?.status).toBe('revoked');
+    expect(onResolveClaim).toHaveBeenCalledWith(stale, 'approved');
   });
 
   it('uses the exact unknown-team fallback without exposing a missing companion team id', async () => {
     const missingTeamId = 'internal-companion-team-key';
-    const missingTeamSession = {
-      ...session,
-      snakeCompanions: {
-        roomCode: '4821',
-        claims: [{
-          deviceId: 'ipad-missing',
-          gmName: 'Alex',
-          teamId: missingTeamId,
-          status: 'pending' as const,
-        }],
-      },
-    };
     const { container } = render(<CompanionApprovalCard
-      session={missingTeamSession}
+      roomCode="4821"
       teams={[]}
-      onChange={vi.fn()}
+      claims={[liveClaim({ deviceId: 'mac-missing', teamId: missingTeamId })]}
+      intents={[]}
+      ready
+      onResolveClaim={vi.fn()}
+      onApprovePick={vi.fn()}
+      onRejectPick={vi.fn()}
     />);
 
     expect(screen.getByText('ALEX · 1 TEAM')).toBeInTheDocument();
@@ -242,7 +291,7 @@ describe('S5 companion surfaces', () => {
     expect(screen.getByText('YOUR PRIVATE DRAFT DESK')).toBeInTheDocument();
     expect(screen.getByText('TEAM A PRIVATE BOARD')).toBeInTheDocument();
     expect(screen.getByTestId('snake-companion-frame')).toHaveClass('snake-workspace-page');
-    expect(screen.getByTestId('companion-private-workspace-layout')).toHaveClass('snake-private-workspace');
+    expect(screen.getByTestId('companion-private-workspace-layout')).toHaveClass('snake-private-workspace', 'snake-companion-private-workspace');
     expect(screen.getByTestId('companion-selected-player-pane')).toHaveClass('snake-selected-pane');
     expect(screen.getByTestId('companion-private-workspace-scroll')).toHaveClass('snake-board-pane');
     expect(container.textContent).not.toMatch(/TEAM B PRIVATE BOARD|GAVEL|COMMISSIONER|EXECUTE TRADE|RECORD PICK/i);
@@ -250,14 +299,21 @@ describe('S5 companion surfaces', () => {
 
   it('keeps pending-device explanation behind Help and exposes the signed-in account control', () => {
     const signOut = vi.fn();
+    const onClaim = vi.fn();
     render(<CompanionClaimScreen
       pending
       accountEmail="owner@example.com"
       onSignOut={signOut}
-      onClaim={vi.fn()}
+      onClaim={onClaim}
     />);
 
     expect(screen.getByText(/ACCOUNT OWNER@EXAMPLE.COM/)).toBeInTheDocument();
+    expect(screen.getByLabelText('GM NAME')).toBeInTheDocument();
+    expect(screen.getByLabelText('ROOM CODE')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('GM NAME'), { target: { value: 'Alex' } });
+    fireEvent.change(screen.getByLabelText('ROOM CODE'), { target: { value: '4821' } });
+    fireEvent.click(screen.getByRole('button', { name: 'SEND REQUEST AGAIN' }));
+    expect(onClaim).toHaveBeenCalledWith('Alex', '4821');
     expect(screen.queryByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'COMPANION HELP' }));
     expect(screen.getByText('YOUR DESK STAYS COVERED UNTIL THE COMMISSIONER APPROVES THIS DEVICE.')).toBeInTheDocument();

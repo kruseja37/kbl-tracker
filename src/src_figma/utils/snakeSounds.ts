@@ -1,5 +1,6 @@
-export type SnakeSound = 'nav' | 'gavel' | 'turn' | 'snipe' | 'danger';
-export type SnakeSoundEvent = 'NAVIGATE' | 'PICK_RECORDED' | 'YOUR_TURN' | 'PRIVATE_SNIPE' | 'DANGER';
+export type SnakeSound = 'nav' | 'gavel' | 'turn' | 'snipe' | 'danger' | 'drafted' | 'request';
+export type SnakeSoundEvent = 'NAVIGATE' | 'PICK_RECORDED' | 'YOUR_TURN' | 'PRIVATE_SNIPE' | 'DANGER'
+  | 'PLAYER_DRAFTED' | 'COMPANION_PICK_SENT';
 
 export const SNAKE_SOUND_STORAGE_KEY = 'kbl-snake-sounds-enabled';
 
@@ -9,6 +10,8 @@ const SOUND_BY_EVENT: Record<SnakeSoundEvent, SnakeSound> = {
   YOUR_TURN: 'turn',
   PRIVATE_SNIPE: 'snipe',
   DANGER: 'danger',
+  PLAYER_DRAFTED: 'drafted',
+  COMPANION_PICK_SENT: 'request',
 };
 
 const NOTES: Record<SnakeSound, readonly number[]> = {
@@ -17,6 +20,8 @@ const NOTES: Record<SnakeSound, readonly number[]> = {
   turn: [440, 660],
   snipe: [740, 370, 740],
   danger: [220, 220, 174],
+  drafted: [523, 659, 784],
+  request: [784, 1047],
 };
 
 export function snakeSoundForRoomEvent(event: SnakeSoundEvent): SnakeSound {

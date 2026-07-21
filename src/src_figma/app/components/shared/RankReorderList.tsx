@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- this shared control deliberately exports its pure ranking helpers */
 import { useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronsUp, GripVertical } from "lucide-react";
 
@@ -26,6 +27,12 @@ export interface RankReorderListProps<T> {
    *  "Set rank for {label}" / "Send {label} to top" aria-labels. */
   itemLabel: (item: T) => string;
   onReorder: (orderedIds: readonly string[]) => void;
+  /** Optional global move adapter for a paged window of a larger ranking. */
+  onMove?: (fromIndex: number, toIndex: number) => void;
+  /** Zero-based position of the first rendered item in the complete ranking. */
+  rankOffset?: number;
+  /** Complete ranking length, used by direct rank entry in a paged window. */
+  totalItemCount?: number;
   readOnly?: boolean;
   /** The row's primary content (name/popover/etc) — rendered after the drag handle. */
   renderContent: (item: T, index: number) => ReactNode;
@@ -128,6 +135,9 @@ export function RankReorderList<T>({
   getId,
   itemLabel,
   onReorder,
+  onMove,
+  rankOffset = 0,
+  totalItemCount = items.length,
   readOnly = false,
   renderContent,
   renderBeforeArrows,
@@ -149,6 +159,10 @@ export function RankReorderList<T>({
 
   const commitMove = (fromIndex: number, toIndex: number) => {
     if (readOnly || fromIndex === toIndex) return;
+    if (onMove) {
+      onMove(fromIndex, toIndex);
+      return;
+    }
     onReorder(moveRankedId(items, getId, fromIndex, toIndex));
   };
 
@@ -171,9 +185,9 @@ export function RankReorderList<T>({
       return;
     }
     const parsed = Number.parseInt(trimmed, 10);
-    const clamped = Math.min(Math.max(parsed, 1), items.length);
+    const clamped = Math.min(Math.max(parsed, 1), totalItemCount);
     cancelEdit();
-    commitMove(fromIndex, clamped - 1);
+    commitMove(rankOffset + fromIndex, clamped - 1);
   };
 
   const handleEditKeyDown = (event: KeyboardEvent<HTMLInputElement>, fromIndex: number) => {
@@ -191,7 +205,8 @@ export function RankReorderList<T>({
       {items.map((item, index) => {
         const id = getId(item);
         const label = itemLabel(item);
-        const rank = index + 1;
+        const globalIndex = rankOffset + index;
+        const rank = globalIndex + 1;
         const dragIndex = draggedId ? items.findIndex((candidate) => getId(candidate) === draggedId) : -1;
         const dragged = draggedId === id;
         const editing = editingId === id;
@@ -204,7 +219,7 @@ export function RankReorderList<T>({
             }}
             onDrop={(event) => {
               event.preventDefault();
-              if (dragIndex >= 0) commitMove(dragIndex, index);
+              if (dragIndex >= 0) commitMove(rankOffset + dragIndex, globalIndex);
               setDraggedId(null);
             }}
             className={rowClassName(item, index, dragged)}
@@ -232,7 +247,7 @@ export function RankReorderList<T>({
                   type="number"
                   autoFocus
                   min={1}
-                  max={items.length}
+                  max={totalItemCount}
                   value={editValue}
                   aria-label={`Set rank for ${label}`}
                   className={rankInputClassName}
@@ -261,8 +276,8 @@ export function RankReorderList<T>({
                 <>
                   <button
                     type="button"
-                    onClick={() => commitMove(index, 0)}
-                    disabled={index === 0}
+                    onClick={() => commitMove(globalIndex, 0)}
+                    disabled={globalIndex === 0}
                     aria-label={`Send ${label} to top`}
                     title="Send to top"
                     className={sendToTopClassName}
@@ -271,8 +286,8 @@ export function RankReorderList<T>({
                   </button>
                   <button
                     type="button"
-                    onClick={() => commitMove(index, index - 1)}
-                    disabled={index === 0}
+                    onClick={() => commitMove(globalIndex, globalIndex - 1)}
+                    disabled={globalIndex === 0}
                     aria-label={`Move ${label} up`}
                     className={arrowButtonClassName}
                   >
@@ -280,8 +295,8 @@ export function RankReorderList<T>({
                   </button>
                   <button
                     type="button"
-                    onClick={() => commitMove(index, index + 1)}
-                    disabled={index === items.length - 1}
+                    onClick={() => commitMove(globalIndex, globalIndex + 1)}
+                    disabled={globalIndex === totalItemCount - 1}
                     aria-label={`Move ${label} down`}
                     className={arrowButtonClassName}
                   >

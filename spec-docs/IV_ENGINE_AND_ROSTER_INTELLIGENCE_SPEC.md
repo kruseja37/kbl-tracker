@@ -408,17 +408,20 @@ Port the workbook's luxury system as the balance enforcer WITHIN a tier: per sta
 | Rotation (4) | POW | 1.0 | 120 | 2,000,000 | 3000 |
 | Rotation (4) | CON | 1.0 | 160 | 1,200,000 | 2500 |
 | Rotation (4) | SPD | 2.0 | 300 | 1,000,000 | 2500 |
-| Rotation (4) | FLD | 2.0 | 396 | 650,000 | 1000 |
 | Rotation (4) | VEL | 1.5 | 100 | 1,500,000 | 2000 |
 | Rotation (4) | JNK | 2.0 | 260 | 400,000 | 1000 |
 | Rotation (4) | ACC | 1.9 | 260 | 800,000 | 1200 |
 | Bullpen (4) | POW | 1.0 | 120 | 2,100,000 | 5000 |
 | Bullpen (4) | CON | 1.0 | 120 | 1,300,000 | 3000 |
 | Bullpen (4) | SPD | 2.0 | 260 | 1,100,000 | 3000 |
-| Bullpen (4) | FLD | 2.0 | 396 | 750,000 | 1000 |
 | Bullpen (3) | VEL | 1.1 | 65 | 3,000,000 | 5000 |
 | Bullpen (3) | JNK | 2.0 | 150 | 500,000 | 1000 |
 | Bullpen (3) | ACC | 1.9 | 165 | 1,000,000 | 3000 |
+
+**Current KBL override (ratified 2026-07-19):** pitcher FLD is salary/IV value only. It is not a
+luxury-tax input. New tier tables omit rotation/bullpen FLD rows, and settlement ignores those rows
+in a saved legacy table. Hitter FLD remains active. A true Two Way player's FLD enters the hitter
+row when that player fills the position-player job.
 
 JK note honored: these XBL numbers may feel "nerfed" — they are TIER-SCALED in KBL (caps scale with the tier's pool distribution in T3, not used raw). What ports from XBL is the RATIOS AND SHAPES (which stats are precious, penalty convexities, relative modification magnitudes) — proven under multi-season adversarial min-maxing in a competitive human league. The calibration is re-derived per tier: T3 sets each neutral cap at a percentile (default 65th, `luxuryCapPercentile` in registry §12) of the pool's best-plausible top-N sum distribution, and modification deltas rescale proportionally ("+337 FLD" becomes "+X% of tier FLD cap"). All values in registry §12.
 

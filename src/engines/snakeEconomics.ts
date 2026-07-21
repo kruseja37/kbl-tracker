@@ -39,7 +39,13 @@ export interface SnakeLegalFinishBill {
   feasible: boolean;
   completionPlayerIds: readonly string[];
   completionCost: number;
+  /** Exact settled-plus-frozen salary on the quoted final 22. */
+  finalSalary: number;
+  /** Exact tax on the roster already committed in this quote. */
+  currentTax: number;
   completionTax: number;
+  /** Exact nonlinear tax on the quoted final 22. */
+  finalTax: number;
   legalFinishCushion: number;
   /** BLOCKED is emitted only after exhaustive exact search; OPEN is never a hard money gate. */
   affordability: 'AFFORDABLE' | 'BLOCKED' | 'OPEN';
@@ -128,7 +134,10 @@ function infeasibleLegalFinish(): SnakeLegalFinishBill {
     feasible: false,
     completionPlayerIds: [],
     completionCost: 0,
+    finalSalary: Number.POSITIVE_INFINITY,
+    currentTax: Number.POSITIVE_INFINITY,
     completionTax: Number.POSITIVE_INFINITY,
+    finalTax: Number.POSITIVE_INFINITY,
     legalFinishCushion: Number.NEGATIVE_INFINITY,
     affordability: 'BLOCKED',
   };
@@ -194,7 +203,10 @@ function exactGlobalLegalFinish(input: {
       feasible: true,
       completionPlayerIds: players.map((player) => player.playerId),
       completionCost,
+      finalSalary: input.committedSpent + completionCost,
+      currentTax: input.currentTax,
       completionTax: finalTax - input.currentTax,
+      finalTax,
       legalFinishCushion: input.budget - input.committedSpent - finalTax - completionCost,
       affordability: snakeMoneyNonnegative(input.budget - input.committedSpent - finalTax - completionCost)
         ? 'AFFORDABLE'
@@ -352,7 +364,10 @@ export function evaluateSnakeLegalFinish(input: SnakeLegalFinishInput): SnakeLeg
       feasible: true,
       completionPlayerIds: completion.map((player) => player.playerId),
       completionCost,
+      finalSalary: input.committedSpent + completionCost,
+      currentTax,
       completionTax: finalTax - currentTax,
+      finalTax,
       legalFinishCushion: input.budget - input.committedSpent - finalTax - completionCost,
       affordability: snakeMoneyNonnegative(input.budget - input.committedSpent - finalTax - completionCost)
         ? 'AFFORDABLE'

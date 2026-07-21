@@ -318,6 +318,110 @@ describe('useLeagueBuilderData', () => {
     expect(refreshLoadingStates.length).toBeGreaterThan(0);
   });
 
+  test('new draft leagues copy source clubs to unique ids and leave source rosters and players untouched', async () => {
+    const sourceLeagueId = 'source-sml';
+    const sourceTeamId = 'source-herbisaurs';
+    const sourceRosterIds = Array.from({ length: 22 }, (_value, index) => `source-player-${index + 1}`);
+    await saveLeagueTemplate(makeLeague({
+      id: sourceLeagueId,
+      name: 'Super Mega League',
+      teamIds: [sourceTeamId],
+      divisions: [{ id: 'source-div', name: 'Source', conferenceId: 'conf-a', teamIds: [sourceTeamId] }],
+    }));
+    await saveTeam(makeTeam(sourceTeamId, {
+      name: 'Herbisaurs',
+      abbreviation: 'HERB',
+      colors: { primary: '#159629', secondary: '#f6a000' },
+      logoUrl: 'https://example.test/herbisaurs.png',
+      leagueIds: [sourceLeagueId],
+      mlbArchetypeKey: 'whiteyball',
+      farmArchetypeKey: 'nasty-boys',
+      rosterDesign: {
+        slots: [{ slotId: 'CF', kind: 'pos', position: 'CF' }],
+        pins: { CF: sourceRosterIds[0] },
+      },
+      boardRankOverrides: { global: [...sourceRosterIds] },
+      captainPlayerId: sourceRosterIds[0],
+      fanHopefulPlayerId: sourceRosterIds[1],
+      lineupWithDH: [{ battingOrder: 1, playerId: sourceRosterIds[0], fieldingPosition: 'CF' }],
+      startingRotation: sourceRosterIds.slice(18),
+    }));
+    await saveTeamRoster({
+      ...createEmptyTeamRoster(sourceTeamId),
+      mlbRoster: sourceRosterIds,
+    });
+    await savePlayer(makePlayer(sourceRosterIds[0], {
+      leagueAssignments: [{ leagueId: sourceLeagueId, teamId: sourceTeamId, rosterStatus: 'MLB' }],
+    }));
+    const sourceRosterBefore = await getTeamRoster(sourceTeamId);
+    const sourceTeamBefore = await getTeam(sourceTeamId);
+    const sourcePlayerBefore = await getPlayer(sourceRosterIds[0]);
+
+    const { result } = await renderLoadedLeagueBuilderHook();
+    const createInput = (name: string): Omit<LeagueTemplate, 'id' | 'createdDate' | 'lastModified'> => ({
+      name,
+      teamIds: [sourceTeamId],
+      conferences: [{ id: 'draft-conf', name: 'Draft', abbreviation: 'DRF', divisionIds: ['draft-div'] }],
+      divisions: [{ id: 'draft-div', name: 'Draft', conferenceId: 'draft-conf', teamIds: [sourceTeamId] }],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+      draftPoolMode: 'pool-first',
+      tier: 'standard',
+      salaryCap: 900_000,
+      balanceMode: 'taxed',
+      checkpointCadence: 'standard',
+    });
+
+    let firstLeague!: LeagueTemplate;
+    let secondLeague!: LeagueTemplate;
+    await act(async () => {
+      firstLeague = await result.current.createLeague(createInput('First Draft'));
+      secondLeague = await result.current.createLeague(createInput('Second Draft'));
+    });
+
+    expect(firstLeague.teamIds).toHaveLength(1);
+    expect(secondLeague.teamIds).toHaveLength(1);
+    expect(firstLeague.teamIds[0]).not.toBe(sourceTeamId);
+    expect(secondLeague.teamIds[0]).not.toBe(sourceTeamId);
+    expect(secondLeague.teamIds[0]).not.toBe(firstLeague.teamIds[0]);
+    expect(firstLeague.divisions[0]?.teamIds).toEqual(firstLeague.teamIds);
+    expect(secondLeague.divisions[0]?.teamIds).toEqual(secondLeague.teamIds);
+
+    const firstCopiedTeam = await getTeam(firstLeague.teamIds[0]);
+    const secondCopiedTeam = await getTeam(secondLeague.teamIds[0]);
+    for (const copiedTeam of [firstCopiedTeam, secondCopiedTeam]) {
+      expect(copiedTeam).toEqual(expect.objectContaining({
+        name: 'Herbisaurs',
+        abbreviation: 'HERB',
+        colors: { primary: '#159629', secondary: '#f6a000' },
+        logoUrl: 'https://example.test/herbisaurs.png',
+        mlbArchetypeKey: 'whiteyball',
+        farmArchetypeKey: 'nasty-boys',
+      }));
+      expect(copiedTeam?.rosterDesign).toBeUndefined();
+      expect(copiedTeam?.boardRankOverrides).toBeUndefined();
+      expect(copiedTeam?.captainPlayerId).toBeNull();
+      expect(copiedTeam?.fanHopefulPlayerId).toBeNull();
+      expect(copiedTeam?.lineupWithDH).toEqual([]);
+      expect(copiedTeam?.startingRotation).toEqual([]);
+      await expect(getTeamRoster(copiedTeam!.id)).resolves.toEqual(expect.objectContaining({
+        teamId: copiedTeam!.id,
+        mlbRoster: [],
+        farmRoster: [],
+      }));
+    }
+
+    const firstCopiedTeamId = firstLeague.teamIds[0];
+    await act(async () => {
+      await result.current.updateLeague({ ...firstLeague, name: 'First Draft Renamed' });
+    });
+    expect((await getLeagueTemplate(firstLeague.id))?.teamIds).toEqual([firstCopiedTeamId]);
+
+    expect(await getTeam(sourceTeamId)).toEqual(sourceTeamBefore);
+    expect(await getTeamRoster(sourceTeamId)).toEqual(sourceRosterBefore);
+    expect(await getPlayer(sourceRosterIds[0])).toEqual(sourcePlayerBefore);
+  });
+
   test('C1-C3 duplicateLeague deep-copies teams, unlocks copied designs, and remaps league memberships', async () => {
     const lockedAt = '2026-07-03T12:00:00.000Z';
     await saveLeagueTemplate(makeLeague({

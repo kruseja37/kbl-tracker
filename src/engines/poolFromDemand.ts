@@ -33,8 +33,13 @@ import {
   type SlotPreference,
 } from './rosterDesignFeasibility';
 import { extractDraftPool, type ExtractedPool } from './draftPoolExtractor';
-import { archetypeFitScorer, type RosterPosture, type SimPlayer } from './archetypeBalanceSimulator';
-import { historicalToSimArchetype } from './draftabilityRanker';
+import {
+  archetypeFitScorer,
+  buildIdentityRoster,
+  type RosterPosture,
+  type SimPlayer,
+} from './archetypeBalanceSimulator';
+import { historicalToSimArchetype, rankArchetypeDraftability } from './draftabilityRanker';
 import { poolDemandModel } from './auctionPoolSizing';
 import { scoreSmb4Player } from './smb4GradeEmulator';
 import type { HistoricalArchetype } from '../data/historicalArchetypes';
@@ -51,7 +56,41 @@ import {
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
   name?: string;
+  /** One-capacity person key. Alternate cards of the same person share this value. */
+  versionGroupId?: string;
   profile: ClassifiableProfile;
+}
+
+function demandVersionGroupId(player: Pick<DemandUniversePlayer, 'id' | 'versionGroupId'>): string {
+  return player.versionGroupId?.trim() || player.id;
+}
+
+function demandVersionGroupIds(players: readonly DemandUniversePlayer[]): Set<string> {
+  return new Set(players.map(demandVersionGroupId));
+}
+
+function removeDemandGroupIfAbsent(
+  players: ReadonlyMap<string, DemandUniversePlayer>,
+  groups: Set<string>,
+  removed: DemandUniversePlayer,
+): void {
+  const groupId = demandVersionGroupId(removed);
+  if (![...players.values()].some((player) => demandVersionGroupId(player) === groupId)) {
+    groups.delete(groupId);
+  }
+}
+
+function uniqueDemandCardsByVersionGroup(
+  players: readonly DemandUniversePlayer[],
+  blockedGroups: ReadonlySet<string> = new Set<string>(),
+): DemandUniversePlayer[] {
+  const seen = new Set(blockedGroups);
+  return players.filter((player) => {
+    const groupId = demandVersionGroupId(player);
+    if (seen.has(groupId)) return false;
+    seen.add(groupId);
+    return true;
+  });
 }
 
 export interface TeamDesignInput {
@@ -139,6 +178,78 @@ export interface PoolFromDemandResult {
 export interface ClassifiedDemandPlayer {
   player: DemandUniversePlayer;
   classification: ShapeClassification;
+}
+
+export interface PoolIdentitySupportReceipt {
+  readonly version: 1;
+  readonly authorityFingerprint: string;
+  readonly sourceFingerprint: string;
+  readonly playerIds: readonly string[];
+}
+
+function canonicalPoolReceiptJson(value: unknown): string {
+  return JSON.stringify(value, (_key, current) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return current;
+    return Object.keys(current as Record<string, unknown>)
+      .sort((left, right) => left.localeCompare(right))
+      .reduce<Record<string, unknown>>((sorted, key) => {
+        const entry = (current as Record<string, unknown>)[key];
+        if (entry !== undefined) sorted[key] = entry;
+        return sorted;
+      }, {});
+  });
+}
+
+
+function compactPoolReceiptFingerprint(value: unknown): string {
+  const source = canonicalPoolReceiptJson(value);
+  let left = 0x811c9dc5;
+  let right = 0x9e3779b9;
+  for (let index = 0; index < source.length; index += 1) {
+    const code = source.charCodeAt(index);
+    left = Math.imul(left ^ code, 0x01000193) >>> 0;
+    right = Math.imul(right ^ (code + index), 0x85ebca6b) >>> 0;
+  }
+  return `${source.length.toString(36)}:${left.toString(16).padStart(8, '0')}:${right.toString(16).padStart(8, '0')}`;
+}
+
+function poolIdentitySupportFingerprint(input: {
+  universe: readonly DemandUniversePlayer[];
+  selectedArchetypes: readonly HistoricalArchetype[];
+  tier: TierKey;
+  teams: number;
+  budgetPerTeam?: number;
+  playerIds: readonly string[];
+  authorityFingerprint: string;
+}): string {
+  return `snake-pool-support-v1:${compactPoolReceiptFingerprint({
+    authorityFingerprint: input.authorityFingerprint,
+    budgetPerTeam: input.budgetPerTeam,
+    playerIds: [...input.playerIds].sort((left, right) => left.localeCompare(right)),
+    selectedArchetypes: input.selectedArchetypes,
+    teams: input.teams,
+    tier: input.tier,
+    universe: [...input.universe].sort((left, right) => left.id.localeCompare(right.id)),
+  })}`;
+}
+
+/** Bind the validated Snake support authority to the exact numeric-shaping input. */
+export function createPoolIdentitySupportReceipt(input: {
+  universe: readonly DemandUniversePlayer[];
+  selectedArchetypes: readonly HistoricalArchetype[];
+  tier: TierKey;
+  teams: number;
+  budgetPerTeam?: number;
+  playerIds: readonly string[];
+  authorityFingerprint: string;
+}): PoolIdentitySupportReceipt {
+  const playerIds = [...input.playerIds].sort((left, right) => left.localeCompare(right));
+  return {
+    version: 1,
+    authorityFingerprint: input.authorityFingerprint,
+    sourceFingerprint: poolIdentitySupportFingerprint({ ...input, playerIds }),
+    playerIds,
+  };
 }
 
 export const POOL_SIZE_MULTIPLIER_STOPS = [1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5] as const;
@@ -388,7 +499,13 @@ export interface NumericPoolRepairSwap {
 }
 
 export interface NumericPoolCurveViolation {
-  code: 'LEGALITY_REQUIRES_CURVE_VIOLATION' | 'REPAIR_GROWTH_LIMIT' | 'LOW_TAIL_CAP_EXCEEDED' | 'MIDDLE_MASS_TARGET_MISSED';
+  code:
+    | 'LEGALITY_REQUIRES_CURVE_VIOLATION'
+    | 'REPAIR_GROWTH_LIMIT'
+    | 'LOW_TAIL_CAP_EXCEEDED'
+    | 'MIDDLE_MASS_TARGET_MISSED'
+    | 'HIGH_TAIL_CAP_EXCEEDED'
+    | 'SUPERSTAR_TAIL_CAP_EXCEEDED';
   message: string;
 }
 
@@ -593,15 +710,255 @@ function largestRemainderCounts(
 function targetCountsByRoleBucket(
   source: readonly DemandUniversePlayer[],
   targetSize: number,
+  teamCount: number,
 ): Record<string, number> {
   const buckets = new Map<string, number>();
   for (const player of source) buckets.set(roleBucketOf(player), (buckets.get(roleBucketOf(player)) ?? 0) + 1);
-  return largestRemainderCounts(
+  const sourceRelative = largestRemainderCounts(
     [...buckets.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([id, count]) => ({ id, share: source.length === 0 ? 0 : count / source.length })),
     targetSize,
   );
+
+  // FINDING-254: an archive's historical role mix is not the roster's desired bullpen mix.
+  // Preserve the source-relative total number of pitchers, but divide those pitcher seats by the
+  // canonical nine-arm roster shape: four starters, one swing arm, three ordinary relievers, and
+  // one closer. If the selected source cannot supply a role, consume every available person in that
+  // role and redistribute only the unavoidable remainder. Full Sources bypasses shaping entirely.
+  const pitcherDemand = [
+    { id: 'arm:SP', weight: 4 },
+    { id: 'arm:SP/RP', weight: 1 },
+    { id: 'arm:RP', weight: 3 },
+    { id: 'arm:CP', weight: 1 },
+  ] as const;
+  const pitcherTarget = pitcherDemand.reduce((sum, entry) => sum + (sourceRelative[entry.id] ?? 0), 0);
+  const availableByRole = Object.fromEntries(pitcherDemand.map((entry) => [
+    entry.id,
+    buckets.get(entry.id) ?? 0,
+  ]));
+  const rebalanced = Object.fromEntries(pitcherDemand.map((entry) => [entry.id, 0])) as Record<string, number>;
+  let remaining = Math.min(
+    pitcherTarget,
+    Object.values(availableByRole).reduce((sum, count) => sum + count, 0),
+  );
+
+  while (remaining > 0) {
+    const open = pitcherDemand.filter((entry) => rebalanced[entry.id] < availableByRole[entry.id]);
+    if (open.length === 0) break;
+    const totalWeight = open.reduce((sum, entry) => sum + entry.weight, 0);
+    const proposed = largestRemainderCounts(
+      open.map((entry) => ({ id: entry.id, share: entry.weight / totalWeight })),
+      remaining,
+    );
+    let added = 0;
+    for (const entry of open) {
+      const room = availableByRole[entry.id] - rebalanced[entry.id];
+      const take = Math.min(room, proposed[entry.id] ?? 0);
+      rebalanced[entry.id] += take;
+      added += take;
+    }
+    if (added === 0) {
+      const fallback = [...open].sort((left, right) => (
+        right.weight - left.weight || left.id.localeCompare(right.id)
+      ))[0];
+      rebalanced[fallback.id] += 1;
+      added = 1;
+    }
+    remaining -= added;
+  }
+
+  const closerFloor = derivePositionSupplyFloorTargets(teamCount)
+    .find((target) => target.kind === 'closer')?.needed ?? 0;
+  const closerId = 'arm:CP';
+  const closerShortfall = Math.max(
+    0,
+    Math.min(closerFloor, availableByRole[closerId]) - rebalanced[closerId],
+  );
+  for (let index = 0; index < closerShortfall; index += 1) {
+    const donor = pitcherDemand
+      .filter((entry) => entry.id !== closerId && rebalanced[entry.id] > 0)
+      .sort((left, right) => (
+        (rebalanced[right.id] / right.weight) - (rebalanced[left.id] / left.weight)
+        || left.id.localeCompare(right.id)
+      ))[0];
+    if (!donor) break;
+    rebalanced[donor.id] -= 1;
+    rebalanced[closerId] += 1;
+  }
+
+
+  const supplyFloors = derivePositionSupplyFloorTargets(teamCount);
+  const starterFloor = supplyFloors.find((target) => target.kind === 'starter')?.needed ?? 0;
+  const relieverFloor = supplyFloors.find((target) => target.kind === 'reliever')?.needed ?? 0;
+  const transferToFunctionalGroup = (options: {
+    needed: number;
+    receiverIds: readonly string[];
+    donorIds: readonly string[];
+  }): void => {
+    for (let index = 0; index < options.needed; index += 1) {
+      const receiver = pitcherDemand
+        .filter((entry) => options.receiverIds.includes(entry.id))
+        .filter((entry) => rebalanced[entry.id] < availableByRole[entry.id])
+        .sort((left, right) => (
+          (rebalanced[left.id] / left.weight) - (rebalanced[right.id] / right.weight)
+          || right.weight - left.weight
+          || left.id.localeCompare(right.id)
+        ))[0];
+      const donor = pitcherDemand
+        .filter((entry) => options.donorIds.includes(entry.id))
+        .filter((entry) => rebalanced[entry.id] > 0)
+        .filter((entry) => entry.id !== closerId || rebalanced[entry.id] > closerFloor)
+        .sort((left, right) => (
+          (rebalanced[right.id] / right.weight) - (rebalanced[left.id] / left.weight)
+          || left.id.localeCompare(right.id)
+        ))[0];
+      if (!receiver || !donor) break;
+      rebalanced[donor.id] -= 1;
+      rebalanced[receiver.id] += 1;
+    }
+  };
+  const starterCount = rebalanced['arm:SP'] + rebalanced['arm:SP/RP'];
+  transferToFunctionalGroup({
+    needed: Math.max(0, starterFloor - starterCount),
+    receiverIds: ['arm:SP', 'arm:SP/RP'],
+    donorIds: ['arm:RP', 'arm:CP'],
+  });
+  const relieverCount = rebalanced['arm:SP/RP'] + rebalanced['arm:RP'] + rebalanced['arm:CP'];
+  transferToFunctionalGroup({
+    needed: Math.max(0, relieverFloor - relieverCount),
+    receiverIds: ['arm:SP/RP', 'arm:RP', 'arm:CP'],
+    donorIds: ['arm:SP'],
+  });
+
+  return {
+    ...sourceRelative,
+    ...rebalanced,
+  };
+}
+
+function shapeRepresentativeUniverse(
+  source: readonly DemandUniversePlayer[],
+  fitOf: (player: DemandUniversePlayer) => number,
+  qualityCenter: number,
+): DemandUniversePlayer[] {
+  const byGroup = new Map<string, DemandUniversePlayer[]>();
+  for (const player of source) {
+    const groupId = demandVersionGroupId(player);
+    byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), player]);
+  }
+  return [...byGroup.values()]
+    .map((cards) => [...cards].sort((left, right) => {
+      const centerDelta = Math.abs(numericGradeOf(left) - qualityCenter)
+        - Math.abs(numericGradeOf(right) - qualityCenter);
+      if (Math.abs(centerDelta) > 1e-9) return centerDelta;
+      const fitDelta = fitOf(right) - fitOf(left);
+      if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+      return left.id.localeCompare(right.id);
+    })[0])
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+const ROLE_BALANCE_ADVISORY_PATTERN = /^(?:Remove|Add) .+ to balance rosters\.$/;
+
+function roleBalanceAdvisoryMessages(options: {
+  players: readonly DemandUniversePlayer[];
+  universe: readonly DemandUniversePlayer[];
+  targetSize: number;
+  teams: number;
+  fitOf: (player: DemandUniversePlayer) => number;
+  qualityCenter: number;
+}): string[] {
+  const representativeUniverse = shapeRepresentativeUniverse(
+    options.universe,
+    options.fitOf,
+    options.qualityCenter,
+  );
+  const roleTargets = targetCountsByRoleBucket(
+    representativeUniverse,
+    options.targetSize,
+    options.teams,
+  );
+  const finalCurvePeople = shapeRepresentativeUniverse(
+    options.players,
+    options.fitOf,
+    options.qualityCenter,
+  );
+  const roleCount = (bucket: string) => finalCurvePeople
+    .filter((player) => roleBucketOf(player) === bucket).length;
+  const rosterRoleBuckets = Object.keys(roleTargets)
+    .filter((bucket) => bucket.startsWith('arm:') || bucket.startsWith('pos:'))
+    .sort((left, right) => left.localeCompare(right));
+  const surplusRoles = rosterRoleBuckets
+    .map((bucket) => ({ bucket, count: roleCount(bucket) - (roleTargets[bucket] ?? 0) }))
+    .filter((entry) => entry.count > 0);
+  const deficitRoles = rosterRoleBuckets
+    .map((bucket) => ({ bucket, count: (roleTargets[bucket] ?? 0) - roleCount(bucket) }))
+    .filter((entry) => entry.count > 0);
+  const roleList = (entries: readonly { bucket: string; count: number }[]) => entries
+    .map((entry) => `${entry.count} ${entry.bucket.replace(/^(?:arm|pos):/, '')}`)
+    .join(' + ');
+  if (surplusRoles.length === 0 && deficitRoles.length === 0) return [];
+  const remove = surplusRoles.length > 0 ? `Remove ${roleList(surplusRoles)}` : '';
+  const add = deficitRoles.length > 0
+    ? `${remove ? 'add' : 'Add'} ${roleList(deficitRoles)}`
+    : '';
+  return [`${remove}${remove && add ? ' and ' : ''}${add} to balance rosters.`];
+}
+
+export function refreshRoleBalanceAdvisories(options: {
+  messages: readonly string[];
+  players: readonly DemandUniversePlayer[];
+  universe: readonly DemandUniversePlayer[];
+  targetSize: number;
+  teams: number;
+  fitOf: (player: DemandUniversePlayer) => number;
+  qualityCenter: number;
+}): string[] {
+  return [
+    ...options.messages.filter((message) => !ROLE_BALANCE_ADVISORY_PATTERN.test(message)),
+    ...roleBalanceAdvisoryMessages(options),
+  ];
+}
+
+function trimDemandPoolToPersonTarget(
+  players: readonly DemandUniversePlayer[],
+  protectedIds: ReadonlySet<string>,
+  fitOf: (player: DemandUniversePlayer) => number,
+  target: number,
+): { kept: DemandUniversePlayer[]; evicted: DemandUniversePlayer[] } {
+  const cardsByGroup = new Map<string, DemandUniversePlayer[]>();
+  for (const player of players) {
+    const groupId = demandVersionGroupId(player);
+    cardsByGroup.set(groupId, [...(cardsByGroup.get(groupId) ?? []), player]);
+  }
+  const protectedGroups = new Set(
+    players.filter((player) => protectedIds.has(player.id)).map(demandVersionGroupId),
+  );
+  const evictable = [...cardsByGroup.entries()]
+    .filter(([groupId]) => !protectedGroups.has(groupId))
+    .map(([groupId, cards]) => ({
+      groupId,
+      cards,
+      fit: Math.max(...cards.map(fitOf)),
+      salary: Math.max(...cards.map((player) => player.salary)),
+    }))
+    .sort((left, right) => {
+      const fitDelta = left.fit - right.fit;
+      if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+      if (left.salary !== right.salary) return right.salary - left.salary;
+      return left.groupId.localeCompare(right.groupId);
+    });
+  const evicted: DemandUniversePlayer[] = [];
+  for (const group of evictable) {
+    if (cardsByGroup.size <= target) break;
+    cardsByGroup.delete(group.groupId);
+    evicted.push(...group.cards);
+  }
+  return {
+    kept: [...cardsByGroup.values()].flat().sort((left, right) => left.id.localeCompare(right.id)),
+    evicted: evicted.sort((left, right) => left.id.localeCompare(right.id)),
+  };
 }
 
 function targetCountsByWindow(
@@ -749,12 +1106,25 @@ export function matchesPositionSupplyFloor(
   }
 }
 
+function distinctPositionSupplyCount(
+  players: readonly RosterSlotPlayer[],
+  target: Pick<PositionSupplyFloorTarget, 'kind' | 'position'>,
+): number {
+  const matchingPeople = new Set<string>();
+  players.forEach((player, index) => {
+    if (!matchesPositionSupplyFloor(player, target)) return;
+    const grouped = player as RosterSlotPlayer & { id?: string; versionGroupId?: string };
+    matchingPeople.add(grouped.versionGroupId?.trim() || grouped.id || `row:${index}`);
+  });
+  return matchingPeople.size;
+}
+
 export function evaluatePositionSupplyFloors(
   players: readonly RosterSlotPlayer[],
   teamCount: number,
 ): PositionSupplyFloorResult[] {
   return deriveHardPositionSupplyFloorTargets(teamCount).map((target) => {
-    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    const available = distinctPositionSupplyCount(players, target);
     return {
       ...target,
       available,
@@ -769,7 +1139,7 @@ export function evaluateCompetitivePositionSupplyFloors(
   teamCount: number,
 ): PositionSupplyFloorResult[] {
   return derivePositionSupplyFloorTargets(teamCount).map((target) => {
-    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    const available = distinctPositionSupplyCount(players, target);
     return {
       ...target,
       available,
@@ -782,6 +1152,7 @@ export interface PositionSupplyFloorApplication {
   players: DemandUniversePlayer[];
   floors: PositionSupplyFloorResult[];
   injectedIds: string[];
+  evictedIds: string[];
   shortfalls: DemandShortfall[];
   messages: string[];
 }
@@ -794,8 +1165,12 @@ export function enforcePositionSupplyFloors(options: {
   excludedIds?: ReadonlySet<string>;
   priorityIds?: ReadonlySet<string>;
   poolSourceMode?: PoolSourceMode;
+  protectedIds?: ReadonlySet<string>;
+  maxPeople?: number;
+  tuning?: NumericPoolShapeTuning;
 }): PositionSupplyFloorApplication {
   const current = new Map(options.players.map((player) => [player.id, player]));
+  const currentGroups = demandVersionGroupIds(options.players);
   const excludedIds = options.excludedIds ?? new Set<string>();
   const fitOf = options.fitOf ?? (() => 0);
   const priorityIds = options.poolSourceMode === 'team-roster-priority'
@@ -803,7 +1178,10 @@ export function enforcePositionSupplyFloors(options: {
     : new Set<string>();
   const comparator = bySourceThenFitDescIdAsc(fitOf, priorityIds);
   const injectedIds: string[] = [];
+  const evictedIds: string[] = [];
   const messages: string[] = [];
+  const protectedIds = options.protectedIds ?? new Set<string>();
+  const tuning = options.tuning ?? poolBalancePresetTuning();
 
   for (const target of derivePositionSupplyFloorTargets(options.teams)) {
     const currentPlayers = [...current.values()];
@@ -812,19 +1190,81 @@ export function enforcePositionSupplyFloors(options: {
     const missing = floor?.missing ?? 0;
     if (missing <= 0) continue;
     const candidates = options.universe
-      .filter((player) => !current.has(player.id))
+      .filter((player) => !currentGroups.has(demandVersionGroupId(player)))
       .filter((player) => !excludedIds.has(player.id))
       .filter((player) => matchesPositionSupplyFloor(player, target))
       .sort(comparator);
-    const picks = candidates.slice(0, missing);
+    const picks = uniqueDemandCardsByVersionGroup(candidates, currentGroups);
+    const injectedBefore = injectedIds.length;
+    let rejectedAtExactSize = 0;
     for (const pick of picks) {
+      if (injectedIds.length - injectedBefore >= missing) break;
+      let evicted: DemandUniversePlayer | null = null;
+      if (options.maxPeople !== undefined && currentGroups.size >= options.maxPeople) {
+        const groupCounts = new Map<string, number>();
+        for (const player of current.values()) {
+          const groupId = demandVersionGroupId(player);
+          groupCounts.set(groupId, (groupCounts.get(groupId) ?? 0) + 1);
+        }
+        const beforeFloors = evaluateCompetitivePositionSupplyFloors([...current.values()], options.teams);
+        const beforeByKey = new Map(beforeFloors.map((entry) => [`${entry.kind}:${entry.position}`, entry]));
+        const targetKey = `${target.kind}:${target.position}`;
+        evicted = [...current.values()]
+          .filter((player) => !protectedIds.has(player.id))
+          .filter((player) => (groupCounts.get(demandVersionGroupId(player)) ?? 0) === 1)
+          .filter((player) => doesNotIncreaseUpperTailOnSwap(
+            [...current.values()],
+            player,
+            pick,
+            tuning,
+          ))
+          .filter((player) => {
+            const afterPlayers = [
+              ...[...current.values()].filter((currentPlayer) => currentPlayer.id !== player.id),
+              pick,
+            ];
+            const afterFloors = evaluateCompetitivePositionSupplyFloors(afterPlayers, options.teams);
+            return afterFloors.every((after) => {
+              const key = `${after.kind}:${after.position}`;
+              const before = beforeByKey.get(key)?.missing ?? 0;
+              return key === targetKey ? after.missing < before : after.missing <= before;
+            });
+          })
+          .sort((left, right) => {
+            const fitDelta = fitOf(left) - fitOf(right);
+            if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+            if (left.salary !== right.salary) return right.salary - left.salary;
+            return left.id.localeCompare(right.id);
+          })[0] ?? null;
+        if (!evicted) {
+          rejectedAtExactSize += 1;
+          continue;
+        }
+      }
+      if (evicted) {
+        current.delete(evicted.id);
+        removeDemandGroupIfAbsent(current, currentGroups, evicted);
+        evictedIds.push(evicted.id);
+      }
       current.set(pick.id, pick);
+      currentGroups.add(demandVersionGroupId(pick));
       injectedIds.push(pick.id);
+      if (evicted) {
+        messages.push(
+          `position supply floor swapped in ${playerName(pick)} and removed ${playerName(evicted)} without growing the pool.`,
+        );
+      }
     }
-    if (picks.length > 0) {
+    const targetAdded = injectedIds.length - injectedBefore;
+    if (targetAdded > 0) {
       messages.push(
-        `position supply floor added ${picks.length} ${target.label.toLowerCase()} `
+        `position supply floor added ${targetAdded} ${target.label.toLowerCase()} `
           + `(${floor?.available ?? 0}/${target.needed} before top-up).`,
+      );
+    }
+    if (rejectedAtExactSize > 0) {
+      messages.push(
+        `position supply floor could not add ${rejectedAtExactSize} ${target.label.toLowerCase()} without growing the exact named pool; the shortfall remains.`,
       );
     }
   }
@@ -835,14 +1275,14 @@ export function enforcePositionSupplyFloors(options: {
     if (floor.missing <= 0) return [];
     const universeAvailable = options.universe
       .filter((player) => !excludedIds.has(player.id))
-      .filter((player) => matchesPositionSupplyFloor(player, floor))
-      .length;
+      .filter((player) => matchesPositionSupplyFloor(player, floor));
+    const universeAvailablePeople = distinctPositionSupplyCount(universeAvailable, floor);
     return [{
       key: `position-floor:${floor.position}`,
       position: floor.position,
       wanted: floor.needed,
-      available: universeAvailable,
-      message: `The uploaded universe has ${universeAvailable} ${floor.label.toLowerCase()}; `
+      available: universeAvailablePeople,
+      message: `The uploaded universe has ${universeAvailablePeople} ${floor.label.toLowerCase()}; `
         + `${floor.needed} required for ${floor.teams} club${floor.teams === 1 ? '' : 's'} plus hoarding slack.`,
     }];
   });
@@ -851,6 +1291,7 @@ export function enforcePositionSupplyFloors(options: {
     players,
     floors,
     injectedIds,
+    evictedIds,
     shortfalls,
     messages,
   };
@@ -969,6 +1410,52 @@ function selectWindowCandidates(options: {
     .map((entry) => entry.player);
 }
 
+type DemandFitScorer = (player: DemandUniversePlayer) => number;
+
+function selectIdentityBalancedCandidates(options: {
+  candidates: readonly DemandUniversePlayer[];
+  needed: number;
+  windowId: string;
+  fitScorers: readonly DemandFitScorer[];
+  identityStartIndex?: number;
+  generationNonce?: number;
+}): DemandUniversePlayer[] {
+  if (options.needed <= 0) return [];
+  if (options.fitScorers.length === 0) {
+    return selectWindowCandidates({
+      ...options,
+      candidates: uniqueDemandCardsByVersionGroup(options.candidates),
+    });
+  }
+  const picked: DemandUniversePlayer[] = [];
+  const pickedGroups = new Set<string>();
+  const originalRank = new Map(options.candidates.map((player, index) => [player.id, index]));
+  const nonce = Math.max(0, Math.floor(options.generationNonce ?? 0));
+  const identityStartIndex = Math.max(0, Math.floor(options.identityStartIndex ?? 0));
+  for (let cursor = 0; cursor < options.needed; cursor += 1) {
+    const scorer = options.fitScorers[(identityStartIndex + cursor + nonce) % options.fitScorers.length];
+    const eligible = options.candidates
+      .filter((player) => !pickedGroups.has(demandVersionGroupId(player)))
+      .sort((left, right) => {
+        const fitDelta = scorer(right) - scorer(left);
+        if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+        const rankDelta = (originalRank.get(left.id) ?? 0) - (originalRank.get(right.id) ?? 0);
+        if (rankDelta !== 0) return rankDelta;
+        return left.id.localeCompare(right.id);
+      });
+    const pick = selectWindowCandidates({
+      candidates: eligible,
+      needed: 1,
+      windowId: options.windowId,
+      generationNonce: nonce > 0 ? nonce + cursor : 0,
+    })[0];
+    if (!pick) break;
+    picked.push(pick);
+    pickedGroups.add(demandVersionGroupId(pick));
+  }
+  return picked;
+}
+
 function byFitDescIdAsc(
   fitOf: (player: DemandUniversePlayer) => number,
 ): (a: DemandUniversePlayer, b: DemandUniversePlayer) => number {
@@ -989,6 +1476,15 @@ function bySourceThenFitDescIdAsc(
     if (aPriority !== bPriority) return aPriority ? -1 : 1;
     return byFitDescIdAsc(fitOf)(a, b);
   };
+}
+
+function worstIdentityFitLoss(
+  outgoing: DemandUniversePlayer,
+  incoming: DemandUniversePlayer,
+  fitScorers: readonly DemandFitScorer[],
+): number {
+  if (fitScorers.length === 0) return 0;
+  return Math.max(...fitScorers.map((score) => score(outgoing) - score(incoming)));
 }
 
 export function buildNumericPoolShapeDiagnostics(options: {
@@ -1024,7 +1520,8 @@ export function buildNumericPoolShapeDiagnostics(options: {
   const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
   const qualityShift = poolQualityCenter - DEFAULT_POOL_QUALITY_CENTER;
   const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
-  const numericGrades = options.players.map(numericGradeOf);
+  const curvePlayers = shapeRepresentativeUniverse(options.players, () => 0, poolQualityCenter);
+  const numericGrades = curvePlayers.map(numericGradeOf);
   const denominator = numericGrades.length || 1;
   const highTailShare = numericGrades.filter((grade) => grade >= tuning.highTailMin).length / denominator;
   const superstarTailShare = numericGrades.filter((grade) => grade >= tuning.superstarTailMin).length / denominator;
@@ -1033,6 +1530,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
   ).length / denominator;
   const lowTailShare = numericGrades.filter((grade) => grade < tuning.lowTailMax).length / denominator;
   const hardKeepPlayers = [...(options.hardKeepPlayers ?? [])];
+  const hardKeepPeople = shapeRepresentativeUniverse(hardKeepPlayers, () => 0, poolQualityCenter);
   const finalIds = new Set(options.players.map((player) => player.id));
   const designHardKeepIds = options.designHardKeepIds ?? new Set<string>();
   const identityCriticalIds = options.identityCriticalIds ?? new Set<string>();
@@ -1045,18 +1543,19 @@ export function buildNumericPoolShapeDiagnostics(options: {
   const engineGeneratedPlayers = options.engineGeneratedPlayers
     ? [...options.engineGeneratedPlayers]
     : options.players.filter((player) => !hardKeepPlayers.some((kept) => kept.id === player.id));
+  const engineGeneratedPeople = shapeRepresentativeUniverse(engineGeneratedPlayers, () => 0, poolQualityCenter);
   const selectedTeamRosterIds = options.selectedTeamRosterIds ?? new Set<string>();
-  const hardKeepByBand = countPlayersByBand(hardKeepPlayers, tuning);
-  const engineGeneratedByBand = countPlayersByBand(engineGeneratedPlayers, tuning);
-  const finalPoolByBand = countPlayersByBand(options.players, tuning);
+  const hardKeepByBand = countPlayersByBand(hardKeepPeople, tuning);
+  const engineGeneratedByBand = countPlayersByBand(engineGeneratedPeople, tuning);
+  const finalPoolByBand = countPlayersByBand(curvePlayers, tuning);
   const targetBandCounts = targetCountsByBand(options.targetSize, tuning);
   const hardKeepShapeOverflowByBand: Record<string, number> = {};
   for (const [band, count] of Object.entries(hardKeepByBand)) {
     const overflow = count - (targetBandCounts[band] ?? 0);
     if (overflow > 0) hardKeepShapeOverflowByBand[band] = overflow;
   }
-  const hardKeepOverflowCount = Math.max(0, hardKeepPlayers.length - options.targetSize);
-  const overTargetReason = options.players.length > options.targetSize
+  const hardKeepOverflowCount = Math.max(0, hardKeepPeople.length - options.targetSize);
+  const overTargetReason = curvePlayers.length > options.targetSize
     ? hardKeepOverflowCount > 0
       ? 'hardKeep overflow'
       : hardKeepPlayers.length > 0
@@ -1064,7 +1563,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
         : 'legal repair or curve violation'
     : null;
   const positionRoleCoverage: Record<string, number> = {};
-  for (const player of options.players) {
+  for (const player of curvePlayers) {
     const bucket = roleBucketOf(player);
     positionRoleCoverage[bucket] = (positionRoleCoverage[bucket] ?? 0) + 1;
   }
@@ -1077,9 +1576,9 @@ export function buildNumericPoolShapeDiagnostics(options: {
     defaultQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
     qualityShift,
     shiftedBandWindows: tuning.windows.map((window) => ({ ...window })),
-    poolSize: options.players.length,
+    poolSize: curvePlayers.length,
     requiredRosterDemand: options.requiredRosterDemand,
-    poolSlackFactor: options.requiredRosterDemand > 0 ? options.players.length / options.requiredRosterDemand : 0,
+    poolSlackFactor: options.requiredRosterDemand > 0 ? curvePlayers.length / options.requiredRosterDemand : 0,
     targetSize: options.targetSize,
     medianNumericGrade,
     targetMedianQuality: poolQualityCenter,
@@ -1095,7 +1594,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     quotaShortfalls,
     legalCompletionFeasible: options.legalCompletionFeasible ?? null,
     messages: [...(options.messages ?? [])],
-    hardKeepCount: hardKeepPlayers.length,
+    hardKeepCount: hardKeepPeople.length,
     hardKeepOverflowCount,
     designHardKeepCount: [...designHardKeepIds].filter((id) => finalIds.has(id)).length,
     identityCriticalCandidateCount: identityCriticalIds.size,
@@ -1108,7 +1607,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     finalPoolByBand,
     hardKeepShapeOverflowByBand,
     qualityBandTargetCounts: targetCountsByWindow(options.targetSize, tuning.windows),
-    qualityBandFinalCounts: countPlayersByWindow(options.players, tuning.windows),
+    qualityBandFinalCounts: countPlayersByWindow(curvePlayers, tuning.windows),
     qualityBandShortfalls: qualityBandShortfallsByWindow(quotaShortfalls),
     qualityCenterShortfallReason: qualityCenterShortfallReason({
       poolQualityCenter,
@@ -1180,7 +1679,9 @@ export function shapePoolByNumericGrade(options: {
   excludedIds?: ReadonlySet<string>;
   targetSize: number;
   requiredRosterDemand: number;
+  teams?: number;
   fitOf: (player: DemandUniversePlayer) => number;
+  identityFitScorers?: readonly DemandFitScorer[];
   preset?: PoolBalancePresetKey;
   poolQualityCenter?: number;
   tuning?: NumericPoolShapeTuning;
@@ -1191,6 +1692,7 @@ export function shapePoolByNumericGrade(options: {
   const preset = options.preset ?? 'balanced';
   const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
   const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
+  const identityFitScorers = options.identityFitScorers ?? [];
   const excludedIds = options.excludedIds ?? new Set<string>();
   const poolSourceMode = options.poolSourceMode ?? 'full-pool';
   const selectedTeamRosterIds = options.priorityIds ?? new Set<string>();
@@ -1202,74 +1704,182 @@ export function shapePoolByNumericGrade(options: {
     .filter((player) => options.protectedIds.has(player.id) && !excludedIds.has(player.id))
     .sort((a, b) => a.id.localeCompare(b.id));
   const selected = new Map(protectedPlayers.map((player) => [player.id, player]));
+  const selectedGroups = demandVersionGroupIds(protectedPlayers);
   const effectiveTarget = Math.max(0, Math.floor(options.targetSize));
   const windows = tuning.windows;
-  const roleTargets = targetCountsByRoleBucket(options.universe.filter((player) => !excludedIds.has(player.id)), effectiveTarget);
+  const eligibleUniverse = options.universe.filter((player) => !excludedIds.has(player.id));
+  const representativeUniverse = shapeRepresentativeUniverse(
+    eligibleUniverse,
+    options.fitOf,
+    poolQualityCenter,
+  );
+  const protectedPeople = shapeRepresentativeUniverse(
+    protectedPlayers,
+    options.fitOf,
+    poolQualityCenter,
+  );
+  const roleTargets = targetCountsByRoleBucket(
+    representativeUniverse,
+    effectiveTarget,
+    options.teams ?? 0,
+  );
   const quotaShortfalls: NumericPoolQuotaShortfall[] = [];
   const messages: string[] = [];
+  let identitySelectionCursor = 0;
 
   for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
     const bucketSource = options.universe.filter((player) => roleBucketOf(player) === bucket && !excludedIds.has(player.id));
     const windowTargets = targetCountsByWindow(bucketTarget, windows);
+    const protectedCountsByWindow = Object.fromEntries(windows.map((window) => [
+      window.id,
+      protectedPeople.filter((player) => (
+        roleBucketOf(player) === bucket
+        && numericWindowId(numericGradeOf(player), windows) === window.id
+      )).length,
+    ])) as Record<string, number>;
+    const protectedInBucket = Object.values(protectedCountsByWindow)
+      .reduce((sum, count) => sum + count, 0);
+    const remainingBucketNeed = Math.max(0, bucketTarget - protectedInBucket);
+    const windowDeficits = windows.map((window) => ({
+      id: window.id,
+      count: Math.max(0, (windowTargets[window.id] ?? 0) - (protectedCountsByWindow[window.id] ?? 0)),
+    }));
+    const totalWindowDeficit = windowDeficits.reduce((sum, entry) => sum + entry.count, 0);
+    const neededByWindow = totalWindowDeficit > 0
+      ? largestRemainderCounts(
+          windowDeficits.map((entry) => ({ id: entry.id, share: entry.count / totalWindowDeficit })),
+          remainingBucketNeed,
+        )
+      : targetCountsByWindow(remainingBucketNeed, windows);
     for (const window of windows) {
       const targetCount = windowTargets[window.id] ?? 0;
-      if (targetCount <= 0) continue;
-      const protectedCount = protectedPlayers.filter((player) =>
-        roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
-      ).length;
-      const needed = Math.max(0, targetCount - protectedCount);
+      const protectedCount = protectedCountsByWindow[window.id] ?? 0;
+      const needed = neededByWindow[window.id] ?? 0;
+      if (targetCount <= 0 && needed <= 0) continue;
       const candidates = bucketSource
-        .filter((player) => !selected.has(player.id))
+        .filter((player) => !selectedGroups.has(demandVersionGroupId(player)))
         .filter((player) => numericWindowId(numericGradeOf(player), windows) === window.id)
         .sort(fitComparator);
-      const picks = selectWindowCandidates({
+      const picks = selectIdentityBalancedCandidates({
         candidates,
         needed,
-        windowId: window.id,
+        windowId: `${bucket}|${window.id}`,
+        fitScorers: identityFitScorers,
+        identityStartIndex: identitySelectionCursor,
         generationNonce: options.generationNonce,
       });
-      for (const pick of picks) selected.set(pick.id, pick);
+      identitySelectionCursor += picks.length;
+      for (const pick of picks) {
+        selected.set(pick.id, pick);
+        selectedGroups.add(demandVersionGroupId(pick));
+      }
       if (picks.length < needed) {
+        const availableGroups = demandVersionGroupIds(candidates).size;
         quotaShortfalls.push({
           roleBucket: bucket,
           windowId: window.id,
           minInclusive: window.minInclusive,
           maxExclusive: window.maxExclusive,
-          targetCount,
+          targetCount: protectedCount + needed,
           protectedCount,
           selectedCount: protectedCount + picks.length,
-          availableCount: protectedCount + candidates.length,
+          availableCount: protectedCount + availableGroups,
         });
       }
     }
   }
 
-  if (selected.size < effectiveTarget) {
+  // A role can miss one or more quality windows even when that role has enough people overall.
+  // Fill the remaining role quota before the global fallback. Otherwise a missing RP window can be
+  // replaced by an extra CP or hitter and silently undo the roster-demand role distribution.
+  for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
+    const selectedInBucket = shapeRepresentativeUniverse(
+      [...selected.values()],
+      options.fitOf,
+      poolQualityCenter,
+    ).filter((player) => roleBucketOf(player) === bucket).length;
+    const needed = Math.max(0, bucketTarget - selectedInBucket);
+    if (needed === 0) continue;
+    const candidates = options.universe
+      .filter((player) => roleBucketOf(player) === bucket)
+      .filter((player) => !selectedGroups.has(demandVersionGroupId(player)) && !excludedIds.has(player.id))
+      .sort(fitComparator);
+    const picks = selectIdentityBalancedCandidates({
+      candidates,
+      needed,
+      windowId: `${bucket}|role-fallback`,
+      fitScorers: identityFitScorers,
+      identityStartIndex: identitySelectionCursor,
+      generationNonce: options.generationNonce,
+    });
+    identitySelectionCursor += picks.length;
+    for (const pick of picks) {
+      selected.set(pick.id, pick);
+      selectedGroups.add(demandVersionGroupId(pick));
+    }
+    if (picks.length > 0) {
+      messages.push(
+        `role quota fallback added ${picks.length} ${bucket} candidate${picks.length === 1 ? '' : 's'} after quality-window shortfalls.`,
+      );
+    }
+  }
+
+  if (selectedGroups.size < effectiveTarget) {
     const remaining = options.universe
-      .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+      .filter((player) => !selectedGroups.has(demandVersionGroupId(player)) && !excludedIds.has(player.id))
       .sort((a, b) => {
         const aMiddle = numericGradeOf(a) >= tuning.middleMin && numericGradeOf(a) < tuning.middleMax;
         const bMiddle = numericGradeOf(b) >= tuning.middleMin && numericGradeOf(b) < tuning.middleMax;
         if (aMiddle !== bMiddle) return aMiddle ? -1 : 1;
         return fitComparator(a, b);
       });
-    const needed = effectiveTarget - selected.size;
-    const picks = options.generationNonce && options.generationNonce > 0
-      ? selectWindowCandidates({
-          candidates: remaining,
-          needed,
-          windowId: 'fallback',
-          generationNonce: options.generationNonce,
-        })
-      : remaining.slice(0, needed);
-    for (const pick of picks) selected.set(pick.id, pick);
+    const uniqueRemaining = uniqueDemandCardsByVersionGroup(remaining, selectedGroups);
+    const needed = effectiveTarget - selectedGroups.size;
+    const picks = selectIdentityBalancedCandidates({
+      candidates: remaining,
+      needed,
+      windowId: 'fallback',
+      fitScorers: identityFitScorers,
+      identityStartIndex: identitySelectionCursor,
+      generationNonce: options.generationNonce,
+    });
+    identitySelectionCursor += picks.length;
+    for (const pick of picks) {
+      selected.set(pick.id, pick);
+      selectedGroups.add(demandVersionGroupId(pick));
+    }
     messages.push(
-      `numeric grade quota fallback added ${Math.min(needed, remaining.length)} deterministic source candidates after explicit quota shortfalls.`,
+      `numeric grade quota fallback added ${Math.min(needed, uniqueRemaining.length)} deterministic source candidates after explicit quota shortfalls.`,
     );
   }
 
-  const highTailCapCount = Math.floor(effectiveTarget * tuning.highTailCap);
-  let highTailCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
+  if (selectedGroups.size > effectiveTarget) {
+    const beforeTrim = selectedGroups.size;
+    const trimmed = trimDemandPoolToPersonTarget(
+      [...selected.values()],
+      options.protectedIds,
+      options.fitOf,
+      effectiveTarget,
+    );
+    selected.clear();
+    for (const player of trimmed.kept) selected.set(player.id, player);
+    selectedGroups.clear();
+    for (const groupId of demandVersionGroupIds(trimmed.kept)) selectedGroups.add(groupId);
+    if (trimmed.evicted.length > 0) {
+      messages.push(
+        `numeric grade quotas selected ${beforeTrim - effectiveTarget} person${beforeTrim - effectiveTarget === 1 ? '' : 's'} above the target because protected distribution exceeded one or more role/window shares; trimmed ${demandVersionGroupIds(trimmed.evicted).size} unprotected person${demandVersionGroupIds(trimmed.evicted).size === 1 ? '' : 's'} by fit before price.`,
+      );
+    }
+  }
+
+  const highTailCapCount = Math.ceil(effectiveTarget * tuning.highTailCap);
+  const selectedCurvePeople = () => shapeRepresentativeUniverse(
+    [...selected.values()],
+    options.fitOf,
+    poolQualityCenter,
+  );
+  let highTailCount = selectedCurvePeople()
+    .filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
   if (highTailCount > highTailCapCount) {
     let swaps = 0;
     const highTailEvictable = () => [...selected.values()]
@@ -1284,9 +1894,30 @@ export function shapePoolByNumericGrade(options: {
       if (highTailCount <= highTailCapCount) break;
       const sameBucket = roleBucketOf(highTailPlayer);
       const replacementCandidates = options.universe
-        .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+        .filter((player) => player.id !== highTailPlayer.id && !excludedIds.has(player.id))
+        .filter((player) => (
+          demandVersionGroupId(player) === demandVersionGroupId(highTailPlayer)
+          || !selectedGroups.has(demandVersionGroupId(player))
+        ))
         .filter((player) => numericGradeOf(player) < tuning.highTailMin)
+        .filter((player) => preservesCompetitivePositionSupplyOnSwap(
+          selectedCurvePeople(),
+          highTailPlayer,
+          player,
+          options.teams ?? 0,
+        ))
+        .filter((player) => preservesBullpenRoleCountsOnSwap(
+          selectedCurvePeople(),
+          highTailPlayer,
+          player,
+        ))
         .sort((a, b) => {
+          const identityLossDelta = worstIdentityFitLoss(highTailPlayer, a, identityFitScorers)
+            - worstIdentityFitLoss(highTailPlayer, b, identityFitScorers);
+          if (Math.abs(identityLossDelta) > 1e-9) return identityLossDelta;
+          const aSamePerson = demandVersionGroupId(a) === demandVersionGroupId(highTailPlayer);
+          const bSamePerson = demandVersionGroupId(b) === demandVersionGroupId(highTailPlayer);
+          if (aSamePerson !== bSamePerson) return aSamePerson ? -1 : 1;
           const aSameBucket = roleBucketOf(a) === sameBucket;
           const bSameBucket = roleBucketOf(b) === sameBucket;
           if (aSameBucket !== bSameBucket) return aSameBucket ? -1 : 1;
@@ -1298,8 +1929,11 @@ export function shapePoolByNumericGrade(options: {
       const replacement = replacementCandidates[0];
       if (!replacement) continue;
       selected.delete(highTailPlayer.id);
+      removeDemandGroupIfAbsent(selected, selectedGroups, highTailPlayer);
       selected.set(replacement.id, replacement);
-      highTailCount -= 1;
+      selectedGroups.add(demandVersionGroupId(replacement));
+      highTailCount = selectedCurvePeople()
+        .filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
       swaps += 1;
     }
     if (swaps > 0) {
@@ -1307,13 +1941,14 @@ export function shapePoolByNumericGrade(options: {
     }
     if (highTailCount > highTailCapCount) {
       messages.push(
-        `numeric grade high-tail cap still exceeds target by ${highTailCount - highTailCapCount}; protected players or missing same-role middle supply prevented further swaps.`,
+        `numeric grade high-tail cap still exceeds target by ${highTailCount - highTailCapCount}; protected players or selected-source position floors prevented further swaps.`,
       );
     }
   }
 
-  const superstarCapCount = Math.floor(effectiveTarget * tuning.superstarTailCap);
-  let superstarCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
+  const superstarCapCount = Math.ceil(effectiveTarget * tuning.superstarTailCap);
+  let superstarCount = selectedCurvePeople()
+    .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
   if (superstarCount > superstarCapCount) {
     let swaps = 0;
     const superstarEvictable = () => [...selected.values()]
@@ -1328,9 +1963,30 @@ export function shapePoolByNumericGrade(options: {
       if (superstarCount <= superstarCapCount) break;
       const sameBucket = roleBucketOf(superstar);
       const replacement = options.universe
-        .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+        .filter((player) => player.id !== superstar.id && !excludedIds.has(player.id))
+        .filter((player) => (
+          demandVersionGroupId(player) === demandVersionGroupId(superstar)
+          || !selectedGroups.has(demandVersionGroupId(player))
+        ))
         .filter((player) => numericGradeOf(player) < tuning.superstarTailMin)
+        .filter((player) => preservesCompetitivePositionSupplyOnSwap(
+          selectedCurvePeople(),
+          superstar,
+          player,
+          options.teams ?? 0,
+        ))
+        .filter((player) => preservesBullpenRoleCountsOnSwap(
+          selectedCurvePeople(),
+          superstar,
+          player,
+        ))
         .sort((a, b) => {
+          const identityLossDelta = worstIdentityFitLoss(superstar, a, identityFitScorers)
+            - worstIdentityFitLoss(superstar, b, identityFitScorers);
+          if (Math.abs(identityLossDelta) > 1e-9) return identityLossDelta;
+          const aSamePerson = demandVersionGroupId(a) === demandVersionGroupId(superstar);
+          const bSamePerson = demandVersionGroupId(b) === demandVersionGroupId(superstar);
+          if (aSamePerson !== bSamePerson) return aSamePerson ? -1 : 1;
           const aSameBucket = roleBucketOf(a) === sameBucket;
           const bSameBucket = roleBucketOf(b) === sameBucket;
           if (aSameBucket !== bSameBucket) return aSameBucket ? -1 : 1;
@@ -1341,8 +1997,11 @@ export function shapePoolByNumericGrade(options: {
         })[0];
       if (!replacement) continue;
       selected.delete(superstar.id);
+      removeDemandGroupIfAbsent(selected, selectedGroups, superstar);
       selected.set(replacement.id, replacement);
-      superstarCount -= 1;
+      selectedGroups.add(demandVersionGroupId(replacement));
+      superstarCount = selectedCurvePeople()
+        .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
       swaps += 1;
     }
     if (swaps > 0) {
@@ -1355,9 +2014,51 @@ export function shapePoolByNumericGrade(options: {
     }
   }
 
-  if (protectedPlayers.length > effectiveTarget) {
+  // Protected distributions can make the ideal role/window curve impossible at the fixed size.
+  // Recompute from the final post-cap membership so diagnostics name every relaxed preference
+  // without retaining a stale pre-trim or pre-swap quota result.
+  quotaShortfalls.length = 0;
+  const finalCurvePeople = selectedCurvePeople();
+  messages.push(...roleBalanceAdvisoryMessages({
+    players: finalCurvePeople,
+    universe: eligibleUniverse,
+    targetSize: effectiveTarget,
+    teams: options.teams ?? 0,
+    fitOf: options.fitOf,
+    qualityCenter: poolQualityCenter,
+  }));
+  for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
+    const bucketSource = representativeUniverse.filter((player) => roleBucketOf(player) === bucket);
+    const windowTargets = targetCountsByWindow(bucketTarget, windows);
+    for (const window of windows) {
+      const targetCount = windowTargets[window.id] ?? 0;
+      if (targetCount <= 0) continue;
+      const selectedCount = finalCurvePeople.filter((player) =>
+        roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      if (selectedCount >= targetCount) continue;
+      const protectedCount = protectedPeople.filter((player) =>
+        roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      const availableCount = bucketSource.filter((player) =>
+        numericWindowId(numericGradeOf(player), windows) === window.id
+      ).length;
+      quotaShortfalls.push({
+        roleBucket: bucket,
+        windowId: window.id,
+        minInclusive: window.minInclusive,
+        maxExclusive: window.maxExclusive,
+        targetCount,
+        protectedCount,
+        selectedCount,
+        availableCount,
+      });
+    }
+  }
+
+  if (protectedPeople.length > effectiveTarget) {
     messages.push(
-      `protected classes already exceed the numeric target by ${protectedPlayers.length - effectiveTarget}; protected asks, claims, floors, and pins were preserved.`,
+      `protected classes already exceed the numeric target by ${protectedPeople.length - effectiveTarget}; protected asks, claims, floors, and pins were preserved.`,
     );
   }
 
@@ -1416,17 +2117,51 @@ function playerName(player: DemandUniversePlayer): string {
   return maybe.name ?? ([maybe.firstName, maybe.lastName].filter(Boolean).join(' ') || player.id);
 }
 
-function makeMaxFitOf(
+function uniqueDemandIdentityReference(
+  universe: readonly DemandUniversePlayer[],
+  score: DemandFitScorer,
+): DemandUniversePlayer[] {
+  const bestByGroup = new Map<string, DemandUniversePlayer>();
+  for (const player of universe) {
+    const groupId = demandVersionGroupId(player);
+    const current = bestByGroup.get(groupId);
+    if (!current || score(player) > score(current) + 1e-9
+      || (Math.abs(score(player) - score(current)) <= 1e-9
+        && (player.iv > current.iv + 1e-9
+          || (Math.abs(player.iv - current.iv) <= 1e-9 && player.id.localeCompare(current.id) < 0)))) {
+      bestByGroup.set(groupId, player);
+    }
+  }
+  return [...bestByGroup.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+interface DemandIdentityFitModel {
+  scorer: DemandFitScorer;
+  reference: DemandUniversePlayer[];
+}
+
+function makeIdentityFitModels(
   selectedArchetypes: readonly HistoricalArchetype[],
   tier: TierKey,
   posture: RosterPosture,
   universe: readonly DemandUniversePlayer[],
+): DemandIdentityFitModel[] {
+  return selectedArchetypes.map((archetype) => {
+    const simArchetype = historicalToSimArchetype(archetype);
+    const representativeScore = archetypeFitScorer(simArchetype, tier, 'optimal');
+    const reference = uniqueDemandIdentityReference(universe, representativeScore);
+    return {
+      scorer: archetypeFitScorer(simArchetype, tier, posture, reference),
+      reference,
+    };
+  });
+}
+
+function makeMaxFitOf(
+  fitScorers: readonly DemandFitScorer[],
 ): (player: DemandUniversePlayer) => number {
-  if (selectedArchetypes.length === 0) return () => 0;
-  const scorers = selectedArchetypes.map((archetype) =>
-    archetypeFitScorer(historicalToSimArchetype(archetype), tier, posture, universe),
-  );
-  return (player) => Math.max(...scorers.map((score) => score(player)));
+  if (fitScorers.length === 0) return () => 0;
+  return (player) => Math.max(...fitScorers.map((score) => score(player)));
 }
 
 function trimClampMessage(sizing: Pick<PoolSizingResult, 'demandBase' | 'requestedMultiplier' | 'requestedTarget'>, finalSize: number, cap: number): string {
@@ -1529,11 +2264,22 @@ function maxLowTailCount(size: number, tuning: NumericPoolShapeTuning = poolBala
 }
 
 function maxHighTailCount(size: number, tuning: NumericPoolShapeTuning = poolBalancePresetTuning()): number {
-  return Math.floor(size * tuning.highTailCap);
+  return Math.ceil(size * tuning.highTailCap);
 }
 
 function incrementCount(target: Record<string, number>, key: string): void {
   target[key] = (target[key] ?? 0) + 1;
+}
+
+function mergeCountRecords(
+  left: Readonly<Record<string, number>>,
+  right: Readonly<Record<string, number>>,
+): Record<string, number> {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return Object.fromEntries([...keys].sort((a, b) => a.localeCompare(b)).map((key) => [
+    key,
+    (left[key] ?? 0) + (right[key] ?? 0),
+  ]));
 }
 
 function repairCandidatePriority(options: {
@@ -1585,6 +2331,7 @@ function selectCurveSwapEvictionCandidate(options: {
   protectedIds: ReadonlySet<string>;
   incoming: DemandUniversePlayer;
   slot: DesignSlot | null;
+  teams: number;
   fitOf: (player: DemandUniversePlayer) => number;
   tuning?: NumericPoolShapeTuning;
 }): DemandUniversePlayer | null {
@@ -1594,6 +2341,23 @@ function selectCurveSwapEvictionCandidate(options: {
   return options.currentPlayers
     .filter((player) => !options.protectedIds.has(player.id))
     .filter((player) => isLowTailWindow(numericWindowIdOf(player, windows)))
+    .filter((player) => preservesCompetitivePositionSupplyOnSwap(
+      options.currentPlayers,
+      player,
+      options.incoming,
+      options.teams,
+    ))
+    .filter((player) => preservesBullpenRoleCountsOnSwap(
+      options.currentPlayers,
+      player,
+      options.incoming,
+    ))
+    .filter((player) => doesNotIncreaseUpperTailOnSwap(
+      options.currentPlayers,
+      player,
+      options.incoming,
+      options.tuning ?? poolBalancePresetTuning(),
+    ))
     .sort((a, b) => {
       const aWindow = numericWindowIdOf(a, windows);
       const bWindow = numericWindowIdOf(b, windows);
@@ -1617,17 +2381,326 @@ function eligibleForRepairClass(slot: DesignSlot | null, player: DemandUniverseP
   return (slot ? [slot] : buildDefaultDesignSlots()).some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player));
 }
 
+function preservesCompetitivePositionSupplyOnSwap(
+  currentPlayers: readonly DemandUniversePlayer[],
+  outgoing: DemandUniversePlayer,
+  incoming: DemandUniversePlayer,
+  teams: number,
+): boolean {
+  const before = new Map(evaluateCompetitivePositionSupplyFloors(currentPlayers, teams).map((floor) => [
+    `${floor.kind}:${floor.position}`,
+    floor.missing,
+  ]));
+  const afterPlayers = [
+    ...currentPlayers.filter((player) => player.id !== outgoing.id),
+    incoming,
+  ];
+  return evaluateCompetitivePositionSupplyFloors(afterPlayers, teams).every((floor) => (
+    floor.missing <= (before.get(`${floor.kind}:${floor.position}`) ?? 0)
+  ));
+}
+
+function preservesBullpenRoleCountsOnSwap(
+  currentPlayers: readonly DemandUniversePlayer[],
+  outgoing: DemandUniversePlayer,
+  incoming: DemandUniversePlayer,
+): boolean {
+  const counts = (players: readonly DemandUniversePlayer[]) => ({
+    closers: players.filter((player) => roleBucketOf(player) === 'arm:CP').length,
+    ordinaryOrSwing: players.filter((player) => (
+      roleBucketOf(player) === 'arm:RP' || roleBucketOf(player) === 'arm:SP/RP'
+    )).length,
+  });
+  const before = counts(currentPlayers);
+  const after = counts([
+    ...currentPlayers.filter((player) => player.id !== outgoing.id),
+    incoming,
+  ]);
+  return after.closers === before.closers && after.ordinaryOrSwing === before.ordinaryOrSwing;
+}
+
+function doesNotIncreaseUpperTailOnSwap(
+  currentPlayers: readonly DemandUniversePlayer[],
+  outgoing: DemandUniversePlayer,
+  incoming: DemandUniversePlayer,
+  tuning: NumericPoolShapeTuning,
+): boolean {
+  const counts = (players: readonly DemandUniversePlayer[]) => ({
+    highTail: players.filter((player) => numericGradeOf(player) >= tuning.highTailMin).length,
+    superstarTail: players.filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length,
+  });
+  const before = counts(currentPlayers);
+  const after = counts([
+    ...currentPlayers.filter((player) => player.id !== outgoing.id),
+    incoming,
+  ]);
+  return after.highTail <= before.highTail && after.superstarTail <= before.superstarTail;
+}
+
+function repairSelectedIdentityCoverage(options: {
+  universe: readonly DemandUniversePlayer[];
+  players: readonly DemandUniversePlayer[];
+  selectedArchetypes: readonly HistoricalArchetype[];
+  tier: TierKey;
+  posture: RosterPosture;
+  budgetPerTeam: number;
+  teams: number;
+  protectedIds: ReadonlySet<string>;
+  excludedIds: ReadonlySet<string>;
+  fitScorers: readonly DemandFitScorer[];
+  identityReferences: readonly (readonly DemandUniversePlayer[])[];
+  tuning: NumericPoolShapeTuning;
+}): {
+  players: DemandUniversePlayer[];
+  swaps: Array<{ outgoingId: string; incomingId: string; archetypeId: string }>;
+  messages: string[];
+} {
+  if (
+    options.selectedArchetypes.length === 0
+    || options.fitScorers.length !== options.selectedArchetypes.length
+    || options.identityReferences.length !== options.selectedArchetypes.length
+    || options.teams <= 0
+    || !Number.isFinite(options.budgetPerTeam)
+  ) {
+    return { players: [...options.players], swaps: [], messages: [] };
+  }
+  const current = new Map(options.players.map((player) => [player.id, player]));
+  const selectedGroups = demandVersionGroupIds(options.players);
+  const repairProtectedIds = new Set(options.protectedIds);
+  const referenceByArchetypeId = new Map(options.selectedArchetypes.map((archetype, index) => [
+    archetype.id,
+    [...options.identityReferences[index]],
+  ]));
+  const swaps: Array<{ outgoingId: string; incomingId: string; archetypeId: string }> = [];
+  const rank = () => options.selectedArchetypes.flatMap((archetype) => rankArchetypeDraftability(
+    [...current.values()],
+    [archetype],
+    options.tier,
+    {
+      realTeamCount: options.teams,
+      posture: options.posture,
+      budgetOverride: options.budgetPerTeam,
+      embodimentReference: [...(referenceByArchetypeId.get(archetype.id) ?? options.universe)],
+    },
+  ));
+  let locked = rank().filter((verdict) => verdict.band === 'LOCKED');
+  const curveCounts = (players: readonly DemandUniversePlayer[]) => ({
+    high: players.filter((player) => numericGradeOf(player) >= options.tuning.highTailMin).length,
+    superstar: players.filter((player) => numericGradeOf(player) >= options.tuning.superstarTailMin).length,
+    low: players.filter((player) => numericGradeOf(player) < options.tuning.lowTailMax).length,
+    middle: players.filter((player) => {
+      const grade = numericGradeOf(player);
+      return grade >= options.tuning.middleMin && grade < options.tuning.middleMax;
+    }).length,
+  });
+  const preservesFinalShape = (
+    beforePlayers: readonly DemandUniversePlayer[],
+    afterPlayers: readonly DemandUniversePlayer[],
+  ) => {
+    const before = curveCounts(beforePlayers);
+    const after = curveCounts(afterPlayers);
+    if (
+      after.high > before.high
+      || after.superstar > before.superstar
+      || after.low > before.low
+      || after.middle < before.middle
+    ) return false;
+    const missingBefore = new Map(evaluateCompetitivePositionSupplyFloors(beforePlayers, options.teams).map((floor) => [
+      `${floor.kind}:${floor.position}`,
+      floor.missing,
+    ]));
+    if (evaluateCompetitivePositionSupplyFloors(afterPlayers, options.teams).some((floor) => (
+      floor.missing > (missingBefore.get(`${floor.kind}:${floor.position}`) ?? 0)
+    ))) return false;
+    const bullpenCounts = (players: readonly DemandUniversePlayer[]) => ({
+      closers: players.filter((player) => roleBucketOf(player) === 'arm:CP').length,
+      ordinaryOrSwing: players.filter((player) => (
+        roleBucketOf(player) === 'arm:RP' || roleBucketOf(player) === 'arm:SP/RP'
+      )).length,
+    });
+    const bullpenBefore = bullpenCounts(beforePlayers);
+    const bullpenAfter = bullpenCounts(afterPlayers);
+    return bullpenAfter.closers === bullpenBefore.closers
+      && bullpenAfter.ordinaryOrSwing === bullpenBefore.ordinaryOrSwing;
+  };
+  for (let round = 0; round < 3 && locked.length > 0; round += 1) {
+    let roundSwaps = 0;
+    for (const verdict of locked) {
+      const archetypeIndex = options.selectedArchetypes.findIndex((archetype) => archetype.id === verdict.archetypeId);
+      if (archetypeIndex < 0) continue;
+      const archetype = options.selectedArchetypes[archetypeIndex];
+      const scorer = options.fitScorers[archetypeIndex];
+      const identityReference = referenceByArchetypeId.get(archetype.id) ?? [...options.universe];
+      const sourceBuild = buildIdentityRoster(
+        [...identityReference],
+        historicalToSimArchetype(archetype),
+        options.tier,
+        options.budgetPerTeam,
+        {
+          realTeamCount: options.teams,
+          posture: options.posture,
+          embodimentReference: [...identityReference],
+        },
+      );
+      for (let repair = 0; repair < 3; repair += 1) {
+        const currentPlayers = [...current.values()];
+        const pairedVersionTransfers = sourceBuild.players
+          .filter((incoming): incoming is DemandUniversePlayer => 'profile' in incoming)
+          .filter((incoming) => !current.has(incoming.id) && !options.excludedIds.has(incoming.id))
+          .flatMap((incoming) => {
+            const incomingGroup = demandVersionGroupId(incoming);
+            const selectedSibling = currentPlayers.find((player) => demandVersionGroupId(player) === incomingGroup);
+            if (!selectedSibling || options.protectedIds.has(selectedSibling.id)) return [];
+            if (numericBandOf(selectedSibling, options.tuning) === numericBandOf(incoming, options.tuning)) return [];
+            return currentPlayers
+              .filter((donor) => donor.id !== selectedSibling.id && !options.protectedIds.has(donor.id))
+              .flatMap((donor) => options.universe
+                .filter((replacement) => demandVersionGroupId(replacement) === demandVersionGroupId(donor))
+                .filter((replacement) => replacement.id !== donor.id && !options.excludedIds.has(replacement.id))
+                .map((replacement) => {
+                  const afterPlayers = currentPlayers
+                    .filter((player) => player.id !== selectedSibling.id && player.id !== donor.id)
+                    .concat(incoming, replacement);
+                  return {
+                    selectedSibling,
+                    incoming,
+                    donor,
+                    replacement,
+                    afterPlayers,
+                    gain: scorer(incoming) + scorer(replacement) - scorer(selectedSibling) - scorer(donor),
+                    otherIdentityLoss: Math.max(...options.fitScorers.map((identityScorer) => (
+                      identityScorer(selectedSibling) + identityScorer(donor)
+                      - identityScorer(incoming) - identityScorer(replacement)
+                    ))),
+                    replacesRepairKeep: repairProtectedIds.has(selectedSibling.id)
+                      || repairProtectedIds.has(donor.id),
+                  };
+                })
+                .filter((pair) => pair.gain > 1e-9)
+                .filter((pair) => !pair.replacesRepairKeep || pair.otherIdentityLoss <= 1e-9)
+                .filter((pair) => preservesFinalShape(currentPlayers, pair.afterPlayers)))
+          })
+          .sort((left, right) => (
+            right.gain - left.gain
+            || left.otherIdentityLoss - right.otherIdentityLoss
+            || left.incoming.id.localeCompare(right.incoming.id)
+            || left.replacement.id.localeCompare(right.replacement.id)
+          ));
+        const transfer = pairedVersionTransfers[0];
+        if (transfer) {
+          current.delete(transfer.selectedSibling.id);
+          current.delete(transfer.donor.id);
+          repairProtectedIds.delete(transfer.selectedSibling.id);
+          repairProtectedIds.delete(transfer.donor.id);
+          removeDemandGroupIfAbsent(current, selectedGroups, transfer.selectedSibling);
+          removeDemandGroupIfAbsent(current, selectedGroups, transfer.donor);
+          current.set(transfer.incoming.id, transfer.incoming);
+          current.set(transfer.replacement.id, transfer.replacement);
+          selectedGroups.add(demandVersionGroupId(transfer.incoming));
+          selectedGroups.add(demandVersionGroupId(transfer.replacement));
+          repairProtectedIds.add(transfer.incoming.id);
+          repairProtectedIds.add(transfer.replacement.id);
+          swaps.push({
+            outgoingId: transfer.selectedSibling.id,
+            incomingId: transfer.incoming.id,
+            archetypeId: archetype.id,
+          });
+          swaps.push({
+            outgoingId: transfer.donor.id,
+            incomingId: transfer.replacement.id,
+            archetypeId: archetype.id,
+          });
+          roundSwaps += 2;
+          continue;
+        }
+        const pairs = sourceBuild.players
+          .filter((incoming): incoming is DemandUniversePlayer => 'profile' in incoming)
+          .filter((incoming) => !current.has(incoming.id) && !options.excludedIds.has(incoming.id))
+          .flatMap((incoming) => {
+            const incomingGroup = demandVersionGroupId(incoming);
+            const selectedSibling = currentPlayers.find((player) => demandVersionGroupId(player) === incomingGroup);
+            if (selectedGroups.has(incomingGroup) && !selectedSibling) return [];
+            const outgoingCandidates = selectedSibling ? [selectedSibling] : currentPlayers;
+            return outgoingCandidates
+              .filter((outgoing) => !options.protectedIds.has(outgoing.id))
+              .filter((outgoing) => numericBandOf(outgoing, options.tuning) === numericBandOf(incoming, options.tuning))
+              .filter((outgoing) => preservesCompetitivePositionSupplyOnSwap(
+                currentPlayers,
+                outgoing,
+                incoming,
+                options.teams,
+              ))
+              .filter((outgoing) => preservesBullpenRoleCountsOnSwap(currentPlayers, outgoing, incoming))
+              .filter((outgoing) => doesNotIncreaseUpperTailOnSwap(
+                currentPlayers,
+                outgoing,
+                incoming,
+                options.tuning,
+              ))
+              .map((outgoing) => ({
+                outgoing,
+                incoming,
+                gain: scorer(incoming) - scorer(outgoing),
+                otherIdentityLoss: worstIdentityFitLoss(outgoing, incoming, options.fitScorers),
+                replacesRepairKeep: repairProtectedIds.has(outgoing.id),
+                sameGroup: demandVersionGroupId(outgoing) === incomingGroup,
+                sameRole: roleBucketOf(outgoing) === roleBucketOf(incoming),
+              }))
+              .filter((pair) => pair.gain > 1e-9)
+              .filter((pair) => !pair.replacesRepairKeep || pair.otherIdentityLoss <= 1e-9);
+          })
+          .sort((left, right) => (
+            right.gain - left.gain
+            || left.otherIdentityLoss - right.otherIdentityLoss
+            || Number(right.sameGroup) - Number(left.sameGroup)
+            || Number(right.sameRole) - Number(left.sameRole)
+            || left.incoming.id.localeCompare(right.incoming.id)
+            || left.outgoing.id.localeCompare(right.outgoing.id)
+          ));
+        const pair = pairs[0];
+        if (!pair) break;
+        current.delete(pair.outgoing.id);
+        repairProtectedIds.delete(pair.outgoing.id);
+        removeDemandGroupIfAbsent(current, selectedGroups, pair.outgoing);
+        current.set(pair.incoming.id, pair.incoming);
+        selectedGroups.add(demandVersionGroupId(pair.incoming));
+        repairProtectedIds.add(pair.incoming.id);
+        swaps.push({
+          outgoingId: pair.outgoing.id,
+          incomingId: pair.incoming.id,
+          archetypeId: archetype.id,
+        });
+        roundSwaps += 1;
+      }
+    }
+    if (roundSwaps === 0) break;
+    locked = rank().filter((verdict) => verdict.band === 'LOCKED');
+  }
+  return {
+    players: [...current.values()].sort((left, right) => left.id.localeCompare(right.id)),
+    swaps,
+    messages: swaps.length > 0
+      ? [`identity-balanced shaping exchanged ${swaps.length} curve-neutral source card${swaps.length === 1 ? '' : 's'} before the final certificate.`]
+      : [],
+  };
+}
+
 function selectSwapDownEvictionCandidate(
   currentPlayers: readonly DemandUniversePlayer[],
   protectedIds: ReadonlySet<string>,
   slot: DesignSlot | null,
   incoming: DemandUniversePlayer,
+  teams: number,
+  tuning: NumericPoolShapeTuning,
 ): DemandUniversePlayer | null {
   const classSlots = repairClassSlots(slot, incoming);
   return currentPlayers
     .filter((player) => !protectedIds.has(player.id))
     .filter((player) => player.salary > incoming.salary)
     .filter((player) => classSlots.some((candidateSlot) => eligibleForRepairGroup(candidateSlot, player)))
+    .filter((player) => preservesCompetitivePositionSupplyOnSwap(currentPlayers, player, incoming, teams))
+    .filter((player) => preservesBullpenRoleCountsOnSwap(currentPlayers, player, incoming))
+    .filter((player) => doesNotIncreaseUpperTailOnSwap(currentPlayers, player, incoming, tuning))
     .sort((a, b) => b.salary - a.salary || a.id.localeCompare(b.id))[0] ?? null;
 }
 
@@ -1700,11 +2773,16 @@ export function repairG1PoolForSizing(options: {
   const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * LEGAL_ROSTER.size);
   const targetSize = Math.max(0, Math.floor(options.targetSize ?? options.players.length));
   const maxRepairSlackFactor = options.maxRepairSlackFactor ?? tuning.maxRepairSlackFactor;
+  const requestedSlackFactor = requiredRosterDemand > 0
+    ? targetSize / requiredRosterDemand
+    : 0;
+  const allowedFinalSlackFactor = Math.max(maxRepairSlackFactor, requestedSlackFactor);
   const repairGrowthAllowed = options.repairGrowthAllowed ?? true;
   const maxRepairSize = requiredRosterDemand > 0
     ? Math.max(targetSize, Math.floor(requiredRosterDemand * maxRepairSlackFactor))
     : Number.POSITIVE_INFINITY;
   const current = new Map(options.players.map((player) => [player.id, player]));
+  const currentGroups = demandVersionGroupIds(options.players);
   let g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), options.teams, options.budget);
   const messages: string[] = [];
   const injectedIds: string[] = [];
@@ -1714,6 +2792,7 @@ export function repairG1PoolForSizing(options: {
   const lowTailAdditionsByRole: Record<string, number> = {};
   const swaps: NumericPoolRepairSwap[] = [];
   const curveViolations: NumericPoolCurveViolation[] = [];
+  const retiredRepairGroups = new Set<string>();
   let excludedRepairNoteAdded = false;
   let rounds = 0;
   while (!g1.holds && rounds < options.maxRounds) {
@@ -1729,7 +2808,8 @@ export function repairG1PoolForSizing(options: {
     for (const slot of repairSlots) {
       const label = slot ? (slot.position ?? slot.slotId) : 'roster';
       const eligible = options.universe
-        .filter((player) => !current.has(player.id))
+        .filter((player) => !currentGroups.has(demandVersionGroupId(player)))
+        .filter((player) => !retiredRepairGroups.has(demandVersionGroupId(player)))
         .filter((player) => !requestedExcludedIds.has(player.id))
         .filter((player) => eligibleForRepairClass(slot, player))
         .filter((player) => player.salary <= slotBound)
@@ -1743,16 +2823,44 @@ export function repairG1PoolForSizing(options: {
         options.fitOf,
         tuning,
       );
-      const chosen = repairCandidates[0] ?? null;
+      const orderedRepairCandidates = isOverrunRepair
+        ? [...repairCandidates].sort((left, right) => {
+            const leftLowTail = isLowTailWindow(numericWindowIdOf(left, tuning.windows));
+            const rightLowTail = isLowTailWindow(numericWindowIdOf(right, tuning.windows));
+            if (leftLowTail !== rightLowTail) return leftLowTail ? 1 : -1;
+            if (left.salary !== right.salary) return left.salary - right.salary;
+            const fitDelta = options.fitOf(right) - options.fitOf(left);
+            if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+            return left.id.localeCompare(right.id);
+          })
+        : repairCandidates;
+      let chosen = orderedRepairCandidates[0] ?? null;
       if (!chosen) continue;
       const lastResort = fitQualified.length === 0;
-      const chosenWindow = numericWindowIdOf(chosen, tuning.windows);
-      const chosenRole = roleBucketOf(chosen);
       if (isOverrunRepair) {
-        const evicted = selectSwapDownEvictionCandidate([...current.values()], options.protectedIds, slot, chosen);
+        let evicted: DemandUniversePlayer | null = null;
+        for (const candidate of orderedRepairCandidates) {
+          const candidateEviction = selectSwapDownEvictionCandidate(
+            [...current.values()],
+            options.protectedIds,
+            slot,
+            candidate,
+            options.teams,
+            tuning,
+          );
+          if (!candidateEviction) continue;
+          chosen = candidate;
+          evicted = candidateEviction;
+          break;
+        }
         if (!evicted) continue;
+        const chosenWindow = numericWindowIdOf(chosen, tuning.windows);
+        const chosenRole = roleBucketOf(chosen);
         current.set(chosen.id, chosen);
+        currentGroups.add(demandVersionGroupId(chosen));
         current.delete(evicted.id);
+        removeDemandGroupIfAbsent(current, currentGroups, evicted);
+        retiredRepairGroups.add(demandVersionGroupId(evicted));
         injectedIds.push(chosen.id);
         evictedIds.push(evicted.id);
         incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
@@ -1778,6 +2886,8 @@ export function repairG1PoolForSizing(options: {
           );
         }
       } else {
+        const chosenWindow = numericWindowIdOf(chosen, tuning.windows);
+        const chosenRole = roleBucketOf(chosen);
         const sizeWouldExceedTarget = current.size + 1 > targetSize;
         const sizeWouldExceedMaxRepair = current.size + 1 > maxRepairSize;
         const lowTailWouldExceedCap = isLowTailWindow(chosenWindow)
@@ -1790,6 +2900,7 @@ export function repairG1PoolForSizing(options: {
             protectedIds: options.protectedIds,
             incoming: chosen,
             slot,
+            teams: options.teams,
             fitOf: options.fitOf,
             tuning,
           });
@@ -1813,11 +2924,14 @@ export function repairG1PoolForSizing(options: {
           );
         }
         current.set(chosen.id, chosen);
+        currentGroups.add(demandVersionGroupId(chosen));
         injectedIds.push(chosen.id);
         incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
         if (isLowTailWindow(chosenWindow)) incrementCount(lowTailAdditionsByRole, chosenRole);
         if (evicted) {
           current.delete(evicted.id);
+          removeDemandGroupIfAbsent(current, currentGroups, evicted);
+          retiredRepairGroups.add(demandVersionGroupId(evicted));
           evictedIds.push(evicted.id);
           incrementCount(removalsByRoleWindow, roleWindowKey(evicted, tuning.windows));
           swaps.push({
@@ -1863,22 +2977,41 @@ export function repairG1PoolForSizing(options: {
       message: 'G1 could not legalize within the configured curve and repair-growth guardrails.',
     });
   }
-  if (finalSnapshot.middleMassShare + 1e-9 < tuning.targetMiddleMass) {
+  const finalCurvePlayers = shapeRepresentativeUniverse(finalPlayers, () => 0, poolQualityCenter);
+  const curveCount = Math.max(1, finalCurvePlayers.length);
+  const discreteMinimumShare = (target: number): number => Math.floor(target * curveCount) / curveCount;
+  const discreteMaximumShare = (cap: number): number => Math.ceil(cap * curveCount) / curveCount;
+  if (finalSnapshot.middleMassShare + 1e-9 < discreteMinimumShare(tuning.targetMiddleMass)) {
     curveViolations.push({
       code: 'MIDDLE_MASS_TARGET_MISSED',
       message: `post-repair middle mass ${(finalSnapshot.middleMassShare * 100).toFixed(1)}% is below ${(tuning.targetMiddleMass * 100).toFixed(0)}%.`,
     });
   }
-  if (finalSnapshot.lowTailShare > tuning.lowTailRepairCap + 1e-9) {
+  if (finalSnapshot.lowTailShare > discreteMaximumShare(tuning.lowTailRepairCap) + 1e-9) {
     curveViolations.push({
       code: 'LOW_TAIL_CAP_EXCEEDED',
       message: `post-repair low tail ${(finalSnapshot.lowTailShare * 100).toFixed(1)}% exceeds ${(tuning.lowTailRepairCap * 100).toFixed(0)}%.`,
     });
   }
-  if (finalSnapshot.poolSlackFactor > maxRepairSlackFactor + 1e-9) {
+  if (finalSnapshot.highTailShare > discreteMaximumShare(tuning.highTailCap) + 1e-9) {
+    curveViolations.push({
+      code: 'HIGH_TAIL_CAP_EXCEEDED',
+      message: `post-repair high tail ${(finalSnapshot.highTailShare * 100).toFixed(1)}% exceeds ${(tuning.highTailCap * 100).toFixed(0)}%.`,
+    });
+  }
+  const superstarTailShare = finalCurvePlayers.length > 0
+    ? finalCurvePlayers.filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length / finalCurvePlayers.length
+    : 0;
+  if (superstarTailShare > discreteMaximumShare(tuning.superstarTailCap) + 1e-9) {
+    curveViolations.push({
+      code: 'SUPERSTAR_TAIL_CAP_EXCEEDED',
+      message: `post-repair superstar tail ${(superstarTailShare * 100).toFixed(1)}% exceeds ${(tuning.superstarTailCap * 100).toFixed(0)}%.`,
+    });
+  }
+  if (finalSnapshot.poolSlackFactor > allowedFinalSlackFactor + 1e-9) {
     curveViolations.push({
       code: 'REPAIR_GROWTH_LIMIT',
-      message: `post-repair slack ${finalSnapshot.poolSlackFactor.toFixed(2)}x exceeds max repair slack ${maxRepairSlackFactor.toFixed(2)}x.`,
+      message: `post-repair slack ${finalSnapshot.poolSlackFactor.toFixed(2)}x exceeds allowed slack ${allowedFinalSlackFactor.toFixed(2)}x.`,
     });
   }
   if ((options.failOnCurveViolation ?? false) && curveViolations.length > 0) {
@@ -1960,6 +3093,16 @@ export function extractPoolFromDemand(
     poolSourceMode?: PoolSourceMode;
     priorityIds?: string[];
     designPriorityIds?: string[];
+    preserveSelectedIdentityClaims?: boolean;
+    /**
+     * Snake named-pool builds certify the finished shaped membership with the authoritative
+     * simultaneous seating proof. They must not require the richer source shelf to pass first.
+     */
+    deferIdentityToFinalProof?: boolean;
+    /** Exact disjoint ids from the authoritative all-club Snake seating certificate. */
+    identitySupportIds?: string[];
+    /** Fingerprint binding those ids to the exact validated Full Sources shaping input. */
+    identitySupportReceipt?: PoolIdentitySupportReceipt;
   } = {},
 ): PoolFromDemandResult {
   const contest = options.contestMultiplier ?? POOL_FROM_DEMAND_TUNING.contestMultiplier;
@@ -1980,6 +3123,21 @@ export function extractPoolFromDemand(
   const requestedExcludedIds = new Set(options.excludedIds ?? []);
   const requestedPriorityIds = new Set(options.priorityIds ?? []);
   const requestedDesignPriorityIds = new Set(options.designPriorityIds ?? []);
+  const requestedIdentitySupportIds = new Set(options.identitySupportIds ?? []);
+  const supportReceiptIds = options.identitySupportReceipt?.playerIds ?? [];
+  const certifiedIdentitySupport = options.identitySupportReceipt?.version === 1
+    && options.identitySupportReceipt.authorityFingerprint.length > 0
+    && supportReceiptIds.length === requestedIdentitySupportIds.size
+    && supportReceiptIds.every((id) => requestedIdentitySupportIds.has(id))
+    && options.identitySupportReceipt.sourceFingerprint === poolIdentitySupportFingerprint({
+      universe,
+      selectedArchetypes,
+      tier,
+      teams: teamsForSizing,
+      budgetPerTeam: options.budgetPerTeam,
+      playerIds: supportReceiptIds,
+      authorityFingerprint: options.identitySupportReceipt.authorityFingerprint,
+    });
   const designReconcileEnabled = requestedDesignPriorityIds.size > 0;
   const reconcileEnabled = handReconcileEnabled || designReconcileEnabled;
   const poolMinSalary = universe.length > 0 ? Math.min(...universe.map((player) => player.salary)) : 0;
@@ -2044,10 +3202,39 @@ export function extractPoolFromDemand(
   }
 
   // 4. The archetype-feasibility floors + balance, from the SAME universe (C1B, audited).
-  const floors = extractDraftPool(universe, selectedArchetypes, tier, {
-    teams: options.teams,
-    budgetPerTeam: options.budgetPerTeam,
-  });
+  // A Snake shaped build can arrive with the exact disjoint ids from an already-validated
+  // Full Sources certificate. Re-running all selected identity optimizers here would merely
+  // reconstruct the same claim set before the final shaped pool is validated against that
+  // certificate. On large multi-source universes that duplicate work can hold the browser main
+  // thread for minutes, so carry the certified support as the floor receipt instead.
+  const floors: ExtractedPool = options.deferIdentityToFinalProof
+    ? {
+        players: [],
+        size: 0,
+        targetSize: 0,
+        claimedIds: [],
+        floorIds: [],
+        verdicts: [],
+        balanced: true,
+        repairRounds: 0,
+        notes: ['Identity is certified against the finished shaped Snake pool.'],
+      }
+    : certifiedIdentitySupport
+    ? {
+        players: universe.filter((player) => requestedIdentitySupportIds.has(player.id)),
+        size: requestedIdentitySupportIds.size,
+        targetSize: requestedIdentitySupportIds.size,
+        claimedIds: [...requestedIdentitySupportIds].sort((a, b) => a.localeCompare(b)),
+        floorIds: [],
+        verdicts: [],
+        balanced: true,
+        repairRounds: 0,
+        notes: ['Full Sources identity certificate support retained; duplicate identity extraction skipped.'],
+      }
+    : extractDraftPool(universe, selectedArchetypes, tier, {
+        teams: options.teams,
+        budgetPerTeam: options.budgetPerTeam,
+      });
 
   // 5. Build the candidate seed. In legacy no-sizing mode this stays the historical
   // reservations + C1B floors union. In sizing mode the numeric shaper owns source selection
@@ -2057,16 +3244,30 @@ export function extractPoolFromDemand(
   for (const { player } of classified) {
     if (reservedIds.has(player.id)) byId.set(player.id, player);
   }
+  const preserveSelectedIdentityClaims = options.preserveSelectedIdentityClaims ?? false;
+  const identityClaimedIds = new Set(preserveSelectedIdentityClaims ? floors.claimedIds : []);
+  const structuralFloorIds = new Set(preserveSelectedIdentityClaims ? floors.floorIds : []);
   const explicitProtectedIdsForExclusions = new Set<string>([
     ...reservedIds,
+    ...identityClaimedIds,
+    ...structuralFloorIds,
+    ...requestedIdentitySupportIds,
     ...(handReconcileEnabled ? requestedPinnedIds : []),
   ]);
   const effectiveExcludedIds = new Set(
     [...requestedExcludedIds].filter((id) => !explicitProtectedIdsForExclusions.has(id)),
   );
-  if (!sizingEnabled) {
+  // FINDING-215: selected identities and structural roster floors are hard membership,
+  // including in numeric-shaping mode. The shaper may grow past its nominal target, but it
+  // may never make a chosen club identity disappear by treating its exact build as a soft score.
+  if (!sizingEnabled || preserveSelectedIdentityClaims) {
     for (const player of floors.players as DemandUniversePlayer[]) {
       if (!byId.has(player.id)) byId.set(player.id, player);
+    }
+  }
+  if (requestedIdentitySupportIds.size > 0) {
+    for (const { player } of classified) {
+      if (requestedIdentitySupportIds.has(player.id)) byId.set(player.id, player);
     }
   }
   if (reconcileEnabled) {
@@ -2083,7 +3284,10 @@ export function extractPoolFromDemand(
   let g1: PoolG1Result | undefined;
   let numericShape: NumericPoolShapeDiagnostics | undefined;
   let positionSupplyFloors: PositionSupplyFloorResult[] = [];
-  const fitOf = makeMaxFitOf(selectedArchetypes, tier, posture, universe);
+  const identityFitModels = makeIdentityFitModels(selectedArchetypes, tier, posture, universe);
+  const identityFitScorers = identityFitModels.map((model) => model.scorer);
+  const identityReferences = identityFitModels.map((model) => model.reference);
+  const fitOf = makeMaxFitOf(identityFitScorers);
 
   if (sizingEnabled) {
     const target = resolvePoolSizingTarget({
@@ -2094,6 +3298,9 @@ export function extractPoolFromDemand(
     });
     const protectedIds = new Set<string>([
       ...reservedIds,
+      ...identityClaimedIds,
+      ...structuralFloorIds,
+      ...requestedIdentitySupportIds,
       ...(handReconcileEnabled ? requestedPinnedIds : []),
       ...requestedDesignPriorityIds,
     ]);
@@ -2117,8 +3324,27 @@ export function extractPoolFromDemand(
           ]),
       );
     };
-    const beforeShape = players;
     const excludedForShape = handReconcileEnabled ? effectiveExcludedIds : new Set<string>();
+    const preShapeFloorInjectedIds: string[] = [];
+    const preShapeFloorMessages: string[] = [];
+    if (requestedIdentitySupportIds.size > 0) {
+      const floorSeed = enforcePositionSupplyFloors({
+        universe,
+        players,
+        teams: teamsForSizing,
+        fitOf,
+        excludedIds: excludedForShape,
+        priorityIds: requestedPriorityIds,
+        poolSourceMode: options.poolSourceMode ?? 'full-pool',
+      });
+      players = floorSeed.players;
+      for (const id of floorSeed.injectedIds) {
+        protectedIds.add(id);
+        preShapeFloorInjectedIds.push(id);
+      }
+      preShapeFloorMessages.push(...floorSeed.messages);
+    }
+    const beforeShape = players;
     const shaped = shapePoolByNumericGrade({
       universe,
       currentPlayers: players,
@@ -2126,7 +3352,9 @@ export function extractPoolFromDemand(
       excludedIds: excludedForShape,
       targetSize: target.effectiveTarget,
       requiredRosterDemand: target.demandBase,
+      teams: teamsForSizing,
       fitOf,
+      identityFitScorers,
       preset: poolBalancePreset,
       tuning: poolShapeTuning,
       poolQualityCenter,
@@ -2142,23 +3370,34 @@ export function extractPoolFromDemand(
       .filter((player) => !protectedIds.has(player.id) && !keptAfterShape.has(player.id))
       .map((player) => player.id)
       .sort((a, b) => a.localeCompare(b));
-    const messages: string[] = [];
+    const messages: string[] = [...preShapeFloorMessages];
     if (target.clamped) {
       messages.push(trimClampMessage(target, target.effectiveTarget, options.budgetPerTeam ?? Number.POSITIVE_INFINITY));
     }
     messages.push(...numericShape.messages);
+    const identityOverrideCount = [...requestedExcludedIds]
+      .filter((id) => identityClaimedIds.has(id))
+      .length;
+    if (identityOverrideCount > 0) {
+      messages.push(
+        `${identityOverrideCount} manual removal${identityOverrideCount === 1 ? '' : 's'} stayed in because chosen club identities require ${identityOverrideCount === 1 ? 'that player' : 'those players'}.`,
+      );
+    }
     if (numericShape.quotaShortfalls.length > 0) {
       messages.push(
         `numeric grade quota shortfalls reported in ${numericShape.quotaShortfalls.length} role/window bucket${numericShape.quotaShortfalls.length === 1 ? '' : 's'}; fallback stayed deterministic and did not silently overfill stars or scrubs.`,
       );
     }
     if (players.length > target.effectiveTarget) {
+      const protectedCount = players.filter((player) => protectedIds.has(player.id)).length;
       messages.push(
-        `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: every remaining player is claimed by an ask, an identity build, a structural floor${handReconcileEnabled && players.some((player) => requestedPinnedIds.has(player.id)) ? ', or your own hand-picks' : ''}`,
+        protectedCount > target.effectiveTarget
+          ? `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget}: protected asks, certificate support, position floors${handReconcileEnabled && players.some((player) => requestedPinnedIds.has(player.id)) ? ', or your own hand-picks' : ''} already exceed the target`
+          : `pool exceeds the ${target.effectiveTarget} target by ${players.length - target.effectiveTarget} after numeric shaping even though ${players.length - protectedCount} players remain unprotected`,
       );
     }
 
-    let injectedIds: string[] = [];
+    let injectedIds: string[] = [...preShapeFloorInjectedIds];
     let repairEvictedIds: string[] = [];
     const budget = options.budgetPerTeam ?? Number.POSITIVE_INFINITY;
     if (Number.isFinite(budget) && teamsForSizing > 0) {
@@ -2184,7 +3423,8 @@ export function extractPoolFromDemand(
       });
       players = repair.players;
       g1 = repair.g1;
-      injectedIds = repair.injectedIds;
+      injectedIds = [...new Set([...preShapeFloorInjectedIds, ...repair.injectedIds])]
+        .sort((a, b) => a.localeCompare(b));
       repairEvictedIds = repair.evictedIds;
       messages.push(...repair.messages);
       if (repair.curveViolations.length > 0) {
@@ -2217,7 +3457,7 @@ export function extractPoolFromDemand(
         g1LowTailAdditionsByRole: repair.lowTailAdditionsByRole,
         g1Swaps: repair.swaps,
         curveViolations: repair.curveViolations,
-        g1AdditionCount: injectedIds.length,
+        g1AdditionCount: repair.injectedIds.length,
         g1SwapCount: repair.swaps.length,
       });
     } else {
@@ -2259,12 +3499,96 @@ export function extractPoolFromDemand(
       excludedIds: excludedForShape,
       priorityIds: requestedPriorityIds,
       poolSourceMode: options.poolSourceMode ?? 'full-pool',
+      protectedIds,
+      maxPeople: target.effectiveTarget,
+      tuning: poolShapeTuning,
     });
     players = floorTopUp.players;
     positionSupplyFloors = floorTopUp.floors;
-    injectedIds = [...injectedIds, ...floorTopUp.injectedIds];
+    injectedIds = [...new Set([...injectedIds, ...floorTopUp.injectedIds])]
+      .sort((a, b) => a.localeCompare(b));
+    repairEvictedIds = [...new Set([...repairEvictedIds, ...floorTopUp.evictedIds])]
+      .sort((a, b) => a.localeCompare(b));
     shortfalls.push(...floorTopUp.shortfalls);
     messages.push(...floorTopUp.messages);
+    const identityRepair = options.deferIdentityToFinalProof
+      ? repairSelectedIdentityCoverage({
+          universe,
+          players,
+          selectedArchetypes,
+          tier,
+          posture,
+          budgetPerTeam: options.budgetPerTeam ?? Number.POSITIVE_INFINITY,
+          teams: teamsForSizing,
+          protectedIds,
+          excludedIds: excludedForShape,
+          fitScorers: identityFitScorers,
+          identityReferences,
+          tuning: poolShapeTuning,
+        })
+      : { players, swaps: [], messages: [] };
+    players = identityRepair.players;
+    injectedIds = [...new Set([
+      ...injectedIds,
+      ...identityRepair.swaps.map((swap) => swap.incomingId),
+    ])].sort((a, b) => a.localeCompare(b));
+    repairEvictedIds = [...new Set([
+      ...repairEvictedIds,
+      ...identityRepair.swaps.map((swap) => swap.outgoingId),
+    ])].sort((a, b) => a.localeCompare(b));
+    messages.push(...identityRepair.messages);
+    const finalIdentityG1Repair = identityRepair.swaps.length > 0 && Number.isFinite(budget)
+      ? repairG1PoolForSizing({
+          universe,
+          players,
+          protectedIds: new Set([
+            ...protectedIds,
+            ...identityRepair.swaps.map((swap) => swap.incomingId),
+          ]),
+          requestedExcludedIds: excludedForShape,
+          teams: teamsForSizing,
+          budget,
+          maxRounds: options.maxRepairRounds ?? 6,
+          poolMinSalary,
+          fitOf,
+          handReconcileEnabled,
+          requiredRosterDemand: target.demandBase,
+          targetSize: target.effectiveTarget,
+          maxRepairSlackFactor: options.maxRepairSlackFactor,
+          repairGrowthAllowed: false,
+          failOnCurveViolation: options.failOnCurveViolation,
+          preset: poolBalancePreset,
+          poolQualityCenter,
+          tuning: poolShapeTuning,
+        })
+      : null;
+    if (finalIdentityG1Repair) {
+      players = finalIdentityG1Repair.players;
+      g1 = finalIdentityG1Repair.g1;
+      injectedIds = [...new Set([
+        ...injectedIds,
+        ...finalIdentityG1Repair.injectedIds,
+      ])].sort((a, b) => a.localeCompare(b));
+      repairEvictedIds = [...new Set([
+        ...repairEvictedIds,
+        ...finalIdentityG1Repair.evictedIds,
+      ])].sort((a, b) => a.localeCompare(b));
+      messages.push(...finalIdentityG1Repair.messages);
+    }
+    const finalMessageOptions = {
+      players,
+      universe: universe.filter((player) => !excludedForShape.has(player.id)),
+      targetSize: target.effectiveTarget,
+      teams: teamsForSizing,
+      fitOf,
+      qualityCenter: poolQualityCenter,
+    };
+    const refreshedMessages = refreshRoleBalanceAdvisories({
+      ...finalMessageOptions,
+      messages,
+    });
+    messages.length = 0;
+    messages.push(...refreshedMessages);
     if (numericShape) {
       numericShape = buildNumericPoolShapeDiagnostics({
         players,
@@ -2275,7 +3599,15 @@ export function extractPoolFromDemand(
         poolQualityCenter,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
-        messages: [...numericShape.messages, ...floorTopUp.messages],
+        messages: refreshRoleBalanceAdvisories({
+          ...finalMessageOptions,
+          messages: [
+            ...numericShape.messages,
+            ...floorTopUp.messages,
+            ...identityRepair.messages,
+            ...(finalIdentityG1Repair?.messages ?? []),
+          ],
+        }),
         hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
         engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
         designHardKeepIds,
@@ -2286,13 +3618,30 @@ export function extractPoolFromDemand(
         fullPoolEligibleCandidateCount: universe.filter((player) => !effectiveExcludedIds.has(player.id)).length,
         preRepair: numericShape.preRepair,
         postRepair: curveSnapshot(players, target.demandBase, target.effectiveTarget, poolBalancePreset, poolShapeTuning, poolQualityCenter),
-        g1AdditionsByRoleWindow: numericShape.g1AdditionsByRoleWindow ?? {},
-        g1RemovalsByRoleWindow: numericShape.g1RemovalsByRoleWindow ?? {},
-        g1LowTailAdditionsByRole: numericShape.g1LowTailAdditionsByRole ?? {},
-        g1Swaps: numericShape.g1Swaps ?? [],
-        curveViolations: numericShape.curveViolations ?? [],
-        g1AdditionCount: numericShape.g1AdditionCount ?? 0,
-        g1SwapCount: numericShape.g1SwapCount ?? 0,
+        g1AdditionsByRoleWindow: mergeCountRecords(
+          numericShape.g1AdditionsByRoleWindow ?? {},
+          finalIdentityG1Repair?.additionsByRoleWindow ?? {},
+        ),
+        g1RemovalsByRoleWindow: mergeCountRecords(
+          numericShape.g1RemovalsByRoleWindow ?? {},
+          finalIdentityG1Repair?.removalsByRoleWindow ?? {},
+        ),
+        g1LowTailAdditionsByRole: mergeCountRecords(
+          numericShape.g1LowTailAdditionsByRole ?? {},
+          finalIdentityG1Repair?.lowTailAdditionsByRole ?? {},
+        ),
+        g1Swaps: [
+          ...(numericShape.g1Swaps ?? []),
+          ...(finalIdentityG1Repair?.swaps ?? []),
+        ],
+        curveViolations: [
+          ...(numericShape.curveViolations ?? []),
+          ...(finalIdentityG1Repair?.curveViolations ?? []),
+        ],
+        g1AdditionCount: (numericShape.g1AdditionCount ?? 0)
+          + (finalIdentityG1Repair?.injectedIds.length ?? 0),
+        g1SwapCount: (numericShape.g1SwapCount ?? 0)
+          + (finalIdentityG1Repair?.swaps.length ?? 0),
       });
     }
 

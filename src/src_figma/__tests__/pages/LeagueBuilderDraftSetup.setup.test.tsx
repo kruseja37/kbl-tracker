@@ -6,21 +6,23 @@ import {
 } from "../../app/pages/LeagueBuilderDraftSetup";
 import {
   buildIdentityAutoAssignPlan,
-  retiredSnakeVersionIdsForLock,
-  snakeVersionRestoreIds,
 } from "../../app/pages/LeagueBuilderDraftSetup.helpers";
 import { buildBest22Target } from "../../../engines/best22Target";
 import { rankAllArchetypesForPool } from "../../../engines/draftabilityRanker";
 import { poolDemandModel } from "../../../engines/auctionPoolSizing";
+import { extractPoolFromDemand } from "../../../engines/poolFromDemand";
 import { selectTeamArchetype } from "../../../engines/archetypeIdentity";
-import { getAuctionSession, getMlbDraftSession, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
+import { getAuctionSession, getMlbDraftSession, getRegisteredPool, saveLeagueTemplate, saveTeam } from "../../../utils/leagueBuilderStorage";
 import {
   RUN_IT_BACK_FRANCHISE_GUARD_MESSAGE,
   resetCompletedDraftArc,
 } from "../../../utils/leagueBuilderAuctionPipeline";
 import {
+  addPlayersToLeaguePool,
   lockLeaguePool,
+  unlockLeaguePool,
 } from "../../../utils/leagueBuilderPoolBuilder";
+import { registerLeaguePoolForLeague } from "../../../utils/leagueBuilderPoolRegistration";
 import { leagueHasLinkedFranchise } from "../../../utils/franchiseManager";
 
 vi.setConfig({ testTimeout: 15000 });
@@ -84,6 +86,7 @@ vi.mock("../../../utils/leagueBuilderStorage", async () => {
     ...actual,
     getAuctionSession: vi.fn(async () => null),
     getMlbDraftSession: vi.fn(async () => null),
+    getRegisteredPool: vi.fn(async () => null),
     saveLeagueTemplate: vi.fn(async (league) => league),
     saveTeam: vi.fn(async (team) => team),
   };
@@ -126,6 +129,16 @@ vi.mock("../../../utils/leagueBuilderPoolBuilder", async () => {
     importRosteredPlayersToLeaguePool: vi.fn(async () => 0),
     lockLeaguePool: vi.fn(async () => undefined),
     unlockLeaguePool: vi.fn(async () => undefined),
+  };
+});
+
+vi.mock("../../../utils/leagueBuilderPoolRegistration", async () => {
+  const actual = await vi.importActual<typeof import("../../../utils/leagueBuilderPoolRegistration")>(
+    "../../../utils/leagueBuilderPoolRegistration",
+  );
+  return {
+    ...actual,
+    registerLeaguePoolForLeague: vi.fn(actual.registerLeaguePoolForLeague),
   };
 });
 
@@ -187,6 +200,39 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.queryByText("PLAYER POOL")).not.toBeInTheDocument();
   });
 
+  test("a source-library URL resolves to the draft league and selection keeps the URL honest", async () => {
+    const sourceLibrary = makeLeague({
+      id: "legends-library-career",
+      name: "Legends Library Career",
+      teamIds: [],
+      sourceLibrary: { kind: "historical-legends", profileType: "Career" },
+    });
+    const fourTeamLeague = makeLeague({ id: "four-team-mock", name: "4-team mock" });
+    const secondDraftLeague = makeLeague({ id: "second-draft", name: "Second Draft" });
+    window.history.pushState({}, "", "/league-builder/draft-setup?leagueId=legends-library-career");
+    mockLeagueData({
+      league: fourTeamLeague,
+      leagues: [sourceLibrary, fourTeamLeague, secondDraftLeague],
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+
+    const leagueSelect = await waitFor(() => {
+      const match = screen.getAllByRole("combobox")
+        .find((element) => (element as HTMLSelectElement).value === "four-team-mock");
+      expect(match).toBeDefined();
+      return match as HTMLSelectElement;
+    });
+    expect(leagueSelect).toHaveValue("four-team-mock");
+    await act(async () => {
+      fireEvent.change(leagueSelect, { target: { value: "second-draft" } });
+    });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      "/league-builder/draft-setup?leagueId=second-draft",
+      { replace: true },
+    );
+  });
+
   test("auction format renders only the auction adapter", async () => {
     render(<LeagueBuilderDraftSetup />);
 
@@ -202,6 +248,7 @@ describe("LeagueBuilderDraftSetup", () => {
 
     const snakeMethod = await screen.findByRole("button", { name: "SNAKE DRAFT", exact: true });
     expect(screen.getByRole("button", { name: "AUCTION DRAFT", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(snakeMethod).toBeEnabled());
     fireEvent.click(snakeMethod);
 
     await waitFor(() => {
@@ -237,6 +284,35 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.queryByText(/START SNAKE DRAFT \(POC\)/i)).not.toBeInTheDocument();
   });
 
+  test("opens the requested snake league without an intermediate select-league state", async () => {
+    mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(screen.queryByText("Select a league first.")).not.toBeInTheDocument();
+    expect(await screen.findByText("Snake Draft — Page League")).toBeInTheDocument();
+  });
+
+  test("does not auto-build and certify a snake pool while Draft Setup is mounting", async () => {
+    const players = makePositionDiversePlayers(300, 8, "mount-pool");
+    mockLeagueData({
+      league: makeLeague({
+        draftFormat: "snake",
+        draftPoolMode: "pool-first",
+        poolAssemblyMode: "shape-to-teams",
+        salaryCap: 10_000_000,
+      }),
+      players,
+      pool: makePool({ locked: false, players: [], totalSlots: 176 }),
+    });
+
+    render(<LeagueBuilderDraftSetup />);
+    expect(await screen.findByTestId("snake-setup-adapter")).toBeInTheDocument();
+    await act(async () => undefined);
+
+    expect(extractPoolFromDemand).not.toHaveBeenCalled();
+    expect(addPlayersToLeaguePool).not.toHaveBeenCalled();
+  });
+
   test("snake format keeps source leagues, manual player selection, versions, and club identities in one setup", async () => {
     mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
     render(<LeagueBuilderDraftSetup />);
@@ -245,22 +321,125 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: "EDIT CAPS IDENTITIES" })).toBeInTheDocument();
     expect(screen.getByText("TEAM IDENTITY")).toBeInTheDocument();
     expect(screen.getByText(/^AVAILABLE PLAYERS \(/)).toBeInTheDocument();
-    expect(screen.getByText(/^IN THE POOL \(/)).toBeInTheDocument();
+    // An unaccepted saved membership is intentionally labelled PREVIOUS POOL until Build.
+    expect(screen.getByText(/^(?:IN THE|PREVIOUS) POOL \(/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "SNAKE DRAFT", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 
-  test("a second snake lock cycle does not restore a version the GM removed", () => {
-    const career = "player-career";
-    const peak = "player-peak";
+  test("snake identity picks persist and update the local team without reloading setup data or the pool", async () => {
+    const leagueData = mockLeagueData({ league: makeLeague({ draftFormat: "snake" }) });
+    render(<LeagueBuilderDraftSetup />);
 
-    const firstRetired = retiredSnakeVersionIdsForLock([career, peak], [career]);
-    expect(firstRetired).toEqual([peak]);
-    expect(snakeVersionRestoreIds([career], firstRetired)).toEqual([peak]);
+    const card = await screen.findByRole("button", { name: /Bomba Squad/i });
+    await waitFor(() => expect(card).toBeEnabled());
+    vi.clearAllMocks();
+    fireEvent.click(card);
 
-    const poolAfterManualRemoval = [career];
-    const secondRetired = retiredSnakeVersionIdsForLock(poolAfterManualRemoval, [career]);
-    expect(secondRetired).toEqual([]);
-    expect(snakeVersionRestoreIds(poolAfterManualRemoval, secondRetired)).toEqual([]);
+    await waitFor(() => {
+      expect(selectTeamArchetype).toHaveBeenCalledTimes(1);
+      expect(leagueData.replaceTeamsLocal).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "team-a", mlbArchetypeKey: "bomba-squad" }),
+      ]);
+    });
+    expect(leagueData.refresh).not.toHaveBeenCalled();
+    expect(leagueData.getRegisteredPool).not.toHaveBeenCalled();
+  });
+
+  test("snake Edit Player opens the shared editor, saves, and refreshes the focused player", async () => {
+    const leagueData = mockLeagueData({
+      league: makeLeague({ draftFormat: "snake" }),
+      pool: makePool({ locked: false }),
+    });
+    render(<LeagueBuilderDraftSetup />);
+
+    fireEvent.click(await screen.findByText("Avery Anchor"));
+    fireEvent.click(await screen.findByRole("button", { name: /Edit Player/i }));
+    const firstName = await screen.findByLabelText("First Name");
+    fireEvent.change(firstName, { target: { value: "Avery-Snake" } });
+    expect(screen.getByText("Avery-Snake Anchor")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Save$/i }));
+
+    await waitFor(() => {
+      expect(leagueData.updatePlayer).toHaveBeenCalledWith(expect.objectContaining({
+        id: "player-0",
+        firstName: "Avery-Snake",
+      }));
+      expect(leagueData.replacePlayersLocal).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "player-0", firstName: "Avery-Snake" }),
+      ]);
+      expect(leagueData.refresh).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("EDIT PLAYER")).not.toBeInTheDocument();
+  });
+
+  test("migrates an unsaved one-card snake lock before Ready can survive", async () => {
+    const currentPlayers = ["one", "two", "three", "four"].flatMap((prefix) => (
+      makeLegalRosterPlayerSet(prefix, 10_000)
+    ));
+    const original = currentPlayers[0];
+    const restored = {
+      ...original,
+      id: "legacy-restored-version",
+      firstName: "Restored",
+      sourceId: "historical:shared-person",
+      versionGroupId: "historical:shared-person",
+      leagueAssignments: original.leagueAssignments.filter((assignment) => assignment.leagueId !== "league-page"),
+    };
+    currentPlayers[0] = {
+      ...original,
+      sourceId: "historical:shared-person",
+      versionGroupId: "historical:shared-person",
+    };
+    const unlockedRestoredPool = makePool({
+      locked: false,
+      players: [...currentPlayers, restored].map((player) => ({
+        id: player.id,
+        iv: player.salary,
+        salary: player.salary,
+      })),
+    });
+    const lockedRestoredPool = { ...unlockedRestoredPool, locked: true };
+    const league = makeLeague({
+      draftFormat: "snake",
+      snakeVersionSourcePlayerIds: [restored.id],
+    });
+    const collapsedPool = makePool({
+      locked: true,
+      players: currentPlayers.map((player) => ({ id: player.id, iv: player.salary, salary: player.salary })),
+    });
+    mockLeagueData({
+      league,
+      teams: [
+        makeTeam("team-a", { mlbArchetypeKey: undefined }),
+        makeTeam("team-b", { mlbArchetypeKey: undefined }),
+      ],
+      players: [...currentPlayers, restored],
+      pool: collapsedPool,
+    });
+    vi.mocked(getRegisteredPool).mockResolvedValue(collapsedPool);
+    vi.mocked(addPlayersToLeaguePool).mockResolvedValue([{ ...restored, leagueAssignments: original.leagueAssignments }]);
+    vi.mocked(registerLeaguePoolForLeague).mockResolvedValue(unlockedRestoredPool);
+    vi.mocked(lockLeaguePool).mockResolvedValue(lockedRestoredPool);
+
+    render(<LeagueBuilderDraftSetup />);
+
+    expect(await screen.findByText(/Restoring every player version/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ENTER SNAKE DRAFT" })).toBeDisabled();
+    await waitFor(() => {
+      expect(addPlayersToLeaguePool).toHaveBeenCalledWith([restored.id], "league-page");
+      expect(registerLeaguePoolForLeague).toHaveBeenCalledWith("league-page");
+      expect(lockLeaguePool).toHaveBeenCalledWith("league-page", {
+        expectedPlayerIds: expect.arrayContaining([...currentPlayers.map((player) => player.id), restored.id]),
+      });
+      expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
+        id: "league-page",
+        snakeVersionSourcePlayerIds: [],
+      }));
+    });
+    expect(vi.mocked(lockLeaguePool).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(saveLeagueTemplate).mock.invocationCallOrder.at(-1)!,
+    );
+    expect(unlockLeaguePool).toHaveBeenCalledWith("league-page");
   });
 
   test("disables player edits while the pool is locked", async () => {
@@ -473,16 +652,19 @@ describe("LeagueBuilderDraftSetup", () => {
       expect.objectContaining({ id: "team-b" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-a" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).not.toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-c" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
   });
 
@@ -517,11 +699,13 @@ describe("LeagueBuilderDraftSetup", () => {
       expect.objectContaining({ id: "team-a" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
     expect(selectTeamArchetype).toHaveBeenCalledWith(
       expect.objectContaining({ id: "team-b" }),
       expect.any(String),
       expect.any(String),
+      expect.any(Function),
     );
   });
 

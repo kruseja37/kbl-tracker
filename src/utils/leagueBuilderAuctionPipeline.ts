@@ -9,10 +9,12 @@ import type { RegisteredPool } from '../engines/leagueConstruction';
 import { toRosterSlotPlayer } from '../engines/rosterNeed';
 import { FARM_AUCTION_ROSTER_SLOTS_PER_TEAM, type FarmAuctionPool } from './farmAuctionPool';
 import {
+  getAllLeagueTemplates,
   getAllPlayers,
   getPlayer,
   getTeamRoster,
   commitFarmDraftRostersAndPlayersAtomically,
+  finalizeMlbSnakeDraftAtomically,
   savePlayer,
   saveTeamRoster,
   resetCompletedDraftArcAtomically,
@@ -25,6 +27,7 @@ import {
   type TeamRoster,
   type LeagueBuilderMlbDraftSession,
 } from './leagueBuilderStorage';
+import { assertDraftLeagueTeamIdsAreExclusive } from './draftLeagueTeamIsolation';
 import { leagueHasLinkedFranchise } from './franchiseManager';
 import { farmPickSalary } from '../engines/snakeFarmSlots';
 import { readSnakeDraftTruth } from './snakeDraftManifest';
@@ -53,6 +56,14 @@ export interface AuctionRosterCommitReport {
   rosterStatus: 'MLB' | 'FARM';
   committedPlayerIds: string[];
   teamRosterCounts: Record<string, number>;
+}
+
+export interface SnakeMlbFinalizationReport extends AuctionRosterCommitReport {
+  session: LeagueBuilderMlbDraftSession;
+}
+
+async function assertExclusiveDraftTeamRecords(leagueId: string): Promise<void> {
+  assertDraftLeagueTeamIdsAreExclusive(await getAllLeagueTemplates(), leagueId);
 }
 
 export function computeIvPercentiles(poolPlayers: readonly RegisteredPool["players"][number][]): Map<string, number> {
@@ -286,6 +297,7 @@ export async function commitCompletedMlbAuctionSessionToLeagueRosters(input: {
   session: AuctionSession;
   excludeTeamIds?: readonly string[];
 }): Promise<AuctionRosterCommitReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
   completedSessionOrThrow(input.session);
 
   const teamRosterCounts: Record<string, number> = {};
@@ -340,6 +352,7 @@ export async function commitCompletedSnakeSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: RegisteredPool;
 }): Promise<AuctionRosterCommitReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
   if (!input.session.draftManifest && input.session.currentPickIndex < input.session.pickOrder.length) {
     throw new Error(
       `Cannot commit snake roster before completion; current pick ${input.session.currentPickIndex} of ${input.session.pickOrder.length}.`,
@@ -442,11 +455,43 @@ export async function commitCompletedSnakeSessionToLeagueRosters(input: {
   };
 }
 
+/**
+ * Product confirmation path. Unlike the legacy roster-only helper above, this
+ * commits the frozen session, exact pool, rosters, players, and handoff marker
+ * as one retry-safe storage unit.
+ */
+export async function finalizeCompletedSnakeSessionToLeagueRosters(input: {
+  leagueId: string;
+  session: LeagueBuilderMlbDraftSession;
+  pool: RegisteredPool;
+  expectedRevision: number;
+  committedAt: string;
+}): Promise<SnakeMlbFinalizationReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
+  if (input.session.leagueId !== input.leagueId) {
+    throw new Error('The completed MLB snake draft belongs to a different league.');
+  }
+  const result = await finalizeMlbSnakeDraftAtomically({
+    session: input.session,
+    registeredPool: input.pool,
+    expectedRevision: input.expectedRevision,
+    committedAt: input.committedAt,
+  });
+  return {
+    leagueId: input.leagueId,
+    rosterStatus: 'MLB',
+    committedPlayerIds: result.committedPlayerIds,
+    teamRosterCounts: result.teamRosterCounts,
+    session: result.session,
+  };
+}
+
 export async function commitCompletedFarmAuctionSessionToLeagueRosters(input: {
   leagueId: string;
   session: AuctionSession;
   pool: FarmAuctionPool;
 }): Promise<AuctionRosterCommitReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
   completedSessionOrThrow(input.session);
 
   const prospectsById = new Map(input.pool.prospects.map((prospect) => [prospect.id, prospect]));
@@ -494,6 +539,7 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
   session: LeagueBuilderMlbDraftSession;
   pool: FarmAuctionPool;
 }): Promise<AuctionRosterCommitReport> {
+  await assertExclusiveDraftTeamRecords(input.leagueId);
   if (!input.session.draftManifest && input.session.draftPhase !== 'FARM') {
     throw new Error('Cannot commit a non-farm snake session to farm rosters.');
   }
@@ -648,6 +694,7 @@ export async function commitCompletedSnakeFarmSessionToLeagueRosters(input: {
 }
 
 export async function resetCompletedDraftArc(leagueId: string): Promise<void> {
+  await assertExclusiveDraftTeamRecords(leagueId);
   if (await leagueHasLinkedFranchise(leagueId)) {
     throw new ResetCompletedDraftLinkedFranchiseError(leagueId);
   }

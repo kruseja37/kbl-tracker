@@ -3,10 +3,13 @@ import { describe, expect, test } from 'vitest';
 import type { RosterSlotPlayer } from '../../data/rosterConstruction';
 import {
   advanceTrustedSnakeSeatingCertificate,
+  classifySnakePickFinishSafety,
   countSnakeSupplyByPosition,
+  createSnakeIdentitySupportCertificate,
   createTrustedSnakeSeatingCertificate,
   proveSimultaneousSnakeSeating,
   proveSnakePickKeepsAllClubsSeated,
+  validateConstructiveSnakeSeatingProof,
   validateSnakeSeatingProof,
   type SnakeSeatingPlayer,
 } from '../snakeSeatingProof';
@@ -77,6 +80,335 @@ const clubs = ['a', 'b'].map((teamId) => ({
 }));
 
 describe('simultaneous snake seating proof', () => {
+  test('classifies every visible late-draft choice instead of treating invalid picks as open', () => {
+    const rosterA = oneClubPool('finish-a').filter((player) => player.playerId !== 'finish-a-CP');
+    const rosterB = oneClubPool('finish-b').filter((player) => player.playerId !== 'finish-b-CP');
+    const cpA = card('finish-a-CP', { isPitcher: true, position: 'CP', role: 'CP' });
+    const cpB = card('finish-b-CP', { isPitcher: true, position: 'CP', role: 'CP' });
+    const wrongShape = card('finish-wrong-CF', { isPitcher: false, position: 'CF' });
+    const input = {
+      clubs: [
+        { teamId: 'a', roster: rosterA, budgetRemaining: 1_000 },
+        { teamId: 'b', roster: rosterB, budgetRemaining: 1_000 },
+      ],
+      pool: [cpA, cpB, wrongShape],
+      baseCaps: [],
+      realTeamCount: 2,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    expect(proof.feasible).toBe(true);
+
+    const rows = classifySnakePickFinishSafety({
+      current: input,
+      proof,
+      teamId: 'a',
+      candidatePlayerIds: [wrongShape.playerId, cpB.playerId, cpA.playerId],
+    });
+
+    expect(rows).toEqual([
+      expect.objectContaining({ playerId: wrongShape.playerId, status: 'BLOCKED' }),
+      expect.objectContaining({ playerId: cpB.playerId, status: 'DRAFTABLE' }),
+      expect.objectContaining({ playerId: cpA.playerId, status: 'DRAFTABLE' }),
+    ]);
+  });
+
+  test('keeps the only legal CP version when the same person has a cheaper SP card', () => {
+    const roster = oneClubPool('mixed-role-roster')
+      .filter((player) => player.playerId !== 'mixed-role-roster-CP');
+    const sourceId = 'lahman:lowede01';
+    const starter = {
+      ...card('mixed-role-cheap-SP', { isPitcher: true, position: 'SP', role: 'SP' }, sourceId),
+      price: 1,
+    };
+    const closer = {
+      ...card('mixed-role-legal-CP', { isPitcher: true, position: 'CP', role: 'CP' }, sourceId),
+      price: 10,
+    };
+    const input = {
+      clubs: [{ teamId: 'mixed-role', roster, budgetRemaining: 1_000 }],
+      pool: [starter, closer],
+      baseCaps: [],
+      realTeamCount: 1,
+    };
+    const proof = proveSimultaneousSnakeSeating(input);
+    expect(proof.feasible, proof.message).toBe(true);
+    expect(proof.assignments[0].playerIds).toEqual([closer.playerId]);
+
+    const rows = classifySnakePickFinishSafety({
+      current: input,
+      proof,
+      teamId: 'mixed-role',
+      candidatePlayerIds: [starter.playerId, closer.playerId],
+    });
+    expect(rows).toEqual([
+      expect.objectContaining({ playerId: starter.playerId, status: 'BLOCKED' }),
+      expect.objectContaining({ playerId: closer.playerId, status: 'DRAFTABLE' }),
+    ]);
+  });
+
+  test('matches eight clubs to eight legal final-round versions without reusing a person', () => {
+    const finalRoundPeople = Array.from({ length: 8 }, (_, index) => {
+      const sourceId = `lahman:mixedfinal${index}`;
+      return {
+        starter: {
+          ...card(`eight-cheap-SP-${index}`, { isPitcher: true, position: 'SP', role: 'SP' }, sourceId),
+          price: 1,
+        },
+        closer: {
+          ...card(`eight-legal-CP-${index}`, { isPitcher: true, position: 'CP', role: 'CP' }, sourceId),
+          price: 10 + index,
+        },
+      };
+    });
+    const input = {
+      clubs: Array.from({ length: 8 }, (_, index) => ({
+        teamId: `eight-${index}`,
+        roster: oneClubPool(`eight-roster-${index}`)
+          .filter((player) => player.playerId !== `eight-roster-${index}-CP`),
+        budgetRemaining: 1_000,
+      })),
+      pool: finalRoundPeople.flatMap(({ starter, closer }) => [starter, closer]),
+      baseCaps: [],
+      realTeamCount: 8,
+    };
+
+    const proof = proveSimultaneousSnakeSeating(input);
+
+    expect(proof.feasible, proof.message).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof(input, proof)).toBe(true);
+    expect(proof.assignments).toHaveLength(8);
+    const selectedIds = proof.assignments.flatMap((assignment) => assignment.playerIds);
+    expect(selectedIds).toHaveLength(8);
+    expect(new Set(selectedIds)).toHaveLength(8);
+    expect(selectedIds.every((playerId) => playerId.startsWith('eight-legal-CP-'))).toBe(true);
+    const selectedPeople = selectedIds.map((playerId) => (
+      input.pool.find((player) => player.playerId === playerId)!.sourceId
+    ));
+    expect(new Set(selectedPeople)).toHaveLength(8);
+  });
+
+  test('mints setup SUCCESS only for disjoint legal money-safe rosters that meet each chosen identity', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const identityPool = [
+      ...oneClubPool('identity-a'),
+      ...oneClubPool('identity-b'),
+      ...floorSlackExtras('identity-slack'),
+    ].map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.playerId.startsWith('identity-slack') || player.shape.isPitcher ? 5 : 95,
+        },
+      },
+    }));
+    const sibling = {
+      ...identityPool[0],
+      playerId: `${identityPool[0].playerId}-peak`,
+      sourceId: identityPool[0].sourceId,
+      construction: { ...identityPool[0].construction, id: `${identityPool[0].playerId}-peak` },
+    };
+    const poolWithSibling = [...identityPool, sibling];
+    const input = {
+      clubs: clubs.map((club) => ({ ...club, identityArchetype: powerIdentity })),
+      pool: poolWithSibling,
+      baseCaps: [],
+      realTeamCount: 2,
+      tier: 'standard' as const,
+    };
+
+    const result = proveSimultaneousSnakeSeating(input);
+
+    expect(result.feasible).toBe(true);
+    expect(result.message).toContain('FITS ITS CHOSEN IDENTITY');
+    expect(validateConstructiveSnakeSeatingProof(input, result)).toBe(true);
+    expect(validateSnakeSeatingProof(input, result)).toBe(true);
+    const assignedGroups = result.assignments.flatMap((assignment) => assignment.playerIds)
+      .map((playerId) => poolWithSibling.find((player) => player.playerId === playerId)!)
+      .map((player) => player.sourceId);
+    expect(new Set(assignedGroups)).toHaveLength(44);
+  });
+
+  test('rejects a shaped roster below the canonical Full Sources IV floor even when its shortlist floor passes', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const withValueAndPower = (
+      players: SnakeSeatingPlayer[],
+      price: number,
+      hitterPower: number,
+    ) => players.map((player) => ({
+      ...player,
+      price,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.shape.isPitcher ? 5 : hitterPower,
+        },
+      },
+    }));
+    const shapedRoster = withValueAndPower(oneClubPool('floor-shaped'), 10, 95);
+    const shapedSlack = withValueAndPower(floorSlackExtras('floor-slack'), 1, 5);
+    const fullSourceStars = withValueAndPower(oneClubPool('floor-full-stars'), 100, 80);
+    const proof = {
+      feasible: true,
+      assignments: [{
+        teamId: 'floor-club',
+        playerIds: shapedRoster.map((player) => player.playerId),
+        salaryCost: 220,
+        addedTax: 0,
+        allInCost: 220,
+      }],
+      shortfall: null,
+      message: 'SHORTLIST CERTIFICATE',
+    };
+    const shortlistInput = {
+      clubs: [{
+        teamId: 'floor-club',
+        roster: [],
+        budgetRemaining: 10_000,
+        identityArchetype: powerIdentity,
+      }],
+      pool: [...shapedRoster, ...shapedSlack],
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+
+    expect(validateConstructiveSnakeSeatingProof(shortlistInput, proof)).toBe(true);
+    expect(validateConstructiveSnakeSeatingProof({
+      ...shortlistInput,
+      identityReferencePool: [...shortlistInput.pool, ...fullSourceStars],
+    }, proof)).toBe(false);
+  });
+
+  test('rejects identity support when the Full Sources fingerprint changes', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const source = [
+      ...oneClubPool('receipt-source'),
+      ...floorSlackExtras('receipt-slack'),
+    ].map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.playerId.startsWith('receipt-source') && !player.shape.isPitcher ? 95 : 5,
+        },
+      },
+    }));
+    const fullInput = {
+      clubs: [{ teamId: 'receipt-club', roster: [], budgetRemaining: 10_000, identityArchetype: powerIdentity }],
+      pool: source,
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+    const fullProof = proveSimultaneousSnakeSeating(fullInput);
+    expect(fullProof.feasible, fullProof.message).toBe(true);
+    const certificate = createSnakeIdentitySupportCertificate(fullInput, fullProof);
+    expect(certificate).not.toBeNull();
+    const shapedInput = {
+      ...fullInput,
+      pool: source,
+      identityReferencePool: source,
+      identitySupportCertificate: certificate!,
+    };
+    const reused = proveSimultaneousSnakeSeating(shapedInput);
+    expect(reused.feasible, reused.message).toBe(true);
+
+    const tamperedReference = source.map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: { ...player.construction.bat, POW: player.shape.isPitcher ? 5 : 50 },
+      },
+    }));
+    const tampered = proveSimultaneousSnakeSeating({
+      ...shapedInput,
+      identityReferencePool: tamperedReference,
+    });
+    expect(tampered.feasible).toBe(false);
+    expect(tampered.shortfall?.reason).toBe('identity-proof-unknown');
+  });
+
+  test('rejects altered identity assignments even when the Full Sources fingerprint still matches', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const highPower = oneClubPool('assignment-high').map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: player.shape.isPitcher ? 5 : 95,
+        },
+      },
+    }));
+    const lowPower = oneClubPool('assignment-low').map((player) => ({
+      ...player,
+      construction: {
+        ...player.construction,
+        bat: {
+          ...player.construction.bat,
+          POW: 5,
+        },
+      },
+    }));
+    const slack = floorSlackExtras('assignment-slack');
+    const fullSource = [...highPower, ...lowPower, ...slack];
+    const fullInput = {
+      clubs: [{ teamId: 'assignment-club', roster: [], budgetRemaining: 10_000, identityArchetype: powerIdentity }],
+      pool: fullSource,
+      baseCaps: [],
+      realTeamCount: 1,
+      tier: 'standard' as const,
+    };
+    const fullProof = proveSimultaneousSnakeSeating(fullInput);
+    expect(fullProof.feasible, fullProof.message).toBe(true);
+    const certificate = createSnakeIdentitySupportCertificate(fullInput, fullProof);
+    expect(certificate).not.toBeNull();
+
+    const alteredCertificate = {
+      ...certificate!,
+      assignments: [{
+        ...certificate!.assignments[0],
+        playerIds: lowPower.map((player) => player.playerId),
+        salaryCost: lowPower.reduce((sum, player) => sum + player.price, 0),
+        addedTax: 0,
+        allInCost: lowPower.reduce((sum, player) => sum + player.price, 0),
+      }],
+    };
+    const tampered = proveSimultaneousSnakeSeating({
+      ...fullInput,
+      pool: [...lowPower, ...slack],
+      identityReferencePool: fullSource,
+      identitySupportCertificate: alteredCertificate,
+    });
+
+    expect(tampered.feasible).toBe(false);
+    expect(tampered.shortfall?.reason).toBe('identity-proof-unknown');
+  });
+
+  test('reports bounded identity uncertainty separately from a proven legal impossibility', () => {
+    const powerIdentity = { name: 'Power', rawShift: { 'hitters/POW': 0.2 } };
+    const result = proveSimultaneousSnakeSeating({
+      clubs: clubs.map((club) => ({ ...club, identityArchetype: powerIdentity })),
+      pool: [...oneClubPool('same-a'), ...oneClubPool('same-b'), ...floorSlackExtras('same-slack')],
+      baseCaps: [],
+      realTeamCount: 2,
+      tier: 'standard',
+    });
+
+    expect(result.feasible).toBe(false);
+    expect(result.shortfall).toMatchObject({
+      kind: 'identity-proof-unknown',
+      reason: 'identity-proof-unknown',
+      missing: 0,
+    });
+    expect(result.message).toContain('COULD NOT CERTIFY EVERY CHOSEN IDENTITY TOGETHER');
+    expect(result.message).not.toMatch(/SHORT|MISSING|LACKS/);
+  });
+
   test('shared-scarcity joint-fail: counting passes but both clubs need the same C-covering SS human', () => {
     const sharedFlex = card('shared-flex-SS', {
       isPitcher: false,
@@ -155,6 +487,24 @@ describe('simultaneous snake seating proof', () => {
     expect(result.message).toBe('EVERY CLUB CAN FINISH A LEGAL 22.');
     expect(result.assignments).toHaveLength(2);
     expect(result.assignments.every((assignment) => assignment.allInCost <= 660)).toBe(true);
+  });
+
+  test('keeps a genuine budget shortage blocked and names the affected club', () => {
+    const result = proveSimultaneousSnakeSeating({
+      clubs: [{ teamId: 'cash-short', roster: [], budgetRemaining: 100 }],
+      pool: [...oneClubPool('cash-short'), ...floorSlackExtras('cash-slack')],
+      baseCaps: [],
+      realTeamCount: 1,
+    });
+
+    expect(result.feasible).toBe(false);
+    expect(result.shortfall).toMatchObject({
+      reason: 'affordability',
+      teamId: 'cash-short',
+      available: 100,
+      needed: 220,
+      shortBy: 120,
+    });
   });
 
   test('keeps arbitrary legal picks available by globally rebalancing every partial roster', () => {

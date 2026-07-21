@@ -36,6 +36,7 @@ import {
   commitCompletedSnakeFarmSessionToLeagueRosters,
   commitCompletedMlbAuctionSessionToLeagueRosters,
   commitCompletedSnakeSessionToLeagueRosters,
+  finalizeCompletedSnakeSessionToLeagueRosters,
   MLB_AUCTION_SEASON,
   ResetCompletedDraftLinkedFranchiseError,
   resetCompletedDraftArc,
@@ -138,7 +139,13 @@ import {
 } from '../../src_figma/app/utils/draftStaffingPersistence';
 
 const LEAGUE_ID = 'draft-pipeline-integration-league';
-const TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
+const SOURCE_TEAM_IDS = ['yankees', 'dodgers', 'red-sox', 'cubs'] as const;
+const TEAM_IDS = SOURCE_TEAM_IDS.map((teamId) => `${LEAGUE_ID}-${teamId}`) as [
+  string,
+  string,
+  string,
+  string,
+];
 const MLB_AUCTION_SEED = 'draft-pipeline-mlb-auction-seed';
 const FARM_AUCTION_SEED = 'draft-pipeline-farm-auction-seed';
 const HUB_ARCHETYPE_ID = 'murderers-row';
@@ -350,7 +357,9 @@ function makeCommitRegressionPlayerAt(
   };
 }
 
-async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
+async function seedDraftLeagueWithRealMlbPlayers(options: {
+  populateTargetRosters?: boolean;
+} = {}): Promise<{
   addedFreeAgentId: string;
   removedCuratedPlayerId: string;
   initialRosterPlayerIdsByTeamId: Record<string, string[]>;
@@ -369,36 +378,41 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
   });
 
   const initialRosterPlayerIdsByTeamId: Record<string, string[]> = {};
-  for (const teamId of TEAM_IDS) {
-    const team = await getTeam(teamId);
-    if (!team) throw new Error(`Seeded MLB team ${teamId} was not found.`);
+  for (const [teamIndex, teamId] of TEAM_IDS.entries()) {
+    const sourceTeamId = SOURCE_TEAM_IDS[teamIndex];
+    const team = await getTeam(sourceTeamId);
+    if (!team) throw new Error(`Seeded MLB team ${sourceTeamId} was not found.`);
     await saveTeam({
       ...team,
-      leagueIds: Array.from(new Set([...(team.leagueIds ?? []), LEAGUE_ID])),
+      id: teamId,
+      leagueIds: [LEAGUE_ID],
       controlledBy: teamId === TEAM_IDS[0] ? 'human' : 'ai',
       farmArchetypeKey: teamId === TEAM_IDS[0] ? 'web-gems' : 'bomba-squad',
     });
 
-    const seededRoster = await getTeamRoster(teamId);
+    const seededRoster = await getTeamRoster(sourceTeamId);
     const seededMlbRoster = seededRoster?.mlbRoster ?? [];
     expect(seededMlbRoster.length).toBeGreaterThanOrEqual(22);
     const selectedRosterIds = seededMlbRoster.slice(0, 22);
     initialRosterPlayerIdsByTeamId[teamId] = selectedRosterIds;
 
-    await saveTeamRoster({
-      ...(seededRoster ?? createEmptyTeamRoster(teamId)),
-      mlbRoster: selectedRosterIds,
-      farmRoster: [],
-    });
+    await saveTeamRoster(options.populateTargetRosters
+      ? {
+          ...createEmptyTeamRoster(teamId),
+          mlbRoster: selectedRosterIds,
+        }
+      : createEmptyTeamRoster(teamId));
 
     for (const playerId of selectedRosterIds) {
       const player = await getPlayer(playerId);
       if (!player) throw new Error(`Seeded roster player ${playerId} was not found.`);
-      expect(player.leagueAssignments ?? []).toEqual(
-        expect.not.arrayContaining([
-          expect.objectContaining({ leagueId: LEAGUE_ID }),
-        ]),
-      );
+      if (!options.populateTargetRosters) {
+        await assignPlayerToLeague(player, {
+          leagueId: LEAGUE_ID,
+          teamId: '',
+          rosterStatus: 'FREE_AGENT',
+        });
+      }
     }
 
     await saveScoutProfile({
@@ -410,7 +424,7 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
       weaknesses: ['CP'],
       accuracyByPosition: { CF: 84, SP: 80, CP: 55, '1B': 64 },
       seed: `${LEAGUE_ID}:${teamId}:scout`,
-      hiredPick: { round: 1, pickNumber: TEAM_IDS.indexOf(teamId as typeof TEAM_IDS[number]) + 1, teamId },
+      hiredPick: { round: 1, pickNumber: teamIndex + 1, teamId },
     });
   }
 
@@ -454,9 +468,17 @@ async function seedDraftLeagueWithRealMlbPlayers(): Promise<{
     }),
   );
 
-  for (const teamId of TEAM_IDS) {
-    const roster = await getTeamRoster(teamId);
-    expect(roster?.mlbRoster.length).toBeGreaterThan(0);
+  for (const [teamIndex, teamId] of TEAM_IDS.entries()) {
+    if (options.populateTargetRosters) {
+      expect(await getTeamRoster(teamId)).toEqual(expect.objectContaining({
+        mlbRoster: initialRosterPlayerIdsByTeamId[teamId],
+        farmRoster: [],
+      }));
+    } else {
+      expectRosterToBeEmpty(await getTeamRoster(teamId));
+    }
+    const sourceRoster = await getTeamRoster(SOURCE_TEAM_IDS[teamIndex]);
+    expect(sourceRoster?.mlbRoster.length).toBeGreaterThanOrEqual(22);
   }
 
   return {
@@ -473,6 +495,8 @@ async function configureHubTeamOutput(): Promise<HubConfiguredTeamResult> {
   const configured = await selectTeamArchetype(
     { ...team, controlledBy: 'human' },
     HUB_ARCHETYPE_ID,
+    undefined,
+    saveTeam,
   );
   if (!configured.capIdentity?.rawShift) {
     throw new Error('Hub-configured archetype did not produce a raw-shift cap identity.');
@@ -1082,6 +1106,14 @@ async function runDraftPipeline(options: RunDraftPipelineOptions = {}): Promise<
   expect(poolIds).toEqual(expect.arrayContaining(rosterPoolPlayerIds));
   expect(poolIds).toContain(curatedFixture.addedFreeAgentId);
   expect(poolIds).not.toContain(curatedFixture.removedCuratedPlayerId);
+
+  // The registered pool is an immutable draft input. Source-roster players do not
+  // become target-league players until the draft assigns them to a target club.
+  for (const playerId of rosterPoolPlayerIds) {
+    const player = await getPlayer(playerId);
+    if (!player) throw new Error(`Pool player ${playerId} missing after registration.`);
+    await removePlayerFromLeague(player, LEAGUE_ID);
+  }
 
   for (const teamId of TEAM_IDS) {
     await clearTeamRoster(teamId, LEAGUE_ID);
@@ -2487,6 +2519,186 @@ describe('draft pipeline integration', () => {
     await expect(getPlayer(playerIds[1])).resolves.toMatchObject({ settledSalary: 123_457 });
   });
 
+  test.each([4, 8])('atomically finalizes a complete %i-team MLB snake draft and repeats the same handoff', async (teamCount) => {
+    const leagueId = `atomic-snake-final-${teamCount}`;
+    const teamIds = Array.from({ length: teamCount }, (_, index) => `${leagueId}-team-${index + 1}`);
+    await saveLeagueTemplate({
+      id: leagueId,
+      name: `Atomic ${teamCount}-Team Snake`,
+      teamIds,
+      conferences: [],
+      divisions: [],
+      defaultRulesPreset: 'standard',
+      draftFormat: 'snake',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      salaryCap: 10_000_000,
+    });
+    for (const teamId of teamIds) {
+      await saveTeam(makeCommitRegressionTeam(teamId, leagueId, 'human'));
+      // Deliberately do not seed TeamRoster. A restored completed live room
+      // must be sufficient to create the exact target roster.
+    }
+
+    const pickOrder = buildSnakeOrder(teamIds, 22);
+    const teamPickIndex = new Map(teamIds.map((teamId) => [teamId, 0]));
+    const completedPicks = pickOrder.map((slot) => {
+      const rosterIndex = teamPickIndex.get(slot.teamId) ?? 0;
+      teamPickIndex.set(slot.teamId, rosterIndex + 1);
+      return {
+        ...slot,
+        playerId: `${slot.teamId}-player-${rosterIndex + 1}`,
+        settledSalary: 25_000 + slot.pick,
+      };
+    });
+    for (const pick of completedPicks) {
+      const rosterIndex = completedPicks
+        .filter((row) => row.teamId === pick.teamId)
+        .findIndex((row) => row.playerId === pick.playerId);
+      await savePlayer(makeCommitRegressionPlayerAt(
+        pick.playerId,
+        legalMlbPrimaryPosition(rosterIndex),
+        rosterIndex === 8 ? 'C' : undefined,
+      ));
+    }
+    const pool: RegisteredPool = {
+      leagueId,
+      tier: 'standard',
+      balanceMode: 'taxed',
+      players: completedPicks.map((pick) => ({
+        id: pick.playerId,
+        iv: pick.settledSalary,
+        salary: pick.settledSalary,
+      })),
+      tierCap: 10_000_000,
+      luxuryCaps: [],
+      pickValueChart: [],
+      totalSlots: pickOrder.length,
+      poolSurplusWarning: false,
+      locked: true,
+    };
+    await saveRegisteredPool(pool);
+    const session: LeagueBuilderMlbDraftSession = {
+      id: createMlbDraftSessionId(leagueId, 1),
+      leagueId,
+      seasonNumber: 1,
+      seed: `atomic-${teamCount}-seed`,
+      workflowVersion: 'snake-v1',
+      engineMethodVersion: 'snake-s1a',
+      tier: 'standard',
+      balanceMode: 'taxed',
+      rounds: 22,
+      pickOrder,
+      completedPicks,
+      currentPickIndex: pickOrder.length,
+      revision: 0,
+      snakeSetup: {
+        poolPlayerIds: pool.players.map((row) => row.id),
+        versionSelections: {},
+        clubs: teamIds.map((teamId) => ({ teamId, hotseat: true })),
+        orderSeed: `atomic-${teamCount}-seed`,
+      },
+      createdDate: '2026-07-20T12:00:00.000Z',
+      lastModified: '2026-07-20T12:00:00.000Z',
+    };
+    await saveMlbDraftSession(session);
+    const frozen = freezeSnakeDraftSession({
+      session,
+      expectedPhase: 'MLB',
+      poolPlayerIds: pool.players.map((row) => row.id),
+      salaryByPlayerId: new Map(pool.players.map((row) => [row.id, row.iv])),
+      frozenAt: '2026-07-20T12:01:00.000Z',
+    });
+
+    if (teamCount === 4) {
+      const originalPut = IDBObjectStore.prototype.put;
+      let injectFailure = true;
+      const putSpy = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (value: unknown) {
+        if (this.name === 'teamRosters' && injectFailure) {
+          injectFailure = false;
+          throw new Error('injected MLB finalization write failure');
+        }
+        return originalPut.call(this, value);
+      });
+      await expect(finalizeCompletedSnakeSessionToLeagueRosters({
+        leagueId,
+        session: frozen,
+        pool,
+        expectedRevision: 0,
+        committedAt: '2026-07-20T12:02:00.000Z',
+      })).rejects.toThrow('injected MLB finalization write failure');
+      putSpy.mockRestore();
+      expect((await getMlbDraftSession(leagueId, 1))?.draftManifest).toBeUndefined();
+      for (const teamId of teamIds) await expect(getTeamRoster(teamId)).resolves.toBeNull();
+      for (const pick of completedPicks) {
+        await expect(getPlayer(pick.playerId)).resolves.toEqual(expect.objectContaining({ leagueAssignments: [] }));
+      }
+
+      // Model the old multi-step path: the manifest and part of one roster
+      // landed, but the handoff marker did not. The new finalizer must converge
+      // this state instead of requiring a new draft.
+      await freezeMlbDraftRoomSessionWithRegisteredPool({
+        session: frozen,
+        registeredPool: pool,
+        expectedRevision: 0,
+      });
+      await saveTeamRoster({
+        ...createEmptyTeamRoster(teamIds[0]),
+        mlbRoster: completedPicks.filter((pick) => pick.teamId === teamIds[0]).slice(0, 3).map((pick) => pick.playerId),
+      });
+      const partialPlayer = await getPlayer(completedPicks[0].playerId);
+      if (!partialPlayer) throw new Error('Partial-commit fixture player is missing.');
+      await savePlayer({
+        ...partialPlayer,
+        settledSalary: 1,
+        leagueAssignments: [{ leagueId, teamId: teamIds[1], rosterStatus: 'MLB' }],
+      });
+    }
+
+    const result = await finalizeCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: frozen,
+      pool,
+      expectedRevision: 0,
+      committedAt: '2026-07-20T12:02:00.000Z',
+    });
+    expect(result.committedPlayerIds).toHaveLength(teamCount * 22);
+    expect(result.teamRosterCounts).toEqual(Object.fromEntries(teamIds.map((teamId) => [teamId, 22])));
+    await expect(assertSnakeRosterHandoffReady(result.session, 'MLB')).resolves.toEqual({
+      phase: 'MLB', ready: true, playerCount: teamCount * 22, teamCount,
+    });
+    for (const teamId of teamIds) {
+      const expectedIds = completedPicks.filter((pick) => pick.teamId === teamId).map((pick) => pick.playerId);
+      await expect(getTeamRoster(teamId)).resolves.toEqual(expect.objectContaining({ mlbRoster: expectedIds }));
+    }
+    for (const pick of completedPicks) {
+      await expect(getPlayer(pick.playerId)).resolves.toEqual(expect.objectContaining({
+        salary: pick.settledSalary,
+        settledSalary: pick.settledSalary,
+        leagueAssignments: [{ leagueId, teamId: pick.teamId, rosterStatus: 'MLB' }],
+      }));
+    }
+
+    const beforeRetry = JSON.stringify({
+      session: await getMlbDraftSession(leagueId, 1),
+      rosters: await Promise.all(teamIds.map((teamId) => getTeamRoster(teamId))),
+      players: await Promise.all(completedPicks.map((pick) => getPlayer(pick.playerId))),
+    });
+    const retried = await finalizeCompletedSnakeSessionToLeagueRosters({
+      leagueId,
+      session: result.session,
+      pool,
+      expectedRevision: result.session.revision ?? 0,
+      committedAt: '2026-07-20T12:03:00.000Z',
+    });
+    expect(retried.session.rosterHandoff).toEqual(result.session.rosterHandoff);
+    expect(JSON.stringify({
+      session: await getMlbDraftSession(leagueId, 1),
+      rosters: await Promise.all(teamIds.map((teamId) => getTeamRoster(teamId))),
+      players: await Promise.all(completedPicks.map((pick) => getPlayer(pick.playerId))),
+    })).toBe(beforeRetry);
+  });
+
   test('S6 carries real-storage 9+1 and 10+0 clubs through MLB freeze, FARM transition, atomic retry, handoff, and Franchise Setup', async () => {
     const leagueId = 'snake-farm-boundary-9-plus-1';
     const teamIds = ['farm-nine', 'farm-ten'] as const;
@@ -2731,7 +2943,7 @@ describe('draft pipeline integration', () => {
 
   test('assembles the pool with the bulk builder + lock, matching the proven contract and enforcing the lock', async () => {
     const { addedFreeAgentId, removedCuratedPlayerId, initialRosterPlayerIdsByTeamId } =
-      await seedDraftLeagueWithRealMlbPlayers();
+      await seedDraftLeagueWithRealMlbPlayers({ populateTargetRosters: true });
     const mlbSlots = TEAM_IDS.length * 22;
 
     // Pool mode (a): import the players rostered on the league's branded teams (4 × 22 = 88).

@@ -11,6 +11,34 @@ import type { FarmAuctionPool } from '../utils/farmAuctionPool';
 /** Separate key in the existing store; preserves the completed MLB record at season 1. */
 export { FARM_SLOT_SALARY_UNIT, FARM_SNAKE_SESSION_NUMBER } from '../utils/leagueBuilderStorage';
 
+export function resolveFarmArchetypeIdsForSnakeTransition(input: {
+  mlbSession: LeagueBuilderMlbDraftSession;
+  teams: ReadonlyArray<{ id: string; name: string; farmArchetypeKey?: string }>;
+}): Record<string, string> {
+  const frozenClubs = input.mlbSession.snakeSetup?.clubs ?? [];
+  const teamById = new Map(input.teams.map((team) => [team.id, team]));
+  const frozenClubIds = new Set(frozenClubs.map((club) => club.teamId));
+  if (teamById.size !== input.teams.length
+    || frozenClubs.length === 0
+    || frozenClubIds.size !== frozenClubs.length
+    || frozenClubs.length !== teamById.size
+    || frozenClubs.some((club) => !teamById.has(club.teamId))) {
+    throw new Error('THE FARM IDENTITIES DO NOT MATCH THE COMPLETED MLB DRAFT CLUBS.');
+  }
+
+  return Object.fromEntries(frozenClubs.map((club) => {
+    const team = teamById.get(club.teamId)!;
+    const frozen = club.farmArchetypeId?.trim();
+    const persisted = team.farmArchetypeKey?.trim();
+    if (frozen && persisted && frozen !== persisted) {
+      throw new Error(`THE FARM IDENTITY CHANGED AFTER THE MLB DRAFT STARTED: ${team.name}.`);
+    }
+    const resolved = frozen || persisted;
+    if (!resolved) throw new Error(`FARM IDENTITY MISSING: ${team.name}.`);
+    return [club.teamId, resolved];
+  }));
+}
+
 function roundToUnit(value: number, unit: number): number {
   return Math.round(value / unit) * unit;
 }

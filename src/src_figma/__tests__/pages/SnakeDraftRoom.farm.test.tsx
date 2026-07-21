@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { FarmSeatBoardRecord, LeagueBuilderMlbDraftSession } from '../../../utils/leagueBuilderStorage';
 import { buildSnakeOrder } from '../../../engines/leagueConstruction';
 
-const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows, farmTeamRows } = vi.hoisted(() => ({
+const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows, farmTeamRows, live } = vi.hoisted(() => ({
   saveSession: vi.fn(async (session) => ({ ...session })),
   getSession: vi.fn(),
   getRoster: vi.fn(),
@@ -12,9 +12,22 @@ const { saveSession, getSession, getRoster, refresh, playerRows, farmLeagueRows,
   playerRows: [] as Array<Record<string, unknown>>,
   farmLeagueRows: [{ id: 'league-farm', name: 'Farm League', teamIds: ['a', 'b'], draftFormat: 'snake', tier: 'standard', balanceMode: 'taxed', salaryCap: 1_000_000 }],
   farmTeamRows: [
-    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human' },
-    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai' },
+    { id: 'a', name: 'Comets', abbreviation: 'COM', colors: { primary: '#123', secondary: '#fff' }, controlledBy: 'human', farmArchetypeKey: 'web-gems' },
+    { id: 'b', name: 'Bears', abbreviation: 'BER', colors: { primary: '#456', secondary: '#fff' }, controlledBy: 'ai', farmArchetypeKey: 'bomba-squad' },
   ],
+  live: {
+    enabled: false,
+    correctionAvailable: false,
+    claims: [] as Array<Record<string, unknown>>,
+    intents: [] as Array<Record<string, unknown>>,
+    seedBoard: vi.fn(async () => ({ teamId: 'a' })),
+    resolveClaim: vi.fn(async (claim) => claim),
+    resolveIntent: vi.fn(async (intent) => intent),
+    publishSession: vi.fn(async () => null),
+    restorePreviousPublicState: vi.fn(),
+    refresh: vi.fn(async () => undefined),
+    closeRoom: vi.fn(async () => null),
+  },
 }));
 
 vi.mock('../../hooks/useLeagueBuilderData', async (importOriginal) => {
@@ -58,8 +71,48 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
         farmSeatBoards: { ...current.farmSeatBoards, [input.teamId]: input.board },
       });
     }),
+    patchMlbDraftSessionSnakeCompanions: vi.fn(async (input) => {
+      const current = saveSession.mock.calls.at(-1)?.[0] ?? await getSession(input.leagueId, input.seasonNumber);
+      return saveSession({
+        ...current,
+        snakeCompanions: input.patch(current.snakeCompanions, current),
+      });
+    }),
   };
 });
+
+vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
+  useSnakeLiveHostRoom: (options: { session: LeagueBuilderMlbDraftSession | null }) => {
+    const ready = live.enabled && Boolean(options.session?.snakeCompanions?.roomCode);
+    const room = ready ? {
+      id: 'farm-room', ownerUserId: 'owner', sessionId: options.session!.id,
+      roomCode: options.session!.snakeCompanions!.roomCode, phase: 'FARM', status: 'open',
+      publicRevision: 1, publicState: {}, hostDeviceId: 'host',
+      correctionAvailable: live.correctionAvailable,
+      createdAt: 'now', updatedAt: 'now',
+    } : null;
+    return {
+      room,
+      publicSession: room ? options.session : null,
+      claims: live.claims,
+      intents: live.intents,
+      events: [], status: ready ? 'live' : 'idle', subscriptionStatus: ready ? 'SUBSCRIBED' : null,
+      error: null, working: false, hostAccessReady: ready, liveRoomReady: ready, catalog: null,
+      refresh: live.refresh,
+      publishSession: live.publishSession,
+      resolveClaim: live.resolveClaim,
+      resolveIntent: live.resolveIntent,
+      submitTradeIntent: vi.fn(),
+      restorePreviousPublicState: live.restorePreviousPublicState,
+      seedBoard: live.seedBoard,
+      closeRoom: live.closeRoom,
+    };
+  },
+}));
+
+vi.mock('../../../utils/snakeLiveCapabilityStore', () => ({
+  getOrCreateSnakeLiveDeviceId: vi.fn(async () => 'host-device'),
+}));
 
 vi.mock('../../../utils/franchisePhase2Flags', () => ({ isSnakeDraftV1Enabled: () => true }));
 vi.mock('../../../utils/snakeRosterHandoff', () => ({
@@ -76,11 +129,17 @@ import {
   buildSnakeRosterHandoff,
   freezeSnakeDraftSession,
 } from '../../../utils/snakeDraftManifest';
+import { buildSnakeLivePublicState } from '../../../utils/snakeLiveRoomSession';
 
 describe('S6 farm room continuation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     playerRows.length = 0;
+    live.enabled = false;
+    live.correctionAvailable = false;
+    live.claims.length = 0;
+    live.intents.length = 0;
+    live.restorePreviousPublicState.mockReset();
     getRoster.mockResolvedValue({ teamId: 'a', mlbRoster: [], farmRoster: [] });
     const originalPickOrder = buildSnakeOrder(['a', 'b'], 22);
     const tradedPickOrder = originalPickOrder.map((slot) => {
@@ -107,7 +166,10 @@ describe('S6 farm room continuation', () => {
       snakeSetup: {
         poolPlayerIds: mlbPlayerIds,
         versionSelections: {},
-        clubs: [{ teamId: 'b', hotseat: true }, { teamId: 'a', hotseat: true }],
+        clubs: [
+          { teamId: 'b', hotseat: true, farmArchetypeId: 'bomba-squad' },
+          { teamId: 'a', hotseat: true, farmArchetypeId: 'web-gems' },
+        ],
         orderSeed: 'ranked-club-order-is-not-draft-order',
       },
     };
@@ -134,6 +196,10 @@ describe('S6 farm room continuation', () => {
     expect(created.pickOrder).toHaveLength(20);
     expect(created.pickOrder.slice(0, 2).map((slot) => slot.teamId)).toEqual(['a', 'b']);
     expect(created.snakeSetup.clubs.map((club) => club.teamId)).toEqual(['a', 'b']);
+    expect(created.snakeSetup.clubs).toEqual([
+      expect.objectContaining({ teamId: 'a', archetypeId: 'web-gems' }),
+      expect.objectContaining({ teamId: 'b', archetypeId: 'bomba-squad' }),
+    ]);
     expect(created.farmSlotSalaries).toHaveLength(20);
     expect(created.farmSlotSalaries[0]).toBe(3 * created.farmSlotSalaries.at(-1));
     expect(await screen.findByTestId('snake-draft-room')).toBeInTheDocument();
@@ -231,5 +297,92 @@ describe('S6 farm room continuation', () => {
     expect(screen.getByText('REMAINING PICKS')).toBeInTheDocument();
     expect(screen.queryByText('OWNED, TRADEABLE PICKS')).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/tradeable|pick or trade/i);
+  });
+
+  test('publishes a FARM pick through the host authority before it advances the local room', async () => {
+    live.enabled = true;
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    fireEvent.click(await screen.findByRole('button', { name: /REVEAL COMETS SEAT/i }));
+    const selectedCard = await screen.findByTestId('selected-farm-prospect-card');
+    const selectedName = selectedCard.querySelector('h2')?.textContent;
+    expect(selectedName).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT PROSPECT' }));
+    fireEvent.pointerDown(await screen.findByRole('button', { name: 'HOLD THE GAVEL' }));
+
+    await waitFor(() => expect(live.publishSession).toHaveBeenCalledOnce(), { timeout: 2_500 });
+    const publication = live.publishSession.mock.calls[0][0];
+    expect(publication).toEqual(expect.objectContaining({
+      expectedRoomRevision: 1,
+      eventKind: 'PICK_RECORDED',
+      status: 'open',
+    }));
+    expect(publication.session.currentPickIndex).toBe(1);
+    expect(publication.session.completedPicks).toEqual([
+      expect.objectContaining({ pick: 1, teamId: 'a' }),
+    ]);
+    expect(publication.session.farmSeatBoards).toBeUndefined();
+    expect(publication.session.farmProspectSnapshot).toBeUndefined();
+    expect(publication.session.versionState).toBeUndefined();
+    expect(publication.publicEvent).toEqual(expect.objectContaining({ pick: 1, teamId: 'a' }));
+  });
+
+  test('uses the live recovery slot for FARM correction and has no pause action', async () => {
+    live.enabled = true;
+    live.correctionAvailable = true;
+    live.restorePreviousPublicState.mockImplementation(async () => {
+      const current = saveSession.mock.calls.at(-1)?.[0];
+      return {
+        id: 'farm-room', ownerUserId: 'owner', sessionId: current.id,
+        roomCode: current.snakeCompanions.roomCode, phase: 'FARM', status: 'open',
+        publicRevision: 2, publicState: buildSnakeLivePublicState(current),
+        correctionAvailable: false, hostDeviceId: 'host', createdAt: 'now', updatedAt: 'later',
+      };
+    });
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    await waitFor(() => expect(saveSession.mock.calls.some(([saved]) => (
+      saved.farmSeatBoards?.a && saved.farmSeatBoards?.b
+    ))).toBe(true));
+    fireEvent.click(await screen.findByRole('button', { name: 'I HAVE THE ROOM' }));
+    const correct = await screen.findByRole('button', { name: 'CORRECT LAST ACTION' });
+    expect(screen.queryByRole('button', { name: 'PAUSE' })).not.toBeInTheDocument();
+    await act(async () => { fireEvent.click(correct); });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'UNDO LAST ACTION' }));
+    });
+
+    await waitFor(() => expect(live.restorePreviousPublicState).toHaveBeenCalledWith({
+      expectedRoomRevision: 1,
+      idempotencyKey: 'farm-correct:farm-room:1',
+    }));
+  });
+
+  test('opens FARM companion approvals and seeds only the approved club scout board', async () => {
+    live.enabled = true;
+    live.claims.push({
+      id: 'claim-a', roomId: 'farm-room', requestKey: 'request-a', deviceId: 'device-a',
+      gmName: 'GM A', teamId: 'a', status: 'pending', revision: 1,
+      createdAt: 'now', resolvedAt: null,
+    });
+    render(<MemoryRouter initialEntries={['/snake-room?leagueId=league-farm&phase=farm']}><SnakeDraftRoom /></MemoryRouter>);
+
+    const companions = await screen.findByRole('button', { name: /COMPANIONS/ });
+    fireEvent.click(companions);
+    const approve = await screen.findByRole('button', { name: 'APPROVE COMETS' });
+    await waitFor(() => expect(approve).not.toBeDisabled());
+    fireEvent.click(approve);
+
+    await waitFor(() => expect(live.seedBoard).toHaveBeenCalledOnce());
+    expect(live.resolveClaim).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'claim-a' }),
+      'approved',
+      'farm-claim:claim-a:1:approved',
+    );
+    const payload = live.seedBoard.mock.calls[0][0].board;
+    expect(payload.formatVersion).toBe('snake-live-farm-private-board-v1');
+    expect(JSON.stringify(payload)).toContain('Comets Eyes');
+    expect(JSON.stringify(payload)).not.toMatch(/trueGrade|prospectProfile|power|contact|velocity|hiddenPersonality/i);
+    expect(screen.queryByRole('button', { name: 'TRADE' })).not.toBeInTheDocument();
   });
 });

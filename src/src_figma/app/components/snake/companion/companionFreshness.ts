@@ -1,11 +1,35 @@
 export function sameDraftSessionSnapshot(
-  current: { id: string; lastModified: string; revision?: number; snakeCompanions?: unknown },
-  fresh: { id: string; lastModified: string; revision?: number; snakeCompanions?: unknown },
+  current: {
+    id: string;
+    lastModified: string;
+    revision?: number;
+    snakeCompanions?: unknown;
+    seatBoards?: Readonly<Record<string, { revision?: number }>>;
+    farmSeatBoards?: Readonly<Record<string, { revision?: number }>>;
+  },
+  fresh: {
+    id: string;
+    lastModified: string;
+    revision?: number;
+    snakeCompanions?: unknown;
+    seatBoards?: Readonly<Record<string, { revision?: number }>>;
+    farmSeatBoards?: Readonly<Record<string, { revision?: number }>>;
+  },
 ): boolean {
   return fresh.id === current.id
     && fresh.lastModified === current.lastModified
     && (fresh.revision ?? 0) === (current.revision ?? 0)
-    && JSON.stringify(fresh.snakeCompanions) === JSON.stringify(current.snakeCompanions);
+    && JSON.stringify(fresh.snakeCompanions) === JSON.stringify(current.snakeCompanions)
+    && boardRevisionSignature(fresh.seatBoards) === boardRevisionSignature(current.seatBoards)
+    && boardRevisionSignature(fresh.farmSeatBoards) === boardRevisionSignature(current.farmSeatBoards);
+}
+
+function boardRevisionSignature(
+  boards?: Readonly<Record<string, { revision?: number }>>,
+): string {
+  return JSON.stringify(Object.entries(boards ?? {})
+    .map(([teamId, board]) => [teamId, board.revision ?? 0] as const)
+    .sort(([leftTeamId], [rightTeamId]) => leftTeamId.localeCompare(rightTeamId)));
 }
 
 export function startCompanionFreshness(input: {

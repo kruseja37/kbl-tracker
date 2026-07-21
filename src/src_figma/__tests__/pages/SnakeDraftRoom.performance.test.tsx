@@ -15,6 +15,7 @@ const directStorage = vi.hoisted(() => ({
   teams: [] as Team[],
   players: [] as Player[],
   pull: vi.fn(async () => undefined),
+  flush: vi.fn(async () => undefined),
   getAllLeagueTemplates: vi.fn(async () => directStorage.leagues),
   getAllTeams: vi.fn(async () => directStorage.teams),
   getAllPlayers: vi.fn(async () => directStorage.players),
@@ -78,7 +79,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
 });
 
 vi.mock('../../../utils/syncEngine', () => ({
-  syncEngine: { pull: directStorage.pull },
+  syncEngine: { pull: directStorage.pull, flush: directStorage.flush },
 }));
 
 vi.mock('../../../utils/franchisePhase2Flags', async (importOriginal) => {
@@ -263,7 +264,7 @@ describe('PERFROOM production-scale call profile', () => {
     };
     console.info('PERFROOM_PROFILE render', JSON.stringify(profile));
     expect(profile.initialRationalRoomCalls).toBe(0);
-    expect(profile.initialLegalFinishCalls).toBe(1);
+    expect(profile.initialLegalFinishCalls).toBe(0);
     expect(profile.initialSeatingProofCalls).toBe(1);
     expect(profile.pureRerenderRationalRoomCalls).toBe(0);
     expect(profile.pureRerenderLegalFinishCalls).toBe(0);
@@ -284,7 +285,7 @@ describe('PERFROOM production-scale call profile', () => {
     // JSDOM has no Worker. The desk must stay interactive without ever running
     // the future-pick playout synchronously on React's UI thread.
     expect(engineProfile.rationalRoom).toBe(0);
-    expect(engineProfile.legalFinish).toBeLessThanOrEqual(22);
+    expect(engineProfile.legalFinish).toBe(0);
   }, 60_000);
 
   test('profiles one early-draft guide ask without precomputing any other pick', async () => {

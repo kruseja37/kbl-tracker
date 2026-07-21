@@ -1183,6 +1183,30 @@ function getEliminationIdsFromBackup(backup: BackupData): string[] {
     .filter((value): value is string => typeof value === 'string' && value.length > 0);
 }
 
+async function normalizeLeagueBuilderSnakeBoardAuthority(
+  backup: BackupData,
+): Promise<BackupData> {
+  const leagueBuilder = backup.databases['kbl-league-builder'];
+  if (!leagueBuilder) return backup;
+  const { normalizeSnakeSeatBoardAuthorityRecords } = await import('./leagueBuilderStorage');
+  const normalized = normalizeSnakeSeatBoardAuthorityRecords({
+    sessions: leagueBuilder.mlbDraftSessions ?? [],
+    boardRows: leagueBuilder.snakeSeatBoards ?? [],
+    modifiedAt: backup.exportedAt,
+  });
+  return {
+    ...backup,
+    databases: {
+      ...backup.databases,
+      'kbl-league-builder': {
+        ...leagueBuilder,
+        mlbDraftSessions: normalized.sessions,
+        snakeSeatBoards: normalized.boardRows,
+      },
+    },
+  };
+}
+
 function getFranchiseIdsFromBackup(backup: BackupData): string[] {
   const records = backup.databases['kbl-app-meta']?.franchiseList ?? [];
   return records
@@ -1256,7 +1280,7 @@ function getBackupPayloadValidationError(backup: BackupData): string | undefined
  * Export all launch-era KBL data to a modern BackupData object.
  */
 export async function exportAllData(): Promise<BackupData> {
-  const backup: BackupData = {
+  let backup: BackupData = {
     kblBackupVersion: KBL_BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     databases: {},
@@ -1265,6 +1289,8 @@ export async function exportAllData(): Promise<BackupData> {
   for (const [dbName, schema] of Object.entries(STATIC_DATABASE_SCHEMAS)) {
     backup.databases[dbName] = await exportDatabase(dbName, schema);
   }
+
+  backup = await normalizeLeagueBuilderSnakeBoardAuthority(backup);
 
   for (const franchiseId of getFranchiseIdsFromBackup(backup)) {
     const dbName = `${DYNAMIC_FRANCHISE_DB_PREFIX}${franchiseId}`;
@@ -1329,7 +1355,13 @@ async function restoreDatabase(
       throw formatSchemaError('IndexedDB schema is invalid before restore', dbName, schemaIssues);
     }
 
-    const storeNames = getIncludedStoreNames(schema);
+    const declaredStoreNames = getIncludedStoreNames(schema);
+    const storeNames = dbName === 'kbl-league-builder'
+      ? [
+          ...declaredStoreNames.filter((storeName) => storeName === 'snakeSeatBoards'),
+          ...declaredStoreNames.filter((storeName) => storeName !== 'snakeSeatBoards'),
+        ]
+      : declaredStoreNames;
 
     for (const storeName of storeNames) {
       if (!hasStorePayload(data, storeName) && !schema.stores[storeName]?.optional) {
@@ -1406,26 +1438,27 @@ export async function restoreAllData(backup: BackupData): Promise<RestoreResult>
   const restoredSchemas: Array<{ dbName: string; schema: DatabaseSchema }> = [];
 
   try {
+    const normalizedBackup = await normalizeLeagueBuilderSnakeBoardAuthority(backup);
     for (const [dbName, schema] of Object.entries(STATIC_DATABASE_SCHEMAS)) {
-      const dbData = backup.databases[dbName];
+      const dbData = normalizedBackup.databases[dbName];
 
       await restoreDatabase(dbName, schema, dbData);
       restoredDatabases.push(dbName);
       restoredSchemas.push({ dbName, schema });
     }
 
-    for (const franchiseId of getFranchiseIdsFromBackup(backup)) {
+    for (const franchiseId of getFranchiseIdsFromBackup(normalizedBackup)) {
       const dbName = `${DYNAMIC_FRANCHISE_DB_PREFIX}${franchiseId}`;
-      const dbData = backup.databases[dbName];
+      const dbData = normalizedBackup.databases[dbName];
 
       await restoreDatabase(dbName, DYNAMIC_FRANCHISE_SCHEMA, dbData);
       restoredDatabases.push(dbName);
       restoredSchemas.push({ dbName, schema: DYNAMIC_FRANCHISE_SCHEMA });
     }
 
-    for (const eliminationId of getEliminationIdsFromBackup(backup)) {
+    for (const eliminationId of getEliminationIdsFromBackup(normalizedBackup)) {
       const dbName = `${DYNAMIC_ELIMINATION_DB_PREFIX}${eliminationId}`;
-      const dbData = backup.databases[dbName];
+      const dbData = normalizedBackup.databases[dbName];
 
       await restoreDatabase(dbName, DYNAMIC_ELIMINATION_SCHEMA, dbData);
       restoredDatabases.push(dbName);

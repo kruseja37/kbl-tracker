@@ -11,5 +11,5 @@ export function snakeRoomMissingLegCopy(input: {
   const subject = missing.length > 1
     ? `${missing.slice(0, -1).join(', ')} AND ${missing.at(-1)}`
     : missing[0] ?? 'ROOM DATA';
-  return `THE ${subject} ${missing.length === 1 ? 'IS' : 'ARE'} MISSING. GO BACK TO SNAKE DRAFT SETUP AND PRESS START THE DRAFT AGAIN.`;
+  return `THE ${subject} ${missing.length === 1 ? 'IS' : 'ARE'} MISSING.`;
 }

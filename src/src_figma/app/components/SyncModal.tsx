@@ -84,6 +84,7 @@ function SyncControls({
   const hasDiagnosticWarnings = (diagnostics?.warnings.length ?? 0) > 0;
   const hasLivePendingWrites = sync.pendingCount > 0;
   const hasOperationError = operationError !== null;
+  const hasStorageQuotaError = sync.quotaRecoveryAvailable;
   const hasBuildFreshnessProblem = Boolean(
     diagnostics && (
       diagnostics.build.latest?.matchesCurrent === false ||
@@ -161,8 +162,12 @@ function SyncControls({
     setProgress('Syncing pending changes...');
     try {
       await syncEngine.init();
-      await syncEngine.flush();
-      await sync.pull();
+      if (hasStorageQuotaError) {
+        await syncEngine.recoverQuotaBlockedQueue();
+      } else {
+        await syncEngine.flush();
+        await sync.pull();
+      }
       await handleDiagnostics();
     } catch (error) {
       setOperationError(error instanceof Error ? error.message : 'Sync failed');
@@ -254,7 +259,7 @@ function SyncControls({
               className="w-full bg-[#0F766E] text-white font-['Press_Start_2P'] text-[8px] py-2.5 hover:bg-[#0D9488] flex items-center justify-center gap-2"
             >
               <Cloud className="w-3 h-3" />
-              SYNC NOW
+              {hasStorageQuotaError ? 'FREE SPACE + SYNC' : 'SYNC NOW'}
             </button>
             <button
               onClick={() => setConfirm('upload')}

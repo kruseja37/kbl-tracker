@@ -15,7 +15,7 @@ import {
 } from './leagueConstruction';
 import { archetypeBandPriorities } from './cpuShillBidding';
 import type { ModStat } from '../data/tierParams';
-import { saveTeam, type Team } from '../utils/leagueBuilderStorage';
+import type { Team } from '../utils/leagueBuilderStorage';
 
 const ARCHETYPE_BAND_PRIORITIES_CACHE = new Map<string, BandPriorities>();
 
@@ -171,7 +171,14 @@ export function constructionArchetypeFitMultiplier(
   });
 }
 
-export async function selectTeamArchetype(team: Team, mlbKey: string, farmKey?: string): Promise<Team> {
+export type TeamArchetypePersister = (team: Team) => Promise<Team>;
+
+export async function selectTeamArchetype(
+  team: Team,
+  mlbKey: string,
+  farmKey: string | undefined,
+  persistTeam: TeamArchetypePersister,
+): Promise<Team> {
   const mlbArch = HISTORICAL_ARCHETYPES.find((arch) => arch.id === mlbKey);
   if (!mlbArch) {
     throw new Error(`Unknown archetype: ${mlbKey}`);
@@ -189,5 +196,8 @@ export async function selectTeamArchetype(team: Team, mlbKey: string, farmKey?: 
     team.farmCapIdentity = archetypeToCapIdentity(farmArch);
   }
 
-  return saveTeam(team);
+  // Persistence is injected by the browser page. Keeping this engine module pure
+  // prevents Assistant workers from bundling IndexedDB, sync, Supabase Auth, and
+  // browser Storage just because they share the identity-fit calculation above.
+  return persistTeam(team);
 }

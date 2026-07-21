@@ -132,11 +132,11 @@ function ready(
         recommendationOrder: playerIds,
         ledger: { rosterCount: 22, salary: 110, tax: 0, allIn: 110, moneyLeft: 890 },
         chemistry: [
-          { family: 'CMP', word: 'Competitive', count: 22, tier: 'L3' },
-          { family: 'SPI', word: 'Spirited', count: 0, tier: 'L1' },
-          { family: 'CRA', word: 'Crafty', count: 0, tier: 'L1' },
-          { family: 'SCH', word: 'Scholarly', count: 0, tier: 'L1' },
-          { family: 'DIS', word: 'Disciplined', count: 0, tier: 'L1' },
+          { family: 'CMP', word: 'Competitive', count: 22, traitCount: 0, tier: 'L3' },
+          { family: 'SPI', word: 'Spirited', count: 0, traitCount: 0, tier: 'L1' },
+          { family: 'CRA', word: 'Crafty', count: 0, traitCount: 0, tier: 'L1' },
+          { family: 'SCH', word: 'Scholarly', count: 0, traitCount: 0, tier: 'L1' },
+          { family: 'DIS', word: 'Disciplined', count: 0, traitCount: 0, tier: 'L1' },
         ],
       },
     },
@@ -223,6 +223,29 @@ describe('snake assistant board worker hook', () => {
     expect(result.board.recommendationOrder.every((playerId) => (
       value.input.activePool.some((player) => player.playerId === playerId)
     ))).toBe(true);
+
+    render(<Harness value={value} />);
+    act(() => FakeWorker.instances[0].onmessage?.({
+      data: { key: value.key, result },
+    } as MessageEvent<SnakeAssistantBoardWorkerResponse>));
+    expect(screen.getByText('team-a')).toBeInTheDocument();
+  });
+
+  it('accepts sibling versions in rankings when the final 22 uses that person once', () => {
+    const value = request('sibling-rankings');
+    const sibling = livePlayer(['p-c-career', 'C']);
+    const original = value.input.activePool.find((player) => player.playerId === 'p-c')!;
+    sibling.versionGroupId = original.versionGroupId;
+    sibling.stored.versionGroupId = original.versionGroupId;
+    value.input.activePool.push(sibling);
+    const result = runSnakeAssistantBoardRequest(value);
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') return;
+    expect(result.board.recommendationOrder).toContain(original.playerId);
+    expect(result.board.recommendationOrder).toContain(sibling.playerId);
+    expect(result.board.playerIds.filter((playerId) => (
+      playerId === original.playerId || playerId === sibling.playerId
+    ))).toHaveLength(1);
 
     render(<Harness value={value} />);
     act(() => FakeWorker.instances[0].onmessage?.({

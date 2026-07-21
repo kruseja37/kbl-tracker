@@ -100,6 +100,9 @@ for (const entry of cases) {
       await page.getByRole('button', { name: 'REVEAL BEEWOLVES SEAT' }).click();
       await expect(page.getByTestId('private-draft-desk')).toBeVisible();
       await expect(page.getByTestId('selected-player-card')).toBeVisible();
+      await page.getByTestId('rating-room').locator('summary').click();
+      await expect(page.getByTestId('rating-room-row-hitters:POW')).toContainText('USED 472 / LIMIT 586');
+      await expect(page.getByTestId('rating-room-row-hitters:POW')).toContainText('114 LEFT');
       await auditCurrentSurface(page);
       await expect(page.getByRole('button', { name: 'DRAFT PLAYER' })).toHaveCount(0);
       await expectControlInsideViewportWithScrollRescue(page, page.getByRole('button', { name: 'COVER' }));
@@ -186,8 +189,10 @@ for (const viewport of [{ width: 1024, height: 768 }, { width: 768, height: 1024
     await expect(page.getByTestId('my-board-view')).toContainText('TAYLOR UTILITY');
     await expect(page.getByTestId('my-board-view')).toContainText('NORA CURVEBALL');
     await page.getByRole('button', { name: 'ASST GM BOARD' }).click();
-    await expect(page.getByTestId('assistant-board-panel')).toContainText('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
+    await expect(page.getByTestId('assistant-board-panel')).toContainText('ASST GM');
+    await expect(page.getByTestId('assistant-board-panel')).toContainText('22/22');
     await expect(page.getByTestId('assistant-board-panel')).toContainText('QUINN VERSATILE');
+    await expect(page.getByTestId('assistant-rating-room')).toBeVisible();
     await page.getByRole('button', { name: 'MY BOARD' }).click();
 
     if (viewport.width >= 1024) {
@@ -316,7 +321,7 @@ test('one companion device keeps two covered team desks private and independent'
   const search = page.getByRole('searchbox', { name: 'FIND PLAYER' });
   await search.fill('taylor utility');
   await page.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }).click();
-  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+  await expect(page.locator('[aria-label="OVERALL ranking results"]')).toContainText('#1');
 
   await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('buz');
   await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
@@ -331,7 +336,7 @@ test('one companion device keeps two covered team desks private and independent'
   await page.getByRole('button', { name: 'PLAYER POOL' }).click();
   await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('nora curveball');
   await page.getByRole('button', { name: 'Send NORA CURVEBALL to top' }).click();
-  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+  await expect(page.locator('[aria-label="OVERALL ranking results"]')).toContainText('#1');
   await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('bew');
   await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
   await expect(page.getByText('MAX BACKSTOP')).toHaveCount(0);
@@ -340,9 +345,9 @@ test('one companion device keeps two covered team desks private and independent'
   await expect(page.getByTestId('companion-team-header')).toContainText('BEEWOLVES');
   await page.getByRole('button', { name: 'PLAYER POOL' }).click();
   await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('taylor utility');
-  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).toContainText('#1');
+  await expect(page.locator('[aria-label="OVERALL ranking results"]')).toContainText('#1');
   await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('nora curveball');
-  await expect(page.locator('[aria-label="OVERALL ranking search results"]')).not.toContainText('#1');
+  await expect(page.locator('[aria-label="OVERALL ranking results"]')).not.toContainText('#1');
 
   await page.getByRole('combobox', { name: 'PRIVATE TEAM DESK' }).selectOption('buz');
   await expect(page.getByTestId('snake-companion-covered')).toBeVisible();
@@ -405,6 +410,7 @@ test('companion sign out and forget room clear every private preview choice', as
   await page.goto('/__preview/snake-responsive?surface=companion');
   await page.getByRole('button', { name: 'RETURN TO DESK' }).click();
   await page.getByRole('button', { name: 'PLAYER POOL' }).click();
+  await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('taylor utility');
   await page.getByRole('button', { name: /^SELECT TAYLOR UTILITY/ }).click();
   await page.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }).click();
   await page.getByRole('button', { name: 'OPTIMIZE AROUND' }).click();
@@ -433,6 +439,7 @@ test('companion cover starts a clean private epoch at 430x932 without clearing M
   const firstEpoch = await page.getByTestId('companion-private-epoch').getAttribute('data-private-epoch');
 
   await page.getByRole('button', { name: 'PLAYER POOL' }).click();
+  await page.getByRole('searchbox', { name: 'FIND PLAYER' }).fill('taylor utility');
   await page.getByRole('button', { name: /^SELECT TAYLOR UTILITY/ }).click();
   await page.getByRole('button', { name: 'Send TAYLOR UTILITY to top' }).click();
   await page.getByRole('button', { name: 'OPEN PLAYER CARD' }).click();

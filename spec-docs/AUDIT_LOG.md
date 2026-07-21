@@ -4,6 +4,160 @@
 
 ---
 
+### 2026-07-18 — FINDING-241 independently approved
+
+The final separate read-only audit of frozen `089d149a` returned **APPROVE — Major 0 / Minor 0**.
+It confirmed that typed recovery state drives both display and execution, including reload of a
+large restored base-less queue; each bounded pass removes only persisted derived bases and durably
+saves the shrinking queue; two stagnant passes preserve a genuine conflict; and zero-pending
+receipt pull saves the expected-account cursor before prune/final durability. Upload/Download are
+unreachable. Independent gates passed 128/128 focused tests, TypeScript, changed-file ESLint,
+2,735-module production/PWA build, and diff integrity. Only JK's live retry remains. No push, merge,
+or deploy.
+
+### 2026-07-18 — FINDING-241 partial quota continuation builder close
+
+JK's first live recovery safely reduced 1,398 operations to 806, then stopped on one stale local
+write plus renewed derived-base quota pressure. Recovery availability is now typed engine state and
+survives both a stale error wrapper and reload of a large restored base-less queue. The same click
+makes bounded continuation passes, durably saves each smaller queue, removes only persisted derived
+bases, and stops after two no-progress passes without altering a real conflict. At zero pending it
+pulls receipt truth before the final pruned-base persistence. Focused proof is 128/128. TypeScript,
+lint, build, separate audit, and JK's retry remain. No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-240 independently approved
+
+The final separate read-only audit of frozen `aa123d76` returned **APPROVE — Major 0 / Minor 0**.
+It confirmed that recovery removes only persisted derived bases, retains every queue/in-memory base,
+drains once, and retries queue/base durability before success; pull saves the expected account's
+cursor before pruning; destructive-download rollback carries the starting account; and every cursor
+save rejects missing Supabase, sign-out, or account switch before metadata persistence. The modal
+requires a literal local persistence-error prefix plus quota semantics and never routes recovery to
+Upload/Download. Independent gates passed 126/126 focused tests, TypeScript, changed-file ESLint,
+2,735-module production/PWA build, and diff integrity. Only JK's live `FREE SPACE + SYNC` click and
+pending-zero observation remain. No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-240 third audit block and complete account binding
+
+The third audit of `cb4e30ca` returned **BLOCK — Major 1 / Minor 1**. Destructive-download rollback
+still called cursor save without its originating account, so an account switch during download could
+write the restored old-account cursor into the new account's metadata. The recovery predicate also
+used containment rather than a literal prefix. The operation now carries its starting user through
+rollback, every cursor save requires that exact user, and account mismatch fails the rollback before
+metadata can cross accounts. UI detection now uses `startsWith` for the exact local persistence
+markers. New account-switch rollback and embedded-marker regressions pass; focused proof is 126/126.
+TypeScript, lint, build, and final re-audit remain. No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-240 second audit block and fail-closed repair
+
+The second auditor blocked `12ce0030` with **Major 1 / Minor 1**. A pull could lose authentication
+or switch accounts while saving the safe cursor; the old cursor save silently returned, after which
+in-memory base pruning could still run. A reload could then pair an older durable cursor with deleted
+conflict bases. Cursor persistence now requires the expected signed-in account and throws before any
+prune on missing Supabase, sign-out, or account change. The UI also requires an exact local
+queue/write-base persistence prefix plus quota semantics, so unrelated Supabase/API quota errors keep
+the ordinary action. New regressions prove auth loss retains durable bases and generic service quota
+text cannot expose recovery. Focused proof is 124/124; TypeScript and changed-file lint are green.
+Production build and final re-audit remain. No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-240 first audit block and one-click repair
+
+The first auditor blocked frozen builder commit `b9c52371` because accepted batches rebuilt and
+persisted bases before the old durable queue key was removed. Under exact reverse quota pressure,
+all records could reach cloud, base persistence could fail, the queue key could then clear, and the
+strict flush could reject without retrying bases. That made recovery require a misleading second
+click. The repair drains first, retries both derived-base and queue durability after the old queue
+key is gone, and succeeds only with zero pending operations and both persistence writes green. The
+strengthened regression keeps an old durable queue, fails queue persistence while bases exist, then
+fails base persistence while the old queue exists; one recovery call still sends both records and
+clears the queue. Focused proof remains 122/122; TypeScript, changed-file lint, production/PWA build,
+and diff integrity are green. Final re-audit and JK's live click remain; no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-240 sync-quota recovery builder close
+
+JK's exact preview showed 1,398 pending writes and quota failures persisting both `kbl-sync-queue`
+and `kbl-sync-store-write-bases`. The queue holds legitimate local mutations; the write-base map is
+derived cloud-receipt cache. The builder repair exposes `FREE SPACE + SYNC` only for quota-class
+persistence failures. It evicts only the persisted derived bases, retains every queued operation and
+source IndexedDB row, drains through the unchanged atomic path, then pulls and prunes bases already
+covered by the safe cursor. It never invokes full Upload/Download or clears product/auth/cloud data.
+Focused sync/UI proof is 122/122; TypeScript, changed-file ESLint, 2,735-module production/PWA
+build, and diff integrity are green. Separate non-builder audit and JK's one-click recovery remain.
+No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-239 exact rating room independently approved
+
+The separate non-builder auditor approved frozen rating-room commit `a036b839` with **Major 0 /
+Minor 0**. It independently traced the 19 displayed rows to the same canonical ledger consumed by
+`luxuryTax`, including uncapped accumulated USED points, shifted limits, LEFT/OVER, exact row tax,
+ordered contributors, ordinary pitcher role weights, CP bullpen inclusion, one SP/RP group, and Two
+Way no-duplication. My Board and Asst GM Board use their own exact 22-player inputs under the active
+team's cap identity in Main and Companion. Independent gates passed 85/85 focused tests, 17/17
+responsive/privacy browser journeys, changed-file ESLint, TypeScript plus production/PWA build,
+diff integrity, and clean worktree. JK's browser walk remains the product gate; no push, merge, or
+deploy.
+
+### 2026-07-18 — FINDING-238 approved; FINDING-239 rating-room builder close
+
+The independent re-auditor approved frozen large-source repair `1ae9c0a4` with **Major 0 / Minor
+0** after independently passing 58/58 focused tests, exact 2,001-source proof 3/3, lint, TypeScript,
+production build, and diff integrity. It confirmed source-plus-assignment binding and cancellation
+between every awaited membership/persistence stage.
+
+The next builder addition exposes the exact settled tax-row ledger on My Board and Asst GM Board.
+One engine function now owns contributors, usage-weighted points, allowed points, signed room,
+overage, and row tax, and `luxuryTax` consumes it. The UI shows uncapped accumulated points, exact
+LEFT/OVER, contributor names/points, selected-player contribution, and row tax in a collapsed
+RATING ROOM. Builder verification is focused 85/85, broad Snake 628/628, production browser 23/23,
+TypeScript, lint, production build, and diff integrity. FINDING-239 still needs a separate frozen
+non-builder audit; JK's browser walk remains the product gate. No push, merge, or deploy.
+
+### 2026-07-18 — FINDING-238 second audit block and narrow repair
+
+The re-auditor blocked first-audit repair `6d45f11f` with **Major 2 / Minor 0**. The source
+fingerprint did not include the assignment payload, so a copied valid source receipt plus altered
+legal/affordable assignments could bypass setup identity. Cancellation stopped the worker but had
+only one checkpoint before the combined add/remove/save chain, so abort during a pending add could
+still begin the old remove and setup save.
+
+The second repair adds an assignment fingerprint over the exact source authority and assignment
+payload and rejects any mismatch before support reuse. Draft Setup now checks its owned build signal
+after add, after remove, immediately before save, and after save in both shaped and Full Sources
+paths. Permanent tests alter only the assignment payload and pause both membership paths inside add,
+then unmount and prove no later remove or setup save occurs. Focused proof is 58/58; exact
+2,001-source/eight-team proof is 3/3 in 140 seconds; TypeScript, changed-file lint, and diff integrity
+are green. Final re-audit and JK's browser walk remain; no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-238 first audit block and narrow repair
+
+The separate auditor blocked frozen builder commit `17a3ec8b` with **Major 3 / Minor 0**. The proof
+and its validator both anchored the 90% IV floor to the bounded candidate shortlist rather than exact
+Full Sources; raw assignments/ids could skip identity work without a source-bound independent
+receipt; and the page did not own or abort the pool-shape worker when the user navigated away.
+
+The repair extracts one canonical Full Sources value-baseline authority shared by construction and
+validation, mints support only after the exact independent validator passes, fingerprints the exact
+source and numeric-shaping inputs before reuse, and owns one AbortController across proof, shaping,
+and post-worker persistence. Exact false-shortlist, changed-source, raw-id, changed-IV, and unmount
+regressions are green. The broad Snake matrix is 625/625; exact 440 calibration is 4/4; exact 2,001
+source proof remains 3/3; TypeScript, changed-file ESLint, the 2,735-module build/PWA, and diff
+integrity are green. Playwright functional/setup gates are green, including the 3.5-minute real
+eight-club 2,001-source browser path. The Mac/iPad latency file is 2/2 in its serial production-like
+lane; one four-worker stress run measured a 279 ms Mac long task against a 250 ms gate while the
+isolated rerun measured 200 ms. Final re-audit and JK's browser walk remain; no push, merge, or
+deploy.
+
+### 2026-07-18 — FINDING-238 large-source Snake setup builder close
+
+Exact 2,001-card production sources reproduced a false `identity-proof-unknown` and a synchronous
+duplicate identity extraction. The bounded certificate now keeps Full Sources as immutable identity
+truth, named shaped pools retain its exact 176-card support, and numeric shaping runs off-thread.
+Builder proof is 176/176 picks, all 24 selectable identities on 2,001-card eight-club rooms, exact
+212/238/264 presets, 619/619 focused Snake UI/storage tests, complete production lifecycle, and
+responsive Mac/iPad browser builds. TypeScript, changed-file ESLint, 2,735-module production/PWA
+build, and diff integrity are green. Independent audit and JK's browser walk remain; no push, merge,
+or deploy.
+
 ## HOW TO READ THIS FILE
 
 - Findings are numbered sequentially: FINDING-001, FINDING-002, etc.
@@ -24,6 +178,26 @@ reliever batting remains role-usage-discounted; Two Way relief batting is full-u
 again in bullpen-secondary rows. All 24 identities stay inside the +/-10% parity band. The separate
 audit returned VERIFIED with no Major or Minor findings. Next action: JK's hands-on League Builder
 and Snake-room walk remains the sole product gate.
+
+### 2026-07-17 — Existing-room companion republication audit block and repair
+
+JK's Hotseat retained the completed trade while every companion retained the old room after loading
+FINDING-235. This is a pre-repair conflict, not a failure of the repaired five-second freshness loop:
+the old authoritative write had already stale-rejected, and refresh correctly did not overwrite a
+newer cloud base. Contract `SNAKE-COMPANION-HOTSEAT-REPUBLISH-43` adds one explicit commissioner
+recovery. It writes only the current room record against that record's exact cloud base and verifies
+the accepted content. The first separate auditor returned **BLOCK — Major 1 / Minor 0** because an
+affected companion's own pre-Contract-42 whole-room queue would continue rejecting that publication.
+The repair adds a room-scoped commissioner publication marker and retires only a superseded legacy
+room op proven by its independent board row and by the absence of unpublished companion intent.
+The two-device regression adopts the trade/pick order, preserves the private board, and retains an
+unrelated pending write; negative regressions preserve an unpublished pick request and trade decline.
+The next audit pass found that publish also needed to compare against the exact current cloud room;
+otherwise unseen cloud-side companion activity could be overwritten. That check and regression are
+now built. Final builder and independent gates are green: 250/250 affected tests, TypeScript,
+changed-file ESLint, 2,730-module production build/PWA, diff integrity, and auditor **APPROVE — Major
+0 / Minor 0**. JK's same-room click remains the product gate. No new draft or repeated action is
+permitted.
 
 ---
 
@@ -1280,3 +1454,646 @@ relief cases are pinned. The separate non-builder audit returned **VERIFIED**, w
 findings: 6/6 recalibration, exact `9e5901d7` ablation 1/1, 186/186 surrounding tests, 72/72 parity
 rosters and 48/48 identity rosters legal/solvent, independently reproduced lower bounds, and clean
 TypeScript/lint/diff gates. JK's browser walk remains open.
+
+### 2026-07-16 Draft Setup browser-gate feedback — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-214 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Snake player editor | Shared editor mounted in Snake; builder component gates and independent audit are green. |
+| FINDING-215 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Shaped pool / chosen identities | Live unique-person identity certificate, honest UNKNOWN, BUILD-scoped widening, actual-mode persistence, and source-role diagnostics are independently approved. |
+| FINDING-216 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Setup certificate / board parity | Cross-position sibling alternatives survive the bounded nonlinear search while final legal plans reserve one person; incomplete search fails closed. |
+| FINDING-217 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Legends version handling | Compact all-card setup, safe unsaved-legacy migration, sibling-retirement ticker, undo removal, and fail-closed version optimization are independently approved. |
+| FINDING-218 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Snake identity picks | Identity saves remain local after persistence; a separate auditor approved the removal of redundant full-data and pool refreshes. |
+| FINDING-219 | 2026-07-16 | FIXED-AND-INDEPENDENTLY-VERIFIED — JK BROWSER RE-WALK OPEN | Draft Setup mount | Requested league resolution is synchronous and hidden mount-time BUILD is removed; a separate auditor approved with explicit BUILD preserved. |
+
+Contract: `contracts/CONTRACT_DRAFT_SETUP_BROWSER_FIXES_2026-07-16.md`. Builder and auditor are
+different agents. No commit, merge, or deploy is authorized; JK's browser re-walk remains the sole
+product-acceptance gate.
+
+### 2026-07-17 — FINDING-237 approved-minor regression exposed a deeper final-round defect
+
+The next frozen audit returned **APPROVE — Major 0 / Minor 1** at `f06c6884`: implementation no
+longer minted a mixed-version hard block, but an exact cheaper-SP / necessary-CP sibling regression
+was missing. The builder added that test instead of waiving the minor. It failed red because the
+underlying final-round seating certificate still reduced one person's versions before roster-role
+matching. The repaired bounded matcher activates only when every club has zero or one open seat,
+keeps every card's actual role, assigns each person once across the room, calculates exact shifted-cap
+tax and money, and can return SUCCESS only through `validateConstructiveSnakeSeatingProof`.
+
+The exact one-club and eight-club mixed-version tests are green. The complete real-player oracle is
+also green: 88/88 and 176/176 picks, all eight Standard/Nerfed pool presets, a 506-card classifier in
+186 ms, and eight independent private Assistant boards. The 60-file broader Snake suite passes
+609/609, for 617 cumulative tests with the separate production oracle.
+
+The final browser pass initially revealed a proof/log feedback loop rather than a solver failure:
+metadata-only room-log writes recreated an equivalent input by reference, briefly cleared the proof,
+changed advisor copy, and repeated. Proof lifecycle is now keyed by the complete canonical seating
+input. An 80-sample / 800 ms live trace retained all 20 safe rows continuously; the clean gate
+measured DRAFTABLE filtering at 26 ms and player selection at 185 ms. Final independent audit remains
+mandatory; JK's real browser walk remains the product gate.
+
+### 2026-07-17 — FINDING-237 final independent close
+
+The separate non-builder audited frozen commit `12efdbdf758c7d9b3490b5b909082b1f22ad5bc8`
+and returned **APPROVE — Major 0 / Minor 0**. It found no correctness, data-integrity, UX-flow,
+persistence, performance, or regression finding. The audit independently verified the zero-or-one
+open-seat activation boundary, every actual card-version role, room-wide unique-person augmenting
+matching, exact shifted-cap tax and affordability edges, unchanged constructive final validation,
+complete semantic proof fingerprinting, OPEN actionability, mutation-time validation, Assistant
+certificate overlap, and zero-interest fallback. Independent gates passed 8 focused files / 113
+tests, TypeScript, changed-file ESLint, production build, and diff integrity. JK's real eight-team
+browser walk remains the only product-acceptance gate; no push, merge, or deploy is authorized.
+
+### 2026-07-17 — FINDING-237 third audit block and narrow repair
+
+The next read-only pass rejected `4242ca69` with **BLOCK — Major 2 / Minor 0**. One cheapest version
+per person plus a constructive completion heuristic was not a valid hard-impossibility proof for
+mixed-position historical versions. The finish key also omitted proof feasibility, assignment
+salary/tax, and message. The repair removes the heuristic hard block, retains only the exact illegal
+full-22 check, and hashes the complete proof object. Fresh focused 20/20, exact 506-card classifier,
+TypeScript, changed-file lint, production build/PWA, diff integrity, and eight-team browser gates are
+green. Final independent re-audit remains mandatory.
+
+Builder repair handoff after the first rejected audit: all seven deltas are implemented. The exact
+repaired-tree focused matrix passes 8 files / 187 tests, TypeScript and changed-file ESLint are
+green, the post-lint seating-proof delta passes 14/14, and diff integrity is clean. Production build
+was not rerun by coordinator instruction. This
+is builder evidence only: the original non-builder auditor must recheck the frozen tree, and JK's
+browser re-walk remains the sole product-acceptance gate. No commit, merge, push, or deploy is
+authorized.
+
+### 2026-07-16 Draft Setup second independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with three Majors and no Blockers: Assistant could
+pre-collapse sibling cards to a legal non-optimal 198 assignment instead of the 293 weighted
+optimum; Full Sources could persist a removal that its hard keep restored; and Full Sources UNKNOWN
+copy fell back to shaped-pool guidance after reload or a receipt-clearing manual edit.
+
+The original builder removed the pre-collapse and placed exact one-capacity version-group matching
+inside the weighted identity optimizer, cleaned the Full Sources removal ledger from final
+membership before state/persistence, and keyed UNKNOWN copy to persisted `poolAssemblyMode`.
+Builder gates are Assistant 21/21, residual Full Sources 2/2, combined optimizer/default-caller/UI
+78/78, TypeScript, changed-file ESLint, and diff integrity. Production build was not run by
+coordinator instruction. This is builder evidence only; status remains **BUILT — INDEPENDENT
+RE-AUDIT PENDING**. No commit, merge, push, or deploy is authorized, and JK's browser re-walk
+remains the product-acceptance gate. The original target worktree and its pre-existing
+`archetypeBalanceSimulator.ts` collision remain untouched.
+
+### 2026-07-16 Draft Setup third independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with two Majors: the additive exact assignment did
+not exhaust arbitrary-length nonlinear roster exchanges, and optional slot-preference scoring
+changed the default no-group Best 22 path.
+
+The original builder retained the assignment. Exclusive-version optimization now uses the additive
+assignment only as a seed, then runs a separately capped deterministic simple-cycle search over all
+relevant unpinned occupied groups and evaluates the actual legality, nonlinear tax, value-floor,
+and fit objectives. Cap or pass exhaustion marks the result incomplete and Assistant fails closed;
+two-cycle, four-cycle, and deterministic cap-hit regressions are pinned. The no-group path again
+uses literal `rosterFitScore(players)`, with omitted-option parity under nonzero preference/rank
+inputs.
+
+Builder gates are 12 changed test files / 246 tests, optimizer/default/Assistant 51/51, exact-tree
+TypeScript, all-changed-file ESLint, diff integrity, and a successful 2,729-module production build.
+Full-repository lint still reports 939 pre-existing problems outside the changed-file gate. This is
+builder evidence only; status remains **BUILT — INDEPENDENT RE-AUDIT PENDING**. No commit, merge,
+push, or deploy is authorized. The target worktree remains untouched, and JK's browser re-walk is
+the sole product-acceptance gate.
+
+### 2026-07-16 Draft Setup fourth independent audit and builder repair
+
+The same non-builder auditor returned **REJECT** with one Major: completion followed only the
+winning baseline/identity board, so a cap hit in an executed but unselected start could be discarded
+and Assistant could report READY.
+
+The original builder retained the narrow repair. Baseline completion now ANDs every executed value
+and fit start; identity completion ANDs both identity starts. The winning board is still selected by
+the existing objective and feasibility rules, but any incomplete executed start propagates
+`optimizationComplete=false` and Assistant fails closed. Two real Assistant regressions isolate the
+secondary baseline start and the unselected identity start respectively. The identity regression's
+test-only 10-second timeout accommodates deliberate exhaustion of the unchanged 250,000-candidate
+production cap; no product timeout or cap changed.
+
+Builder gates are focused simulator/Assistant 31/31, exact-tree TypeScript, narrow changed-file
+ESLint, and diff integrity. The prior production build remains green; it was not rerun because only
+about 1.58 GiB remained. This is builder evidence only; status remains **BUILT — INDEPENDENT
+RE-AUDIT PENDING**. No commit, merge, push, or deploy occurred. The external target worktree now
+points to clean `codex/home-bar-proportions` at `7ba9922f`; the builder did not modify tracked files
+there. JK's browser re-walk remains the sole product-acceptance gate.
+
+### 2026-07-16 Draft Setup final independent re-audit — APPROVE
+
+The same non-builder auditor returned **APPROVE** with zero actionable findings. Baseline completion
+ANDs every executed value/fit start, identity completion ANDs both identity starts, and either capped
+unselected start forces Assistant `INCOMPLETE_BOARD` independently of the winning board. The
+auditor's narrow run passed 48/48 tests and `git diff --check`; no diagnostic or test-only production
+seam was found. This is code-audit approval only. JK's browser re-walk remains the sole
+product-acceptance gate. No commit, merge, push, or deploy occurred.
+
+### 2026-07-16 Snake Draft browser walkthrough wave 2 intake
+
+JK approved the next live-room correction batch. FINDING-220 through FINDING-224 record the five
+confirmed seams: inconsistent CP assignment, visually ambiguous committed players, repeated
+per-row unavailable-risk noise, missing local GM decision views, and stale explanatory/placeholder
+copy. Contract `SNAKE-DRAFT-WALKTHROUGH-WAVE-2-33` freezes the scope and performance law.
+
+The clean PR #115 head `d7858e7b` is the implementation base; the dirty root checkout is excluded.
+Baseline production build is green. The pre-change full-suite result is being recorded separately
+before implementation. Builder work is not an audit, and JK's real-browser walkthrough remains the
+only product-acceptance gate.
+
+### 2026-07-16 Snake Draft browser walkthrough wave 2 — independent close
+
+Implementation `c4f1c58f` and test-alignment follow-up `cf033728` close FINDING-220 through
+FINDING-224: committed-roster/CP truth, team-colored roster rows, actionable-only player risk,
+memoized GM sorts and filters with context-aware `TOP`, and Help-gated methodology. The first
+separate read-only audit returned NOT VERIFIED with one confirmed edge: a complete saved board could
+skip CP refitting when both owned closers were already present but assigned in the wrong order.
+
+Repair `8a2602eb` changes only saved-board reconciliation and its direct regressions. The same
+auditor returned **APPROVE — zero findings** after verifying the exact persisted-board case, the
+fail-closed committed-player checks, undrafted-extra-closer removal, 40/40 desk proof, the exact
+Assistant closer proof, and diff integrity. Builder combined gates passed 67/67 closer/model/Assistant
+and 45/45 main/companion. The broader production/page/model gate is 139/139 and lifecycle proof is
+36/36; TypeScript, changed-file lint, production build, and diff integrity are green. Live Mac/iPad
+checks found no horizontal overflow or console errors; local sorts measured 38-61 ms, fit filters
+22-83 ms, and position-context `TOP` 279 ms. This is engineering approval only. JK's browser re-walk
+remains the sole product-acceptance gate.
+
+### 2026-07-17 Snake fit and shaped-pool correctness follow-up — append-only finding index
+
+| Finding | Date | Status | Surface | Required resolution |
+|---------|------|--------|---------|---------------------|
+| FINDING-225 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; JK BROWSER GATE PENDING | Snake room FIT | FIT is identity-only across the exact 440; tax remains separate. |
+| FINDING-226 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING | Snake shaped pool | Production-identity exact 238/264 proof independently verified. |
+| FINDING-228 | 2026-07-17 | IMPLEMENTED — INDEPENDENTLY VERIFIED; COMBINED PREVIEW/JK GATES PENDING | Snake chosen-identity certificate | Exact adapter Full/238/264 and all-24 four-club proof independently verified. |
+
+### 2026-07-17 Snake chosen-identity certificate coverage gap
+
+Performance integration supplied the first real production-browser proof of the correctness commit.
+The page stayed responsive, but the eight-club journey honestly auto-widened to 440 with
+`identity-proof-unknown`. A two-club Murderers Row/Whiteyball room and a synchronous direct engine
+call on the same exact 440 input returned the same result, excluding worker transport. The permanent
+calibration was false-green because it supplied `capIdentity` without production's
+`identityArchetype`; correcting that field reproduces the Full Sources failure in 26.35 seconds.
+
+FINDING-226 is reopened under FINDING-228. Performance code remains frozen and green. Contract
+`SNAKE-IDENTITY-CERTIFICATE-CORRECTNESS-36` owns a separate bounded search-construction repair and
+production-input calibration, followed by a separate non-builder audit. No readiness, identity,
+money, legality, value-floor, embodiment, version, pool-size, or performance law may be weakened.
+
+### 2026-07-17 Snake chosen-identity certificate — builder repair
+
+The corrected production-input regression failed at exact 440 Full Sources before shaping. The
+narrow repair adds one generic deterministic constructor inside `snakeSeatingProof`: clubs build
+canonical identity rosters from remaining version groups in four bounded orderings, while each
+club's value floor remains anchored to its Full Sources baseline. No assignment is trusted from that
+construction. The existing independent validator recomputes and must accept disjoint people, legal
+22, exact settlement money and bills, the Full Sources optimal-posture IV floor, and strict positive
+identity embodiment before SUCCESS can return. The prior generic matcher and honest UNKNOWN tail
+remain unchanged fallbacks.
+
+Builder proof passes the exact production adapter rather than a hand-built cap-only input: mixed
+eight-club Full Sources plus 238 Competitive and 264 Loose, two-club Murderers Row/Whiteyball Full
+Sources, and four simultaneous clubs for every one of the 24 archetypes against exactly 440 assigned
+SMB4 players. The original synthetic strict-identity UNKNOWN remains UNKNOWN. Surrounding gates are
+107/107 proof/adapter/pool/desk, 49/49 Draft Setup, TypeScript, changed-file lint, 2,729-module
+production build/PWA, and diff integrity. This is builder evidence only; the diff is now frozen for
+a separate non-builder audit. Performance integration and browser latency files remain untouched.
+
+### 2026-07-17 Snake chosen-identity certificate — independent close
+
+A separate non-builder auditor returned **APPROVE — Major 0 / Minor 0**. It traced the real
+`buildSnakeSetupProofInput` path and confirmed that both `capIdentity` and `identityArchetype` reach
+the permanent exact-440 calibration. It verified the bounded four-order constructor, immutable Full
+Sources value-floor translation, identity-specific Legend version selection with whole-person group
+consumption, and the unchanged validator's independent checks for disjoint identities, legal 22,
+exact settlement bills and money, source-relative IV floor, and strict positive identity embodiment.
+The honest UNKNOWN fallback remains intact.
+
+Independent reruns passed the exact calibration 4/4 in 278.32s, seating proof 14/14, adapter proof
+12/12, TypeScript, changed-file ESLint, the 2,729-module production build/PWA, and diff integrity.
+This closes the correctness-lane audit only. Performance re-integration, combined independent audit,
+one preview, and JK's real browser walk remain open; no merge or deployment is authorized.
+
+### 2026-07-17 Snake FIT and shaped-pool correctness — independent close
+
+The exact 440-player trace confirmed two separate correctness defects: tax pressure overwrote the
+identity FIT label, and all independent identity claims plus structural floors could silently expand
+named 238/264 pools to 336/344. Contract `SNAKE-FIT-POOL-CORRECTNESS-34` kept the repair separate
+from proof scheduling and latency work.
+
+The implementation makes FIT identity-only, derives shaped membership from the exact Full Sources
+simultaneous certificate plus the established position floor, trims evictable quota overfill, and
+requires a feasible final proof inside the actual named bound. The real 440 regression returns exact
+238 Competitive and 264 Loose pools with all 176 certificate players and no LOCKED club. Auto-widen
+uses only wider named presets or honest Full Sources. Reset clears hand edits while retaining the
+persisted actual preset and re-enters the same certificate path.
+
+The first separate read-only audit rejected a Reset Edits bypass and a missing pre-shape injection
+receipt. Both received narrow repairs. Its next pass exposed a mutation-dishonest reset test; the
+contract was clarified to retain the persisted widened preset, and the test now models production
+`replaceLeagueLocal`, rerenders at Loose, and proves the 300-player source plus 264-player final
+candidate. Final auditor verdict: **APPROVE — Major 0 / Minor 0**. Builder gates include 83/83
+engine/desk tests, 28/28 universe tests, 21/21 pool-lock tests, 2/2 exact-440 calibration tests,
+TypeScript, changed-file ESLint, production build, and diff integrity. No merge, push, deploy, or
+preview occurred. Performance integration, combined independent audit, one preview, and JK's real
+browser walk remain downstream gates.
+### 2026-07-17 — Combined Snake identity-correctness and proof-performance audit
+
+Separate non-builder verdict on integration `68c0f0c0`: **APPROVE — Major 0 / Minor 0**. The auditor
+passed 134 focused combined tests, TypeScript, changed-file ESLint, the 2,730-module production build
+with the Snake setup-proof worker emitted, and both diff checks. It confirmed correctness-owned files
+are byte-identical to approved `ca4cc14b`, performance runtime is byte-identical to approved
+`503362af` except those correctness files, and the restored permanent contract/FINDING-227/229 records
+close the documentation gate. Exact-stock calibration 4/4 remained green in the builder integration
+run. FINDING-229 stays deferred for legacy/malformed saved-room recovery. JK's real browser walk is
+the final acceptance gate; no merge or deploy is authorized.
+
+### 2026-07-17 — Legends import and four-team Draft Setup recovery
+
+FINDING-230 is fixed under contract `LEGENDS-DRAFT-TARGET-RECOVERY-37`. Exact legacy Legends cards
+with only closed SML/MLB assignments can now be reclaimed; user assignments still block repair.
+Draft Setup cannot target a source library, and stock refresh preserves authoritative user-league
+team membership, player assignments, rosters, registered pools, and draft sessions. The separate
+auditor returned **APPROVE — Major 0 / Minor 0** after rejecting three earlier preservation gaps.
+Focused 115/115, TypeScript, lint, production build, and diff integrity are green. JK's browser repair
+click remains the product gate; no merge, push, or deploy is authorized.
+## 2026-07-17 — Snake Two Way catcher board materialization (Contract 38)
+
+- Builder reproduced the production blocker red-first with a legal 14-hitter/8-pitcher certificate
+  whose second catcher coverer is a Two Way starter. Before repair, setup failed with broken `SP4`.
+- The narrow repair changes only board-slot materialization and display: roster-wide canonical
+  legality remains the final authority, and ordinary fifth-bench rows display as `FLEX5`.
+- Separate non-builder verdict: **APPROVE — Major 0 / Minor 0**. The auditor confirmed catcher
+  preference, unique player/version enforcement, fail-closed seed/reorder/backfill validation, and
+  shared My/Assistant rendering.
+- Independent gates: 13 files / 154 tests, TypeScript, changed-file ESLint, 2,730-module production
+  build/PWA, and diff integrity green. JK's browser retry remains the only acceptance gate.
+
+| FINDING-232 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED | deskModel.ts / deskRoomModel.ts / SnakeDraftSetupAdapter.helpers.ts | Exact certified legal staffs now materialize without a stricter display-row law or outside substitution. |
+| FINDING-233 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK BROWSER VERIFIED | LoginForm.tsx / supabase.ts / focused tests | Chrome quota now falls back only the Supabase token to tab storage; rejected/stalled sign-in has actionable status. |
+| FINDING-234 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | CompanionClaimScreen.tsx / SnakeDraftRoomView.tsx / SnakeDraftRoom.tsx | Pending devices can resend room claims; Hotseat shows an exact pending count without auto-opening private details. |
+| FINDING-235 | 2026-07-17 | FIXED — INDEPENDENTLY APPROVED — JK RETEST PENDING | leagueBuilderStorage.ts / companionFreshness.ts / SnakeDraftRoom.tsx | Private boards no longer publish stale room copies; open devices adopt board revisions and authoritative picks/trades/corrections force-publish. |
+
+### 2026-07-17 — FINDING-237 first audit block and builder repair
+
+The separate read-only auditor rejected initial commit `df64b450` with **BLOCK — Major 2 / Minor 1**:
+zero-interest could remove the only legal completion card, production did not compute exact finish
+status for every visible candidate, and the 88/176 journey did not independently prove Assistant
+overlap or final legal/financial truth. The builder repaired all three without changing FIT, tax,
+archetype, roster, pick, trade, correction, privacy, or companion-sync law. Heavy classification and
+selected-player consequence work now runs only in fingerprinted workers with cache and stale-job
+cancellation. Repaired builder evidence is 12/12 long exact production tests plus 602/602 surrounding
+Snake tests, TypeScript, changed-file ESLint, 2,734-module build/PWA, no Auth/storage strings in the
+emitted Snake workers, clean diff integrity, and a no-console-error eight-team browser pass. The
+frozen repair still requires the same non-builder re-audit; JK's browser walk remains product
+acceptance.
+
+### 2026-07-17 — Companion live-room propagation independent close
+
+The separate non-builder auditor returned **APPROVE — Major 0 / Minor 0**. It confirmed that an
+independent board edit queues only its standalone row, both cloud arrival orders preserve the
+authoritative room and newest board, already-open Hotseat/companion pages detect MLB and FARM board
+revision changes, and completed picks, trades, and corrections strict-flush the saved room. A failed
+publication accurately says the action was saved locally and never invites a duplicate action.
+Independent gates passed 8 focused files / 230 tests, TypeScript, changed-file ESLint, the
+2,730-module production build/PWA, and diff integrity. JK's same-room browser walk remains the final
+product gate; no new draft is required and no push, merge, or deploy is authorized.
+
+### 2026-07-17 — FINDING-237 second audit block and narrow repair
+
+The same read-only auditor rejected commit `72f7246c` with **BLOCK — Major 3 / Minor 0**. Confirmed
+issues were false-authoritative `BLOCKED` from a conservative bounded solver, an incomplete
+module-global finish-cache fingerprint, and remaining render-time `evaluateSnakeLegalFinish` calls
+in both Main and Companion. The repair leaves bounded uncertainty `OPEN` and mutation-verifiable,
+adds all cap/identity/version/roster/pool shape and construction inputs to the key, suppresses
+progress-driven React publishes, and uses the current shared certificate for scarcity depth.
+Post-repair builder gates: 114/114 targeted tests including fresh 88/176 completion, TypeScript,
+changed-file ESLint, 2,734-module build/PWA, diff integrity, and a green eight-team 506-card browser
+pass. A final audit of the new frozen commit remains mandatory; JK's browser walk is still the only
+product-acceptance gate.
+
+### 2026-07-18 — FINDING-242 first audit blocked; account-bound drain repair built
+
+Frozen exact-content candidate `04d35826` received **BLOCK — Major 1 / Minor 0**. The auditor
+approved exact queue/local/cloud equality, tombstone handling, source-drift and concurrent-mutation
+protection, durable reconciliation rollback, pagination, localStorage normalization, and the
+non-destructive UI boundary. The blocker was a pre-reconciliation account-switch window: bounded
+retry drains independently read the current session and could stamp the captured account's queued
+data onto a newly signed-in account. The repair blocks ordinary drains for the full recovery, waits
+for existing drains, pins one account through both recovery drain paths, validates before moving
+queue state, and checkpoints the protected queue before the first attempt. Direct regression plus
+all focused sync/UI proof is 133/133; TypeScript, changed-file ESLint, the 2,735-module production/PWA
+build, and diff integrity are green. Same-auditor re-audit remains; no JK click, push, merge, or deploy.
+
+### 2026-07-18 — FINDING-242 final independent approval
+
+Frozen repair `a04e9534` received **APPROVE — Major 0 / Minor 0**. The same non-builder auditor
+confirmed recovery blocks ordinary drains before waiting/capturing its owner, checkpoints the
+protected queue, and validates that captured account in both store and localStorage drains before
+moving queue state or writing cloud. The direct capture-to-first-drain switch test proves pending
+remains one, the durable queue retains the operation, and cloud remains empty. Exact equality,
+tombstones, source/concurrent drift, rollback, pagination, wire normalization, and Upload/Download
+separation remain fail-closed. Independent gates passed 133/133, TypeScript, changed-file ESLint,
+2,735-module production/PWA build with 223 precache entries, parent/cumulative diff checks, and a
+clean worktree. JK's live one-click retry remains; no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-243 current-device queue recovery builder close
+
+The exact-only approved path proved honest but insufficient on JK's real 805 local/cloud
+differences. The builder adds target-limited current-intent rebase: only a queued value still equal
+to actual local source may receive the freshly fetched exact cloud base and a new atomic operation.
+The queue checkpoint precedes drain; cloud races remain rejected. Shared Snake rooms additionally
+must cover unseen companion intent before publication. Focused proof is 137/137, including mixed
+safe/obsolete queues, shared-room tombstones, and rebase-snapshot cloud-race rejection; TypeScript,
+changed-file ESLint, and diff integrity are green. Separate non-builder audit and JK retry remain;
+no push, merge, or deploy.
+
+### 2026-07-18 — FINDING-243 first independent audit block and repair
+
+Separate auditor Gibbs blocked frozen commit `641679b7` with **Major 2 / Minor 0**. It reproduced
+that an unfiltered post-rebase drain could publish a locally obsolete peer, and that a queued
+`mlbDraftSessions` tombstone could erase a live cloud room with unseen companion intent. The
+builder repaired both exact boundaries: the recovery drain initially accepted only the queue keys returned by
+the safe rebase classifier, and shared-room live/deleted disagreement is protected. The auditor's
+two minimal reproductions are now permanent tests. The second audit blocked `e774f405` with
+**Major 1 / Minor 0** because a same-key replacement during the drain's auth await could still match
+the approved key. The repair now binds the target to the exact rebased operation object; that third
+auditor reproduction is also permanent. Focused proof is 138/138, with TypeScript, changed-file
+ESLint, fresh production/PWA build, and diff integrity green. Final re-audit remains required before
+preview restart.
+
+### 2026-07-18 — FINDING-243 final independent re-audit
+
+Frozen code commit `9725c5bd` received **APPROVE — Major 0 / Minor 0** from separate auditor Gibbs.
+The auditor independently passed all three adversarial reproductions: mixed safe/obsolete queue,
+same-key replacement during targeted-drain authentication, and live Snake-room tombstone with
+unseen companion intent. It confirmed exact-operation binding after account validation, current
+local-source equality, shared-room protection, monotonic exact-base rebasing, durable checkpoint
+and rollback, and the unchanged atomic cloud-race authority. Independent gates passed focused
+138/138, TypeScript, changed-file ESLint, 2,735-module production/PWA build with 223 precache
+entries, parent/cumulative diff integrity, and clean frozen worktree. Engineering audit is closed;
+JK's live browser retry remains the only acceptance gate. No push, merge, or deploy.
+### 2026-07-19 — Snake live-room authority close
+
+| Finding | Date | Status | Surface | Summary |
+|---|---|---|---|---|
+| FINDING-244 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — REMOTE PREVIEW READY — JK WALK PENDING | Snake live room / companion cloud authority | Hotseat is the sole public writer; companions own scoped private boards and submit intent; immutable catalog, server correction recovery, and companion generic-sync isolation are implemented at `fd07bba0` and independently approved at exact branch head `cedf96ee`, Major 0 / Minor 0. Migration 009 is installed and exact deployed head `d2ac79d7` is READY in preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`. |
+| FINDING-245 | 2026-07-19 | FIXED — INDEPENDENTLY APPROVED — JK WALK PENDING | League Builder draft target teams | Draft targets use new IDs and empty rosters; source teams and source rosters remain unchanged; legacy shared-ID targets fail closed. |
+| FINDING-247 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — NEW PREVIEW READY — JK WALK PENDING | Snake Draft completed MLB handoff and completed-room recovery | One transaction now freezes the exact pool/session, creates and saves all target rosters, saves player assignments/salaries and handoff, aborts without partial state, repairs old partial state, and repeats byte-for-byte across proven 4- and 8-team completions. Recovery now appears when a signed-in browser has the league but lacks its local pool/session and explicitly reloads the restored state even when the URL already names that league. Recovery head `05f7f6b0` was rejected Major 1 / Minor 0 for a same-URL dead end; repaired head `56d1ab81` received APPROVE, Major 0 / Minor 0. Preview `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY from source `56d1ab81`; production is unchanged. |
+| FINDING-248 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING | Snake Draft MLB-to-farm identity and prospect generation | New and recovered Snake drafts now carry each club's farm identity through setup, live catalog, recovery, Scout Reveal, and farm-session creation. Missing legacy identity fails closed with a generic repair control. Production farm pools use the exact Standard prospect distribution and keep true ratings hidden. Exact head `914e35e9` is approved, Major 0 / Minor 0; preview `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY. |
+| FINDING-250 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — INTEGRATION GATE PENDING — JK WALK PENDING | Snake Draft Setup four/eight-team certification | The large-source identity shortlist used card count to enter pruning, then kept only six fit cards per identity-role lens. The generic repair counts distinct people and keeps at least half a legal roster per fit lens. Two audit BLOCKs repaired exact Build-to-Lock binding, bounded UNKNOWN attribution, scope, and person-group metadata. The same auditor approved frozen hash `be166c0e`, Major 0 / Minor 0. Its approved code is integrated locally with FINDING-249; combined verification and audit remain. |
+
+### 2026-07-20 — FINDING-248 audit close
+
+The hostile pre-freeze pass found one duplicate-club-set gap in the MLB-to-farm identity resolver;
+the builder's own negative-feedback pass found one Auction-scope regression in the Scout Reveal
+repair gate. Both were repaired with direct tests before the final freeze. The separate read-only
+auditor approved exact head `914e35e9`, **Major 0 / Minor 0**. Independent proof is 92/92 focused
+tests plus the exact N=500 Standard prospect distribution, TypeScript, changed-code ESLint, and
+full-range diff integrity. Preview publication and JK's browser walk remain. No merge or production
+deployment is authorized.
+
+Preview deployment `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY at
+`https://kbl-tracker-20p586qnl-kruseja37s-projects.vercel.app`. Authenticated remote checks returned
+HTTP 200. The deployed Scout Reveal bundle contains `FARM IDENTITIES MISSING` and
+`SAVE FARM IDENTITIES`; Chrome loaded the app home page with no warning or error in the console.
+Production remains unchanged. JK's new/recovered league walk is the remaining product gate.
+
+### 2026-07-20 — FINDING-250 first independent audit block and builder repair
+
+The separate read-only auditor returned **BLOCK — Major 2 / Minor 1**. First, a completed build was
+not bound to the source, pool mode, preset, club identity, and membership state used by Lock. A
+change after Build could therefore lock old IDs under new controls. Second, a bounded UNKNOWN could
+name the first club and a seed-search detail as if they were proven causes. The minor finding was
+one edit to `SnakeDraftSetupAdapter.tsx` outside the contract allowlist.
+
+The builder removed the adapter edit. Lock now requires an accepted fingerprint over the exact
+source people and content, clubs and identities, requested and accepted mode/preset, extracted
+basis, membership IDs, provenance, and design pins. A changed source, team, identity, preset, mode,
+or content cancels work and invalidates acceptance. Lock saves the accepted basis and exact IDs.
+Target-league free-agent pool assignments no longer remove selected unassigned players from the
+source universe. Only a proven zero-variance identity cause may name a club; ordinary bounded
+UNKNOWN now says that the all-club identity check is unresolved. The final browser path builds,
+locks, and starts the exact four-club room. Same-auditor re-audit remains required before a local
+preview. No push, merge, or deploy is authorized.
+
+### 2026-07-20 — FINDING-250 second independent audit block and builder repair
+
+The same auditor returned **BLOCK — Major 1 / Minor 0**. The accepted source-content key included
+ratings, positions, traits, salary, and card IDs, but omitted `sourceId`, `versionGroupId`, and
+legacy `historicalSourceId`. Those fields decide whether several cards are one person. A metadata-
+only grouping change could therefore leave an old Build receipt accepted at Lock.
+
+The source-content key now includes all three normalized grouping fields. Three direct regressions
+change each field after Build and prove that Lock disables, no old pool locks, and the UI requires a
+new Build. Builder proof is 12/12 production-input plus 100/100 other focused tests, for 112/112
+affected tests. TypeScript, changed-file ESLint, the production/PWA build, and four/eight-team
+browser paths are green. Same-auditor re-audit remains required before a local preview. No push,
+merge, or deploy is authorized.
+
+### 2026-07-20 — FINDING-250 final independent approval and local preview
+
+The same non-builder auditor approved frozen diff hash
+`be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, **Major 0 / Minor 0**.
+It closed both prior audit blocks. It verified all three person-group fields in accepted source
+content, the Lock recheck, the three direct stale-Lock regressions, club-neutral bounded UNKNOWN,
+and the clean adapter component scope. The prior independent full gate passed 109/109; the final
+delta passed 3/3, TypeScript, focused ESLint, hash, status, and diff integrity. Builder proof is
+112/112 with the production/PWA build and both browser paths green.
+
+After approval, one local production preview started at `http://127.0.0.1:4173/` and returned HTTP
+200. This is not a Vercel or production deployment. JK's browser walk is the sole product gate. No
+push, merge, deploy, or product acceptance occurred.
+
+### 2026-07-19 — FINDING-246 first audit block and builder repair
+
+The separate read-only auditor rejected frozen `aeeb00a2` with **REJECT — Major 3 / Minor 1**.
+Production `LIKELY_GONE` state did not drive the red token; the host request cue watched desk claims
+instead of current pick intent; a legal Two Way catcher-depth roster with six committed shortstops
+could use the starting SS slot before SWING; and a saved legacy cap table dropped true Two Way FLD
+from both hitter and pitcher rows. Completion ordering and hard handoff gates were approved.
+
+The builder repaired only those four seams. Risk styling now follows the typed state in both card and
+row, the host cue counts current-revision pending pick intents while claims stay silent, committed
+fielders use legal depth including SWING before a ranked available starter, and legacy Two Way
+secondary ratings use the same hitter/pitcher split while all pitcher-FLD rows remain filtered.
+Direct repair proof is 148/148. The independent 93-test production-shape gate again completes
+88/88 and 176/176 picks, keeps every Assistant GM available, and passes all Standard/Nerfed pool
+presets. TypeScript, changed-file ESLint, and diff integrity are green. Same-auditor re-audit remains;
+no push, merge, deploy, or product acceptance is authorized.
+
+The repair was frozen at `70fde7dc`. The same read-only auditor returned **APPROVE — Major 0 /
+Minor 0** after checking the exact `aeeb00a2..70fde7dc` diff. Independent focused verification was
+160/160 with diff integrity green. The auditor confirmed typed risk color, pick-intent-only host
+audio, position-first legal depth, legacy Two Way FLD treatment, and unchanged completion hard-gate
+ordering. No push, merge, deploy, or product acceptance is authorized.
+
+### 2026-07-20 — FINDING-249 first independent audit block
+
+Separate auditor Helmholtz reviewed initial FARM companion commit `256962dd` and returned
+**BLOCK — Major 3 / Minor 0**. The audit found three authoritative gaps: UI-only removal did not
+stop raw FARM trade intents or public trade/pause events; extra root, league, and team catalog
+fields could carry private values; and FARM correction used a local snapshot rather than the server
+recovery slot. The builder repaired only those seams and added permanent server-model, catalog, and
+completion regressions. Direct repair proof is 60/60 and the combined MLB/FARM live-room gate is
+205/205. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build
+are green. Same-auditor recheck is required before remote work.
+
+### 2026-07-20 — FINDING-249 second independent audit block
+
+The same auditor reviewed first repair `1e53eb8f` and returned **BLOCK — Major 2 / Minor 0**. The
+real SQL catalog validator still accepted object values in allowed public identity fields even
+though the TypeScript reader rejected them. The FARM publish RPC also checked only the event label,
+so a raw host could change pause, trades, order, or other public state while calling the change a
+pick. The second repair aligns SQL and the test server on exact scalar catalog types and one exact
+next-pick transition. Its 33-test delta gate and 241-test MLB/FARM gate pass. TypeScript,
+changed-file ESLint, diff integrity, and the 2,744-module production/PWA build pass. Final
+same-auditor recheck is required before remote work.
+
+### 2026-07-20 — FINDING-249 final independent approval
+
+The same read-only auditor reviewed frozen code head `7a44d2b6` and returned **APPROVE — Major 0 /
+Minor 0**. The auditor confirmed that the strict FARM catalog accepts scalar public identity only
+and that the publish RPC permits one exact legal next-pick transition. Independent gates passed:
+33/33 focused tests, 227/227 broad Snake live-room tests, TypeScript, changed-file ESLint, both diff
+integrity checks, and the 2,744-module production/PWA build. The known live-reconnect result is
+unchanged from base. The migration is still local and unapplied. No push, preview, merge, or
+production promotion is authorized.
+
+### 2026-07-20 — FINDING-249/250 combined integration approval and database gate
+
+A separate read-only integration auditor reviewed exact code head `e8c7ee59` over base `db8a6426`
+and returned **APPROVE — Major 0 / Minor 0**. It confirmed that every FARM runtime blob remains
+byte-identical to approved head `7a44d2b6`, every certification blob remains byte-identical to
+approved isolated commit `5abc1c19`, and the two lanes share no production-code file. It verified
+FARM pick-only server authority and scalar public catalog law, exact Build-to-Lock source and
+person-group binding, stale-work rejection, club-neutral bounded UNKNOWN, and conflict-free
+FINDING-249/250 records.
+
+Independent proof passed 187/187 focused tests, TypeScript, changed-file ESLint, diff integrity,
+and the 2,744-module production/PWA build. Builder browser proof passed 4/4, including the exact
+1,341-card four-team and 2,001-card eight-team source journeys. After approval, migration
+`20260720213000_farm_snake_live_catalog.sql` was applied to the linked Supabase project. Local and
+remote migration histories match and linked-schema lint reports no errors. One integrated branch
+push and one Vercel preview remain. Production is unchanged; JK's browser walk is the product gate.
+
+### 2026-07-20 — FINDING-251 stale Snake source-build receipt
+
+JK's Vercel browser walk exposed a contradictory Draft Setup state: after the selected source union
+changed, the screen could continue to label the prior membership as `IN THE POOL` and show the old
+`BUILT` receipt, while Lock correctly refused the stale build. The source and membership laws were
+not changed. The UI now labels that membership `PREVIOUS POOL` and suppresses the stale receipt.
+The existing required rebuild action remains the only way to replace membership. Focused source-change
+regression and the real setup-to-room registration regression pass; the replacement preview remains
+subject to JK's browser walk.
+
+### 2026-07-20 — FINDING-252 target/source authority audit
+
+JK's next preview proved that FINDING-251 was only the display symptom. The active target league
+still appeared as a source, and the pool rows written to that target were counted as source rows on
+reload. The source pipeline audit traced league selection, player assignments, build replacement,
+fingerprint acceptance, lock, and reload. The repair makes the target output-only and external
+assignments source-only. Exact unit and page regressions prove the circular 835-in/zero-available
+state cannot form from target assignments. Builder gates pass. Independent audit and JK's browser
+walk remain open.
+
+### 2026-07-20 — FINDING-253 Legends named-pool root audit
+
+The source-to-draft trace covered external library assignment, source union, version-group identity,
+numeric shaping, legal repair, simultaneous proof, local pool replacement, accepted receipt, Lock,
+and live sibling retirement. It found two connected defects: the shaper counted alternate cards as
+people, and Draft Setup required Full Sources proof before normal shaping. A third receipt defect used
+a session-only engine label as if it were a user setting. The generic repair counts people, shapes
+first, proves the exact result, widens through named presets, and uses Full Sources only as an optional
+final fallback. Exact production-data proof covers 835 cards/345 people, 132-person four-team Loose,
+264-person eight-team Loose, and all 24 identities. The builder gate passed 206/206 focused tests,
+TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build. Separate
+final audit remains required.
+
+### 2026-07-20 — FINDING-253 first audit block and repair
+
+The separate read-only auditor reviewed frozen commit `7960b043` and returned **BLOCK — Major 1 /
+Minor 1**. Protected Career, Draft, and Peak siblings shared one person key but still counted as
+separate bodies in competitive position floors, protected curve quotas, tail caps, and diagnostics.
+The contract also had two trailing-space lines. The final validator prevented a false SUCCESS, but
+the shaper could omit needed competitive supply before proof.
+
+The repair counts distinct people in every floor and curve path while preserving every manually
+protected card. New direct regressions prove that two protected cards supply one CF, trigger the
+missing floor top-up, occupy one curve slot, and contribute once to tail shares and band totals.
+During the wider gate, the exact 440-player four-club Bomba Squad calibration exposed an independent
+proof-scheduler boundary. The scheduler now uses a generic source-by-club work budget: safe inputs
+use exact search; larger inputs use the bounded constructor; the unchanged independent validator
+still owns SUCCESS. The repaired evidence is 163/163 core tests, 31/31 adjacent unchanged-path
+tests, the final 4/4 calibration, TypeScript, changed-file ESLint, diff integrity, and the
+2,744-module production/PWA build. Same-auditor re-audit is required before preview.
+
+### 2026-07-20 — FINDING-253 independent close
+
+The same non-builder auditor reviewed repaired commit `1bac2cfe` and returned **APPROVE — Major 0 /
+Minor 0**. It found no residual floor, quota, cap, band, diagnostic, named-acceptance, scheduler,
+fingerprint, or validator defect. Its live verification passed the 163/163 core gate and 4/4
+exact-440 scheduler calibration. `git diff --check f19ccbb5..1bac2cfe` is clean. The builder and
+auditor gates are closed. One replacement preview and JK's browser walk remain open; production is
+unchanged.
+
+### 2026-07-20 — FINDING-253 replacement preview
+
+Vercel preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY at
+`https://kbl-tracker-5fekcs1al-kruseja37s-projects.vercel.app`. It was built from source commit
+`5a3d4031`; the remote build passed TypeScript, transformed 2,744 modules, and generated 224 PWA
+entries. An authenticated Vercel smoke test returned the KBL app title `Super Mega Baseball`.
+Production is unchanged. JK's browser walk is the only remaining gate.
+
+### 2026-07-21 — FINDING-254 Snake Lock and bullpen-source browser failures
+
+JK's replacement-preview walk found two release-blocking setup failures after the approved
+Legends certification repair. First, Lock Pool remained disabled after a build, including Full
+Sources, so no room could start. Second, a two-team named pool contained two RP, zero SP/RP, and
+nine CP. Source inspection proves the combined Legends shelf itself has 117 CP cards, 33 RP cards,
+and seven SP/RP cards. The named shaper currently copies source-library role percentages, so its
+66-person target reproduces that closer-heavy mix even though roster construction needs starter,
+general-relief, and closer supply in different proportions. The Build proof and Lock proof also
+preserved pool-row arrival order, so the same membership could create a second proof fingerprint
+after storage returned the rows in another order. The repair uses stable player-id order, derives
+named pitcher roles from legal roster demand, and swaps at the named count boundary. Two-, four-,
+and eight-team exact checks are green. A separate read-only audit and JK's browser walk remain open.
+
+### 2026-07-21 — FINDING-254 role-balance acceptance amendment
+
+JK ruled that the ideal position mix must not become a second hard Lock gate. The repaired shaper
+uses the legal roster mix as its target, keeps true position floors and final proof mandatory, and
+reports an exact `Remove X ... and add Y ...` correction when the source or protected edits leave a
+different mix. Whole-player curve rounding prevents fractional caps from rejecting one unavoidable
+card. The exact 264-person eight-team Legends gate and all 24 identities across three eight-team
+rooms pass the unchanged independent validator. Separate re-audit and JK browser acceptance remain.
+
+### 2026-07-21 — FINDING-254 first audit block and narrow repair
+
+The separate auditor blocked frozen commit `e51c0f22`, Major 1 / Minor 1. A role note could survive
+later membership repairs, and three maximum-tail count seams rounded down instead of using the
+ratified whole-person ceiling. The repair rebuilds one role note from exact final membership and
+uses ceiling counts at every maximum-tail seam. Direct regressions, exact 66/132/264-person Legends
+pools, page and room 99/99, browser 3/3, TypeScript, changed-file ESLint, diff integrity, and the
+production/PWA build pass. Same-auditor re-audit remains required before preview.
+
+### 2026-07-21 — FINDING-254 independent close
+
+The same non-builder auditor reviewed repair commit `8960a4c1` and returned APPROVE, Major 0 /
+Minor 0. It independently passed 74/74 engine tests and exact 66/132/264-person Legends cases. It
+confirmed that exact final membership owns the only role note, all maximum-tail seams use ceiling
+counts, and manual controls and hard-gate authority remain unchanged. One replacement preview is
+permitted for JK's browser walk. Merge and production promotion remain unauthorized.
+
+### 2026-07-21 — FINDING-254 replacement preview
+
+Preview deployment `dpl_8RXGUwww7Lp23aMkyf2iUHK1ccd3` is READY from source commit `ca512ba2`.
+The 2,744-module build and PWA generation with 224 entries passed in Vercel. JK's browser walk is
+the remaining product gate. Production is unchanged.
+
+### 2026-07-21 — FINDING-254 product acceptance
+
+JK confirmed that Draft Setup worked in the replacement preview and authorized the merge. PR 116
+is clean against current `origin/main` at `ba7f97d6`, and both Vercel checks pass.

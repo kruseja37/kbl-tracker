@@ -7,6 +7,45 @@
 
 ## July 2026
 
+### 2026-07-18 (Snake large-source law): source size cannot manufacture scarcity
+
+**The ruling:** Full Sources is immutable source truth, not the proof search space. A deterministic
+bounded candidate union may make large-source identity construction tractable, but final SUCCESS
+must still be rechecked against Full Sources for distinct people, legal 22s, exact tax, affordability,
+the existing IV floor, and strict positive chosen-identity embodiment. Named shaped pools retain the
+validated disjoint Full Sources support and remain bound by their existing counts and position floor.
+Once that support has been certified, the shaper must not rebuild the same identity claims; numeric
+shaping belongs off the UI thread. UNKNOWN stays honest, but visible copy may not call a 2,001-card
+source scarce without an actual source shortfall.
+
+**Audit clarification:** The bounded construction list is never the 90% IV-floor authority. That
+baseline is computed from immutable Full Sources by the same canonical value procedure used by the
+identity builder. Shaped support may be reused only through an independently validated certificate
+fingerprinted to exact Full Sources and a second receipt fingerprinted to the exact numeric-shaping
+inputs. Navigating away or starting a replacement build cancels the prior proof/shape chain before
+it can persist stale membership.
+
+**Second-audit clarification:** Source authority and its assignments are one receipt. The assignment
+payload has its own fingerprint tied to the source fingerprint and must match before reuse. Build
+cancellation is cooperative across persistence: after every awaited membership step and before any
+later remove or setup save, the page must prove that the same mounted build still owns the action.
+
+### 2026-07-17 (Snake late-draft law): exact legal completion outranks preference optimization at every room size
+
+**The ruling:** four-team testing is a repro size, not the product standard. A Snake room must preserve
+the same legality, tax, Assistant, privacy, and responsiveness law through a full 22 rounds for at
+least eight teams. When the room's exact simultaneous certificate proves an affordable legal finish,
+the Assistant may not disappear merely because its preferred identity/value search is incomplete or
+insolvent; it must show a revalidated legal 22. `STRONG/SOLID/WEAK FIT` remains identity-only. A
+separate `DRAFTABLE/OPEN/BLOCKED` state tells the GM whether a card preserves the current exact
+finish, and the selected card shows the projected final salary, tax, all-in, and money left before
+the pick. Current drafted rows show settled salary and actual tax-core contribution, never a signed
+remove/reinsert delta mislabeled as player cost. Zero-interest stays private and cannot alter roster,
+FIT, tax, or legal-finish truth. Full-source lists must page or virtualize; Assistant work must remain
+off the render path and free of storage/Auth imports. **Product gate:** deterministic 88- and
+176-pick completions plus eight-team production-browser latency, followed by a separate audit and
+JK's own browser walk.
+
 ### 2026-07-12 (snake completion law): recorded beat auto-advances; final pick stops at a durable recap and explicit roster commit
 
 **The ruling:** every non-final snake pick displays its recorded-pick beat and then advances automatically; there is no redundant manual next-pick button. The final MLB and farm picks never auto-advance. They stop at `VIEW DRAFT RECAP`, and the recap is recoverable directly from the completed saved session after reload. League Builder rosters are not written merely by rendering the recap: `CONFIRM MLB DRAFT` commits and routes to Scout Hire, while `CONFIRM FARM DRAFT` commits and routes to Staff Hire. A failed commit stays on a retryable recap and never navigates. **Rationale:** the draft ceremony remains readable without turning every pick into extra tapping, and finalization can no longer be lost in React-only state or silently mutate rosters before the commissioner confirms what was drafted.
@@ -4097,3 +4136,275 @@ and value constraint while preventing a nominally optimized roster from failing 
 its headline strength. Bomba Squad is the proved boundary: its positive-power candidate keeps 98%
 of baseline IV and is selected over a marginally higher aggregate-fit candidate with negative power
 embodiment.
+
+## 2026-07-16 — Snake live desk uses one roster truth and local decision views
+
+My Board and Assistant GM Board obey the same committed-roster law with different team inputs. The
+highest-IV owned closer owns CP; additional owned closers are legal committed depth; a normal plan
+does not add an undrafted extra closer. Complete saved boards are reconciled to that law on reopen.
+Owned players remain visible as active-team-colored `ROSTER` rows, while rival picks leave private
+actionable boards and Player Pool.
+
+Snake IV is the frozen draft salary, so a separate Salary sort is redundant and prohibited. `TAX IF
+PICKED` is the signed marginal tax against this club's committed roster at this pick; `TRUE COST` is
+frozen IV plus that signed marginal tax. Fit, IV, tax, true cost, rating sorts, and fit filters are
+memoized view state only. They do not invoke an engine, worker, persistence, or board recalculation;
+only `TOP` persists the chosen player to the current Overall or position board.
+
+Risk-worker lifecycle belongs at board level, not repeated on player rows. Rows expose only actionable
+`AT RISK` or `LIKELY GONE`; methodology and diagnostics follow the Help-button law. These are product
+laws for every team desk, not special cases for room size or one team. Independent audit is APPROVE
+after repair `8a2602eb`; JK's browser re-walk remains the acceptance gate.
+
+## 2026-07-17 — Snake FIT is identity-only; shaped pools are certificate-bounded
+
+`STRONG FIT`, `SOLID FIT`, and `WEAK FIT` answer only whether the card matches the selected team
+archetype, using the existing exact multiplier and `>=1.04` / `<=0.96` thresholds. Tax If Picked and
+True Cost remain separate consequences; tax pressure may not relabel identity fit.
+
+For shaped Snake pools, exact selected Full Sources is proved first. The proof's disjoint assignment
+IDs plus the already-ratified anti-hoarding position floor define required engine membership; grade
+and role curves fill the remaining slots as preferences. A named candidate is accepted only when the
+final simultaneous proof passes and actual membership is inside that preset's bound. BUILD may widen
+only through larger named presets, then honest Full Sources. The accepted actual preset is persisted.
+RESET EDITS clears hand adds/removes and rebuilds that current preset through the same certificate
+path; it does not silently revert a prior narrower selection.
+
+This is a correctness law, not a performance ruling. Proof search, execution placement, stable
+fingerprints, cancellation, caching, refresh strategy, duplicate diagnostics, and latency gates
+remain owned by the separate performance lane. Help-button law remains canon, and JK's real browser
+walk remains the final product gate.
+
+## 2026-07-17 — Chosen-identity SUCCESS requires a production-input simultaneous certificate
+
+Permanent chosen-identity calibration must enter the engine through production
+`buildSnakeSetupProofInput`, including both `capIdentity` and `identityArchetype`; a cap-only proof
+does not cover Draft Setup readiness. A constructive candidate may build canonical identity rosters
+only from the remaining whole-person version groups, and every club's required IV floor stays
+anchored to its immutable Full Sources baseline.
+
+When multiple Legend versions exist, construction may select the version that actually embodies the
+chosen identity, but assigning one version consumes the whole person group. Construction is never
+the authority: the unchanged independent validator must re-prove distinct people, legal 22, exact
+salary/tax settlement and affordability, the source-relative IV floor, and strict positive identity
+embodiment before SUCCESS. If bounded construction and the existing generic matcher do not prove a
+candidate, `identity-proof-unknown` remains the honest result.
+
+This ruling changes no FIT threshold, archetype multiplier, named pool size, auto-widen law,
+readiness meaning, proof scheduling, worker, caching, refresh, cancellation, or latency behavior.
+Performance re-integration and JK's browser walk remain separate downstream gates.
+
+## 2026-07-17 — Snake final-round law preserves card roles while consuming unique people
+
+Historical versions share one draftable person but may have different roster roles. At the final
+seat, the engine must evaluate every available version's actual role, tax, and salary; it may not
+choose one cheapest representative before determining legality. When all clubs have at most one open
+seat, a bounded room-wide match assigns unique people to legal roles and the unchanged constructive
+validator remains the only authority allowed to certify SUCCESS.
+
+Proof lifecycle is semantic, not referential. A metadata-only session revision that leaves clubs,
+rosters, pool cards, version state, caps, identities, and budgets unchanged must retain the current
+proof and visible safe rows. A real change to any of those inputs requires a fresh proof. This avoids
+an advisor-log feedback loop without weakening stale-result cancellation or mutation-time legality.
+
+## 2026-07-18 — Snake rating room is the uncapped canonical tax-row ledger
+
+My Board and Asst GM Board must expose the exact rating totals that the settled luxury-tax engine
+uses. Every configured row shows the full accumulated top-N total even after it crosses the limit,
+the club's archetype-adjusted allowed total, signed room as LEFT or OVER, the resulting row tax, and
+the exact contributing players and points. Hitter rows use the top eight; rotation secondary and
+pitching rows use the configured top four; bullpen secondary rows use the configured top four and
+VEL/JNK/ACC use the configured top three, including closers. The data table, not UI copy, remains
+authoritative when a row's configured top-N differs.
+
+Ordinary pitcher secondary ratings retain their role-usage weights. Two Way batting enters the
+hitter rows at full use and is not duplicated in rotation/bullpen secondary rows; pitching ratings
+still enter exactly one settled pitching group. The draft UI must call the same canonical row
+ledger that `luxuryTax` consumes. A parallel approximation, capped USED display, or separate
+Assistant formula is prohibited. The panel is a compact drill-in; methodology copy remains behind
+Help. No source, FIT, cap, archetype, tax coefficient, roster, salary/IV, or persistence law changes.
+
+## 2026-07-18 — Restored sync writes may retire only on queue/local/cloud exact equality
+
+Loss of a rebuildable cloud receipt does not make a pending write authoritative and does not make it
+disposable. After bounded atomic retries stop, recovery may classify an operation as already
+satisfied only when the queued payload, current local IndexedDB/localStorage source, and current
+cloud row agree exactly on target, normalized content, and deletion state. Timestamp comparison is
+insufficient. Any difference, unreadable source, concurrent mutation, account switch, or durability
+failure preserves the write behind the existing stale guard. Full Upload/Download remains an
+explicit destructive choice and is not part of this recovery.
+
+The recovery account binding starts before any bounded retry drain, not only before exact
+reconciliation or the final pull. Recovery blocks ordinary drains, waits for any already-active
+drain to finish, captures one account, then revalidates that account before moving either an
+IndexedDB or localStorage queue entry in-flight. This prevents a mid-recovery sign-in change from
+stamping one account's protected queue onto another account.
+
+## 2026-07-18 — Explicit queue recovery may publish only still-current local intent
+
+Exact duplicate retirement is insufficient when a restored queue contains genuine local/cloud
+differences. On the explicit recovery action, a queued write may be rebased only if its payload and
+tombstone state still equal this device's current IndexedDB/localStorage source. The rebase uses the
+fresh exact cloud row as its compare-and-set base, a new operation id, monotonic timestamp, and a
+durable checkpoint before the unchanged atomic RPC. A cloud race is rejected.
+
+This is target-limited queue recovery, not full Upload. It may not publish an obsolete queue entry,
+change unrelated cloud rows, cross accounts, or overwrite a Snake room containing companion intent
+not covered by the current local room.
+## 2026-07-19 — Live Snake rooms use cloud authority, not browser backup sync
+
+- The Hotseat is the only writer of public Snake draft state.
+- A companion can read public state, write only its approved teams' private boards, and submit pick
+  or trade intent for Hotseat approval.
+- Each private board has one server authority. The host can seed it once but cannot read or update it
+  after transfer.
+- Public room revisions and private board revisions are separate. A board error cannot stop or undo
+  a public pick, trade, correction, order change, or completion.
+- Realtime messages are hints. Devices read current scoped server state on subscribe, reconnect, and
+  a bounded fallback interval. Event order is never draft authority.
+- Active Snake rooms and seat boards are retired from generic account backup sync. The remaining
+  backup outbox is account-owned IndexedDB data.
+- Browser data is an auth/device store and a disposable cache for the live room. It is not the live
+  room source of truth.
+- The room's immutable catalog contains only the exact active teams and player pool. It excludes
+  private personality, salary-factor, roster-design, ranking, lineup, and history data. A private
+  board may carry its own approved-device-only design slots.
+- The latest completed pick or trade has one private, one-use server recovery slot. Public state
+  exposes only whether correction is available.
+- The companion route uses Supabase Auth without starting the generic backup engine. It stops that
+  engine while the private desk is open and restores the prior setting on exit.
+- This ruling does not make the full application cloud-only. The original Hotseat still needs its
+  local League Builder session plus host capability key to discover and rejoin the cloud room. It
+  also needs canonical private player records for final freeze and roster handoff.
+- The dedicated authority currently covers the MLB Snake live room only. FARM Snake remains a
+  Hotseat path on local League Builder and generic sync until a separate product ruling changes it.
+- A new draft target gets copied team records with new IDs and empty rosters. Source team IDs and
+  source rosters remain unchanged.
+- Apply migration 009 and deploy the matching app before the narrow cleanup of old Snake test rooms
+  and retired local sync keys. Do not wipe players, source leagues, teams, archetypes, or pools.
+- One Hotseat plus three companion devices can run an eight-team draft. One companion can control
+  more than one team.
+- Mac mini/Neo and laptop are the primary companion layouts. Help-button law remains canon. JK's
+  real browser and device walk remains the only product acceptance gate.
+
+## 2026-07-19 — Pitcher FLD is salary value, not luxury-tax concentration
+
+Ordinary pitcher FLD does not enter a rotation or bullpen luxury-tax row. New Juiced, Standard,
+and Nerfed tables omit both pitcher-FLD rows. Settlement and the Rating Room also ignore a pitcher
+FLD row found in a saved legacy table, so a stale frozen table cannot charge this retired category.
+This ruling supersedes the earlier defensive-start exposure treatment.
+
+Pitcher FLD remains part of salary/IV and gameplay. Hitter FLD remains an active top-eight tax row.
+A true Two Way player's FLD enters that hitter row when the player fills the position-player job;
+it is not also charged as pitcher FLD. Ordinary pitcher POW/CON/SPD remain usage-weighted tax rows,
+and VEL/JNK/ACC, pitcher-group assignment, archetype shifts, salary caps, and roster law do not
+change. The current active tax ledger has 17 rows.
+
+## 2026-07-19 — Snake position boards own starting field slots
+
+The top still-available player in a field-position ranking owns that starting position in My Board.
+A drafted player at the same position remains in the projected 22 as legal depth. Overall order is
+the tie-breaker for cross-position flex and bench assignments. Existing closer and pitcher-role
+rules remain separate and unchanged.
+
+## 2026-07-19 — Completed public Snake truth outranks late room cleanup at handoff
+
+MLB draft confirmation must prove completion from refreshed Hotseat-owned public session truth,
+freeze the exact registered pool, commit rosters, mark the handoff, and verify that handoff before
+navigation. Closing the already-complete live room is cleanup after that commit. A stale or offline
+cleanup RPC may remain retryable, but it cannot convert a completed, verified roster handoff into a
+generic confirmation failure.
+
+## 2026-07-20 — FARM Snake uses the same split live-room authority as MLB Snake
+
+- Hotseat is the only writer of FARM public picks, order, rosters, budget state, and completion.
+- An approved companion owns only its team's private fogged scout board. It can send a pick request;
+  Hotseat must confirm the pick before public state changes.
+- The public FARM catalog can contain team branding, safe prospect identity, public FARM rosters,
+  farm targets, and the public session. It cannot contain true grades, ratings, hidden modifiers,
+  private rankings, or private scout data.
+- The server validates the complete active prospect pool and rejects unknown catalog fields. A UI
+  change without the matching database validator is not a valid deployment.
+- Public and private revisions stay separate. Devices read current server state after subscribe,
+  reconnect, and bounded fallback polling. Drafted prospects leave private boards after the public
+  pick advances.
+- FARM draft-pick trades remain absent. The existing MLB trade contract does not extend to FARM.
+- This is a generic four/eight-team product path. It is not a recovery rule for one saved league.
+- Mac mini/Neo and laptop remain the primary companion layouts. Help text remains behind `?`, and
+  JK's browser walk remains the sole product gate.
+
+## 2026-07-20 — FARM room action law is enforced at the server boundary
+
+- A FARM room accepts only public `PICK_RECORDED` actions. It rejects `TRADE_EXECUTED` and
+  `PAUSE_CHANGED` even when a caller bypasses the UI.
+- A FARM companion can submit only a pick intent. Host and companion trade-intent RPCs reject the
+  FARM phase.
+- FARM has no clock, so it has no pause action.
+- `CORRECT LAST ACTION` restores the database recovery slot. A local correction snapshot can merge
+  private board state, but it cannot decide public order, picks, roster, or room revision.
+- The FARM public catalog uses an exact allowlist at the client and database boundaries. Unknown
+  root, league, team, color, prospect, or roster fields fail closed.
+- Every allowed FARM catalog identity value has an exact JSON scalar type. An object cannot pass as
+  a league, team, color, prospect, or roster string.
+- A FARM `PICK_RECORDED` publish is one exact transition. It appends the next frozen slot and can
+  change only completed picks, current index, revision, and modification time. It cannot alter
+  pause, trades, order, version state, or other session facts.
+
+## 2026-07-20 — Draft Setup target leagues are output, not sources
+
+- The active draft league is the target pool. Draft Setup does not list it as one of its own
+  sources and does not accept its id as source evidence.
+- External leagues and source libraries own source membership. A player can keep an external
+  source assignment while Draft Setup adds or removes the active target-pool assignment.
+- An absent `sourceLeagueIds` field means all known external sources. An explicit array means its
+  valid external members. An explicit empty array means no external sources. Unassigned Players is
+  a separate switch.
+- Older saved arrays that contain the target id remain readable. The target id is ignored at read
+  time. Draft Setup does not rewrite the league merely because the page loaded.
+- Build can replace target membership, but those output rows cannot change source counts,
+  selection, proof input, or the next build after reload.
+- This ruling supersedes the 2026-07-08 active-own-league checkbox rule. That model could not
+  distinguish a source assignment from a pool-output assignment written to the same league id.
+
+## 2026-07-20 — Named Snake pools shape people before they certify rosters
+
+- Full Sources remains the exact union of selected cards. It is a source view and a manual option.
+- Tight, Competitive, and Loose count one version-group person once and normally select one card for
+  that person. Alternate cards remain available at the source level and by direct hand edit.
+- The engine shapes the requested named pool first and proves that exact membership. It tries wider
+  named presets only when needed. Full Sources is an optional final fallback, not a certificate
+  prerequisite.
+- One exact final proof still owns legal roster, identity, value, salary, tax, and one-person
+  capacity truth. Honest UNKNOWN remains blocked.
+- Exact membership records generated output. A session-only engine-generated label is not a Lock
+  input and cannot make an otherwise unchanged accepted receipt stale.
+- This applies to all source types, every identity, and four- and eight-team rooms. It contains no
+  Legend, league, club, or room special case.
+
+## 2026-07-21 — Named Snake pools use roster demand for pitcher roles
+
+- A source library describes available players. Its historical position percentages do not define
+  the desired draft-pool position mix.
+- Tight, Competitive, and Loose preserve their named people count and divide pitcher seats from the
+  legal nine-arm roster shape: four SP, one SP/RP, three RP, and one CP. Selected-source supply is a
+  hard bound, and the existing competitive position floors remain active.
+- If a named pool is short at a legal position after shaping, the engine swaps an unprotected person
+  at the target boundary. It does not silently grow the named pool.
+- Full Sources keeps the exact selected card union, including alternate versions of one person.
+  Manual adds can keep additional sibling versions in a named pool.
+- The exact final proof still owns legality, money, tax, identity, and one-person capacity. This
+  ruling does not change FIT, tax, caps, archetype thresholds, or honest UNKNOWN behavior.
+
+## 2026-07-21 — Named-pool role balance is advice, not a second roster law
+
+- The legal 22-player roster, salary, tax, identity, and distinct-person proof remain hard Lock
+  requirements.
+- The ideal position mix is a shaping target. A source shelf or a protected hand edit can leave a
+  named pool above or below that target without making every legal draft impossible.
+- Draft Setup reports the exact correction in player counts, such as `Remove 3 CP and add 2 RP + 1
+  SP/RP to balance rosters.` The user can add or remove players and Build again.
+- Percentage curve limits use whole-player rounding. A 264-person pool can contain 40 high-tail
+  players because 15% of 264 is 39.6; the engine does not reject the 40th player as a fractional
+  violation. The displayed actual percentage remains unchanged.
+- Position supply floors and the final independent proof remain authoritative. Advice cannot turn
+  an illegal, insolvent, duplicate-person, tax-failing, or identity-failing pool into SUCCESS.

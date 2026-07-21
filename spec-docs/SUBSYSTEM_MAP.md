@@ -1,5 +1,5 @@
 # KBL Tracker Subsystem Map
-**Last updated:** 2026-07-15
+**Last updated:** 2026-07-19
 **Status:** Core map plus current Snake Draft wiring
 
 ## Legend
@@ -34,7 +34,7 @@
 | 19 | Career Stats | careerStorage.ts, useCareerStats.ts | ⚠️ PARTIAL | FINDING-078: careerStorage wired (FranchiseHome + milestones); useCareerStats hook orphaned in inactive path |
 | 20 | UI Pages | 16 pages in src_figma/app/pages/ | ✅ WIRED | FINDING-093: full page→hook map complete. PostGameSummary + WorldSeries have zero app-level hooks — data gap risk |
 | 21 | Trait System | smb4_traits_reference.md, player types | ❌ MISSING | FINDING-055/056: no traits in active type system; field in legacy unifiedPlayerStorage only |
-| 23 | Snake Draft room | SnakeDraftRoom.tsx, SnakeCompanion.tsx, snakeAssistantBoard.ts, snakeLuxuryTax.ts | ✅ WIRED | FINDING-186-211: canonical setup/room path, private boards, roster-local tax/fit, exact role-specific starter-hitting identity, companion intent + Hotseat authority, no-trade FARM, live/frozen alignment, responsive Mac/iPad layouts; JK acceptance walk pending |
+| 23 | Snake Draft room | SnakeDraftRoom.tsx, SnakeCompanion.tsx, snakeAssistantBoard.ts, snakeLuxuryTax.ts, snakeLiveRoomTransport.ts, snakeLiveCatalog.ts | ⚠️ JK GATE | FINDING-186-250: canonical setup/room path, roster-local tax/fit, cloud room authority, exact selected-source proof, distinct-person version capacity, FARM companion authority, and four/eight-team setup are wired. FINDING-249 adds FARM companion parity. FINDING-250 repairs a false large-source UNKNOWN with exact Build-to-Lock binding, club-neutral bounded UNKNOWN, and source/version-group metadata binding. Both source lanes received separate APPROVE, Major 0 / Minor 0 verdicts; combined integration verification and JK's acceptance walk remain. |
 | 24 | Historical Legends source libraries | historicalLegendsLibraries.ts, historicalLegendsLibraryProvisioner.ts, LeagueBuilderDraftSetup.tsx | ✅ WIRED | FINDING-206: selectable Career/Draft/Peak shelves, stable 242-person cohorts, later-version free agents, manual override preserved |
 | 25 | Draft personality initialization | leaguePoolAxisRegen.ts, leaguePoolAxisRegenPersist.ts, historicalLegendsImport.ts | ✅ WIRED | FINDING-207: Legend-authored/person-level truth preserved; non-Legends initialize once; hidden values excluded from draft surfaces |
 | 26 | Snake draft morale / fan alignment | draftFreezeInputs.ts, snakeDraftAlignment.ts, snakeDraftManifest.ts, franchiseInitializer.ts | ✅ WIRED | FINDING-208-210: pick-vs-expectation player morale, roster-alignment fan morale, FARM hidden-rank leak rejected |

@@ -1268,3 +1268,459 @@ the separate audit still open. The non-builder audit then independently reproduc
 ablation, current lower-bound sweep, 72 legal/solvent parity rosters, 48 legal/solvent identity rosters,
 RP/CP usage settlement, and Two Way no-double-tax treatment. Its verdict is VERIFIED with no Major or
 Minor findings. This close leaves only JK's League Builder and Mac/iPad Snake walk as the product gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 Snake FIT/pool correctness close
+
+The prior live header recorded Snake walkthrough wave 2 implementation `c4f1c58f` and audit repair
+`8a2602eb` on `codex/draft-setup-browser-fixes`, with its automated, Mac/iPad, console, overflow, and
+interaction gates green and JK's real browser re-walk still pending. This correctness lane supersedes
+that top header with independently approved identity-only FIT and exact certificate-backed named
+pool bounds. Performance integration, one combined preview, and JK's browser walk remain open.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 production-identity certificate close
+
+The prior live header recorded independently approved identity-only FIT and exact 238/264 membership
+on `codex/draft-fit-pool-calibration`, with performance integration next. The performance browser
+gate then proved that calibration had omitted production `identityArchetype` and honestly fell back
+UNKNOWN to 440. FINDING-228 corrects that coverage and bounded certificate construction; a separate
+auditor approved it with zero findings. Performance re-integration, combined audit, one preview, and
+JK's browser walk remain open.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 Legends recovery close
+
+The prior live header recorded combined Snake correctness and responsiveness approval at integration
+`68c0f0c0`, with JK's real Draft Setup/full Snake browser walk as the remaining gate. During that walk,
+a legacy partial Legends import exposed crossed source ownership and an invalid source-library draft
+target. FINDING-230 now closes those recovery seams without resetting the user's four-team league;
+the browser walk remains the final gate.
+# 2026-07-17 — outgoing live header before FINDING-231
+
+> ## RIGHT NOW — LEGENDS RECOVERY + SNAKE SETUP APPROVED; JK BROWSER RETEST IS THE GATE (2026-07-17; branch `codex/draft-setup-browser-fixes`, base integration `68c0f0c0`). FINDING-230 repairs the legacy state where all 835 Legends cards polluted SML and blocked their three source libraries. Verified stock-only collisions can be reclaimed; any user-league assignment still blocks. Source libraries cannot become draft targets, and SML refresh preserves the real four-team template, reused stock-player assignments, roster, registered pool, and all durable draft sessions. Separate repair audit: **APPROVE — Major 0 / Minor 0** after three preservation repairs; focused 115/115, TypeScript, lint, 2,730-module build/PWA, and diff integrity green. **NEXT:** JK reloads League Builder, runs Import Legends → Repair Legends Import, confirms SML 506 + three Legends libraries + intact four-team target, then resumes the full Snake browser walk. No merge, push, deploy, or product acceptance is authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 certified staff materialization close
+
+The prior live header recorded independently approved FINDING-231, which fixed Two Way catcher
+depth but left JK's same four-team Start Draft retry as the product gate. That retry exposed a wider
+aggregate-staff/display-row mismatch that moved between Sirloins and Herbisaurs. FINDING-232 now
+materializes every supported exact certified 13/9 or 14/8 staff without changing the certificate or
+substituting players. Separate audit approved the repair with zero findings; JK's same browser retry
+remains the sole acceptance gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion entry close
+
+The prior live header recorded independently approved FINDING-232, with JK's same four-team Start
+Draft retry as the product gate. That setup retry passed and the walk advanced to companion entry,
+where Chrome exposed a full-origin Supabase token-save failure and recovered pending claims exposed
+a waiting-only admission dead end with no Hotseat notice. FINDING-233 now preserves normal Auth
+persistence with a quota-only tab fallback and JK verified Chrome sign-in. FINDING-234 retains room
+re-entry/resend on pending devices and adds an explicit pending count to Hotseat; its browser retry
+remains the sole product gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion live-room propagation build
+
+The prior live header recorded JK-verified Chrome sign-in and independently approved companion
+admission feedback, with JK's claim/approval retry as the product gate. That retry passed and the
+walk advanced through a legal trade, where Hotseat changed pick ownership but companions never did.
+FINDING-235 separates private-board sync from shared room authority and forces completed Hotseat
+picks, trades, and corrections to publish immediately. The separate audit approved the repaired
+frozen diff with Major 0 / Minor 0; JK's same-room retest remains and no new draft is required.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 existing-room companion recovery build
+
+The prior live header recorded independently approved FINDING-235 and asked JK to refresh the same
+room. That refresh loaded the new code but could not retroactively publish the already-rejected
+pre-repair Hotseat trade. FINDING-236 adds a one-record, explicit Hotseat republication path; the
+existing draft remains authoritative and no action should be repeated.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 companion-side legacy queue repair
+
+The prior live header recorded a Hotseat-only one-room republication path. The separate auditor
+blocked it because companions with the retired embedded-board whole-room queue would reject the
+publication forever. FINDING-236 now includes explicit room-scoped commissioner authority and a
+narrow companion adoption path that preserves independent boards, unrelated queues, and unpublished
+intent. The initial 248-test builder matrix and TypeScript passed before the offer-absence audit edge;
+the repaired 249-test matrix passed before the current-cloud intent edge. The 250-test repair adds
+that exact check. Final TypeScript, changed-file lint, production build/PWA, diff integrity, and the
+separate re-audit are green; JK's same-room recovery click remains.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 audit repair
+
+The prior live header recorded initial FINDING-237 implementation with 88/88 and 176/176 completion,
+the first eight-team browser latency pass, and separate audit still pending. That auditor then found
+three concrete proof/behavior gaps: zero-interest could suppress legality, row status was not an exact
+per-player classification, and the completion test did not independently join Assistant advice to
+final legal and financial truth. The live header now records the repaired worker-backed classifier,
+Assistant/certificate overlap law, cumulative 614-test proof, and re-audit as the remaining engineering
+gate before JK's eight-team browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 third audit repair
+
+The prior header recorded the second audit repair. The next pass found a mixed-position historical
+version false-block risk and four missing proof-fingerprint fields. The live header now records their
+narrow repair and final re-audit as the remaining engineering gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 second audit repair
+
+The prior live header recorded the first audit's repaired 614-test builder snapshot. The same
+read-only auditor then found three remaining major seams: conservative proof failure shown as hard
+`BLOCKED`, an incomplete module-global finish fingerprint, and render-time legal-finish work in Main
+and Companion. The live header now records the narrow second repair, fresh 176-pick and browser
+proof, and final independent re-audit as the remaining engineering gate.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 final-round version repair
+
+The prior header recorded removal of the mixed-version heuristic hard block and complete proof-key
+receipt coverage. The non-builder auditor approved that frozen code with one minor: no exact
+cheaper-SP / only-legal-CP sibling regression. Adding the regression exposed that the certificate
+solver itself still collapsed those versions in the final round. The new header records an exact
+unique-person final-round matcher, an eight-club regression, the separately discovered and repaired
+semantic-proof/advisor-log blink loop, full 176-pick production proof, and final re-audit as the last
+engineering gate before JK's browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-17 FINDING-237 independent close
+
+The prior live header recorded the exact final-round version matcher, the semantic proof lifecycle
+repair, full 176-pick production proof, and final non-builder audit as the last engineering gate.
+That auditor has now returned APPROVE with Major 0 / Minor 0 at frozen commit `12efdbdf`; only JK's
+real eight-team browser walk remains.
+## 2026-07-18 — Large-source eight-team Snake setup repair built
+
+- Reproduced JK's setup failure with 2,001 exact SML/MLB/Legends cards and eight mixed identities;
+  confirmed more than 1,500 unique people for 176 picks, so raw scarcity was false.
+- Added bounded large-source identity construction while preserving immutable Full Sources as the
+  source-relative IV and embodiment reference and the existing independent SUCCESS validator.
+- Named 212/238/264 builds retain the exact 176-card Full Sources support, validate against the same
+  source, and skip only the now-redundant identity extraction.
+- Numeric shaping moved to a module worker. Mac Full/Tight main-thread gaps are 415/327 ms.
+- Large-source proof covers all 24 selectable identities in three eight-club rooms; the primary
+  certificate completes 176/176 picks. Snake UI/storage is 619/619, responsive browser 17/17, full
+  production lifecycle 1/1, pool assembly 3/3, latency 2/2, and the 2,735-module build is green.
+  Separate audit and JK's browser walk remain. No push, merge, or deploy.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-238 first-audit repair
+
+The prior live header recorded exact 2,001-source construction, named pool shaping, and 176-pick
+completion with a separate audit still pending. That auditor blocked three real seams: shortlist-
+relative IV-floor authority, unbound support reuse, and absent production cancellation. The live
+header now records their narrow repair, the preserved scale gates, and final re-audit as the last
+engineering gate before JK's eight-team browser acceptance.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-238 second-audit repair
+
+The prior header recorded Full Sources IV-floor authority, a source-bound support certificate, and
+worker cancellation. The re-auditor found that assignment payloads were not bound to the source and
+that cancellation was not rechecked between asynchronous membership/persistence stages. The live
+header now records exact assignment binding and stage-by-stage cancellation as the final audit
+candidate.
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-239 rating-room build
+
+FINDING-238's second audit repair was frozen at `1ae9c0a4` after binding exact assignments to source
+authority and adding cancellation checkpoints between every awaited add/remove/save stage. Exact
+2,001-source proof was 3/3, focused proof 58/58, and the final independent re-audit was still
+pending. Next was that re-audit, then the newly approved rating-room/tax-ledger UI and one clean JK
+browser preview. No push, merge, deploy, or product acceptance was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 FINDING-239 audit close
+
+The prior live header recorded the independently approved exact 2,001-card eight-team setup repair
+and builder-verified exact Rating Room. The Rating Room showed all 19 canonical tax rows with
+uncapped accumulated points, shifted limits, LEFT/OVER, row tax, and exact contributors on My Board
+and Asst GM Board; broad Snake proof was 628/628 and browser proof was 23/23. Its separate
+non-builder audit and JK's clean browser walk remained. The auditor has now returned APPROVE with
+Major 0 / Minor 0; only JK's product-acceptance walk remains. No push, merge, or deploy was
+authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 partial quota audit close
+
+The prior live header recorded builder-verified typed recovery continuation at `089d149a`, with
+128/128 focused tests and separate audit pending. The auditor returned APPROVE with Major 0 / Minor
+0 after independent tests, TypeScript, lint, production/PWA build, and diff integrity. The exact
+preview is live at port 5188; only JK's hard-refresh and one `FREE SPACE + SYNC` retry remain. No
+push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 partial quota continuation
+
+The prior live header recorded independent approval of the 1,398-item one-click quota recovery.
+JK's live click safely synced 592 operations and retained 806, but a stale-write wrapper hid the
+remaining storage-quota condition and the rebuilt derived cache again competed for space before its
+receipt cursor could prune it. The new live header records typed recovery continuation, bounded
+progress retries, queue durability, conflict preservation, and receipt-before-final-base persistence.
+No push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content sync reconciliation
+
+The prior live header recorded independent approval of bounded partial quota continuation. JK's live
+retry kept all 806 remaining operations safe but every restored write lacked a current cloud receipt,
+so the atomic stale guard returned the last store/local batch counts instead of making progress. The
+new live header records exact queue/current-local/current-cloud duplicate retirement and preservation
+of every actual difference as the narrow next recovery. No push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content first-audit repair
+
+The prior live header recorded the exact-content recovery candidate with 132/132 focused proof and
+separate audit pending. The first auditor returned BLOCK with one Major: bounded retry drains were
+not yet bound to the account captured for recovery. The new live header records the narrow
+account-pinned drain repair, 133/133 focused proof, and the same-auditor re-audit as the next gate.
+JK's one-click retry remains held; no push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 exact-content audit close
+
+The prior live header recorded the first-audit account-binding repair with 133/133 focused proof
+and same-auditor re-audit pending. Frozen `a04e9534` received APPROVE with Major 0 / Minor 0 after
+independent tests, TypeScript, lint, production/PWA build, diff integrity, and exact account-switch
+challenge. The new live header leaves only the exact preview restart and JK's one-click browser
+retry. No push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 current-device queue recovery
+
+The prior live header recorded independent approval of exact-content duplicate retirement. JK's
+live retry retired one of 806 operations, proving the remaining 805 were actual local/cloud
+differences rather than duplicates. The new live header records a target-limited, current-local
+rebase path with exact cloud bases and companion-intent protection. Separate audit and JK retry
+remain; no push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota recovery
+
+The prior live header recorded independent approval of the exact 2,001-card eight-team setup and
+Rating Room, with only JK's browser walk remaining. JK's first return to the exact preview exposed
+1,398 pending sync writes plus browser quota failures for both the durable queue and conflict-base
+cache. The new live header records the narrow, non-destructive recovery and its separate audit as
+the next engineering gate. No push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota first-audit repair
+
+The prior live header recorded the quota-only `FREE SPACE + SYNC` builder repair at `b9c52371` with
+122/122 focused tests and separate audit pending. The auditor proved that accepted cloud batches
+could still fail their early rebuilt-base persistence while the old queue occupied quota, remove the
+queue only afterward, and reject without a post-drain retry. The live header now records the exact
+one-click repair and final re-audit as the remaining engineering gate. No push, merge, or deploy was
+authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota second-audit repair
+
+The prior live header recorded the repaired one-click recovery after frozen `12ce0030`. The second
+auditor found that auth loss during cursor persistence could allow pruning against an in-memory
+cursor that was not durable, and that generic service quota text could expose the special recovery
+action. The live header now records fail-closed expected-account cursor persistence and exact local
+persistence-error UI gating. Final build, freeze, re-audit, and JK's one-click recovery remain. No
+push, merge, or deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota third-audit repair
+
+The prior live header recorded fail-closed incremental cursor persistence and local-error UI gating
+at `cb4e30ca`. The third auditor found that destructive-download rollback still omitted the expected
+account and that the UI marker used containment rather than a literal prefix. The live header now
+records mandatory expected-account binding for every cursor save and literal prefix detection. Final
+verification, freeze, re-audit, and JK's one-click recovery remain. No push, merge, or deploy was
+authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-18 sync-quota audit close
+
+The prior live header recorded the third-audit repair at `aa123d76`: mandatory expected-account
+binding for every cursor save, literal local persistence-prefix UI gating, 126/126 focused tests, and
+final re-audit pending. The separate auditor has now returned APPROVE with Major 0 / Minor 0 after
+independent tests, TypeScript, lint, production/PWA build, and diff integrity. Only JK's live
+`FREE SPACE + SYNC` click and pending-zero observation remain. No push, merge, or deploy was
+authorized.
+## Outgoing Live Header Snapshot — before 2026-07-19 Snake live-room authority close
+
+The prior current-state file had accumulated many stale `RIGHT NOW` banners from the Snake and
+Draft Setup program. The active state is now one concise header. The live-room repair replaces the
+two-authority browser-sync design with one cloud authority: Hotseat writes public truth; companions
+write only approved private boards and submit intent; public and private revisions are independent;
+events are hints backed by bounded current-state reads; draft target teams have new IDs and empty
+rosters. Final independent audit is APPROVE, Major 0 / Minor 0. Migration 009, matching deployment,
+narrow old test-state cleanup, and JK's browser walk remain. No merge, push, remote migration, or
+deploy was authorized.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 Snake live-room remote gate
+
+The prior live header already recorded code completion and independent approval, but still named a
+fetch and local commit as future work. Current `origin/main` was fetched again and remains
+`ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`; the implementation is `fd07bba0`, and the final
+non-builder auditor approved exact branch head `cedf96ee` with Major 0 / Minor 0. The new live header
+leaves only authorized migration 009, an exact Vercel preview, narrow test-state cleanup, and JK's
+real-device browser walk. No merge, push, remote migration, deploy, or product acceptance has
+occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 Snake live-room browser gate
+
+JK authorized migration 009, a push of `codex/snake-live-room-authority`, and one Vercel preview.
+Migration 009 is now installed; the nine live-room tables, RLS, direct grants, Realtime publication,
+RPC allowlist, owner access, and cross-account isolation were checked remotely. The branch was
+pushed at exact head `d2ac79d7`. Vercel preview deployment `dpl_4THxvqPDazfwcAzTd1yeXaHoHkQb`
+is READY and reports build SHA `d2ac79d7d58c`. Production remains on `ba7f97d6`. JK's real-device
+walk is still the sole product gate; no merge or production promotion occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 browser-feedback repair
+
+The prior current-state header recorded migration 009, pushed head `d2ac79d7`, and the one READY
+Vercel preview as complete. JK then finished a real four-team draft in that preview. Companion
+authority worked, but his walk found five follow-ups: position rankings did not always control the
+starting slot, public picks and companion submissions lacked distinct cues, `LIKELY GONE` was not
+red, pitcher FLD still entered tax, and the completed MLB recap could fail at roster confirmation.
+The live header now records that bounded browser-feedback repair and keeps a new preview behind
+build, separate audit, and explicit authority. Production remains unchanged.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 first-audit repair
+
+The prior header recorded the five browser-feedback fixes as builder-verified. The separate auditor
+rejected frozen `aeeb00a2` with Major 3 / Minor 1: two UI signals watched display/claim proxies,
+position-first assignment failed a legal depth-heavy Two Way edge, and saved legacy caps dropped
+Two Way hitter FLD. The new header records direct repairs and fresh 4/8-team scale proof, with the
+same-auditor recheck still required. No push, merge, deploy, or product acceptance occurred.
+
+## Outgoing Live Header Snapshot — before 2026-07-19 FINDING-246 audit close
+
+The prior header recorded direct repair proof and left the same-auditor recheck open. The repair was
+frozen at `70fde7dc`; the same auditor returned APPROVE, Major 0 / Minor 0, after 160/160 independent
+focused tests. The live header now leaves only an explicitly authorized push and updated preview,
+then JK's browser re-walk. No push, merge, deploy, or product acceptance occurred.
+
+## 2026-07-20 — Outgoing before FINDING-247 atomic MLB finalization
+
+> ## RIGHT NOW — SNAKE BROWSER-FEEDBACK REPAIR INDEPENDENTLY APPROVED; NEW PREVIEW NOT YET AUTHORIZED (2026-07-19; branch `codex/snake-live-room-authority`). JK completed the four-team preview draft. The bounded repair makes each position board control its starting slot, adds distinct public-pick and companion-submit cues, renders `LIKELY GONE` in red, removes ordinary pitcher FLD from tax while keeping its salary/IV value, and lets proven public completion finish local roster handoff even if live-room cleanup is late. The first non-builder audit rejected frozen `aeeb00a2` with Major 3 / Minor 1. The repaired head `70fde7dc` passed the same auditor with **APPROVE — Major 0 / Minor 0** and an independent 160/160 focused gate. Builder proof is 148/148; the 93-test production-shape gate completed 88/88 and 176/176 picks, kept every Assistant GM available, and passed every Standard/Nerfed pool preset. TypeScript, changed-file lint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** with explicit authority, push the approved head and update one preview for JK's browser re-walk. The prior `d2ac79d7` preview is stale. Production remains on `ba7f97d6`; no merge or promotion occurred.
+
+## 2026-07-20 — Outgoing before FINDING-247 independent approval
+
+The prior live header recorded the atomic completed-MLB handoff repair and the first audit's one
+Major cleanup finding. The narrow repair was frozen at `6c7b5714`: after verified local success, an
+absent recovered room is already clean; a present room still receives best-effort close. The same
+auditor rechecked the full contract and returned APPROVE, Major 0 / Minor 0. No push, preview,
+merge, production deployment, or product acceptance had occurred at this snapshot.
+
+## 2026-07-20 — Outgoing before FINDING-248 MLB-to-farm identity close
+
+The prior live header recorded approved completed-room recovery at `56d1ab81` and a READY preview
+for JK's room 4352 confirmation. JK completed that gate and reached Scout Reveal, where every club
+showed a false Generalist because farm identity had not been frozen or transported. The new live
+header records the generic end-to-end identity repair and exact Standard prospect proof at approved
+head `914e35e9`. One new preview and JK's new/recovered league walk remain. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-248 remote preview gate
+
+The prior live header recorded independent approval of the farm-identity and prospect flow at exact
+code head `914e35e9`, with preview publication still open. The new live header records READY preview
+`dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` and its remote smoke. Only JK's new/recovered league browser walk
+remains. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-249 FARM companion audit
+
+The prior live header recorded the approved farm-identity/prospect repair and its READY preview.
+JK recovered Test Mock, entered its FARM draft, and found no companion machinery. The new live
+header records the generic FARM live-room implementation, strict fog-data boundary, four/eight-team
+proof, and required follow-on migration. Separate audit, remote authorization, and JK's browser walk
+remain. Production is unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-249 first-audit repair
+
+The prior live header recorded the initial FARM companion build at `256962dd`. The separate auditor
+returned BLOCK, Major 3 / Minor 0. It proved that raw RPC calls could still trade or pause a FARM
+room, extra catalog fields could carry private values, and FARM correction used a local snapshot
+instead of the server recovery slot. The new header records the narrow server, catalog, and recovery
+repairs. Same-auditor recheck remains. No migration, push, preview, merge, or production promotion
+is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-249 second-audit repair
+
+The prior live header recorded the first repair at `1e53eb8f`. The same auditor returned BLOCK,
+Major 2 / Minor 0. It proved that SQL accepted non-scalar public identity values and that a raw host
+could publish an arbitrary FARM state rewrite as a pick. The new header records exact scalar gates
+and an exact one-pick server transition. Final same-auditor recheck remains. No migration, push,
+preview, merge, or production promotion is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-249 final approval
+
+The prior live header recorded the second repair at `7a44d2b6` with final re-audit pending. The same
+read-only auditor returned APPROVE, Major 0 / Minor 0, after independent focused and broad tests,
+TypeScript, lint, build, and diff-integrity checks. The new header records the frozen engineering
+approval and leaves only explicit remote authority plus JK's real FARM companion browser walk. No
+migration, push, preview, merge, or production promotion is authorized.
+
+## 2026-07-20 — Outgoing before FINDING-250 first certification audit
+
+The prior live header recorded FINDING-248 farm-identity approval and its remote preview. JK then
+reported that a valid four-team Snake setup could not certify with more than 800 cards. The exact
+preview was commit `3f2b30cd`, whose certification code matches isolated source `db8a6426`. The
+builder reproduced a false bounded identity UNKNOWN, repaired the generic distinct-person and fit-
+depth rules, added exact blocker detail, and passed production-input, static, build, and browser
+gates. The new live header leaves the separate read-only audit, one local preview, and JK's browser
+walk open. The FARM companion worktree is separate and unchanged. No push, merge, deploy, or
+product acceptance occurred.
+
+## 2026-07-20 — Outgoing before FINDING-250 certification re-audit
+
+The first auditor blocked the builder diff, Major 2 / Minor 1. It found stale accepted membership at
+Lock, false club attribution for bounded UNKNOWN, and one out-of-contract adapter edit. The builder
+removed the adapter edit, bound Lock to the exact accepted fingerprint and basis, made bounded
+UNKNOWN club-neutral, and stabilized selected-source truth after target-pool assignment. Production
+tests, static gates, build, and four/eight-team browser paths are green. The new live header leaves
+same-auditor re-audit, one local preview, and JK's browser walk open.
+
+## 2026-07-20 — Outgoing before FINDING-250 second certification re-audit
+
+The same auditor blocked the repaired diff, Major 1 / Minor 0. Accepted source content omitted the
+three fields that group Career, Peak, and Draft cards into one person. The builder added `sourceId`,
+`versionGroupId`, and legacy `historicalSourceId` to the acceptance key and added one stale-Lock
+regression for each field. The new live header leaves same-auditor re-audit, one local preview, and
+JK's browser walk open.
+
+## 2026-07-20 — Outgoing before FINDING-250 approved local preview
+
+The same auditor approved frozen diff hash `be166c0e`, Major 0 / Minor 0, and closed both prior audit
+blocks. Builder evidence is 112/112 affected tests plus static, build, and browser gates. The new
+live header records the one authorized local production preview at `http://127.0.0.1:4173/`. Only
+JK's browser walk remains. No Vercel deployment, push, merge, or production promotion occurred.
+
+## 2026-07-20 — Outgoing before FINDING-249/250 combined integration approval
+
+The prior live header recorded both independently approved source lanes after their local
+integration and left combined verification, integration audit, migration, push, and preview open.
+The combined builder gate passed 187/187 focused tests, TypeScript, changed-file lint, a
+2,744-module production/PWA build, and four real browser journeys. A separate read-only auditor
+approved exact code head `e8c7ee59`, Major 0 / Minor 0. Migration
+`20260720213000_farm_snake_live_catalog.sql` was then applied; local and remote migration histories
+match and linked-schema lint reports no errors. The new live header leaves one branch push, one
+matching Vercel preview, and JK's browser walk open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-251 source-build display repair
+
+The integrated branch was pushed and deployed to a Vercel preview after independent approval and the
+database migration. JK's browser walk then found that a source-setting change could leave the previous
+Snake pool labelled as current beside a stale build receipt, even though Lock correctly required a
+fresh build. The new live header records the narrow display repair and leaves its replacement preview
+plus JK's Legends-source and four/eight-team checks open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-252 target/source authority repair
+
+The prior header treated the 835-card contradiction as stale display only. JK's replacement preview
+proved a deeper loop: the active target's pool-output assignments were still counted as source
+membership after reload. The new header records the target/output boundary repair and leaves one
+replacement preview, independent audit, and JK's source/setup walk open. Production remains
+unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 Legends named-pool repair
+
+The prior header recorded the target/output boundary repair. JK's replacement preview then showed
+that three valid external Legends sources still could not produce a lockable normal pool: 835 cards
+for 345 people widened to unresolved Full Sources. The new header records the shape-first,
+one-person-capacity repair and leaves static/build verification, independent audit, one replacement
+preview, and JK's browser walk open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 same-auditor re-audit
+
+The first frozen FINDING-253 repair passed builder gates but the separate auditor blocked it, Major
+1 / Minor 1. Protected sibling cards still inflated position floors and curve accounting; two
+contract lines also contained trailing whitespace. The narrow repair counts people once across
+those seams and adds direct regressions. A broader gate also found and repaired a generic
+exact-versus-bounded proof scheduler boundary for safe four-club 440-player workloads. Core,
+adjacent, calibration, TypeScript, lint, build, and diff-integrity gates are green. The new header
+leaves same-auditor approval, one replacement preview, and JK's browser walk open. Production is
+unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 replacement preview
+
+The repaired head `1bac2cfe` closed the first audit's Major 1 / Minor 1 findings. The same
+non-builder auditor returned APPROVE, Major 0 / Minor 0, after an independent 163/163 core gate and
+4/4 exact-440 calibration. The new header leaves only one replacement preview and JK's browser walk
+open. Production is unchanged.

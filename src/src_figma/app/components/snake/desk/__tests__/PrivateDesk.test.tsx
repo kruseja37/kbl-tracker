@@ -72,16 +72,22 @@ describe('PrivateDesk', () => {
       overallRankings: ['muraski'] as const,
       boardSlots: { SS: 'muraski' } as const,
       brokenSlots: [], planBill: null, advisorLog: [],
-      taxCoreRows: [{ key: 'core', label: 'TOP SALARY', playerNames: ['MURASKI'] }],
+      taxCoreRows: [{
+        key: 'hitters:POW', group: 'hitters' as const, stat: 'POW' as const, topN: 8,
+        label: 'TOP 8 HITTERS · POWER', playerNames: ['MURASKI'],
+        used: 70, allowed: 80, room: 10, tax: 0,
+        contributors: [{ playerId: 'muraski', playerName: 'MURASKI', points: 70 }],
+      }],
       slotDepth: { SS: 3 },
       assistantBoard: idleAssistant,
       onReorder: () => undefined,
     };
     const { rerender } = render(<PrivateDesk {...common} showHelp={false} />);
-    expect(screen.getByText((_, node) => node?.tagName === 'P' && node.textContent === 'TOP SALARY: MURASKI')).toBeInTheDocument();
-    expect(screen.queryByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rating-room-row-hitters:POW')).toHaveTextContent('USED 70 / LIMIT 80');
+    expect(screen.getByTestId('rating-room-row-hitters:POW')).toHaveTextContent('10 LEFT');
+    expect(screen.queryByText('USED IS THE EXACT TOP-N RATING TOTAL. LIMIT IS YOUR ARCHETYPE-ADJUSTED TAX LINE.')).not.toBeInTheDocument();
     rerender(<PrivateDesk {...common} showHelp />);
-    expect(screen.getByText('THESE ARE THE PLAYERS WHO COUNT TOWARD YOUR TAX.')).toBeInTheDocument();
+    expect(screen.getByText('USED IS THE EXACT TOP-N RATING TOTAL. LIMIT IS YOUR ARCHETYPE-ADJUSTED TAX LINE.')).toBeInTheDocument();
   });
 
   it('shows one chosen overall or position ranking and routes each reorder to the matching persisted list', () => {
@@ -174,6 +180,56 @@ describe('PrivateDesk', () => {
     expect(onReorderOverall).toHaveBeenCalledWith(['target', 'muraski']);
   });
 
+  it('opens the complete league draft log and loads any drafted player card', () => {
+    const onSelectCandidate = vi.fn();
+    render(<PrivateDesk
+      candidates={[candidate]}
+      rankings={{ SS: ['muraski'] }}
+      overallRankings={['muraski']}
+      boardSlots={{ SS: 'muraski' }}
+      brokenSlots={[]}
+      planBill={null}
+      advisorLog={[]}
+      taxCoreRows={[]}
+      slotDepth={{ SS: 1 }}
+      assistantBoard={idleAssistant}
+      onReorder={() => undefined}
+      onSelectCandidate={onSelectCandidate}
+      draftLog={[
+        { pick: 1, teamName: 'BEEWOLVES', playerId: 'jovita', playerName: 'JOVITA PULO', position: 'SP' },
+        { pick: 2, teamName: 'BUZZARDS', playerId: 'muraski', playerName: 'MURASKI', position: 'SS' },
+      ]}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT LOG' }));
+    expect(screen.getByTestId('full-draft-log')).toHaveTextContent('#1JOVITA PULOSPBEEWOLVES');
+    expect(screen.getByTestId('full-draft-log')).toHaveTextContent('#2MURASKISSBUZZARDS');
+    fireEvent.click(screen.getByRole('button', { name: /#1JOVITA PULO/ }));
+    expect(onSelectCandidate).toHaveBeenCalledWith('jovita');
+  });
+
+  it('returns to My Board if a draft correction removes the last log entry', () => {
+    const common = {
+      candidates: [candidate],
+      rankings: { SS: ['muraski'] },
+      overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' },
+      brokenSlots: [], planBill: null, advisorLog: [], taxCoreRows: [], slotDepth: { SS: 1 },
+      assistantBoard: idleAssistant,
+      onReorder: () => undefined,
+    };
+    const { rerender } = render(<PrivateDesk
+      {...common}
+      draftLog={[{ pick: 1, teamName: 'BUZZARDS', playerId: 'muraski', playerName: 'MURASKI', position: 'SS' }]}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'DRAFT LOG' }));
+    expect(screen.getByTestId('full-draft-log')).toBeInTheDocument();
+    rerender(<PrivateDesk {...common} draftLog={[]} />);
+    expect(screen.getByRole('button', { name: 'MY BOARD' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.queryByTestId('full-draft-log')).not.toBeInTheDocument();
+  });
+
   it('renders a separate read-only assistant board and never renders the retired what-if controls', () => {
     render(<PrivateDesk
       candidates={[candidate]}
@@ -207,17 +263,35 @@ describe('PrivateDesk', () => {
       tradeGuide={<div>POSTED PRICE GUIDE</div>}
     />);
 
-    expect(screen.getByTestId('plan-truth-strip')).toHaveTextContent('PLAN TRUTH UNAVAILABLE');
+    expect(screen.queryByTestId('plan-truth-strip')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).toHaveTextContent('SS · STRONG FIT · AT RISK');
     expect(screen.queryByText('WHAT-IF')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'ASST GM BOARD' }));
-    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM · ARCHETYPE FIRST · ≥90% FROZEN IV');
+    expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('ASST GM 22');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('LEGAL AND SOLVENT FIRST');
     expect(screen.getByTestId('assistant-board-panel')).toHaveTextContent('FROZEN IV CANNOT FALL BELOW 90%');
     expect(screen.getByTestId('assistant-plan-truth-strip')).toHaveTextContent('$90');
     expect(screen.queryByRole('button', { name: /KEEP/ })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'TRADE PICKS' }));
     expect(screen.getByText('POSTED PRICE GUIDE')).toBeInTheDocument();
+  });
+
+  it('collapses unavailable risk into one board state and keeps its explanation behind Help', () => {
+    const offline = { ...candidate, risk: 'SAFE_TO_WAIT' as const, riskUnavailable: true };
+    const common = {
+      candidates: [offline], rankings: { SS: ['muraski'] }, overallRankings: ['muraski'],
+      boardSlots: { SS: 'muraski' }, brokenSlots: [], planBill: null, advisorLog: [],
+      taxCoreRows: [], slotDepth: { SS: 1 }, assistantBoard: idleAssistant,
+      onReorder: () => undefined,
+    };
+    const { rerender } = render(<PrivateDesk {...common} />);
+    expect(screen.getByTestId('board-risk-state')).toHaveTextContent('RISK OFFLINE');
+    expect(screen.getAllByText(/RISK OFFLINE/)).toHaveLength(1);
+    expect(screen.queryByText(/NEXT-PICK PLAYOUT/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SELECT MURASKI' })).not.toHaveTextContent('RISK UNAVAILABLE');
+
+    rerender(<PrivateDesk {...common} showHelp />);
+    expect(screen.getByTestId('board-risk-state')).toHaveTextContent('NEXT-PICK PLAYOUT IS NOT READY');
   });
 
   it('renders only the frozen tabs, adds Activity only for consequential history, and opens a verified trade prefill', () => {
