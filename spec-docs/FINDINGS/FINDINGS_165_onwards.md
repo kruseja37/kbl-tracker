@@ -1413,3 +1413,29 @@ that library id. The focused Draft Setup source/universe and recalculation gate 
 import and setup-to-room coverage is 72/72. TypeScript, changed-file ESLint, diff integrity, and the
 2,744-module production build pass. Three pre-existing long SNAKE POOL GUIDE receipt timeouts remain
 unchanged from the base branch. Independent audit and JK's replacement-preview walk remain open.
+
+### FINDING-253
+**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** BUILT — AUDIT/JK WALK PENDING
+**Files:** `src/engines/poolFromDemand.ts`, `src/engines/snakeSeatingProof.ts`,
+`src/src_figma/app/engines/leaguePlayerAdapter.ts`,
+`src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused tests.
+**Evidence:** With only Career, Draft, and Peak selected, the page showed 835 cards for 345 people.
+Every named four-club build widened to the 835-card Full Sources shelf, reported all clubs unresolved,
+and could not Lock.
+**Root cause:** Numeric shaping had no person-group field, so alternate Legend cards counted as
+independent people. The page also proved the complete source shelf before it shaped the requested
+normal pool. That made Full Sources a mandatory gateway even though the source shelf is not the
+roster clubs must draft. Saving the accepted named preset could also rehydrate a session-only engine
+label and mark an unchanged exact build receipt stale.
+**Action:** Carry the canonical version-group id into shaping. Count one person once and select one
+card per person for named builds. Shape and certify the exact named membership first; widen through
+named presets before using Full Sources as an optional final fallback. Keep the independent final
+validator and exact Lock fingerprint. Remove the session-only engine label from acceptance because
+exact membership already records the generated result.
+**Builder proof:** The exact production Legends import is 835 cards for 345 people. Four-team Loose
+is 132 cards for 132 people; eight-team Loose is 264 for 264. Both meet the balanced distribution
+limits and pass independent final validation. All 24 selectable identities pass in three eight-team
+Legends-only rooms. Alternate-card and Draft Setup flow regressions pass. Static, build, independent
+audit, preview, and JK browser gates are recorded separately. The builder gate is 206/206 focused
+tests, TypeScript, changed-file ESLint, diff integrity, and a 2,744-module production/PWA build with
+224 precache entries.

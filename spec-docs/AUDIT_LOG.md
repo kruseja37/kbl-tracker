@@ -1998,3 +1998,16 @@ fingerprint acceptance, lock, and reload. The repair makes the target output-onl
 assignments source-only. Exact unit and page regressions prove the circular 835-in/zero-available
 state cannot form from target assignments. Builder gates pass. Independent audit and JK's browser
 walk remain open.
+
+### 2026-07-20 — FINDING-253 Legends named-pool root audit
+
+The source-to-draft trace covered external library assignment, source union, version-group identity,
+numeric shaping, legal repair, simultaneous proof, local pool replacement, accepted receipt, Lock,
+and live sibling retirement. It found two connected defects: the shaper counted alternate cards as
+people, and Draft Setup required Full Sources proof before normal shaping. A third receipt defect used
+a session-only engine label as if it were a user setting. The generic repair counts people, shapes
+first, proves the exact result, widens through named presets, and uses Full Sources only as an optional
+final fallback. Exact production-data proof covers 835 cards/345 people, 132-person four-team Loose,
+264-person eight-team Loose, and all 24 identities. The builder gate passed 206/206 focused tests,
+TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build. Separate
+final audit remains required.

@@ -51,7 +51,41 @@ import {
 /** A universe player: sim/economy shape + the whole classifiable profile. */
 export interface DemandUniversePlayer extends SimPlayer {
   name?: string;
+  /** One-capacity person key. Alternate cards of the same person share this value. */
+  versionGroupId?: string;
   profile: ClassifiableProfile;
+}
+
+function demandVersionGroupId(player: Pick<DemandUniversePlayer, 'id' | 'versionGroupId'>): string {
+  return player.versionGroupId?.trim() || player.id;
+}
+
+function demandVersionGroupIds(players: readonly DemandUniversePlayer[]): Set<string> {
+  return new Set(players.map(demandVersionGroupId));
+}
+
+function removeDemandGroupIfAbsent(
+  players: ReadonlyMap<string, DemandUniversePlayer>,
+  groups: Set<string>,
+  removed: DemandUniversePlayer,
+): void {
+  const groupId = demandVersionGroupId(removed);
+  if (![...players.values()].some((player) => demandVersionGroupId(player) === groupId)) {
+    groups.delete(groupId);
+  }
+}
+
+function uniqueDemandCardsByVersionGroup(
+  players: readonly DemandUniversePlayer[],
+  blockedGroups: ReadonlySet<string> = new Set<string>(),
+): DemandUniversePlayer[] {
+  const seen = new Set(blockedGroups);
+  return players.filter((player) => {
+    const groupId = demandVersionGroupId(player);
+    if (seen.has(groupId)) return false;
+    seen.add(groupId);
+    return true;
+  });
 }
 
 export interface TeamDesignInput {
@@ -676,6 +710,68 @@ function targetCountsByRoleBucket(
   );
 }
 
+function shapeRepresentativeUniverse(
+  source: readonly DemandUniversePlayer[],
+  fitOf: (player: DemandUniversePlayer) => number,
+  qualityCenter: number,
+): DemandUniversePlayer[] {
+  const byGroup = new Map<string, DemandUniversePlayer[]>();
+  for (const player of source) {
+    const groupId = demandVersionGroupId(player);
+    byGroup.set(groupId, [...(byGroup.get(groupId) ?? []), player]);
+  }
+  return [...byGroup.values()]
+    .map((cards) => [...cards].sort((left, right) => {
+      const centerDelta = Math.abs(numericGradeOf(left) - qualityCenter)
+        - Math.abs(numericGradeOf(right) - qualityCenter);
+      if (Math.abs(centerDelta) > 1e-9) return centerDelta;
+      const fitDelta = fitOf(right) - fitOf(left);
+      if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+      return left.id.localeCompare(right.id);
+    })[0])
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function trimDemandPoolToPersonTarget(
+  players: readonly DemandUniversePlayer[],
+  protectedIds: ReadonlySet<string>,
+  fitOf: (player: DemandUniversePlayer) => number,
+  target: number,
+): { kept: DemandUniversePlayer[]; evicted: DemandUniversePlayer[] } {
+  const cardsByGroup = new Map<string, DemandUniversePlayer[]>();
+  for (const player of players) {
+    const groupId = demandVersionGroupId(player);
+    cardsByGroup.set(groupId, [...(cardsByGroup.get(groupId) ?? []), player]);
+  }
+  const protectedGroups = new Set(
+    players.filter((player) => protectedIds.has(player.id)).map(demandVersionGroupId),
+  );
+  const evictable = [...cardsByGroup.entries()]
+    .filter(([groupId]) => !protectedGroups.has(groupId))
+    .map(([groupId, cards]) => ({
+      groupId,
+      cards,
+      fit: Math.max(...cards.map(fitOf)),
+      salary: Math.max(...cards.map((player) => player.salary)),
+    }))
+    .sort((left, right) => {
+      const fitDelta = left.fit - right.fit;
+      if (Math.abs(fitDelta) > 1e-9) return fitDelta;
+      if (left.salary !== right.salary) return right.salary - left.salary;
+      return left.groupId.localeCompare(right.groupId);
+    });
+  const evicted: DemandUniversePlayer[] = [];
+  for (const group of evictable) {
+    if (cardsByGroup.size <= target) break;
+    cardsByGroup.delete(group.groupId);
+    evicted.push(...group.cards);
+  }
+  return {
+    kept: [...cardsByGroup.values()].flat().sort((left, right) => left.id.localeCompare(right.id)),
+    evicted: evicted.sort((left, right) => left.id.localeCompare(right.id)),
+  };
+}
+
 function targetCountsByWindow(
   targetSize: number,
   windows: readonly NumericPoolShapeWindow[] = poolBalancePresetTuning().windows,
@@ -868,6 +964,7 @@ export function enforcePositionSupplyFloors(options: {
   poolSourceMode?: PoolSourceMode;
 }): PositionSupplyFloorApplication {
   const current = new Map(options.players.map((player) => [player.id, player]));
+  const currentGroups = demandVersionGroupIds(options.players);
   const excludedIds = options.excludedIds ?? new Set<string>();
   const fitOf = options.fitOf ?? (() => 0);
   const priorityIds = options.poolSourceMode === 'team-roster-priority'
@@ -884,13 +981,14 @@ export function enforcePositionSupplyFloors(options: {
     const missing = floor?.missing ?? 0;
     if (missing <= 0) continue;
     const candidates = options.universe
-      .filter((player) => !current.has(player.id))
+      .filter((player) => !currentGroups.has(demandVersionGroupId(player)))
       .filter((player) => !excludedIds.has(player.id))
       .filter((player) => matchesPositionSupplyFloor(player, target))
       .sort(comparator);
-    const picks = candidates.slice(0, missing);
+    const picks = uniqueDemandCardsByVersionGroup(candidates, currentGroups).slice(0, missing);
     for (const pick of picks) {
       current.set(pick.id, pick);
+      currentGroups.add(demandVersionGroupId(pick));
       injectedIds.push(pick.id);
     }
     if (picks.length > 0) {
@@ -1274,9 +1372,14 @@ export function shapePoolByNumericGrade(options: {
     .filter((player) => options.protectedIds.has(player.id) && !excludedIds.has(player.id))
     .sort((a, b) => a.id.localeCompare(b.id));
   const selected = new Map(protectedPlayers.map((player) => [player.id, player]));
+  const selectedGroups = demandVersionGroupIds(protectedPlayers);
   const effectiveTarget = Math.max(0, Math.floor(options.targetSize));
   const windows = tuning.windows;
-  const roleTargets = targetCountsByRoleBucket(options.universe.filter((player) => !excludedIds.has(player.id)), effectiveTarget);
+  const eligibleUniverse = options.universe.filter((player) => !excludedIds.has(player.id));
+  const roleTargets = targetCountsByRoleBucket(
+    shapeRepresentativeUniverse(eligibleUniverse, options.fitOf, poolQualityCenter),
+    effectiveTarget,
+  );
   const quotaShortfalls: NumericPoolQuotaShortfall[] = [];
   const messages: string[] = [];
 
@@ -1291,17 +1394,21 @@ export function shapePoolByNumericGrade(options: {
       ).length;
       const needed = Math.max(0, targetCount - protectedCount);
       const candidates = bucketSource
-        .filter((player) => !selected.has(player.id))
+        .filter((player) => !selectedGroups.has(demandVersionGroupId(player)))
         .filter((player) => numericWindowId(numericGradeOf(player), windows) === window.id)
         .sort(fitComparator);
       const picks = selectWindowCandidates({
-        candidates,
+        candidates: uniqueDemandCardsByVersionGroup(candidates, selectedGroups),
         needed,
         windowId: window.id,
         generationNonce: options.generationNonce,
       });
-      for (const pick of picks) selected.set(pick.id, pick);
+      for (const pick of picks) {
+        selected.set(pick.id, pick);
+        selectedGroups.add(demandVersionGroupId(pick));
+      }
       if (picks.length < needed) {
+        const availableGroups = demandVersionGroupIds(candidates).size;
         quotaShortfalls.push({
           roleBucket: bucket,
           windowId: window.id,
@@ -1310,39 +1417,43 @@ export function shapePoolByNumericGrade(options: {
           targetCount,
           protectedCount,
           selectedCount: protectedCount + picks.length,
-          availableCount: protectedCount + candidates.length,
+          availableCount: protectedCount + availableGroups,
         });
       }
     }
   }
 
-  if (selected.size < effectiveTarget) {
+  if (selectedGroups.size < effectiveTarget) {
     const remaining = options.universe
-      .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+      .filter((player) => !selectedGroups.has(demandVersionGroupId(player)) && !excludedIds.has(player.id))
       .sort((a, b) => {
         const aMiddle = numericGradeOf(a) >= tuning.middleMin && numericGradeOf(a) < tuning.middleMax;
         const bMiddle = numericGradeOf(b) >= tuning.middleMin && numericGradeOf(b) < tuning.middleMax;
         if (aMiddle !== bMiddle) return aMiddle ? -1 : 1;
         return fitComparator(a, b);
       });
-    const needed = effectiveTarget - selected.size;
+    const uniqueRemaining = uniqueDemandCardsByVersionGroup(remaining, selectedGroups);
+    const needed = effectiveTarget - selectedGroups.size;
     const picks = options.generationNonce && options.generationNonce > 0
       ? selectWindowCandidates({
-          candidates: remaining,
+          candidates: uniqueRemaining,
           needed,
           windowId: 'fallback',
           generationNonce: options.generationNonce,
         })
-      : remaining.slice(0, needed);
-    for (const pick of picks) selected.set(pick.id, pick);
+      : uniqueRemaining.slice(0, needed);
+    for (const pick of picks) {
+      selected.set(pick.id, pick);
+      selectedGroups.add(demandVersionGroupId(pick));
+    }
     messages.push(
-      `numeric grade quota fallback added ${Math.min(needed, remaining.length)} deterministic source candidates after explicit quota shortfalls.`,
+      `numeric grade quota fallback added ${Math.min(needed, uniqueRemaining.length)} deterministic source candidates after explicit quota shortfalls.`,
     );
   }
 
-  if (selected.size > effectiveTarget) {
-    const beforeTrim = selected.size;
-    const trimmed = trimPoolToTarget(
+  if (selectedGroups.size > effectiveTarget) {
+    const beforeTrim = selectedGroups.size;
+    const trimmed = trimDemandPoolToPersonTarget(
       [...selected.values()],
       options.protectedIds,
       options.fitOf,
@@ -1350,9 +1461,11 @@ export function shapePoolByNumericGrade(options: {
     );
     selected.clear();
     for (const player of trimmed.kept) selected.set(player.id, player);
+    selectedGroups.clear();
+    for (const groupId of demandVersionGroupIds(trimmed.kept)) selectedGroups.add(groupId);
     if (trimmed.evicted.length > 0) {
       messages.push(
-        `numeric grade quotas selected ${beforeTrim - effectiveTarget} player${beforeTrim - effectiveTarget === 1 ? '' : 's'} above the target because protected distribution exceeded one or more role/window shares; trimmed ${trimmed.evicted.length} unprotected candidate${trimmed.evicted.length === 1 ? '' : 's'} by fit before price.`,
+        `numeric grade quotas selected ${beforeTrim - effectiveTarget} person${beforeTrim - effectiveTarget === 1 ? '' : 's'} above the target because protected distribution exceeded one or more role/window shares; trimmed ${demandVersionGroupIds(trimmed.evicted).size} unprotected person${demandVersionGroupIds(trimmed.evicted).size === 1 ? '' : 's'} by fit before price.`,
       );
     }
   }
@@ -1373,7 +1486,7 @@ export function shapePoolByNumericGrade(options: {
       if (highTailCount <= highTailCapCount) break;
       const sameBucket = roleBucketOf(highTailPlayer);
       const replacementCandidates = options.universe
-        .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+        .filter((player) => !selectedGroups.has(demandVersionGroupId(player)) && !excludedIds.has(player.id))
         .filter((player) => numericGradeOf(player) < tuning.highTailMin)
         .sort((a, b) => {
           const aSameBucket = roleBucketOf(a) === sameBucket;
@@ -1387,7 +1500,9 @@ export function shapePoolByNumericGrade(options: {
       const replacement = replacementCandidates[0];
       if (!replacement) continue;
       selected.delete(highTailPlayer.id);
+      removeDemandGroupIfAbsent(selected, selectedGroups, highTailPlayer);
       selected.set(replacement.id, replacement);
+      selectedGroups.add(demandVersionGroupId(replacement));
       highTailCount -= 1;
       swaps += 1;
     }
@@ -1417,7 +1532,7 @@ export function shapePoolByNumericGrade(options: {
       if (superstarCount <= superstarCapCount) break;
       const sameBucket = roleBucketOf(superstar);
       const replacement = options.universe
-        .filter((player) => !selected.has(player.id) && !excludedIds.has(player.id))
+        .filter((player) => !selectedGroups.has(demandVersionGroupId(player)) && !excludedIds.has(player.id))
         .filter((player) => numericGradeOf(player) < tuning.superstarTailMin)
         .sort((a, b) => {
           const aSameBucket = roleBucketOf(a) === sameBucket;
@@ -1430,7 +1545,9 @@ export function shapePoolByNumericGrade(options: {
         })[0];
       if (!replacement) continue;
       selected.delete(superstar.id);
+      removeDemandGroupIfAbsent(selected, selectedGroups, superstar);
       selected.set(replacement.id, replacement);
+      selectedGroups.add(demandVersionGroupId(replacement));
       superstarCount -= 1;
       swaps += 1;
     }
@@ -1822,11 +1939,16 @@ export function repairG1PoolForSizing(options: {
   const requiredRosterDemand = Math.max(0, options.requiredRosterDemand ?? options.teams * LEGAL_ROSTER.size);
   const targetSize = Math.max(0, Math.floor(options.targetSize ?? options.players.length));
   const maxRepairSlackFactor = options.maxRepairSlackFactor ?? tuning.maxRepairSlackFactor;
+  const requestedSlackFactor = requiredRosterDemand > 0
+    ? targetSize / requiredRosterDemand
+    : 0;
+  const allowedFinalSlackFactor = Math.max(maxRepairSlackFactor, requestedSlackFactor);
   const repairGrowthAllowed = options.repairGrowthAllowed ?? true;
   const maxRepairSize = requiredRosterDemand > 0
     ? Math.max(targetSize, Math.floor(requiredRosterDemand * maxRepairSlackFactor))
     : Number.POSITIVE_INFINITY;
   const current = new Map(options.players.map((player) => [player.id, player]));
+  const currentGroups = demandVersionGroupIds(options.players);
   let g1 = runG1Check([...current.values()].sort((a, b) => a.id.localeCompare(b.id)), options.teams, options.budget);
   const messages: string[] = [];
   const injectedIds: string[] = [];
@@ -1851,7 +1973,7 @@ export function repairG1PoolForSizing(options: {
     for (const slot of repairSlots) {
       const label = slot ? (slot.position ?? slot.slotId) : 'roster';
       const eligible = options.universe
-        .filter((player) => !current.has(player.id))
+        .filter((player) => !currentGroups.has(demandVersionGroupId(player)))
         .filter((player) => !requestedExcludedIds.has(player.id))
         .filter((player) => eligibleForRepairClass(slot, player))
         .filter((player) => player.salary <= slotBound)
@@ -1874,7 +1996,9 @@ export function repairG1PoolForSizing(options: {
         const evicted = selectSwapDownEvictionCandidate([...current.values()], options.protectedIds, slot, chosen);
         if (!evicted) continue;
         current.set(chosen.id, chosen);
+        currentGroups.add(demandVersionGroupId(chosen));
         current.delete(evicted.id);
+        removeDemandGroupIfAbsent(current, currentGroups, evicted);
         injectedIds.push(chosen.id);
         evictedIds.push(evicted.id);
         incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
@@ -1935,11 +2059,13 @@ export function repairG1PoolForSizing(options: {
           );
         }
         current.set(chosen.id, chosen);
+        currentGroups.add(demandVersionGroupId(chosen));
         injectedIds.push(chosen.id);
         incrementCount(additionsByRoleWindow, roleWindowKey(chosen, tuning.windows));
         if (isLowTailWindow(chosenWindow)) incrementCount(lowTailAdditionsByRole, chosenRole);
         if (evicted) {
           current.delete(evicted.id);
+          removeDemandGroupIfAbsent(current, currentGroups, evicted);
           evictedIds.push(evicted.id);
           incrementCount(removalsByRoleWindow, roleWindowKey(evicted, tuning.windows));
           swaps.push({
@@ -1997,10 +2123,10 @@ export function repairG1PoolForSizing(options: {
       message: `post-repair low tail ${(finalSnapshot.lowTailShare * 100).toFixed(1)}% exceeds ${(tuning.lowTailRepairCap * 100).toFixed(0)}%.`,
     });
   }
-  if (finalSnapshot.poolSlackFactor > maxRepairSlackFactor + 1e-9) {
+  if (finalSnapshot.poolSlackFactor > allowedFinalSlackFactor + 1e-9) {
     curveViolations.push({
       code: 'REPAIR_GROWTH_LIMIT',
-      message: `post-repair slack ${finalSnapshot.poolSlackFactor.toFixed(2)}x exceeds max repair slack ${maxRepairSlackFactor.toFixed(2)}x.`,
+      message: `post-repair slack ${finalSnapshot.poolSlackFactor.toFixed(2)}x exceeds allowed slack ${allowedFinalSlackFactor.toFixed(2)}x.`,
     });
   }
   if ((options.failOnCurveViolation ?? false) && curveViolations.length > 0) {
@@ -2083,6 +2209,11 @@ export function extractPoolFromDemand(
     priorityIds?: string[];
     designPriorityIds?: string[];
     preserveSelectedIdentityClaims?: boolean;
+    /**
+     * Snake named-pool builds certify the finished shaped membership with the authoritative
+     * simultaneous seating proof. They must not require the richer source shelf to pass first.
+     */
+    deferIdentityToFinalProof?: boolean;
     /** Exact disjoint ids from the authoritative all-club Snake seating certificate. */
     identitySupportIds?: string[];
     /** Fingerprint binding those ids to the exact validated Full Sources shaping input. */
@@ -2191,7 +2322,19 @@ export function extractPoolFromDemand(
   // reconstruct the same claim set before the final shaped pool is validated against that
   // certificate. On large multi-source universes that duplicate work can hold the browser main
   // thread for minutes, so carry the certified support as the floor receipt instead.
-  const floors: ExtractedPool = certifiedIdentitySupport
+  const floors: ExtractedPool = options.deferIdentityToFinalProof
+    ? {
+        players: [],
+        size: 0,
+        targetSize: 0,
+        claimedIds: [],
+        floorIds: [],
+        verdicts: [],
+        balanced: true,
+        repairRounds: 0,
+        notes: ['Identity is certified against the finished shaped Snake pool.'],
+      }
+    : certifiedIdentitySupport
     ? {
         players: universe.filter((player) => requestedIdentitySupportIds.has(player.id)),
         size: requestedIdentitySupportIds.size,

@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-252 REPAIRS THE DRAFT SETUP SOURCE/OUTPUT LOOP (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview proved that the active target league could read its own generated pool back as a source: `test` reported 835 source players, all 835 were already in the pool, and zero were available. The target is now output-only. Draft Setup lists external source leagues, ignores the target id in legacy selections, strips target assignments from source membership, and keeps the expensive proof stable across unrelated team edits. FINDING-249 FARM companion authority and FINDING-250 four/eight-team certification remain integrated and independently approved. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** publish one exact replacement preview, then JK rechecks Legends source selection and the four/eight-team setup paths. Independent audit remains separate. Production is unchanged.
+> ## RIGHT NOW — FINDING-253 REPAIRS LEGENDS NAMED-POOL FLOW (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview showed 835 valid Career, Draft, and Peak cards for 345 people, but every normal four-team build widened to unresolved Full Sources and could not Lock. The root path counted alternate cards as people and required the source shelf to certify before shaping. Named pools now count one person once, shape first, and certify the exact finished membership. Full Sources is an optional final fallback. Exact production data proves 132 distinct people for four-team Loose, 264 for eight-team Loose, balanced curve limits, independent final validation, and all 24 identities. The builder gate is 206/206 focused tests, TypeScript, lint, diff integrity, and a 2,744-module production/PWA build. FINDING-249 FARM companion authority and FINDING-250/252 remain integrated. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** freeze, obtain a separate read-only audit, then publish one replacement preview for JK. Production is unchanged.
 
 ## Current product law
 
@@ -22,8 +22,8 @@
 
 ## Open gates
 
-1. Publish the exact FINDING-251/252 repair to one replacement branch preview.
-2. Independent read-only audit checks the frozen source/output repair.
+1. Freeze FINDING-253 and complete the separate read-only audit.
+2. Publish one exact replacement branch preview.
 3. JK runs the Legends-source, four/eight-team setup, and FARM Hotseat-plus-companion walks.
 
 The exact remote sequence and rollback boundary are in

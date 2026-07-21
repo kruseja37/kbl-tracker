@@ -321,7 +321,8 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(screen.getByRole("button", { name: "EDIT CAPS IDENTITIES" })).toBeInTheDocument();
     expect(screen.getByText("TEAM IDENTITY")).toBeInTheDocument();
     expect(screen.getByText(/^AVAILABLE PLAYERS \(/)).toBeInTheDocument();
-    expect(screen.getByText(/^IN THE POOL \(/)).toBeInTheDocument();
+    // An unaccepted saved membership is intentionally labelled PREVIOUS POOL until Build.
+    expect(screen.getByText(/^(?:IN THE|PREVIOUS) POOL \(/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "SNAKE DRAFT", exact: true })).toHaveAttribute("aria-pressed", "true");
   });
 

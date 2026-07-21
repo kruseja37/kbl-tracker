@@ -692,6 +692,50 @@ describe('extractPoolFromDemand', () => {
     expect(first.diagnostics.poolSlackFactor).toBeCloseTo(1.25);
   });
 
+  it('counts alternate source cards as one person while it shapes a numeric pool', () => {
+    const source = exactCurveSource().flatMap((player, index) => {
+      const versionGroupId = `legend-person-${index}`;
+      return [
+        { ...player, id: `${player.id}-career`, versionGroupId },
+        { ...player, id: `${player.id}-peak`, versionGroupId, iv: player.iv + 1, salary: player.salary + 1 },
+      ];
+    });
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 80,
+      requiredRosterDemand: 64,
+      fitOf: () => 0,
+    });
+
+    expect(source).toHaveLength(200);
+    expect(shaped.players).toHaveLength(80);
+    expect(new Set(shaped.players.map((player) => player.versionGroupId))).toHaveLength(80);
+  });
+
+  it('keeps protected alternate cards but counts their shared person once against the target', () => {
+    const base = exactCurveSource();
+    const first = { ...base[0], id: 'protected-career', versionGroupId: 'protected-person' };
+    const second = { ...base[0], id: 'protected-peak', versionGroupId: 'protected-person' };
+    const source = [first, second, ...base.slice(1).map((player, index) => ({
+      ...player,
+      versionGroupId: `other-person-${index}`,
+    }))];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [first, second],
+      protectedIds: new Set([first.id, second.id]),
+      targetSize: 20,
+      requiredRosterDemand: 16,
+      fitOf: () => 0,
+    });
+
+    expect(shaped.players.map((player) => player.id)).toEqual(expect.arrayContaining([first.id, second.id]));
+    expect(new Set(shaped.players.map((player) => player.versionGroupId))).toHaveLength(20);
+    expect(shaped.players).toHaveLength(21);
+  });
+
   it('balanced preset matches the default numeric-grade supply curve', () => {
     const source = [
       ...exactCurveSource(),

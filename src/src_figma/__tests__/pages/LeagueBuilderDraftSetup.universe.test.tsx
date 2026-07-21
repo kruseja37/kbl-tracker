@@ -174,6 +174,62 @@ import {
 const runActualSnakeProof = vi.mocked(proveSimultaneousSnakeSeating).getMockImplementation()!;
 const runActualSnakePoolShape = vi.mocked(runSnakePoolShape).getMockImplementation()!;
 
+function mockSnakeShapeAtRequestedPersonTarget(): void {
+  vi.mocked(runSnakePoolShape).mockImplementation(async (input, options) => {
+    const result = await runActualSnakePoolShape(input, options);
+    const requestedTarget = Math.round(
+      input.options.teams * 22 * (input.options.poolSizeMultiplier ?? 1.5),
+    );
+    const pinnedIds = new Set(input.options.pinnedIds ?? []);
+    const pinnedPlayers = result.players.filter((player) => pinnedIds.has(player.id));
+    const otherPlayers = result.players.filter((player) => !pinnedIds.has(player.id));
+    const players = [...pinnedPlayers, ...otherPlayers].slice(0, requestedTarget);
+    return {
+      ...result,
+      players,
+      size: players.length,
+      ...(result.sizing ? {
+        sizing: {
+          ...result.sizing,
+          effectiveTarget: requestedTarget,
+          finalSize: players.length,
+        },
+      } : {}),
+    };
+  });
+}
+
+function wirePoolMembershipUpdates(
+  leagueData: ReturnType<typeof mockLeagueData>,
+  leagueId = "league-page",
+): void {
+  const changedPlayer = (playerId: string, inPool: boolean) => {
+    const player = leagueData.players.find((candidate) => candidate.id === playerId)!;
+    const otherAssignments = player.leagueAssignments.filter((assignment) => assignment.leagueId !== leagueId);
+    return {
+      ...player,
+      leagueAssignments: inPool
+        ? [...otherAssignments, { leagueId, teamId: "", rosterStatus: "FREE_AGENT" as const }]
+        : otherAssignments,
+    };
+  };
+  vi.mocked(addPlayersToLeaguePool).mockImplementation(async (playerIds) => (
+    playerIds.map((playerId) => changedPlayer(playerId, true))
+  ));
+  vi.mocked(removePlayersFromLeaguePool).mockImplementation(async (playerIds) => (
+    playerIds.map((playerId) => changedPlayer(playerId, false))
+  ));
+  leagueData.replacePlayersLocal = vi.fn((changedPlayers) => {
+    const changedById = new Map(changedPlayers.map((player) => [player.id, player]));
+    leagueData.players = leagueData.players.map((player) => changedById.get(player.id) ?? player);
+  });
+  leagueData.replaceLeagueLocal = vi.fn((savedLeague) => {
+    leagueData.leagues = leagueData.leagues.map((league) => (
+      league.id === savedLeague.id ? savedLeague : league
+    ));
+  });
+}
+
 function certifiedSnakeProof(teamIds: readonly string[], supportIds: readonly string[]) {
   return {
     feasible: true,
@@ -306,7 +362,8 @@ describe("LeagueBuilderDraftSetup", () => {
   // source leagues, exactly like the two extraction call sites already do.
   // -----------------------------------------------------------------------------------------
 
-  test("SNAKE POOL GUIDE: Competitive uses one full-source certificate and keeps the exact 238-player bound", async () => {
+  test("SNAKE POOL GUIDE: Competitive shapes first and certifies the exact 238-person pool", async () => {
+    mockSnakeShapeAtRequestedPersonTarget();
     const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((id, index) => makeTeam(id, {
       name: `Club ${index + 1}`,
@@ -314,8 +371,11 @@ describe("LeagueBuilderDraftSetup", () => {
       gmSeatId: undefined,
       gmSeatName: undefined,
     }));
-    const players = makePositionDiversePlayers(300, 8, "snake-guide");
-    mockLeagueData({
+    const players = makePositionDiversePlayers(300, 8, "snake-guide").map((player) => ({
+      ...player,
+      leagueAssignments: [],
+    }));
+    const leagueData = mockLeagueData({
       league: makeLeague({
         teamIds,
         draftFormat: "snake",
@@ -328,8 +388,10 @@ describe("LeagueBuilderDraftSetup", () => {
       players,
       pool: makePool({ locked: false, players: [], totalSlots: 176 }),
     });
-    const supportIds = players.slice(0, 176).map((player) => player.id);
-    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(certifiedSnakeProof(teamIds, supportIds));
+    wirePoolMembershipUpdates(leagueData);
+    vi.mocked(proveSimultaneousSnakeSeating).mockImplementation((input) => (
+      certifiedSnakeProof(teamIds, input.pool.map((player) => player.playerId))
+    ));
 
     render(<LeagueBuilderDraftSetup />);
 
@@ -344,18 +406,16 @@ describe("LeagueBuilderDraftSetup", () => {
     const options = await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.35);
     expect(options.poolSizeMultiplier).toBe(1.35);
     expect(options.preserveSelectedIdentityClaims).toBe(false);
-    expect(options.identitySupportIds).toEqual([...supportIds].sort((a, b) => a.localeCompare(b)));
-    expect(options.identitySupportReceipt).toEqual(expect.objectContaining({
-      version: 1,
-      playerIds: [...supportIds].sort((a, b) => a.localeCompare(b)),
-    }));
-    const competitiveCallIndex = vi.mocked(extractPoolFromDemand).mock.calls.findIndex((call) =>
-      call[4]?.poolSizeMultiplier === 1.35
-    );
-    const result = vi.mocked(extractPoolFromDemand).mock.results[competitiveCallIndex]?.value as ReturnType<typeof extractPoolFromDemand>;
-    expect(result.size).toBe(238);
-    expect(await screen.findByText(/BUILT COMPETITIVE SHAPED BUILD/i, {}, { timeout: 12_000 }))
-      .toHaveTextContent(/238 PLAYERS · EVERY CHOSEN IDENTITY CERTIFIED TOGETHER/i);
+    expect(options.deferIdentityToFinalProof).toBe(true);
+    expect(options.identitySupportIds).toBeUndefined();
+    expect(options.identitySupportReceipt).toBeUndefined();
+    await waitFor(() => expect(addPlayersToLeaguePool).toHaveBeenCalled(), { timeout: 12_000 });
+    expect(await screen.findByText(/BUILT /i, {}, { timeout: 12_000 }))
+      .toHaveTextContent(/BUILT COMPETITIVE SHAPED BUILD · 238 PLAYERS · EVERY CHOSEN IDENTITY CERTIFIED TOGETHER/i);
+    const proofPoolSizes = vi.mocked(proveSimultaneousSnakeSeating).mock.calls
+      .map(([input]) => input.pool.length);
+    expect(proofPoolSizes).toContain(238);
+    expect(proofPoolSizes).not.toContain(300);
     expect(saveLeagueTemplate).toHaveBeenCalledWith(expect.objectContaining({
       id: "league-page",
       poolAssemblyMode: "shape-to-teams",
@@ -453,7 +513,8 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(await screen.findByText("POOL SETTINGS CHANGED · BUILD AGAIN")).toBeInTheDocument();
   }, 20_000);
 
-  test("SNAKE POOL GUIDE: over-bound Competitive persists Loose, then RESET EDITS rebuilds Loose through a fresh certificate", async () => {
+  test("SNAKE POOL GUIDE: an uncertified Competitive pool persists Loose, then RESET EDITS rebuilds Loose", async () => {
+    mockSnakeShapeAtRequestedPersonTarget();
     const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((id, index) => makeTeam(id, {
       name: `Club ${index + 1}`,
@@ -461,9 +522,11 @@ describe("LeagueBuilderDraftSetup", () => {
       gmSeatId: undefined,
       gmSeatName: undefined,
     }));
-    const players = makePositionDiversePlayers(300, 8, "snake-widen");
-    const supportIds = players.slice(0, 176).map((player) => player.id);
-    const persistedHandAdds = players.slice(176, 246).map((player) => player.id);
+    const players = makePositionDiversePlayers(300, 8, "snake-widen").map((player) => ({
+      ...player,
+      leagueAssignments: [],
+    }));
+    const persistedHandAdds = players.slice(176, 186).map((player) => player.id);
     const leagueData = mockLeagueData({
       league: makeLeague({
         teamIds,
@@ -478,6 +541,7 @@ describe("LeagueBuilderDraftSetup", () => {
       players,
       pool: makePool({ locked: false, players: [], totalSlots: 176 }),
     });
+    wirePoolMembershipUpdates(leagueData);
     leagueData.replaceLeagueLocal = vi.fn((savedLeague) => {
       // Production replaceLeagueLocal updates hook state immediately. Keep this regression honest
       // about the persisted auto-widened preset before exercising RESET EDITS.
@@ -485,20 +549,18 @@ describe("LeagueBuilderDraftSetup", () => {
         current.id === savedLeague.id ? savedLeague : current
       );
     });
-    vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(certifiedSnakeProof(teamIds, supportIds));
+    vi.mocked(proveSimultaneousSnakeSeating).mockImplementation((input) => (
+      input.pool.length <= 238
+        ? unknownSnakeProof(teamIds.length, input.pool.length)
+        : certifiedSnakeProof(teamIds, input.pool.map((player) => player.playerId))
+    ));
 
     const view = render(<LeagueBuilderDraftSetup />);
     await clickDraftSetupButton("BUILD COMPETITIVE POOL");
 
     await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.35);
     await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.5);
-    const calls = vi.mocked(extractPoolFromDemand).mock.calls;
-    const competitiveIndex = calls.findIndex((call) => call[4]?.poolSizeMultiplier === 1.35);
-    const looseIndex = calls.findIndex((call) => call[4]?.poolSizeMultiplier === 1.5);
-    const competitive = vi.mocked(extractPoolFromDemand).mock.results[competitiveIndex]?.value as ReturnType<typeof extractPoolFromDemand>;
-    const loose = vi.mocked(extractPoolFromDemand).mock.results[looseIndex]?.value as ReturnType<typeof extractPoolFromDemand>;
-    expect(competitive.size).toBeGreaterThan(238);
-    expect(loose.size).toBe(264);
+    await waitFor(() => expect(addPlayersToLeaguePool).toHaveBeenCalled(), { timeout: 12_000 });
     expect(await screen.findByText(/BUILT LOOSE-SIZED SHAPED BUILD · AUTO-WIDENED FROM COMPETITIVE/i, {}, { timeout: 12_000 }))
       .toHaveTextContent(/264 PLAYERS · EVERY CHOSEN IDENTITY CERTIFIED TOGETHER/i);
     await waitFor(() => expect(leagueData.replaceLeagueLocal).toHaveBeenCalledWith(expect.objectContaining({
@@ -513,8 +575,9 @@ describe("LeagueBuilderDraftSetup", () => {
     await clickDraftSetupButton("RESET EDITS");
 
     const resetOptions = await waitForExtractPoolOptions((candidate) => candidate.poolSizeMultiplier === 1.5);
-    expect(resetOptions.identitySupportIds).toEqual([...supportIds].sort((a, b) => a.localeCompare(b)));
-    expect(resetOptions.identitySupportReceipt).toEqual(expect.objectContaining({ version: 1 }));
+    expect(resetOptions.identitySupportIds).toBeUndefined();
+    expect(resetOptions.identitySupportReceipt).toBeUndefined();
+    expect(resetOptions.deferIdentityToFinalProof).toBe(true);
     expect(resetOptions.preserveSelectedIdentityClaims).toBe(false);
     const resetProofPoolSizes = vi.mocked(proveSimultaneousSnakeSeating).mock.calls
       .map(([input]) => input.pool.length);
@@ -526,7 +589,8 @@ describe("LeagueBuilderDraftSetup", () => {
     expect(leagueData.refresh).not.toHaveBeenCalled();
   }, 20_000);
 
-  test("SNAKE POOL GUIDE: an uncertified full source truth loads Full Sources", async () => {
+  test("SNAKE POOL GUIDE: an uncertified source shelf keeps the shaped pool and blocks Lock", async () => {
+    mockSnakeShapeAtRequestedPersonTarget();
     const teamIds = Array.from({ length: 8 }, (_, index) => `team-${index}`);
     const teams = teamIds.map((id, index) => makeTeam(id, {
       name: `Club ${index + 1}`,
@@ -536,7 +600,7 @@ describe("LeagueBuilderDraftSetup", () => {
       ...player,
       leagueAssignments: [],
     }));
-    mockLeagueData({
+    const leagueData = mockLeagueData({
       league: makeLeague({
         teamIds,
         draftFormat: "snake",
@@ -549,6 +613,7 @@ describe("LeagueBuilderDraftSetup", () => {
       players,
       pool: makePool({ locked: false, players: [], totalSlots: 176 }),
     });
+    wirePoolMembershipUpdates(leagueData);
     vi.mocked(proveSimultaneousSnakeSeating).mockReturnValue(unknownSnakeProof(
       teamIds.length,
       players.length,
@@ -557,13 +622,18 @@ describe("LeagueBuilderDraftSetup", () => {
     render(<LeagueBuilderDraftSetup />);
     await clickDraftSetupButton("BUILD COMPETITIVE POOL");
 
-    expect(await screen.findByText(/BUILT FULL SELECTED SOURCES · AUTO-WIDENED FROM COMPETITIVE/i))
-      .toHaveTextContent(/300 PLAYERS · CHOSEN IDENTITIES NOT YET CERTIFIED TOGETHER/i);
-    expect(extractPoolFromDemand).not.toHaveBeenCalled();
-    expect(addPlayersToLeaguePool).toHaveBeenCalledWith(
-      players.map((player) => player.id).sort((a, b) => a.localeCompare(b)),
-      "league-page",
-    );
+    expect(await screen.findByText(/BUILT /i, {}, { timeout: 12_000 }))
+      .toHaveTextContent(/BUILT LOOSE SHAPED BUILD · IDENTITY CHECK UNRESOLVED · 264 PLAYERS · CHOSEN IDENTITIES NOT YET CERTIFIED TOGETHER/i);
+    expect(extractPoolFromDemand).toHaveBeenCalled();
+    const fullIds = players.map((player) => player.id).sort((a, b) => a.localeCompare(b));
+    expect(vi.mocked(addPlayersToLeaguePool).mock.calls.some(([ids]) => (
+      Array.isArray(ids) && ids.length === fullIds.length && ids.every((id, index) => id === fullIds[index])
+    ))).toBe(false);
+    const proofPoolSizes = vi.mocked(proveSimultaneousSnakeSeating).mock.calls
+      .map(([input]) => input.pool.length);
+    expect(proofPoolSizes).toEqual(expect.arrayContaining([238, 264, 300]));
+    const snakeSetup = await screen.findByTestId("snake-setup-adapter");
+    expect(within(snakeSetup).getByRole("button", { name: "LOCK POOL" })).toBeDisabled();
   }, 20_000);
 
   test("SNAKE POOL GUIDE: leaving during shaping aborts the worker and cannot persist a stale pool", async () => {

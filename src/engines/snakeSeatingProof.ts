@@ -1513,7 +1513,13 @@ function identityProofCandidatePlayers(
   input: SimultaneousSnakeSeatingInput,
   players: readonly SnakeSeatingPlayer[],
 ): SnakeSeatingPlayer[] {
-  const smallSourcePeopleLimit = Math.max(640, input.clubs.length * LEGAL_ROSTER.size * 3);
+  // A named Loose pool is already 1.5x roster demand (264 people for eight clubs). Treat that as
+  // a large proof input: the independent validator still checks the exact finished pool, while the
+  // constructor works from its bounded role/identity lenses instead of exploring every card.
+  const smallSourcePeopleLimit = Math.max(
+    160,
+    Math.ceil(input.clubs.length * LEGAL_ROSTER.size * 1.25),
+  );
   const sourcePeople = new Set(players.map(deriveVersionGroupId)).size;
   if (sourcePeople <= smallSourcePeopleLimit) return [...players];
 

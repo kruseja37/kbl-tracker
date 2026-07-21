@@ -4365,3 +4365,18 @@ generic confirmation failure.
   selection, proof input, or the next build after reload.
 - This ruling supersedes the 2026-07-08 active-own-league checkbox rule. That model could not
   distinguish a source assignment from a pool-output assignment written to the same league id.
+
+## 2026-07-20 — Named Snake pools shape people before they certify rosters
+
+- Full Sources remains the exact union of selected cards. It is a source view and a manual option.
+- Tight, Competitive, and Loose count one version-group person once and normally select one card for
+  that person. Alternate cards remain available at the source level and by direct hand edit.
+- The engine shapes the requested named pool first and proves that exact membership. It tries wider
+  named presets only when needed. Full Sources is an optional final fallback, not a certificate
+  prerequisite.
+- One exact final proof still owns legal roster, identity, value, salary, tax, and one-person
+  capacity truth. Honest UNKNOWN remains blocked.
+- Exact membership records generated output. A session-only engine-generated label is not a Lock
+  input and cannot make an otherwise unchanged accepted receipt stale.
+- This applies to all source types, every identity, and four- and eight-team rooms. It contains no
+  Legend, league, club, or room special case.

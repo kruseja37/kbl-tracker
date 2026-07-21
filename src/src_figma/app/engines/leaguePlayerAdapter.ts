@@ -3,6 +3,7 @@ import type { DesignPoolPlayer } from "../../../engines/rosterDesignFeasibility"
 import { toRosterSlotPlayer } from "../../../engines/rosterNeed";
 import { computePlayerIv } from "../../../utils/leagueBuilderPoolBuilder";
 import type { Player } from "../../../utils/leagueBuilderStorage";
+import { snakePlayerVersionGroupId } from "../../../utils/snakePlayerIdentity";
 
 const PITCHER_POSITIONS = new Set<string>(["SP", "SP/RP", "RP", "CP", "P", "TWO-WAY"]);
 
@@ -61,6 +62,7 @@ export function demandPlayerFromLeaguePlayer(player: Player): DemandUniversePlay
   });
   return {
     id: player.id,
+    versionGroupId: snakePlayerVersionGroupId(player),
     name: playerName(player),
     iv,
     salary: player.salary,

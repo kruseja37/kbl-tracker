@@ -32964,3 +32964,16 @@ was still required before a local preview.
 `be166c0eae08b17a59001871b6caf8f2488e12e5813da438009d90590acd614b`, Major 0 / Minor 0. It
 closed both prior audit blocks. One local production preview may serve JK's browser walk. This close
 does not authorize push, merge, Vercel deployment, or production promotion.
+
+## LEGENDS-NAMED-POOL-FLOW-55
+
+**Route:** Codex 5.6 Sol xhigh builder; separate read-only auditor.
+
+**Goal:** Repair FINDING-253 with the generic source-to-pool law in
+`spec-docs/contracts/CONTRACT_LEGENDS_NAMED_POOL_FLOW_2026-07-20.md`. The builder must carry one-
+person capacity into numeric shaping, shape named pools before proof, certify exact final membership,
+keep Full Sources optional, preserve honest UNKNOWN, and prove four/eight-team Legends-only flow plus
+all 24 identities. Do not change tax, cap, roster, identity thresholds, named target sizes, source
+selection, sibling retirement, or readiness meaning. The final auditor must cite code and return
+APPROVE or BLOCK. Only APPROVE permits one replacement preview for JK. No production promotion is
+authorized.

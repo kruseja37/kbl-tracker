@@ -8466,3 +8466,21 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   receipt timeouts remain on the base branch.
 - Next: freeze the exact diff, publish one replacement preview, and give it to JK. Independent audit
   remains separate; JK's browser walk is the sole product gate. Production remains unchanged.
+
+## 2026-07-20 — FINDING-253 Legends named-pool root repair
+
+- Fetched first. `origin/main` is still `ba7f97d68fd84e44c365c0e795f2431f6e25cbbc`.
+- Traced all 835 Legend cards from the three external libraries through person grouping, curve
+  shaping, legal repair, exact proof, pool replacement, receipt acceptance, Lock, and live version
+  retirement.
+- Reversed the faulty build order. Named pools now shape first and prove their exact result. Full
+  Sources is a final fallback only.
+- Added one-person shaping. Four-team Loose is exactly 132 people and eight-team Loose is exactly
+  264 people, even when the source shelf has Career, Draft, and Peak cards for the same person.
+- Exact production-data checks pass for four and eight clubs. All 24 identities pass in three
+  eight-club Legends-only rooms. The UI flow tests cover auto-widen, honest unresolved state,
+  cancellation, receipt acceptance, and stale rejection.
+- The full focused gate is 206/206. TypeScript, changed-file ESLint, diff integrity, and the
+  2,744-module production/PWA build with 224 precache entries pass.
+- Next: freeze the diff, obtain a separate read-only audit, then publish one replacement preview for
+  JK. Production remains unchanged.

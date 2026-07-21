@@ -1698,3 +1698,11 @@ proved a deeper loop: the active target's pool-output assignments were still cou
 membership after reload. The new header records the target/output boundary repair and leaves one
 replacement preview, independent audit, and JK's source/setup walk open. Production remains
 unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 Legends named-pool repair
+
+The prior header recorded the target/output boundary repair. JK's replacement preview then showed
+that three valid external Legends sources still could not produce a lockable normal pool: 835 cards
+for 345 people widened to unresolved Full Sources. The new header records the shape-first,
+one-person-capacity repair and leaves static/build verification, independent audit, one replacement
+preview, and JK's browser walk open. Production remains unchanged.
