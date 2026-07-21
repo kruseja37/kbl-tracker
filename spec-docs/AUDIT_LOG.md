@@ -2097,3 +2097,12 @@ the remaining product gate. Production is unchanged.
 
 JK confirmed that Draft Setup worked in the replacement preview and authorized the merge. PR 116
 is clean against current `origin/main` at `ba7f97d6`, and both Vercel checks pass.
+
+### 2026-07-21 — FINDING-255 Historical Legends pitcher-position source defect
+
+The pinned 835-card Historical Legends asset contained 197 pitcher cards with a root
+`secondaryPosition`. Those values flowed into stored Player records, draft profile/card models,
+and Snake desk eligibility. The source generator now keeps only each pitcher's authored SP,
+SP/RP, RP, or CP primary role; invalid source roles fail closed; import validation prevents future
+bad assets from persisting; live desk eligibility no longer converts two-way traits into displayed
+secondary positions. Focused verification and an independent read-only audit remain required.

@@ -93,9 +93,13 @@ export interface TaxCoreRow {
 const POSITION_ORDER: readonly TaxonomyPosition[] = [
   'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'SP', 'SP/RP', 'RP', 'CP',
 ];
+const PITCHER_POSITIONS = new Set<TaxonomyPosition>(['SP', 'SP/RP', 'RP', 'CP']);
 const PRIMARY_FIELD_SLOTS = new Set<SnakeBoardSlotId>(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF']);
 
 export function canonicalDeskEligiblePositions(primary: unknown, secondary?: unknown): TaxonomyPosition[] {
+  if (typeof primary === 'string' && PITCHER_POSITIONS.has(primary as TaxonomyPosition)) {
+    return [primary as TaxonomyPosition];
+  }
   const eligible: TaxonomyPosition[] = [];
   for (const position of [primary, secondary]) {
     if (typeof position !== 'string' || !POSITION_ORDER.includes(position as TaxonomyPosition)) continue;

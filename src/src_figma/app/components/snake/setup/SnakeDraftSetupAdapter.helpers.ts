@@ -248,6 +248,15 @@ function materializeOrder(natural: readonly string[], explicit: readonly string[
   return [...pinned, ...natural.filter((id) => !pinnedSet.has(id))];
 }
 
+export function snakeBoardEligiblePositions(input: Pick<DeskRoomPlayer, 'eligiblePositions' | 'shape'>): TaxonomyPosition[] {
+  if (input.shape.isPitcher) return [...input.eligiblePositions];
+  return [...new Set([
+    ...input.eligiblePositions,
+    ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
+      .filter((position) => canCover(input.shape, position)),
+  ])];
+}
+
 const BALANCED_PRIORITIES = Object.fromEntries(BANDS.map((band) => [band, 1])) as BandPriorities;
 
 function boardCandidate(input: {
@@ -267,11 +276,7 @@ function boardCandidate(input: {
     id: input.player.id,
     name: fullName(input.player).toUpperCase(),
     position: input.player.primaryPosition,
-    eligiblePositions: [...new Set([
-      ...input.roomPlayer.eligiblePositions,
-      ...(['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const)
-        .filter((position) => canCover(input.roomPlayer.shape, position)),
-    ])],
+    eligiblePositions: snakeBoardEligiblePositions(input.roomPlayer),
     rosterShape: input.roomPlayer.shape,
     sourceId: input.roomPlayer.sourceId,
     versionGroupId: input.roomPlayer.versionGroupId,
