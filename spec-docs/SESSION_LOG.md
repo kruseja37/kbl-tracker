@@ -8549,3 +8549,15 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build with
   224 entries pass. Next: freeze this diff and return it to the same non-builder auditor. No merge or
   production deploy is authorized; JK's browser walk remains the product gate.
+
+## 2026-07-21 — FINDING-254 first audit repair
+
+- The same non-builder auditor blocked frozen commit `e51c0f22`, Major 1 / Minor 1.
+- Replaced pre-repair role advice with one note calculated from exact final membership after floor,
+  identity, and final legality repair.
+- Changed all three internal maximum-tail count seams to whole-person ceiling math.
+- Added direct stale-advice and fractional-cap regressions. Engine 74/74, exact 66/132/264-person
+  Legends pools, page and room 99/99, browser 3/3, TypeScript, changed-file ESLint, diff integrity,
+  and the 2,744-module production/PWA build with 224 entries pass.
+- Next: freeze the narrow repair and return it to the same auditor. No preview, merge, or production
+  promotion is authorized before APPROVE. JK's browser walk remains the final product gate.

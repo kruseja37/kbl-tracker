@@ -33033,3 +33033,11 @@ rooms; all 835 cards in Full Sources; Build to Lock to Enter Draft in a real Mac
 proof ordering and stale rejection; focused engine, adapter, worker, universe, and pool-lock tests;
 TypeScript; changed-file ESLint; production/PWA build; diff integrity; then a separate read-only
 audit. No merge or production promotion is authorized.
+
+**First audit repair:** The separate auditor returned BLOCK, Major 1 / Minor 1. The visible role
+note was calculated before later floor and identity repairs, so it could describe membership that
+was no longer on screen. Three internal upper-tail limits also rounded down even though the frozen
+whole-player law rounds maximum shares up. The repair removes any pre-repair role note and rebuilds
+one exact note from the final membership. All three maximum-count seams now use ceiling counts.
+Direct regressions prove stale advice replacement and one allowed whole player at a fractional cap.
+The same auditor must recheck the new frozen commit. No preview is permitted before APPROVE.

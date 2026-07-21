@@ -19,6 +19,7 @@ import {
   POOL_QUALITY_CENTER_STOPS,
   POOL_SIZE_MULTIPLIER_STOPS,
   repairG1PoolForSizing,
+  refreshRoleBalanceAdvisories,
   resolvePoolQualityCenter,
   resolvePoolSizingTarget,
   selectFitAwareRepairCandidate,
@@ -844,6 +845,68 @@ describe('extractPoolFromDemand', () => {
     ]));
   });
 
+  it('uses whole-player ceiling counts for maximum high and superstar shares', () => {
+    const tuning = {
+      ...POOL_BALANCE_PRESETS.balanced,
+      highTailCap: 0.20,
+      superstarTailCap: 0.04,
+      windows: POOL_BALANCE_PRESETS.balanced.windows.map((window) => ({
+        ...window,
+        targetShare: window.id === 'middle-core' ? 0.80 : window.id === 'ultra-high-tail' ? 0.20 : 0,
+      })),
+    };
+    const source = [
+      ...shapedHitters('ceil-middle', 8, MIDDLE_CORE),
+      ...shapedHitters('ceil-superstar', 2, HIGH_BAT),
+    ];
+    const shaped = shapePoolByNumericGrade({
+      universe: source,
+      currentPlayers: [],
+      protectedIds: new Set<string>(),
+      targetSize: 5,
+      requiredRosterDemand: 4,
+      fitOf: () => 0,
+      tuning,
+    });
+
+    const superstarCount = Math.round(shaped.diagnostics.superstarTailShare * shaped.diagnostics.poolSize);
+    expect(superstarCount).toBe(1);
+    expect(superstarCount).toBeLessThanOrEqual(Math.ceil(tuning.superstarTailCap * shaped.diagnostics.poolSize));
+    expect(shaped.diagnostics.messages.join(' ')).not.toContain('superstar cap swapped');
+  });
+
+  it('replaces stale role advice with advice from the exact final membership', () => {
+    const finalPlayers = legalOneTeamPool();
+    const removedReliever = finalPlayers.find((player) => player.role === 'RP')!;
+    const extraCloser = arm('CP', { velocity: 60, junk: 60, accuracy: 60 }, 1_000);
+    const preRepairPlayers = [
+      ...finalPlayers.filter((player) => player.id !== removedReliever.id),
+      extraCloser,
+    ];
+    const universe = finalPlayers;
+    const staleMessages = refreshRoleBalanceAdvisories({
+      messages: ['keep this diagnostic'],
+      players: preRepairPlayers,
+      universe,
+      targetSize: 22,
+      teams: 1,
+      fitOf: () => 0,
+      qualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    });
+    expect(staleMessages).toContain('Remove 1 CP and add 1 RP to balance rosters.');
+
+    const refreshedMessages = refreshRoleBalanceAdvisories({
+      messages: staleMessages,
+      players: finalPlayers,
+      universe,
+      targetSize: 22,
+      teams: 1,
+      fitOf: () => 0,
+      qualityCenter: DEFAULT_POOL_QUALITY_CENTER,
+    });
+    expect(refreshedMessages).toEqual(['keep this diagnostic']);
+  });
+
   it('balanced preset matches the default numeric-grade supply curve', () => {
     const source = [
       ...exactCurveSource(),
@@ -1204,7 +1267,10 @@ describe('extractPoolFromDemand', () => {
 
     expect(first.players.map((player) => player.id)).toEqual(same.players.map((player) => player.id));
     expect(rerolled.players.map((player) => player.id)).not.toEqual(first.players.map((player) => player.id));
-    expect(rerolled.diagnostics.highTailShare).toBeLessThanOrEqual(POOL_BALANCE_PRESETS.balanced.highTailCap);
+    expect(rerolled.diagnostics.highTailShare).toBeLessThanOrEqual(
+      Math.ceil(POOL_BALANCE_PRESETS.balanced.highTailCap * rerolled.diagnostics.poolSize)
+        / rerolled.diagnostics.poolSize,
+    );
     expect(rerolled.diagnostics.middleMassShare).toBeGreaterThanOrEqual(POOL_BALANCE_PRESETS.balanced.targetMiddleMass);
   });
 

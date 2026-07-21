@@ -1457,7 +1457,7 @@ Preview deployment `dpl_H2aN3JGRprG6dfLX4DVSSx7gsAoR` is READY from source commi
 serves the KBL app. JK's browser walk remains open.
 
 ### FINDING-254
-**Date:** 2026-07-21 | **Phase:** Snake Draft Setup browser acceptance | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Date:** 2026-07-21 | **Phase:** Snake Draft Setup browser acceptance | **Status:** BUILT — RE-AUDIT PENDING
 **Files:** `src/engines/poolFromDemand.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused engine, page, and browser tests.
 **Evidence:** JK's replacement-preview walk found that Lock Pool never enabled after a build,
@@ -1483,3 +1483,10 @@ certify in three independent eight-team rooms. The exact 264-person gate and the
 rooms pass the unchanged independent validator. Engine 72/72 and focused page/proof regressions
 pass. TypeScript is green. Build, browser journey, separate re-audit, and JK's browser walk remain
 open for this repaired diff.
+**First audit and repair:** The separate auditor blocked frozen commit `e51c0f22`, Major 1 / Minor
+1. It found that later floor or identity swaps could leave the earlier role note stale, and that
+three internal maximum-tail counts still rounded down. Final membership now replaces every earlier
+role note, and all maximum-tail counts use whole-person ceiling math. Direct regressions cover both
+seams. Engine 74/74, exact 66/132/264-person Legends pools, page and room 99/99, browser 3/3,
+TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build pass.
+The same non-builder auditor must approve the new frozen commit before preview.

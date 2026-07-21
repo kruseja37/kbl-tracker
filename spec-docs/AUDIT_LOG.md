@@ -2069,3 +2069,12 @@ reports an exact `Remove X ... and add Y ...` correction when the source or prot
 different mix. Whole-player curve rounding prevents fractional caps from rejecting one unavoidable
 card. The exact 264-person eight-team Legends gate and all 24 identities across three eight-team
 rooms pass the unchanged independent validator. Separate re-audit and JK browser acceptance remain.
+
+### 2026-07-21 — FINDING-254 first audit block and narrow repair
+
+The separate auditor blocked frozen commit `e51c0f22`, Major 1 / Minor 1. A role note could survive
+later membership repairs, and three maximum-tail count seams rounded down instead of using the
+ratified whole-person ceiling. The repair rebuilds one role note from exact final membership and
+uses ceiling counts at every maximum-tail seam. Direct regressions, exact 66/132/264-person Legends
+pools, page and room 99/99, browser 3/3, TypeScript, changed-file ESLint, diff integrity, and the
+production/PWA build pass. Same-auditor re-audit remains required before preview.

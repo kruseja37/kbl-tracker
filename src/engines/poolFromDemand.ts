@@ -859,6 +859,68 @@ function shapeRepresentativeUniverse(
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 
+const ROLE_BALANCE_ADVISORY_PATTERN = /^(?:Remove|Add) .+ to balance rosters\.$/;
+
+function roleBalanceAdvisoryMessages(options: {
+  players: readonly DemandUniversePlayer[];
+  universe: readonly DemandUniversePlayer[];
+  targetSize: number;
+  teams: number;
+  fitOf: (player: DemandUniversePlayer) => number;
+  qualityCenter: number;
+}): string[] {
+  const representativeUniverse = shapeRepresentativeUniverse(
+    options.universe,
+    options.fitOf,
+    options.qualityCenter,
+  );
+  const roleTargets = targetCountsByRoleBucket(
+    representativeUniverse,
+    options.targetSize,
+    options.teams,
+  );
+  const finalCurvePeople = shapeRepresentativeUniverse(
+    options.players,
+    options.fitOf,
+    options.qualityCenter,
+  );
+  const roleCount = (bucket: string) => finalCurvePeople
+    .filter((player) => roleBucketOf(player) === bucket).length;
+  const rosterRoleBuckets = Object.keys(roleTargets)
+    .filter((bucket) => bucket.startsWith('arm:') || bucket.startsWith('pos:'))
+    .sort((left, right) => left.localeCompare(right));
+  const surplusRoles = rosterRoleBuckets
+    .map((bucket) => ({ bucket, count: roleCount(bucket) - (roleTargets[bucket] ?? 0) }))
+    .filter((entry) => entry.count > 0);
+  const deficitRoles = rosterRoleBuckets
+    .map((bucket) => ({ bucket, count: (roleTargets[bucket] ?? 0) - roleCount(bucket) }))
+    .filter((entry) => entry.count > 0);
+  const roleList = (entries: readonly { bucket: string; count: number }[]) => entries
+    .map((entry) => `${entry.count} ${entry.bucket.replace(/^(?:arm|pos):/, '')}`)
+    .join(' + ');
+  if (surplusRoles.length === 0 && deficitRoles.length === 0) return [];
+  const remove = surplusRoles.length > 0 ? `Remove ${roleList(surplusRoles)}` : '';
+  const add = deficitRoles.length > 0
+    ? `${remove ? 'add' : 'Add'} ${roleList(deficitRoles)}`
+    : '';
+  return [`${remove}${remove && add ? ' and ' : ''}${add} to balance rosters.`];
+}
+
+export function refreshRoleBalanceAdvisories(options: {
+  messages: readonly string[];
+  players: readonly DemandUniversePlayer[];
+  universe: readonly DemandUniversePlayer[];
+  targetSize: number;
+  teams: number;
+  fitOf: (player: DemandUniversePlayer) => number;
+  qualityCenter: number;
+}): string[] {
+  return [
+    ...options.messages.filter((message) => !ROLE_BALANCE_ADVISORY_PATTERN.test(message)),
+    ...roleBalanceAdvisoryMessages(options),
+  ];
+}
+
 function trimDemandPoolToPersonTarget(
   players: readonly DemandUniversePlayer[],
   protectedIds: ReadonlySet<string>,
@@ -1810,7 +1872,7 @@ export function shapePoolByNumericGrade(options: {
     }
   }
 
-  const highTailCapCount = Math.floor(effectiveTarget * tuning.highTailCap);
+  const highTailCapCount = Math.ceil(effectiveTarget * tuning.highTailCap);
   const selectedCurvePeople = () => shapeRepresentativeUniverse(
     [...selected.values()],
     options.fitOf,
@@ -1884,7 +1946,7 @@ export function shapePoolByNumericGrade(options: {
     }
   }
 
-  const superstarCapCount = Math.floor(effectiveTarget * tuning.superstarTailCap);
+  const superstarCapCount = Math.ceil(effectiveTarget * tuning.superstarTailCap);
   let superstarCount = selectedCurvePeople()
     .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
   if (superstarCount > superstarCapCount) {
@@ -1957,27 +2019,14 @@ export function shapePoolByNumericGrade(options: {
   // without retaining a stale pre-trim or pre-swap quota result.
   quotaShortfalls.length = 0;
   const finalCurvePeople = selectedCurvePeople();
-  const roleCount = (bucket: string) => finalCurvePeople
-    .filter((player) => roleBucketOf(player) === bucket).length;
-  const rosterRoleBuckets = Object.keys(roleTargets)
-    .filter((bucket) => bucket.startsWith('arm:') || bucket.startsWith('pos:'))
-    .sort((left, right) => left.localeCompare(right));
-  const surplusRoles = rosterRoleBuckets
-    .map((bucket) => ({ bucket, count: roleCount(bucket) - (roleTargets[bucket] ?? 0) }))
-    .filter((entry) => entry.count > 0);
-  const deficitRoles = rosterRoleBuckets
-    .map((bucket) => ({ bucket, count: (roleTargets[bucket] ?? 0) - roleCount(bucket) }))
-    .filter((entry) => entry.count > 0);
-  const roleList = (entries: readonly { bucket: string; count: number }[]) => entries
-    .map((entry) => `${entry.count} ${entry.bucket.replace(/^(?:arm|pos):/, '')}`)
-    .join(' + ');
-  if (surplusRoles.length > 0 || deficitRoles.length > 0) {
-    const remove = surplusRoles.length > 0 ? `Remove ${roleList(surplusRoles)}` : '';
-    const add = deficitRoles.length > 0
-      ? `${remove ? 'add' : 'Add'} ${roleList(deficitRoles)}`
-      : '';
-    messages.push(`${remove}${remove && add ? ' and ' : ''}${add} to balance rosters.`);
-  }
+  messages.push(...roleBalanceAdvisoryMessages({
+    players: finalCurvePeople,
+    universe: eligibleUniverse,
+    targetSize: effectiveTarget,
+    teams: options.teams ?? 0,
+    fitOf: options.fitOf,
+    qualityCenter: poolQualityCenter,
+  }));
   for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
     const bucketSource = representativeUniverse.filter((player) => roleBucketOf(player) === bucket);
     const windowTargets = targetCountsByWindow(bucketTarget, windows);
@@ -2215,7 +2264,7 @@ function maxLowTailCount(size: number, tuning: NumericPoolShapeTuning = poolBala
 }
 
 function maxHighTailCount(size: number, tuning: NumericPoolShapeTuning = poolBalancePresetTuning()): number {
-  return Math.floor(size * tuning.highTailCap);
+  return Math.ceil(size * tuning.highTailCap);
 }
 
 function incrementCount(target: Record<string, number>, key: string): void {
@@ -3526,6 +3575,20 @@ export function extractPoolFromDemand(
       ])].sort((a, b) => a.localeCompare(b));
       messages.push(...finalIdentityG1Repair.messages);
     }
+    const finalMessageOptions = {
+      players,
+      universe: universe.filter((player) => !excludedForShape.has(player.id)),
+      targetSize: target.effectiveTarget,
+      teams: teamsForSizing,
+      fitOf,
+      qualityCenter: poolQualityCenter,
+    };
+    const refreshedMessages = refreshRoleBalanceAdvisories({
+      ...finalMessageOptions,
+      messages,
+    });
+    messages.length = 0;
+    messages.push(...refreshedMessages);
     if (numericShape) {
       numericShape = buildNumericPoolShapeDiagnostics({
         players,
@@ -3536,12 +3599,15 @@ export function extractPoolFromDemand(
         poolQualityCenter,
         legalCompletionFeasible: g1?.holds ?? null,
         quotaShortfalls: numericShape.quotaShortfalls,
-        messages: [
-          ...numericShape.messages,
-          ...floorTopUp.messages,
-          ...identityRepair.messages,
-          ...(finalIdentityG1Repair?.messages ?? []),
-        ],
+        messages: refreshRoleBalanceAdvisories({
+          ...finalMessageOptions,
+          messages: [
+            ...numericShape.messages,
+            ...floorTopUp.messages,
+            ...identityRepair.messages,
+            ...(finalIdentityG1Repair?.messages ?? []),
+          ],
+        }),
         hardKeepPlayers: players.filter((player) => protectedIds.has(player.id)),
         engineGeneratedPlayers: players.filter((player) => !protectedIds.has(player.id)),
         designHardKeepIds,
