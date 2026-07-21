@@ -8484,3 +8484,24 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   2,744-module production/PWA build with 224 precache entries pass.
 - Next: freeze the diff, obtain a separate read-only audit, then publish one replacement preview for
   JK. Production remains unchanged.
+
+## 2026-07-20 — FINDING-253 first audit repair
+
+- The non-builder auditor blocked frozen commit `7960b043`, Major 1 / Minor 1. The main path was
+  correct, but protected sibling versions still inflated position floors and curve accounting. The
+  contract also had two trailing-space lines.
+- Repaired floor availability, floor shortfalls, protected quotas, tail caps, final curve counts,
+  and diagnostics to count version-group people once. Manually protected sibling cards remain in
+  membership as required.
+- Added direct tests for one-person CF supply, required floor injection, one-person curve size,
+  one-person hard-keep count, tail share, and band totals.
+- The adjacent gate then found a separate exact-versus-bounded scheduler boundary on a four-club
+  440-player Bomba Squad proof. Replaced the people-only cutoff with a generic source-by-club work
+  budget. Four-team 440-player proof uses safe exact search; eight-team Competitive and Loose remain
+  on the bounded path; the final validator is unchanged.
+- Final evidence: 163/163 core source, shaping, proof, and Draft Setup tests; 31/31 adjacent
+  unchanged-path tests; 4/4 final SMB4 calibration; full 88-pick and 176-pick Assistant GM scale
+  runs; TypeScript; changed-file ESLint; diff integrity; and a 2,744-module production/PWA build
+  with 224 precache entries.
+- Next: freeze this repair and return it to the same read-only auditor. No push, preview, merge, or
+  production promotion is authorized before APPROVE.

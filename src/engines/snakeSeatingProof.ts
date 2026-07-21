@@ -1496,6 +1496,9 @@ const IDENTITY_PROOF_FIELD_POSITIONS: readonly FieldPosition[] = [
   'C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF',
 ];
 const IDENTITY_PROOF_MIN_FIT_DEPTH = Math.ceil(LEGAL_ROSTER.size / 2);
+// Exact search is faster and more complete below this generic source-by-club work budget. Above it,
+// the bounded constructor keeps setup responsive and the independent validator still owns SUCCESS.
+const IDENTITY_PROOF_EXACT_SEARCH_WORK_LIMIT = 1_760;
 
 /**
  * Bound setup identity work to cards that can actually influence the bounded roster optimizer.
@@ -1521,7 +1524,9 @@ function identityProofCandidatePlayers(
     Math.ceil(input.clubs.length * LEGAL_ROSTER.size * 1.25),
   );
   const sourcePeople = new Set(players.map(deriveVersionGroupId)).size;
-  if (sourcePeople <= smallSourcePeopleLimit) return [...players];
+  const sourceClubWork = sourcePeople * input.clubs.length;
+  if (sourcePeople <= smallSourcePeopleLimit
+    || sourceClubWork <= IDENTITY_PROOF_EXACT_SEARCH_WORK_LIMIT) return [...players];
 
   const tier = input.tier ?? 'standard';
   const selectedIds = new Set<string>();

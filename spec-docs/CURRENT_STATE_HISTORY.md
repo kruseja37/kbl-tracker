@@ -1706,3 +1706,14 @@ that three valid external Legends sources still could not produce a lockable nor
 for 345 people widened to unresolved Full Sources. The new header records the shape-first,
 one-person-capacity repair and leaves static/build verification, independent audit, one replacement
 preview, and JK's browser walk open. Production remains unchanged.
+
+## 2026-07-20 — Outgoing before FINDING-253 same-auditor re-audit
+
+The first frozen FINDING-253 repair passed builder gates but the separate auditor blocked it, Major
+1 / Minor 1. Protected sibling cards still inflated position floors and curve accounting; two
+contract lines also contained trailing whitespace. The narrow repair counts people once across
+those seams and adds direct regressions. A broader gate also found and repaired a generic
+exact-versus-bounded proof scheduler boundary for safe four-club 440-player workloads. Core,
+adjacent, calibration, TypeScript, lint, build, and diff-integrity gates are green. The new header
+leaves same-auditor approval, one replacement preview, and JK's browser walk open. Production is
+unchanged.

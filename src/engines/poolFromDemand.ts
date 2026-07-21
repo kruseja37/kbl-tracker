@@ -917,12 +917,25 @@ export function matchesPositionSupplyFloor(
   }
 }
 
+function distinctPositionSupplyCount(
+  players: readonly RosterSlotPlayer[],
+  target: Pick<PositionSupplyFloorTarget, 'kind' | 'position'>,
+): number {
+  const matchingPeople = new Set<string>();
+  players.forEach((player, index) => {
+    if (!matchesPositionSupplyFloor(player, target)) return;
+    const grouped = player as RosterSlotPlayer & { id?: string; versionGroupId?: string };
+    matchingPeople.add(grouped.versionGroupId?.trim() || grouped.id || `row:${index}`);
+  });
+  return matchingPeople.size;
+}
+
 export function evaluatePositionSupplyFloors(
   players: readonly RosterSlotPlayer[],
   teamCount: number,
 ): PositionSupplyFloorResult[] {
   return deriveHardPositionSupplyFloorTargets(teamCount).map((target) => {
-    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    const available = distinctPositionSupplyCount(players, target);
     return {
       ...target,
       available,
@@ -937,7 +950,7 @@ export function evaluateCompetitivePositionSupplyFloors(
   teamCount: number,
 ): PositionSupplyFloorResult[] {
   return derivePositionSupplyFloorTargets(teamCount).map((target) => {
-    const available = players.filter((player) => matchesPositionSupplyFloor(player, target)).length;
+    const available = distinctPositionSupplyCount(players, target);
     return {
       ...target,
       available,
@@ -1005,14 +1018,14 @@ export function enforcePositionSupplyFloors(options: {
     if (floor.missing <= 0) return [];
     const universeAvailable = options.universe
       .filter((player) => !excludedIds.has(player.id))
-      .filter((player) => matchesPositionSupplyFloor(player, floor))
-      .length;
+      .filter((player) => matchesPositionSupplyFloor(player, floor));
+    const universeAvailablePeople = distinctPositionSupplyCount(universeAvailable, floor);
     return [{
       key: `position-floor:${floor.position}`,
       position: floor.position,
       wanted: floor.needed,
-      available: universeAvailable,
-      message: `The uploaded universe has ${universeAvailable} ${floor.label.toLowerCase()}; `
+      available: universeAvailablePeople,
+      message: `The uploaded universe has ${universeAvailablePeople} ${floor.label.toLowerCase()}; `
         + `${floor.needed} required for ${floor.teams} club${floor.teams === 1 ? '' : 's'} plus hoarding slack.`,
     }];
   });
@@ -1194,7 +1207,8 @@ export function buildNumericPoolShapeDiagnostics(options: {
   const poolQualityCenter = resolvePoolQualityCenter(options.poolQualityCenter);
   const qualityShift = poolQualityCenter - DEFAULT_POOL_QUALITY_CENTER;
   const tuning = options.tuning ?? poolBalancePresetTuning(preset, options.poolQualityCenter);
-  const numericGrades = options.players.map(numericGradeOf);
+  const curvePlayers = shapeRepresentativeUniverse(options.players, () => 0, poolQualityCenter);
+  const numericGrades = curvePlayers.map(numericGradeOf);
   const denominator = numericGrades.length || 1;
   const highTailShare = numericGrades.filter((grade) => grade >= tuning.highTailMin).length / denominator;
   const superstarTailShare = numericGrades.filter((grade) => grade >= tuning.superstarTailMin).length / denominator;
@@ -1203,6 +1217,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
   ).length / denominator;
   const lowTailShare = numericGrades.filter((grade) => grade < tuning.lowTailMax).length / denominator;
   const hardKeepPlayers = [...(options.hardKeepPlayers ?? [])];
+  const hardKeepPeople = shapeRepresentativeUniverse(hardKeepPlayers, () => 0, poolQualityCenter);
   const finalIds = new Set(options.players.map((player) => player.id));
   const designHardKeepIds = options.designHardKeepIds ?? new Set<string>();
   const identityCriticalIds = options.identityCriticalIds ?? new Set<string>();
@@ -1215,18 +1230,19 @@ export function buildNumericPoolShapeDiagnostics(options: {
   const engineGeneratedPlayers = options.engineGeneratedPlayers
     ? [...options.engineGeneratedPlayers]
     : options.players.filter((player) => !hardKeepPlayers.some((kept) => kept.id === player.id));
+  const engineGeneratedPeople = shapeRepresentativeUniverse(engineGeneratedPlayers, () => 0, poolQualityCenter);
   const selectedTeamRosterIds = options.selectedTeamRosterIds ?? new Set<string>();
-  const hardKeepByBand = countPlayersByBand(hardKeepPlayers, tuning);
-  const engineGeneratedByBand = countPlayersByBand(engineGeneratedPlayers, tuning);
-  const finalPoolByBand = countPlayersByBand(options.players, tuning);
+  const hardKeepByBand = countPlayersByBand(hardKeepPeople, tuning);
+  const engineGeneratedByBand = countPlayersByBand(engineGeneratedPeople, tuning);
+  const finalPoolByBand = countPlayersByBand(curvePlayers, tuning);
   const targetBandCounts = targetCountsByBand(options.targetSize, tuning);
   const hardKeepShapeOverflowByBand: Record<string, number> = {};
   for (const [band, count] of Object.entries(hardKeepByBand)) {
     const overflow = count - (targetBandCounts[band] ?? 0);
     if (overflow > 0) hardKeepShapeOverflowByBand[band] = overflow;
   }
-  const hardKeepOverflowCount = Math.max(0, hardKeepPlayers.length - options.targetSize);
-  const overTargetReason = options.players.length > options.targetSize
+  const hardKeepOverflowCount = Math.max(0, hardKeepPeople.length - options.targetSize);
+  const overTargetReason = curvePlayers.length > options.targetSize
     ? hardKeepOverflowCount > 0
       ? 'hardKeep overflow'
       : hardKeepPlayers.length > 0
@@ -1234,7 +1250,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
         : 'legal repair or curve violation'
     : null;
   const positionRoleCoverage: Record<string, number> = {};
-  for (const player of options.players) {
+  for (const player of curvePlayers) {
     const bucket = roleBucketOf(player);
     positionRoleCoverage[bucket] = (positionRoleCoverage[bucket] ?? 0) + 1;
   }
@@ -1247,9 +1263,9 @@ export function buildNumericPoolShapeDiagnostics(options: {
     defaultQualityCenter: DEFAULT_POOL_QUALITY_CENTER,
     qualityShift,
     shiftedBandWindows: tuning.windows.map((window) => ({ ...window })),
-    poolSize: options.players.length,
+    poolSize: curvePlayers.length,
     requiredRosterDemand: options.requiredRosterDemand,
-    poolSlackFactor: options.requiredRosterDemand > 0 ? options.players.length / options.requiredRosterDemand : 0,
+    poolSlackFactor: options.requiredRosterDemand > 0 ? curvePlayers.length / options.requiredRosterDemand : 0,
     targetSize: options.targetSize,
     medianNumericGrade,
     targetMedianQuality: poolQualityCenter,
@@ -1265,7 +1281,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     quotaShortfalls,
     legalCompletionFeasible: options.legalCompletionFeasible ?? null,
     messages: [...(options.messages ?? [])],
-    hardKeepCount: hardKeepPlayers.length,
+    hardKeepCount: hardKeepPeople.length,
     hardKeepOverflowCount,
     designHardKeepCount: [...designHardKeepIds].filter((id) => finalIds.has(id)).length,
     identityCriticalCandidateCount: identityCriticalIds.size,
@@ -1278,7 +1294,7 @@ export function buildNumericPoolShapeDiagnostics(options: {
     finalPoolByBand,
     hardKeepShapeOverflowByBand,
     qualityBandTargetCounts: targetCountsByWindow(options.targetSize, tuning.windows),
-    qualityBandFinalCounts: countPlayersByWindow(options.players, tuning.windows),
+    qualityBandFinalCounts: countPlayersByWindow(curvePlayers, tuning.windows),
     qualityBandShortfalls: qualityBandShortfallsByWindow(quotaShortfalls),
     qualityCenterShortfallReason: qualityCenterShortfallReason({
       poolQualityCenter,
@@ -1376,8 +1392,18 @@ export function shapePoolByNumericGrade(options: {
   const effectiveTarget = Math.max(0, Math.floor(options.targetSize));
   const windows = tuning.windows;
   const eligibleUniverse = options.universe.filter((player) => !excludedIds.has(player.id));
+  const representativeUniverse = shapeRepresentativeUniverse(
+    eligibleUniverse,
+    options.fitOf,
+    poolQualityCenter,
+  );
+  const protectedPeople = shapeRepresentativeUniverse(
+    protectedPlayers,
+    options.fitOf,
+    poolQualityCenter,
+  );
   const roleTargets = targetCountsByRoleBucket(
-    shapeRepresentativeUniverse(eligibleUniverse, options.fitOf, poolQualityCenter),
+    representativeUniverse,
     effectiveTarget,
   );
   const quotaShortfalls: NumericPoolQuotaShortfall[] = [];
@@ -1389,7 +1415,7 @@ export function shapePoolByNumericGrade(options: {
     for (const window of windows) {
       const targetCount = windowTargets[window.id] ?? 0;
       if (targetCount <= 0) continue;
-      const protectedCount = protectedPlayers.filter((player) =>
+      const protectedCount = protectedPeople.filter((player) =>
         roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
       ).length;
       const needed = Math.max(0, targetCount - protectedCount);
@@ -1471,7 +1497,13 @@ export function shapePoolByNumericGrade(options: {
   }
 
   const highTailCapCount = Math.floor(effectiveTarget * tuning.highTailCap);
-  let highTailCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
+  const selectedCurvePeople = () => shapeRepresentativeUniverse(
+    [...selected.values()],
+    options.fitOf,
+    poolQualityCenter,
+  );
+  let highTailCount = selectedCurvePeople()
+    .filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
   if (highTailCount > highTailCapCount) {
     let swaps = 0;
     const highTailEvictable = () => [...selected.values()]
@@ -1503,7 +1535,8 @@ export function shapePoolByNumericGrade(options: {
       removeDemandGroupIfAbsent(selected, selectedGroups, highTailPlayer);
       selected.set(replacement.id, replacement);
       selectedGroups.add(demandVersionGroupId(replacement));
-      highTailCount -= 1;
+      highTailCount = selectedCurvePeople()
+        .filter((player) => numericGradeOf(player) >= tuning.highTailMin).length;
       swaps += 1;
     }
     if (swaps > 0) {
@@ -1517,7 +1550,8 @@ export function shapePoolByNumericGrade(options: {
   }
 
   const superstarCapCount = Math.floor(effectiveTarget * tuning.superstarTailCap);
-  let superstarCount = [...selected.values()].filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
+  let superstarCount = selectedCurvePeople()
+    .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
   if (superstarCount > superstarCapCount) {
     let swaps = 0;
     const superstarEvictable = () => [...selected.values()]
@@ -1548,7 +1582,8 @@ export function shapePoolByNumericGrade(options: {
       removeDemandGroupIfAbsent(selected, selectedGroups, superstar);
       selected.set(replacement.id, replacement);
       selectedGroups.add(demandVersionGroupId(replacement));
-      superstarCount -= 1;
+      superstarCount = selectedCurvePeople()
+        .filter((player) => numericGradeOf(player) >= tuning.superstarTailMin).length;
       swaps += 1;
     }
     if (swaps > 0) {
@@ -1565,17 +1600,18 @@ export function shapePoolByNumericGrade(options: {
   // Recompute from the final post-cap membership so diagnostics name every relaxed preference
   // without retaining a stale pre-trim or pre-swap quota result.
   quotaShortfalls.length = 0;
+  const finalCurvePeople = selectedCurvePeople();
   for (const [bucket, bucketTarget] of Object.entries(roleTargets).sort(([a], [b]) => a.localeCompare(b))) {
-    const bucketSource = options.universe.filter((player) => roleBucketOf(player) === bucket && !excludedIds.has(player.id));
+    const bucketSource = representativeUniverse.filter((player) => roleBucketOf(player) === bucket);
     const windowTargets = targetCountsByWindow(bucketTarget, windows);
     for (const window of windows) {
       const targetCount = windowTargets[window.id] ?? 0;
       if (targetCount <= 0) continue;
-      const selectedCount = [...selected.values()].filter((player) =>
+      const selectedCount = finalCurvePeople.filter((player) =>
         roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
       ).length;
       if (selectedCount >= targetCount) continue;
-      const protectedCount = protectedPlayers.filter((player) =>
+      const protectedCount = protectedPeople.filter((player) =>
         roleBucketOf(player) === bucket && numericWindowId(numericGradeOf(player), windows) === window.id
       ).length;
       const availableCount = bucketSource.filter((player) =>
@@ -1594,9 +1630,9 @@ export function shapePoolByNumericGrade(options: {
     }
   }
 
-  if (protectedPlayers.length > effectiveTarget) {
+  if (protectedPeople.length > effectiveTarget) {
     messages.push(
-      `protected classes already exceed the numeric target by ${protectedPlayers.length - effectiveTarget}; protected asks, claims, floors, and pins were preserved.`,
+      `protected classes already exceed the numeric target by ${protectedPeople.length - effectiveTarget}; protected asks, claims, floors, and pins were preserved.`,
     );
   }
 

@@ -1,7 +1,7 @@
 # CONTRACT: LEGENDS NAMED POOL FLOW
 
-**Date:** 2026-07-20  
-**Thread:** SNAKE_DRAFT  
+**Date:** 2026-07-20
+**Thread:** SNAKE_DRAFT
 **Finding:** FINDING-253
 
 ## Product defect
@@ -44,8 +44,11 @@ The page then widened to Full Sources, stayed unresolved, and could not Lock.
   the independent final validator.
 - All 24 selectable identities pass in three eight-club Legends-only rooms.
 - Alternate-card unit tests prove one-person sizing and protected sibling behavior.
+- Protected sibling cards count once in position floors, curve quotas, curve caps, and diagnostics.
 - Draft Setup tests prove shape-first certification, named auto-widen, honest unresolved state,
   exact receipt acceptance, stale-build rejection, cancellation, and no forced Full Sources load.
+- The generic exact-versus-bounded scheduler certifies all 24 identities in the safe four-club,
+  440-person workload while larger workloads remain bounded and independently validated.
 - TypeScript, changed-file ESLint, production build, diff integrity, and a separate non-builder audit.
 
 No merge or production promotion is authorized by this contract.

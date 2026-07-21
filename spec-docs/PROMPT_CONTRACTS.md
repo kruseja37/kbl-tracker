@@ -32977,3 +32977,11 @@ all 24 identities. Do not change tax, cap, roster, identity thresholds, named ta
 selection, sibling retirement, or readiness meaning. The final auditor must cite code and return
 APPROVE or BLOCK. Only APPROVE permits one replacement preview for JK. No production promotion is
 authorized.
+
+**First audit repair:** The non-builder auditor blocked `7960b043`, Major 1 / Minor 1. Protected
+sibling cards still counted twice in position floors and curve accounting; two contract lines had
+trailing whitespace. The repair counts one version-group person once through floor availability,
+floor shortfalls, protected quotas, tail caps, and diagnostics while preserving every protected
+card. The wider gate also repaired a generic exact-versus-bounded scheduler boundary found by the
+four-team 440-player all-identity calibration. The same auditor must review the repaired frozen
+commit. Only APPROVE permits one replacement preview.

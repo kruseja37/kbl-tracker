@@ -268,6 +268,44 @@ describe('hard legality versus competitive position depth', () => {
     expect(evaluateCompetitivePositionSupplyFloors(closerShapes, teamCount).find((row) => row.position === 'CP'))
       .toMatchObject({ needed: 27, available: 22, missing: 5 });
   });
+
+  it('counts protected alternate cards as one person in position supply and floor repair', () => {
+    const teamCount = 1;
+    const target = floorTarget(teamCount, 'CF');
+    const career = hitter('CF', MIDDLE_CORE, 10_000, {
+      id: 'floor-legend-career',
+      versionGroupId: 'floor-legend-person',
+    });
+    const peak = {
+      ...career,
+      id: 'floor-legend-peak',
+      versionGroupId: 'floor-legend-person',
+    };
+    const otherPeople = Array.from({ length: target.needed - 1 }, (_, index) => hitter(
+      'CF',
+      MIDDLE_CORE,
+      11_000 + index,
+      {
+        id: `floor-other-cf-${index}`,
+        versionGroupId: `floor-other-person-${index}`,
+      },
+    ));
+
+    expect(evaluatePositionSupplyFloors([career, peak], teamCount).find((row) => row.position === 'CF'))
+      .toMatchObject({ available: 1 });
+    expect(evaluateCompetitivePositionSupplyFloors([career, peak], teamCount).find((row) => row.position === 'CF'))
+      .toMatchObject({ available: 1, missing: target.needed - 1 });
+
+    const repaired = enforcePositionSupplyFloors({
+      universe: [career, peak, ...otherPeople],
+      players: [career, peak],
+      teams: teamCount,
+      fitOf: () => 0,
+    });
+    expect(repaired.injectedIds).toHaveLength(target.needed - 1);
+    expect(repaired.floors.find((row) => row.position === 'CF'))
+      .toMatchObject({ available: target.needed, missing: 0 });
+  });
 });
 
 function hardFloorUniverse(teamCount: number, cpCount = floorTarget(teamCount, 'CP').needed): DemandUniversePlayer[] {
@@ -734,6 +772,49 @@ describe('extractPoolFromDemand', () => {
     expect(shaped.players.map((player) => player.id)).toEqual(expect.arrayContaining([first.id, second.id]));
     expect(new Set(shaped.players.map((player) => player.versionGroupId))).toHaveLength(20);
     expect(shaped.players).toHaveLength(21);
+  });
+
+  it('counts protected alternate cards once in curve caps and diagnostics', () => {
+    const highCareer = hitter('SS', HIGH_TAIL, 20_000, {
+      id: 'curve-legend-career',
+      versionGroupId: 'curve-legend-person',
+    });
+    const highPeak = {
+      ...highCareer,
+      id: 'curve-legend-peak',
+      versionGroupId: 'curve-legend-person',
+    };
+    const middlePeople = shapedHitters('curve-middle', 9, MIDDLE_CORE).map((player, index) => ({
+      ...player,
+      versionGroupId: `curve-middle-person-${index}`,
+    }));
+    const players = [highCareer, highPeak, ...middlePeople];
+    const diagnostics = buildNumericPoolShapeDiagnostics({
+      players,
+      hardKeepPlayers: [highCareer, highPeak],
+      requiredRosterDemand: 8,
+      targetSize: 10,
+    });
+
+    expect(players).toHaveLength(11);
+    expect(diagnostics.poolSize).toBe(10);
+    expect(diagnostics.hardKeepCount).toBe(1);
+    expect(diagnostics.highTailShare).toBeCloseTo(0.1);
+    expect(Object.values(diagnostics.finalPoolByBand).reduce((sum, count) => sum + count, 0)).toBe(10);
+
+    const shaped = shapePoolByNumericGrade({
+      universe: players,
+      currentPlayers: [highCareer, highPeak],
+      protectedIds: new Set([highCareer.id, highPeak.id]),
+      targetSize: 10,
+      requiredRosterDemand: 8,
+      fitOf: () => 0,
+    });
+    expect(shaped.diagnostics.poolSize).toBe(10);
+    expect(shaped.diagnostics.highTailShare).toBeCloseTo(0.1);
+    expect(shaped.diagnostics.messages).not.toEqual(expect.arrayContaining([
+      expect.stringContaining('high-tail cap still exceeds'),
+    ]));
   });
 
   it('balanced preset matches the default numeric-grade supply curve', () => {

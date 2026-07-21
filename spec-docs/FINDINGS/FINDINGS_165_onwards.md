@@ -1415,7 +1415,7 @@ import and setup-to-room coverage is 72/72. TypeScript, changed-file ESLint, dif
 unchanged from the base branch. Independent audit and JK's replacement-preview walk remain open.
 
 ### FINDING-253
-**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** BUILT — AUDIT/JK WALK PENDING
+**Date:** 2026-07-20 | **Phase:** Legends named Snake pool | **Status:** REPAIRED — RE-AUDIT/JK WALK PENDING
 **Files:** `src/engines/poolFromDemand.ts`, `src/engines/snakeSeatingProof.ts`,
 `src/src_figma/app/engines/leaguePlayerAdapter.ts`,
 `src/src_figma/app/pages/LeagueBuilderDraftSetup.tsx`, and focused tests.
@@ -1439,3 +1439,13 @@ Legends-only rooms. Alternate-card and Draft Setup flow regressions pass. Static
 audit, preview, and JK browser gates are recorded separately. The builder gate is 206/206 focused
 tests, TypeScript, changed-file ESLint, diff integrity, and a 2,744-module production/PWA build with
 224 precache entries.
+**First audit:** The separate auditor returned BLOCK, Major 1 / Minor 1. Protected sibling cards
+still counted as separate bodies in position floors and curve accounting, and two contract lines
+had trailing whitespace. The repair counts version-group people once in floor availability,
+shortfall supply, protected quotas, tail caps, and diagnostics while preserving every protected
+card. Direct tests cover all affected seams.
+**Calibration repair:** The wider gate exposed a separate scheduler boundary: four clubs and 440
+SMB4 people used the bounded constructor and returned UNKNOWN for Bomba Squad. A generic
+source-by-club work budget now chooses exact search for safe workloads and bounded search for larger
+ones. All 24 four-club SMB4 identities pass; eight-team Competitive and Loose remain bounded; the
+independent validator remains the only SUCCESS authority. Same-auditor approval is still required.

@@ -2011,3 +2011,21 @@ final fallback. Exact production-data proof covers 835 cards/345 people, 132-per
 264-person eight-team Loose, and all 24 identities. The builder gate passed 206/206 focused tests,
 TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build. Separate
 final audit remains required.
+
+### 2026-07-20 — FINDING-253 first audit block and repair
+
+The separate read-only auditor reviewed frozen commit `7960b043` and returned **BLOCK — Major 1 /
+Minor 1**. Protected Career, Draft, and Peak siblings shared one person key but still counted as
+separate bodies in competitive position floors, protected curve quotas, tail caps, and diagnostics.
+The contract also had two trailing-space lines. The final validator prevented a false SUCCESS, but
+the shaper could omit needed competitive supply before proof.
+
+The repair counts distinct people in every floor and curve path while preserving every manually
+protected card. New direct regressions prove that two protected cards supply one CF, trigger the
+missing floor top-up, occupy one curve slot, and contribute once to tail shares and band totals.
+During the wider gate, the exact 440-player four-club Bomba Squad calibration exposed an independent
+proof-scheduler boundary. The scheduler now uses a generic source-by-club work budget: safe inputs
+use exact search; larger inputs use the bounded constructor; the unchanged independent validator
+still owns SUCCESS. The repaired evidence is 163/163 core tests, 31/31 adjacent unchanged-path
+tests, the final 4/4 calibration, TypeScript, changed-file ESLint, diff integrity, and the
+2,744-module production/PWA build. Same-auditor re-audit is required before preview.

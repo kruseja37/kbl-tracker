@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-253 REPAIRS LEGENDS NAMED-POOL FLOW (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview showed 835 valid Career, Draft, and Peak cards for 345 people, but every normal four-team build widened to unresolved Full Sources and could not Lock. The root path counted alternate cards as people and required the source shelf to certify before shaping. Named pools now count one person once, shape first, and certify the exact finished membership. Full Sources is an optional final fallback. Exact production data proves 132 distinct people for four-team Loose, 264 for eight-team Loose, balanced curve limits, independent final validation, and all 24 identities. The builder gate is 206/206 focused tests, TypeScript, lint, diff integrity, and a 2,744-module production/PWA build. FINDING-249 FARM companion authority and FINDING-250/252 remain integrated. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** freeze, obtain a separate read-only audit, then publish one replacement preview for JK. Production is unchanged.
+> ## RIGHT NOW — FINDING-253 REPAIRED AFTER FIRST AUDIT BLOCK (2026-07-20; branch `codex/snake-live-room-authority`). JK's preview showed 835 valid Career, Draft, and Peak cards for 345 people, but every normal four-team build widened to unresolved Full Sources and could not Lock. Named pools now count one person once, shape first, and certify the exact finished membership. The first non-builder audit blocked the frozen repair, Major 1 / Minor 1: protected sibling cards still counted twice in position floors and curve accounting, and the contract had trailing whitespace. Both are repaired. A separate calibration then exposed a proof-scheduler boundary that made a safe four-team 440-player room use bounded search; the generic scheduler now selects exact or bounded search from source-by-club work. Exact production data proves 132 distinct people for four-team Loose, 264 for eight-team Loose, balanced curve limits, independent final validation, all 24 Legends identities, and all 24 four-team SMB4 identities. The final builder evidence is 163/163 core tests plus 35 adjacent tests across the repaired runs, TypeScript, lint, diff integrity, and a 2,744-module production/PWA build. FINDING-249 FARM companion authority and FINDING-250/252 remain integrated. Migration `20260720213000_farm_snake_live_catalog.sql` remains applied. **NEXT:** same-auditor re-audit, then one replacement preview for JK. Production is unchanged.
 
 ## Current product law
 
@@ -22,7 +22,7 @@
 
 ## Open gates
 
-1. Freeze FINDING-253 and complete the separate read-only audit.
+1. Freeze the FINDING-253 audit repairs and obtain same-auditor approval.
 2. Publish one exact replacement branch preview.
 3. JK runs the Legends-source, four/eight-team setup, and FARM Hotseat-plus-companion walks.
 
