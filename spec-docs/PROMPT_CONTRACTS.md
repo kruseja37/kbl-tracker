@@ -33041,3 +33041,10 @@ whole-player law rounds maximum shares up. The repair removes any pre-repair rol
 one exact note from the final membership. All three maximum-count seams now use ceiling counts.
 Direct regressions prove stale advice replacement and one allowed whole player at a fractional cap.
 The same auditor must recheck the new frozen commit. No preview is permitted before APPROVE.
+
+**Independent close:** The same non-builder auditor reviewed repair commit `8960a4c1` and returned
+APPROVE, Major 0 / Minor 0. It confirmed that final membership owns the only role advisory, all
+maximum-tail seams use whole-person ceiling math, and the direct regressions fail under the old
+behavior. Its live gate passed 74/74 engine tests and exact 66/132/264-person Legends cases. One
+replacement preview is permitted for JK's browser walk. Merge and production promotion remain
+unauthorized.

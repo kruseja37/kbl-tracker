@@ -2078,3 +2078,11 @@ ratified whole-person ceiling. The repair rebuilds one role note from exact fina
 uses ceiling counts at every maximum-tail seam. Direct regressions, exact 66/132/264-person Legends
 pools, page and room 99/99, browser 3/3, TypeScript, changed-file ESLint, diff integrity, and the
 production/PWA build pass. Same-auditor re-audit remains required before preview.
+
+### 2026-07-21 — FINDING-254 independent close
+
+The same non-builder auditor reviewed repair commit `8960a4c1` and returned APPROVE, Major 0 /
+Minor 0. It independently passed 74/74 engine tests and exact 66/132/264-person Legends cases. It
+confirmed that exact final membership owns the only role note, all maximum-tail seams use ceiling
+counts, and manual controls and hard-gate authority remain unchanged. One replacement preview is
+permitted for JK's browser walk. Merge and production promotion remain unauthorized.

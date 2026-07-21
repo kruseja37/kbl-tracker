@@ -8561,3 +8561,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   and the 2,744-module production/PWA build with 224 entries pass.
 - Next: freeze the narrow repair and return it to the same auditor. No preview, merge, or production
   promotion is authorized before APPROVE. JK's browser walk remains the final product gate.
+
+## 2026-07-21 — FINDING-254 independently approved
+
+- The same non-builder auditor reviewed repair commit `8960a4c1` and returned APPROVE, Major 0 /
+  Minor 0.
+- It independently passed 74/74 engine tests and exact 66/132/264-person Legends cases.
+- It confirmed final-membership role advice, ceiling-rounded maximum counts, unchanged manual
+  controls, and unchanged hard-gate authority.
+- Next: push the approved branch and publish one replacement preview for JK's browser walk. Merge
+  and production promotion remain unauthorized.
