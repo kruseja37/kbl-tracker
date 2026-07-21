@@ -1500,3 +1500,29 @@ Merge and production promotion remain unauthorized.
 the remaining product gate. Production is unchanged.
 **Product close:** JK confirmed that Draft Setup worked in the replacement preview and authorized
 the merge. PR 116 is clean against current `origin/main`, and both Vercel checks pass.
+
+### FINDING-255
+**Date:** 2026-07-21 | **Phase:** Historical Legends import and draft catalog | **Status:** BUILT — INDEPENDENT AUDIT PENDING
+**Files:** `scripts/build-historical-legends-app-data.mjs`,
+`public/data/historical-legends-app-data.json`, `src/data/historicalLegendsAppData.ts`,
+`src/utils/historicalLegendsImport.ts`, Snake desk/setup eligibility adapters, and focused tests.
+**Evidence:** The pinned asset contains 326 pitcher cards. Before repair, 197 carried a root
+`secondaryPosition`: 140 RP, 21 SP/RP, 21 CP, 13 SP, one P, and one TWO-WAY. These fields persisted
+unchanged and were read by profile/card models and draft-catalog eligibility construction.
+**Impact:** A Historical Legend pitcher could display or carry more than one baseball position,
+including field-style two-way eligibility, contrary to JK's ratified one-role law.
+**Root cause:** The app-asset generator copied `secondaryPosition` from every source profile without
+distinguishing pitchers. Import validation pinned hashes and identity but did not validate pitcher
+role shape. The Snake desk then unioned trait-derived `canCover` positions into displayed
+`eligiblePositions`.
+**Action:** Keep each pitcher's authored primary role and omit its source secondary field. Fail
+closed if pitching data has a role outside SP, SP/RP, RP, or CP. Reject any future app payload that
+contains pitcher secondary eligibility. Keep two-way coverage in the canonical trait-driven roster
+shape but out of displayed desk eligibility. Preserve non-pitcher positions and every non-position
+card field.
+**Builder proof:** The exhaustive asset test scans all 835 Draft/Career/Peak cards and all 326
+pitchers. A protected-player SHA-256 pins every field except the removed pitcher secondary field;
+the exact four two-way trait rows are pinned. The full hash-pinned import provisions all three
+libraries, and the live draft catalog proves pitcher profile, roster shape, and desk eligibility
+seams. Focused tests are 28/28; TypeScript, changed-file ESLint, and diff integrity pass. A separate
+read-only audit is required before push.

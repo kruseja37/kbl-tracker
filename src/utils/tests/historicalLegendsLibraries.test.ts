@@ -15,6 +15,9 @@ import {
   isHistoricalLegendsLibraryId,
 } from '../../data/historicalLegendsLibraries';
 import { importHistoricalLegendsPayload } from '../historicalLegendsImport';
+import { buildRosterDesignPool } from '../../src_figma/app/engines/leaguePlayerAdapter';
+import { canonicalDeskEligiblePositions } from '../../src_figma/app/components/snake/desk/deskModel';
+import { snakeBoardEligiblePositions } from '../../src_figma/app/components/snake/setup/SnakeDraftSetupAdapter.helpers';
 import {
   __resetLeagueBuilderDatabaseForTests,
   clearAllLeagueBuilderData,
@@ -93,6 +96,29 @@ describe('Historical Legends source libraries', () => {
         for (const playerId of roster?.mlbRoster ?? []) rosteredIds.add(playerId);
       }
       expect(rosteredIds).toEqual(new Set(rosteredCards.map((player) => player.id)));
+    }
+  }, 15_000);
+
+  test('imports pitcher roles into the live draft catalog without secondary eligibility', async () => {
+    await importHistoricalLegendsPayload(payload, EXPECTED_HISTORICAL_LEGENDS_SOURCE_SHA256);
+    const legends = (await getAllPlayers()).filter((player) => player.sourceDatabase === 'HISTORICAL_LEGENDS');
+    const catalogById = new Map(buildRosterDesignPool(legends).map((entry) => [entry.id, entry]));
+    const pitcherPositions = new Set(['SP', 'SP/RP', 'RP', 'CP']);
+
+    for (const pitcher of legends.filter((player) => pitcherPositions.has(player.primaryPosition))) {
+      const catalog = catalogById.get(pitcher.id);
+      expect(catalog?.profile.secondaryPosition, pitcher.id).toBeNull();
+      expect(catalog?.slotPlayer.secondaryPosition, pitcher.id).toBeUndefined();
+      expect(canonicalDeskEligiblePositions(pitcher.primaryPosition, pitcher.secondaryPosition), pitcher.id)
+        .toEqual([pitcher.primaryPosition]);
+      expect(snakeBoardEligiblePositions({
+        eligiblePositions: canonicalDeskEligiblePositions(pitcher.primaryPosition, pitcher.secondaryPosition),
+        shape: catalog!.slotPlayer,
+      }), pitcher.id).toEqual([pitcher.primaryPosition]);
+      const expectedTwoWay = [pitcher.trait1, pitcher.trait2].some((trait) => trait === 'Two Way (OF)')
+        ? 'OF'
+        : null;
+      expect(catalog?.slotPlayer.twoWayVariant ?? null, pitcher.id).toBe(expectedTwoWay);
     }
   }, 15_000);
 

@@ -21,6 +21,8 @@ import {
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const PROFILE_TYPES: HistoricalLegendProfileType[] = ['Career', 'Peak', 'Draft Pool'];
+const PITCHER_POSITIONS = new Set(['SP', 'SP/RP', 'RP', 'CP']);
+const PITCHER_LIKE_POSITIONS = new Set([...PITCHER_POSITIONS, 'P', 'TWO-WAY']);
 const STOCK_SOURCE_LEAGUE_IDS = new Set(['sml', 'mlb']);
 
 export interface HistoricalLegendsImportResult {
@@ -124,6 +126,15 @@ export function validateHistoricalLegendsPayload(
     }
     for (const field of ['power', 'contact', 'speed', 'fielding', 'arm', 'velocity', 'junk', 'accuracy'] as const) {
       assertFiniteRating(player[field], field, player.id);
+    }
+    const hasPitchingData = player.arsenal.length > 0
+      || [player.velocity, player.junk, player.accuracy].some((rating) => rating > 0);
+    if ((hasPitchingData || PITCHER_LIKE_POSITIONS.has(player.primaryPosition))
+      && !PITCHER_POSITIONS.has(player.primaryPosition)) {
+      throw new Error(`Historical Legends pitcher ${player.id} has invalid primary role ${player.primaryPosition}.`);
+    }
+    if (PITCHER_POSITIONS.has(player.primaryPosition) && player.secondaryPosition) {
+      throw new Error(`Historical Legends pitcher ${player.id} must not carry secondary position eligibility.`);
     }
     profileCounts.set(metadata.profileType, (profileCounts.get(metadata.profileType) ?? 0) + 1);
     const humanCards = cardsByHuman.get(metadata.playerId) ?? new Set<HistoricalLegendProfileType>();

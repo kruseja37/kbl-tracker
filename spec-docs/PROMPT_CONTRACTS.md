@@ -33048,3 +33048,34 @@ maximum-tail seams use whole-person ceiling math, and the direct regressions fai
 behavior. Its live gate passed 74/74 engine tests and exact 66/132/264-person Legends cases. One
 replacement preview is permitted for JK's browser walk. Merge and production promotion remain
 unauthorized.
+
+## HISTORICAL-LEGENDS-PITCHER-POSITION-57
+
+**Route:** Codex 5.6 Sol xhigh builder; separate Codex 5.6 Sol xhigh read-only auditor.
+
+**Goal:** Enforce JK's ratified Historical Legends position law at the generated/imported source:
+every Draft, Career, and Peak pitcher card keeps exactly its authored primary role, limited to SP,
+SP/RP, RP, or CP, and carries no secondary-position eligibility. Two-way behavior remains solely
+trait/engine-driven.
+
+**Allowed files:** `scripts/build-historical-legends-app-data.mjs`,
+`public/data/historical-legends-app-data.json`, `src/data/historicalLegendsAppData.ts`,
+`src/utils/historicalLegendsImport.ts`, the Snake desk/setup eligibility adapters that construct
+live `eligiblePositions`, focused Historical Legends/import/catalog tests, and the session/contract
+records required by the standard ritual.
+
+**Forbidden:** ratings, IV/salary, traits, personalities, hidden modifiers, names, version identity,
+non-pitcher positions, roster law, Snake economics/tuning, saved-league-only repair, merge, deploy,
+or production promotion.
+
+**Required proof:** exhaustive 835-card Draft/Career/Peak asset scan; all 326 pitcher cards have one
+allowed primary role and no secondary field; protected-player digest proves every other card field
+is unchanged; exact two-way trait rows remain unchanged; invalid source roles and pitcher secondary
+fields fail before persistence; hash-pinned full import provisions all three libraries; the live
+draft catalog and desk eligibility carry only the primary role while the two-way roster shape
+remains trait-derived; focused tests, TypeScript, changed-file ESLint, and diff integrity pass.
+
+**Audit route:** Review the frozen commit read-only. Trace source generation through import,
+persistence, draft catalog, roster eligibility, and displayed card models. Try to falsify protected
+data preservation and two-way behavior. Cite every finding by file and line and return `APPROVE` or
+`BLOCK` with major/minor counts. Do not edit files. Use xhigh reasoning effort.

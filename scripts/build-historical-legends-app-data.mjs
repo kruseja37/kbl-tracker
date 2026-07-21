@@ -20,6 +20,8 @@ const fail = (message) => {
 };
 const profileTypes = ['Career', 'Peak', 'Draft Pool'];
 const typeSlug = { Career: 'career', Peak: 'peak', 'Draft Pool': 'draft' };
+const pitcherPositions = new Set(['SP', 'SP/RP', 'RP', 'CP']);
+const pitcherLikePositions = new Set([...pitcherPositions, 'P', 'TWO-WAY']);
 const profiles = Array.isArray(source.profiles) ? source.profiles : fail('source profiles[] is missing');
 if (!source.editionId || !source.contentHash) fail('source editionId/contentHash is missing');
 if (source.profileCount !== profiles.length) fail('source profileCount does not match profiles[]');
@@ -52,6 +54,13 @@ const players = profiles.map((profile) => {
   const lastName = String(profile.lastName ?? '').trim();
   if (!firstName || !lastName) fail(`${id} is missing a first or last name`);
   const createdDate = String(source.generatedAt ?? new Date(0).toISOString());
+  const primaryPosition = String(profile.primaryPosition ?? '').trim();
+  const arsenal = asArray(profile.arsenal);
+  const hasPitchingData = arsenal.length > 0
+    || [profile.velocity, profile.junk, profile.accuracy].some((rating) => Number(rating) > 0);
+  if ((hasPitchingData || pitcherLikePositions.has(primaryPosition)) && !pitcherPositions.has(primaryPosition)) {
+    fail(`${id} has pitching data but invalid primary role ${primaryPosition || 'EMPTY'}`);
+  }
   return {
     id,
     firstName,
@@ -66,8 +75,12 @@ const players = profiles.map((profile) => {
     bats: profile.bats,
     throws: profile.throws,
     armSlot: profile.armSlot ?? null,
-    primaryPosition: profile.primaryPosition,
-    secondaryPosition: String(profile.secondaryPosition ?? '').trim() || undefined,
+    primaryPosition,
+    // A pitcher's one stored baseball position is its authored primary role. Two-way fielding
+    // remains trait-driven; source secondary values never become pitcher eligibility.
+    secondaryPosition: pitcherPositions.has(primaryPosition)
+      ? undefined
+      : String(profile.secondaryPosition ?? '').trim() || undefined,
     power: finite(profile.power, 'power', id),
     contact: finite(profile.contact, 'contact', id),
     speed: finite(profile.speed, 'speed', id),
@@ -76,7 +89,7 @@ const players = profiles.map((profile) => {
     velocity: finite(profile.velocity, 'velocity', id),
     junk: finite(profile.junk, 'junk', id),
     accuracy: finite(profile.accuracy, 'accuracy', id),
-    arsenal: asArray(profile.arsenal),
+    arsenal,
     overallGrade: profile.overallGrade,
     trait1: String(profile.trait1 ?? '').trim() || undefined,
     trait2: String(profile.trait2 ?? '').trim() || undefined,
