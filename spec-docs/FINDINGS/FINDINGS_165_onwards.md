@@ -1569,3 +1569,7 @@ construction. The narrow final repair orders catalog team rows by frozen active 
 regression with reversed mutable league order. Independent proof passed 99/99 focused tests,
 TypeScript, changed-file ESLint, the production build, and diff integrity. Live migration, one
 preview, and JK's room 9412 walk remain open.
+**Remote close:** Migration `20260721173000` is applied; local and remote histories match, and
+linked-schema lint is clean. Preview deployment `dpl_HpzXM7gEt8TvzNr78fAPyHh8ZNWW` is READY at
+`https://kbl-tracker-e627lvlq7-kruseja37s-projects.vercel.app` from source head `8506c24a`.
+JK's room 9412 browser walk remains the product gate. Production is unchanged.

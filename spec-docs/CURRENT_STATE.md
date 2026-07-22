@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-256 FARM LIVE-ROOM RECOVERY INDEPENDENTLY APPROVED; LIVE MIGRATION AND PREVIEW PENDING (2026-07-21; branch `codex/snake-draft-combined-preview`). Current `origin/main` is `c8130052`. JK's active Farm room 9412 became unreachable after host sign-in and every companion rejected its invalid Farm catalog. The generic repair restores any signed-in owner's Farm room by code, ignores stale local Farm session/snapshot/boards, rebuilds and verifies the exact frozen private prospect snapshot from live room truth, uses frozen club order and Farm identity for the catalog, rotates the lost Hotseat capability, and lets current companions wait for and reload a repaired catalog. It does not change picks or public revision. The first separate audit returned BLOCK, Major 5 / Minor 0. The final audit of head `296bb5e0` returned APPROVE, Major 0 / Minor 0, after 99/99 focused tests, TypeScript, changed-file ESLint, build, and diff-integrity proof. **NEXT:** apply the additive migration, publish one recovery preview, and return room 9412 to JK. No merge or production promotion is authorized.
+> ## RIGHT NOW — FINDING-256 FARM LIVE-ROOM RECOVERY PREVIEW READY; JK WALK PENDING (2026-07-22; branch `codex/snake-draft-combined-preview`). Current `origin/main` is `c8130052`. JK's active Farm room 9412 became unreachable after host sign-in and every companion rejected its invalid Farm catalog. The generic repair restores any signed-in owner's Farm room by code, ignores stale local Farm session/snapshot/boards, rebuilds and verifies the exact frozen private prospect snapshot from live room truth, uses frozen club order and Farm identity for the catalog, rotates the lost Hotseat capability, and lets current companions wait for and reload a repaired catalog. It does not change picks or public revision. The final independent audit returned APPROVE, Major 0 / Minor 0. Migration `20260721173000` is applied; remote history matches and linked-schema lint is clean. Preview `dpl_HpzXM7gEt8TvzNr78fAPyHh8ZNWW` is READY from source head `8506c24a`. **NEXT:** JK browser-walks room 9412 on the preview. No merge or production promotion is authorized.
 
 ## Current product law
 
@@ -25,7 +25,6 @@
 
 ## Open gates
 
-1. Apply the approved additive migration and publish one recovery preview for room 9412.
-2. JK browser-walks the restored Farm host and companion seats. Engineering proof does not close
+1. JK browser-walks the restored Farm host and companion seats. Engineering proof does not close
    this product gate.
-3. Merge and production promotion remain unauthorized.
+2. Merge and production promotion remain unauthorized.

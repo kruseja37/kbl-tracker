@@ -8639,3 +8639,13 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
   integrity.
 - Next: apply the additive Supabase migration, push this branch, publish one preview, and return
   room 9412 to JK. No merge or production promotion is authorized.
+
+## 2026-07-22 — FINDING-256 remote close
+
+- Applied migration `20260721173000_snake_live_host_recovery.sql` to the linked Supabase project.
+  Local and remote migration histories match; linked-schema lint reports no errors.
+- Pushed `codex/snake-draft-combined-preview` through `8506c24a` and created exactly one preview.
+- Vercel deployment `dpl_HpzXM7gEt8TvzNr78fAPyHh8ZNWW` is READY at
+  `https://kbl-tracker-e627lvlq7-kruseja37s-projects.vercel.app`. The remote build transformed
+  2,744 modules. An authenticated fetch returned HTTP 200 and the `Super Mega Baseball` app.
+- Next: JK browser-walks Farm room 9412. Production is unchanged; merge remains unauthorized.

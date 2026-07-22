@@ -1741,3 +1741,10 @@ non-builder auditor has now approved final head `296bb5e0`, Major 0 / Minor 0. T
 repair removes mutable league order from Farm catalog team ordering. Independent focused, static,
 build, and diff gates are green. The new live header leaves only the additive migration, one
 preview, and JK's room 9412 browser walk open. Production is unchanged.
+
+## 2026-07-22 — Outgoing after FINDING-256 remote close
+
+The prior header left the additive migration and one preview open. Migration `20260721173000` is
+now applied with matching local/remote history and clean linked-schema lint. Preview deployment
+`dpl_HpzXM7gEt8TvzNr78fAPyHh8ZNWW` is READY from source head `8506c24a` and returns the app with
+HTTP 200. The new header leaves only JK's room 9412 browser walk open. Production is unchanged.

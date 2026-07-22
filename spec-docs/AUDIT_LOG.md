@@ -2146,3 +2146,13 @@ closed it by ordering Farm catalog teams from the frozen room club ids, with a d
 that reverses mutable league order. Independent proof passed 99/99 focused recovery tests,
 TypeScript, changed-file ESLint, the 2,744-module production build, and diff integrity. The
 additive migration, one preview, and JK's browser walk remain open. Production is unchanged.
+
+### 2026-07-22 — FINDING-256 recovery preview ready
+
+Migration `20260721173000_snake_live_host_recovery.sql` is applied to the linked Supabase project.
+Local and remote histories match, and linked-schema lint reports no errors. Branch
+`codex/snake-draft-combined-preview` is pushed through `8506c24a`. Vercel deployment
+`dpl_HpzXM7gEt8TvzNr78fAPyHh8ZNWW` is READY at
+`https://kbl-tracker-e627lvlq7-kruseja37s-projects.vercel.app`; its remote build transformed 2,744
+modules, and an authenticated fetch returned the `Super Mega Baseball` app with HTTP 200. JK's
+room 9412 browser walk is the only remaining gate. Production is unchanged.
