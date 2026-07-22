@@ -3,6 +3,7 @@ import { supabase } from '../supabase';
 import type {
   CreateSnakeLiveRoomInput,
   PublishSnakeLiveRoomInput,
+  RecoverSnakeLiveHostInput,
   ResolveSnakeLiveClaimInput,
   ResolveSnakeLiveIntentInput,
   RestoreSnakeLivePublicStateInput,
@@ -269,6 +270,17 @@ export function createSnakeLiveRoomTransport(
         p_host_device_id: input.hostDeviceId,
         p_host_token: input.hostToken,
         p_public_state: input.publicState,
+      }));
+    },
+
+    async recoverHost(input: RecoverSnakeLiveHostInput): Promise<SnakeLiveRoom> {
+      return asRoom(await rpc(client, 'kbl_snake_live_recover_host', {
+        p_room_id: input.roomId,
+        p_room_code: input.roomCode,
+        p_expected_room_revision: input.expectedRoomRevision,
+        p_new_host_device_id: input.hostDeviceId,
+        p_new_host_token: input.hostToken,
+        p_catalog: input.catalog,
       }));
     },
 

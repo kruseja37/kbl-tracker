@@ -1650,7 +1650,8 @@ export default function SnakeCompanion() {
   if (!team || !league || (!catalog && !farmCatalog)) return <main className="ballpark-page"><section className="ballpark-panel">
     <h1 className="ballpark-title">DRAFT DATA IS NOT READY</h1>
     <p className="mt-3" role="alert">{liveRoom.error ?? 'THE LIVE DRAFT CATALOG IS INVALID.'}</p>
-    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
+    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-gold mt-4 min-h-11" onClick={() => void refreshSession()}>REFRESH LIVE ROOM</button>
+    <button type="button" className="ballpark-press-button ballpark-press-sm ballpark-press-default ml-2 mt-4 min-h-11" onClick={() => void forgetCurrentRoom()}>FORGET ROOM</button>
   </section></main>;
   if (isCompanionDraftComplete(session)) {
     return <CompanionCompletedScreen teamName={team.name} onLeave={forgetCurrentRoom} onSignOut={signOut} />;

@@ -33085,3 +33085,35 @@ APPROVE, Major 0 / Minor 0. It independently compared all 835 parent/target card
 exactly 197 pitcher secondary fields were removed, recomputed unchanged IV for all 835 cards, ran
 the 28/28 focused gate plus TypeScript and changed-file ESLint, and verified that the four two-way
 rows remain trait-driven. No merge, preview, deploy, or production promotion is authorized.
+
+## FARM-SNAKE-LIVE-RECOVERY-58
+
+**Route:** Codex builder; separate read-only auditor.
+
+**Goal:** Repair FINDING-256. A signed-in league owner must be able to reopen the exact active Farm
+Snake room by its four-digit code after sign-in, reload, or preview-origin change. Approved
+companions must receive the repaired public Farm catalog and continue from the same pick.
+
+**Frozen law:**
+
+- Supabase remains the public authority for the active room, picks, order, and completion.
+- Recovery must not change public draft truth or its revision.
+- Only the signed-in room owner may rotate the lost Hotseat capability.
+- The private prospect snapshot may be rebuilt only from the frozen public seed, exact team order,
+  saved scouts, and exact ordered prospect ids. Any mismatch stops recovery.
+- The live Farm catalog uses the frozen Farm identity stored in the session. Mutable team rows are
+  not the identity authority for an active room.
+- Companion polling may repair a missing or invalid phase catalog. It must not move private board
+  clicks into the public cloud path.
+- Farm trades remain disabled. MLB and Draft Setup rules do not change.
+- JK's browser walk remains the product gate.
+
+**Allowed files:** Snake live-room transport/types/hooks, `SnakeDraftRoom.tsx`,
+`SnakeCompanion.tsx`, additive Farm recovery storage, one additive Supabase migration, focused
+Snake live-room/Farm recovery tests, and required session records.
+
+**Required proof:** exact Farm prospect reconstruction; wrong code, phase, owner, device, revision,
+catalog, team, or pool fails closed; recovery rotates only the host capability; the prior host is
+revoked; companions accept the repaired Farm catalog; page-level room-code recovery; focused tests;
+TypeScript; changed-file ESLint; production build; diff integrity; separate read-only audit; applied
+migration; one preview; then JK's room-code walk. No merge or production promotion is authorized.

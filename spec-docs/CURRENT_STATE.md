@@ -1,6 +1,6 @@
 # CURRENT STATE
 
-> ## RIGHT NOW — FINDING-255 HISTORICAL LEGENDS PITCHER POSITIONS FIXED AND INDEPENDENTLY APPROVED (2026-07-21; branch `codex/legends-pitcher-position`). Current `origin/main` is `c8130052`, including the accepted FINDING-254 merge. The isolated Legends repair removes the 197 prohibited pitcher secondary fields from the pinned 835-card asset while preserving all 326 authored SP, SP/RP, RP, or CP primary roles. Future generation and import fail closed on invalid pitcher roles or secondary eligibility. Live draft catalogs carry only the primary pitching role; Two Way behavior remains trait-driven. Frozen code commit `f6f94e9c` passed 28/28 focused tests, TypeScript, changed-file ESLint, and diff integrity. A separate read-only auditor returned APPROVE, Major 0 / Minor 0, and independently proved all 835 IV values unchanged. **NEXT:** JK reviews/browser-walks the branch after choosing a preview or merge path. No merge, preview, deploy, or production promotion is authorized in this lane.
+> ## RIGHT NOW — FINDING-256 FARM LIVE-ROOM RECOVERY BUILT; AUDIT AND LIVE MIGRATION PENDING (2026-07-21; branch `codex/snake-draft-combined-preview`). Current `origin/main` is `c8130052`. JK's active Farm room 9412 became unreachable after host sign-in and every companion rejected its invalid Farm catalog. The generic repair restores the public Farm session by room code, rebuilds and verifies the exact frozen private prospect snapshot, uses frozen Farm identity for the catalog, rotates only the signed-in owner's lost Hotseat capability, and lets current companions reload a repaired catalog. It does not change picks or public revision. Focused tests, TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build are green. **NEXT:** separate read-only audit, apply the additive migration, publish one recovery preview, and return room 9412 to JK. No merge or production promotion is authorized.
 
 ## Current product law
 
@@ -25,6 +25,8 @@
 
 ## Open gates
 
-1. JK browser-walks the Historical Legends Draft/Career/Peak cards after choosing a later preview
-   or merge path. Engineering approval does not close this product gate.
-2. Merge and deployment remain explicitly unauthorized for FINDING-255.
+1. A separate auditor reviews FINDING-256. Then apply its additive migration and publish one
+   recovery preview for room 9412.
+2. JK browser-walks the restored Farm host and companion seats. Engineering proof does not close
+   this product gate.
+3. Merge and production promotion remain unauthorized.

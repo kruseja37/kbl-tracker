@@ -1718,6 +1718,81 @@ export async function restoreSnakeLiveRoomLocally(input: {
   });
 }
 
+/**
+ * Restore one FARM live-room snapshot into this browser. The public room keeps
+ * draft truth, while the exact private prospect rows are rebuilt from the
+ * frozen seed and verified here before they are attached to the local mirror.
+ */
+export async function restoreSnakeLiveFarmRoomLocally(input: {
+  session: LeagueBuilderMlbDraftSession;
+  prospects: FarmAuctionPool['prospects'];
+  recovery: {
+    roomId: string;
+    roomCode: string;
+    publicRevision: number;
+  };
+}): Promise<LeagueBuilderMlbDraftSession> {
+  const { session, prospects, recovery } = input;
+  if (session.draftPhase !== 'FARM'
+    || session.seasonNumber !== FARM_SNAKE_SESSION_NUMBER
+    || session.id !== createMlbDraftSessionId(session.leagueId, FARM_SNAKE_SESSION_NUMBER)
+    || !session.snakeSetup
+    || !recovery.roomId.trim()
+    || !/^\d{4}$/.test(recovery.roomCode)
+    || !Number.isInteger(recovery.publicRevision)
+    || recovery.publicRevision < 0) {
+    throw new Error('THE LIVE FARM ROOM DOES NOT MATCH ITS DRAFT SESSION.');
+  }
+  const prospectIds = prospects.map((prospect) => prospect.id);
+  const frozenIds = session.snakeSetup.poolPlayerIds;
+  const teamIds = new Set(session.snakeSetup.clubs.map((club) => club.teamId));
+  if (prospectIds.length === 0
+    || new Set(prospectIds).size !== prospectIds.length
+    || JSON.stringify(prospectIds) !== JSON.stringify(frozenIds)
+    || session.pickOrder.some((pick) => !teamIds.has(pick.teamId))
+    || session.completedPicks.some((pick) => !teamIds.has(pick.teamId) || !frozenIds.includes(pick.playerId))
+    || (session.trades?.length ?? 0) > 0
+    || (session.openTradeOffers?.length ?? 0) > 0) {
+    throw new Error('THE LIVE FARM ROOM PROSPECT SNAPSHOT IS INCOMPLETE.');
+  }
+
+  const db = await initLeagueBuilderDatabase();
+  const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
+  const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
+  const existing = await requestToPromise(store.get(session.id)) as LeagueBuilderMlbDraftSession | undefined;
+  if (existing && (existing.createdDate !== session.createdDate || existing.seed !== session.seed)) {
+    tx.abort();
+    throw new Error('THIS BROWSER ALREADY HAS A DIFFERENT FARM DRAFT RUN FOR THIS LEAGUE.');
+  }
+  if (existing?.farmProspectSnapshot
+    && JSON.stringify(existing.farmProspectSnapshot) !== JSON.stringify(prospects)) {
+    tx.abort();
+    throw new Error('THE LOCAL FARM PROSPECT SNAPSHOT DOES NOT MATCH THE LIVE ROOM.');
+  }
+  const recovered: LeagueBuilderMlbDraftSession = {
+    ...(structuredClone(session) as LeagueBuilderMlbDraftSession),
+    farmProspectSnapshot: prospects.map((prospect) => structuredClone(prospect)),
+    ...(existing?.farmSeatBoards ? { farmSeatBoards: existing.farmSeatBoards } : {}),
+    snakeCompanions: {
+      roomCode: recovery.roomCode,
+      claims: existing?.snakeCompanions?.claims ?? [],
+    },
+    liveRoomRecovery: {
+      roomId: recovery.roomId,
+      roomCode: recovery.roomCode,
+      publicRevision: recovery.publicRevision,
+      recoveredAt: nowISO(),
+    },
+  };
+  store.put(recovered);
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error ?? new Error('THE FARM LIVE ROOM COULD NOT BE RESTORED HERE.'));
+    tx.onabort = () => reject(tx.error ?? new Error('THE FARM LIVE ROOM RESTORE STOPPED.'));
+  });
+  return recovered;
+}
+
 export async function deleteRegisteredPool(leagueId: string): Promise<void> {
   const db = await initLeagueBuilderDatabase();
 

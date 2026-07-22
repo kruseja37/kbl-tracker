@@ -10,6 +10,7 @@ import {
   type SnakeLiveCompanionResume,
   type SnakeLiveDeviceCredentials,
 } from '../../../../../utils/snakeLiveCapabilityStore';
+import { readSnakeLiveCatalogForPhase } from '../../../../../utils/snakeLiveCatalog';
 import { readSnakeLivePublicSession } from '../../../../../utils/snakeLiveRoomSession';
 import { createSnakeLiveRoomTransport } from '../../../../../utils/snakeLiveRoomTransport';
 import type {
@@ -165,12 +166,14 @@ export function useSnakeLiveCompanionRoom(
   const roomRef = useRef<SnakeLiveRoom | null>(null);
   const accessRef = useRef<SnakeLiveDeviceAccess | null>(null);
   const claimsRef = useRef<SnakeLiveClaim[]>([]);
+  const catalogRef = useRef<SnakeLiveCatalog | null>(null);
   const eventsRef = useRef<SnakeLivePublicEvent[]>([]);
   const refreshPromiseRef = useRef<Promise<void> | null>(null);
   const refreshRequestedRef = useRef(false);
   roomRef.current = room;
   accessRef.current = access;
   claimsRef.current = claims;
+  catalogRef.current = catalog;
   eventsRef.current = events;
 
   const runMutation = useCallback(async <T,>(operation: () => Promise<T>): Promise<T> => {
@@ -191,6 +194,7 @@ export function useSnakeLiveCompanionRoom(
     roomRef.current = null;
     accessRef.current = null;
     claimsRef.current = [];
+    catalogRef.current = null;
     eventsRef.current = [];
     setRoom(null);
     setCatalog(null);
@@ -213,9 +217,11 @@ export function useSnakeLiveCompanionRoom(
     activeAccess: SnakeLiveDeviceAccess,
     generation: number,
     includeEventHistory = false,
+    refreshCatalog = false,
   ): Promise<void> => {
-    const [nextRoom, nextClaims, nextIntents, nextEvents] = await Promise.all([
+    const [nextRoom, nextCatalog, nextClaims, nextIntents, nextEvents] = await Promise.all([
       transport.getRoom(activeAccess.roomId),
+      refreshCatalog ? transport.getCatalog(activeAccess.roomId) : Promise.resolve(catalogRef.current),
       transport.listDeviceClaims(activeAccess),
       transport.listDeviceIntents(activeAccess),
       includeEventHistory ? transport.listEvents(activeAccess.roomId) : Promise.resolve(null),
@@ -231,6 +237,7 @@ export function useSnakeLiveCompanionRoom(
     }));
     if (generation !== generationRef.current || accessRef.current?.roomId !== activeAccess.roomId) return;
     setRoom(nextRoom);
+    setCatalog(nextCatalog);
     setPublicSession(readSnakeLivePublicSession(nextRoom));
     setClaims(nextClaims);
     setIntents(nextIntents);
@@ -251,7 +258,12 @@ export function useSnakeLiveCompanionRoom(
         const activeAccess = accessRef.current;
         const generation = generationRef.current;
         if (!activeAccess) return;
-        await loadScopedState(activeAccess, generation);
+        const activeRoom = roomRef.current;
+        const activeCatalog = catalogRef.current;
+        const catalogNeedsRepair = Boolean(activeRoom && (
+          !activeCatalog || !readSnakeLiveCatalogForPhase(activeCatalog.catalog, activeRoom.phase)
+        ));
+        await loadScopedState(activeAccess, generation, false, catalogNeedsRepair);
       }
     })().catch((cause) => {
       setError(errorText(cause));

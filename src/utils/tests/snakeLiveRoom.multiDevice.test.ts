@@ -868,32 +868,46 @@ describe('Snake live-room multi-device contract', () => {
     expect(JSON.stringify(await host.transport.listEvents(room.id))).not.toContain('private-player');
   });
 
-  test('does not let another device on the same account reclaim Hotseat authority', async () => {
+  test('lets the signed-in owner explicitly recover Hotseat authority without changing draft truth', async () => {
     const server = new SnakeLiveRoomTestServer();
-    const { hostAccess, room } = await roomFixture(server);
-    const companion = device(server, 'same-account-companion-mac');
+    const { host, hostAccess, room } = await roomFixture(server, 2);
+    const recoveredHost = device(server, 'recovered-hotseat-mac');
+    const catalog = {
+      formatVersion: 'snake-live-catalog-v1',
+      league: { id: 'league-1', teamIds: ['team-1', 'team-2'] },
+      teams: [{ id: 'team-1' }, { id: 'team-2' }],
+      players: [{ id: 'player-1' }, { id: 'player-2' }],
+      registeredPool: {
+        leagueId: 'league-1',
+        players: [
+          { id: 'player-1', iv: 100, salary: 100 },
+          { id: 'player-2', iv: 90, salary: 90 },
+        ],
+      },
+    };
 
-    // All test clients share the same server account and can read public room
-    // truth. Account access must not grant the host capability.
-    expect((await companion.transport.findRoomByCode(room.roomCode))?.id).toBe(room.id);
-    expect('rotateHostToken' in companion.transport).toBe(false);
-    await expect(companion.transport.publishRoom({
+    await recoveredHost.transport.recoverHost({
       roomId: room.id,
-      hostDeviceId: companion.id,
-      hostToken: companion.token,
+      roomCode: room.roomCode,
       expectedRoomRevision: 0,
-      idempotencyKey: 'same-account-takeover-attempt',
-      publicState: { currentPickIndex: 99 },
-      eventKind: 'takeover-attempt',
-      publicEvent: {},
-    })).rejects.toMatchObject({ code: 'forbidden' });
+      hostDeviceId: recoveredHost.id,
+      hostToken: recoveredHost.token,
+      catalog,
+    });
 
-    expect(await companion.transport.getRoom(room.id)).toMatchObject({
-      hostDeviceId: hostAccess.hostDeviceId,
+    expect(await recoveredHost.transport.getRoom(room.id)).toMatchObject({
+      hostDeviceId: recoveredHost.id,
       publicRevision: 0,
       publicState: { currentPickIndex: 0 },
     });
-    expect(await companion.transport.listEvents(room.id)).toMatchObject([{
+    await expect(recoveredHost.transport.getCatalog(room.id)).resolves.toMatchObject({ catalog });
+    await expect(recoveredHost.transport.listClaims({
+      roomId: room.id,
+      hostDeviceId: recoveredHost.id,
+      hostToken: recoveredHost.token,
+    })).resolves.toEqual([]);
+    await expect(host.transport.listClaims(hostAccess)).rejects.toMatchObject({ code: 'forbidden' });
+    expect(await recoveredHost.transport.listEvents(room.id)).toMatchObject([{
       roomRevision: 0,
       kind: 'ROOM_CREATED',
       publicPayload: { roomRevision: 0, phase: 'MLB' },

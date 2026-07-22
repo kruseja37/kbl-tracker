@@ -1534,3 +1534,24 @@ changed-file ESLint, and diff integrity, and mutation-proved the prior asset lea
 195 desk multi-role rows. The remaining risk is that the external source-profile artifact is not
 stored in this worktree; the unchanged pinned source hash, generator probes, exhaustive comparison,
 and new app-asset pin contain that risk. Merge and deployment remain unauthorized.
+
+### FINDING-256
+**Date:** 2026-07-21 | **Phase:** Farm Snake live room | **Status:** BUILDER GREEN — AUDIT AND LIVE MIGRATION PENDING
+**Files:** Snake live-room transport/types/hooks, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`,
+Farm recovery storage, migration `20260721173000_snake_live_host_recovery.sql`, and focused tests.
+**Evidence:** After the MLB draft completed, JK opened Farm room 9412. A later host sign-in left no
+route back to that active room. Draft Setup offered only Run It Back. All companion seats then
+showed `PLAYER DATA IS NOT READY` because the live Farm catalog was invalid.
+**Root cause:** Farm recovery still depended on the browser-local Farm session, prospect snapshot,
+and host capability. The live room carried the frozen seed and exact prospect ids, but the app did
+not use them to rebuild the private snapshot. Farm catalog construction also read mutable team Farm
+identity instead of the frozen session identity. A repaired catalog was not re-read by an already
+open companion.
+**Action:** Add owner-only room-code host recovery that rotates the lost Hotseat capability without
+changing draft truth. Rebuild the exact private prospect snapshot from the frozen seed and saved
+scouts, then require an exact ordered-id match. Build the public Farm catalog from frozen session
+identity. Let current companions refresh an invalid catalog while private board work stays local.
+**Builder proof:** Focused recovery, transport, host, companion, Farm page, and completion tests are
+green. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build
+are green. A separate read-only audit, live migration, replacement preview, and JK's room 9412 walk
+remain open.

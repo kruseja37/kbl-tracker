@@ -159,6 +159,10 @@ function transportHarness(existing: SnakeLiveRoom | null = null) {
   };
   const transport = {
     createRoom: vi.fn(async () => currentRoom),
+    recoverHost: vi.fn(async (input) => {
+      currentRoom = room({ ...currentRoom, hostDeviceId: input.hostDeviceId });
+      return currentRoom;
+    }),
     findRoomBySession: vi.fn(async () => existing),
     findRoomByCode: vi.fn(async () => existing),
     getRoom: vi.fn(async () => currentRoom),
@@ -288,6 +292,30 @@ describe('useSnakeLiveHostRoom', () => {
       catalog: farmCatalogPayload(),
     }));
     expect(result.current.publicSession?.draftPhase).toBe('FARM');
+  });
+
+  it('recovers Hotseat authority only when room-code recovery is explicit', async () => {
+    const existing = room({ hostDeviceId: 'lost-host-device' });
+    const harness = transportHarness(existing);
+    const { result } = renderHook(() => useSnakeLiveHostRoom({
+      session: session(),
+      hostDeviceId: 'recovered-host-device',
+      catalog: liveCatalogPayload(),
+      recoverHost: true,
+      transport: harness.transport,
+      capabilities,
+    }));
+
+    await waitFor(() => expect(result.current.liveRoomReady).toBe(true));
+    expect(harness.transport.recoverHost).toHaveBeenCalledWith(expect.objectContaining({
+      roomId: existing.id,
+      roomCode: existing.roomCode,
+      expectedRoomRevision: existing.publicRevision,
+      hostDeviceId: 'recovered-host-device',
+      catalog: liveCatalogPayload(),
+    }));
+    expect(harness.transport.createRoom).not.toHaveBeenCalled();
+    expect(result.current.room?.hostDeviceId).toBe('recovered-host-device');
   });
 
   it('uses a live event only as a nudge, then reads scoped claims from the server', async () => {

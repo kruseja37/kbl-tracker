@@ -28,7 +28,11 @@ function liveCatalogReceipt(): SnakeLiveCatalog {
     catalog: {
       formatVersion: 'snake-live-catalog-v1',
       league: { id: 'league', name: 'Test League', teamIds: ['team-a', 'team-b', 'team-c'] },
-      teams: [{ id: 'team-a', name: 'Team A' }, { id: 'team-b', name: 'Team B' }],
+      teams: [
+        { id: 'team-a', name: 'Team A' },
+        { id: 'team-b', name: 'Team B' },
+        { id: 'team-c', name: 'Team C' },
+      ],
       players: [{ id: 'p1', firstName: 'Player', lastName: 'One' }],
       registeredPool: { leagueId: 'league', players: [{ id: 'p1', iv: 1 }] },
     },
@@ -420,6 +424,29 @@ describe('useSnakeLiveCompanionRoom', () => {
     expect(harness.transport.listDeviceIntents).toHaveBeenCalledOnce();
     expect(harness.transport.getBoard).toHaveBeenCalledTimes(2);
     expect(harness.transport.getCatalog).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('replaces an invalid resumed catalog after the host repairs the live room', async () => {
+    vi.useFakeTimers();
+    const harness = transportHarness();
+    harness.approveAll();
+    const invalid = liveCatalogReceipt();
+    invalid.catalog = { ...invalid.catalog, teams: [{ id: 'team-a', name: 'Team A' }] };
+    vi.mocked(harness.transport.getCatalog)
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValue(liveCatalogReceipt());
+    const capability = capabilityHarness({ user: savedResume });
+    const { result, unmount } = renderHook(() => useSnakeLiveCompanionRoom({
+      ownerUserId: 'user', transport: harness.transport, capabilities: capability.api,
+    }));
+    await flushMicrotasks();
+    expect(result.current.accessReady).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(harness.transport.getCatalog).toHaveBeenCalledTimes(2);
+    expect(result.current.catalog).toEqual(liveCatalogReceipt());
     unmount();
   });
 

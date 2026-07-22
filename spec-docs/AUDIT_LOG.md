@@ -1844,6 +1844,7 @@ JK's live browser retry remains the only acceptance gate. No push, merge, or dep
 | FINDING-247 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — NEW PREVIEW READY — JK WALK PENDING | Snake Draft completed MLB handoff and completed-room recovery | One transaction now freezes the exact pool/session, creates and saves all target rosters, saves player assignments/salaries and handoff, aborts without partial state, repairs old partial state, and repeats byte-for-byte across proven 4- and 8-team completions. Recovery now appears when a signed-in browser has the league but lacks its local pool/session and explicitly reloads the restored state even when the URL already names that league. Recovery head `05f7f6b0` was rejected Major 1 / Minor 0 for a same-URL dead end; repaired head `56d1ab81` received APPROVE, Major 0 / Minor 0. Preview `dpl_CgSik9sUesdxpb2a9pBUGwzUJhpm` is READY from source `56d1ab81`; production is unchanged. |
 | FINDING-248 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — PREVIEW READY — JK WALK PENDING | Snake Draft MLB-to-farm identity and prospect generation | New and recovered Snake drafts now carry each club's farm identity through setup, live catalog, recovery, Scout Reveal, and farm-session creation. Missing legacy identity fails closed with a generic repair control. Production farm pools use the exact Standard prospect distribution and keep true ratings hidden. Exact head `914e35e9` is approved, Major 0 / Minor 0; preview `dpl_3ZkmY2ZVujBS2K5xbX6v7G9mtNk9` is READY. |
 | FINDING-250 | 2026-07-20 | FIXED — INDEPENDENTLY APPROVED — INTEGRATION GATE PENDING — JK WALK PENDING | Snake Draft Setup four/eight-team certification | The large-source identity shortlist used card count to enter pruning, then kept only six fit cards per identity-role lens. The generic repair counts distinct people and keeps at least half a legal roster per fit lens. Two audit BLOCKs repaired exact Build-to-Lock binding, bounded UNKNOWN attribution, scope, and person-group metadata. The same auditor approved frozen hash `be166c0e`, Major 0 / Minor 0. Its approved code is integrated locally with FINDING-249; combined verification and audit remain. |
+| FINDING-256 | 2026-07-21 | BUILDER GREEN — AUDIT AND LIVE MIGRATION PENDING | Farm Snake host and companion recovery | Room-code recovery now rebuilds the exact frozen Farm prospect snapshot, uses frozen Farm identity, rotates only the signed-in owner's Hotseat capability, repairs an invalid Farm catalog, and lets current companions reload it without changing draft truth. |
 
 ### 2026-07-20 — FINDING-248 audit close
 
@@ -2114,3 +2115,17 @@ comparison found exactly the intended 197 field removals and no other card-data 
 values were unchanged. Focused tests passed 28/28, TypeScript and changed-file ESLint passed, and
 mutation probes proved the old asset still leaks the prohibited fields. JK's browser walk remains
 the product gate; merge and deployment remain unauthorized.
+
+### 2026-07-21 — FINDING-256 Farm live-room recovery defect
+
+JK's active Farm room 9412 became unreachable after host sign-in, and all companion seats rejected
+the live Farm catalog. The active room still had its public session, frozen seed, exact pool ids,
+pick state, and owner. The browser-local host capability and private prospect snapshot were missing,
+and catalog construction depended on mutable team identity.
+
+The generic repair adds explicit owner room-code recovery. It rotates the lost Hotseat capability
+without changing public draft truth or revision, rebuilds prospects from the frozen seed and saved
+scouts, requires exact ordered ids, builds the catalog from frozen session identity, and lets open
+companions reload an invalid catalog. Focused tests, TypeScript, lint, diff integrity, and the
+production build pass. Separate audit, migration application, preview, and JK's room 9412 walk
+remain open.

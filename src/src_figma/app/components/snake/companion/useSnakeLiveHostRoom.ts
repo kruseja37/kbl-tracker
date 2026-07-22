@@ -44,6 +44,8 @@ export interface UseSnakeLiveHostRoomOptions {
   session: LeagueBuilderMlbDraftSession | null;
   hostDeviceId: string | null;
   catalog: SnakeLiveJsonObject | null;
+  /** Set only after the signed-in owner explicitly restores a room by code. */
+  recoverHost?: boolean;
   enabled?: boolean;
   transport?: SnakeLiveRoomTransport;
   capabilities?: SnakeLiveHostCapabilityApi;
@@ -133,6 +135,7 @@ export function useSnakeLiveHostRoom(
   const transport = options.transport ?? DEFAULT_TRANSPORT;
   const capabilities = options.capabilities ?? DEFAULT_CAPABILITIES;
   const enabled = options.enabled ?? true;
+  const recoverHost = options.recoverHost ?? false;
   const roomCode = options.session?.snakeCompanions?.roomCode ?? '';
   const sessionId = options.session ? snakeLiveRoomRunKey(options.session) : '';
   const phase = options.session?.draftPhase ?? 'MLB';
@@ -257,7 +260,20 @@ export function useSnakeLiveHostRoom(
       const existingRoom = Boolean(receivedRoom);
       let catalogForNewRoom: SnakeLiveJsonObject | null = null;
       if (receivedRoom) {
-        if (receivedRoom.hostDeviceId !== hostDeviceId) {
+        if (recoverHost) {
+          const recoveryCatalog = latestCatalogRef.current;
+          if (!recoveryCatalog) {
+            throw new Error('THE LIVE ROOM CATALOG COULD NOT BE REBUILT FOR RECOVERY.');
+          }
+          receivedRoom = await transport.recoverHost({
+            roomId: receivedRoom.id,
+            roomCode,
+            expectedRoomRevision: receivedRoom.publicRevision,
+            hostDeviceId,
+            hostToken: credentials.hostToken,
+            catalog: recoveryCatalog,
+          });
+        } else if (receivedRoom.hostDeviceId !== hostDeviceId) {
           throw new Error('THIS DRAFT IS OPEN ON ANOTHER HOST DEVICE. USE THE ORIGINAL HOST BROWSER.');
         }
       } else {
@@ -325,7 +341,7 @@ export function useSnakeLiveHostRoom(
     return () => {
       if (generationRef.current === generation) generationRef.current += 1;
     };
-  }, [capabilities, catalogAvailable, enabled, options.hostDeviceId, phase, roomCode, sessionId, transport]);
+  }, [capabilities, catalogAvailable, enabled, options.hostDeviceId, phase, recoverHost, roomCode, sessionId, transport]);
 
   useEffect(() => {
     if (!access || !hostAccessReady) return;

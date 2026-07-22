@@ -148,6 +148,17 @@ export interface SnakeLiveHostAccess {
   hostToken: string;
 }
 
+/**
+ * Explicit account-owner recovery after the Hotseat browser loses its local
+ * capability. The server rotates host authority and repairs only a missing or
+ * invalid public catalog.
+ */
+export interface RecoverSnakeLiveHostInput extends SnakeLiveHostAccess {
+  roomCode: string;
+  expectedRoomRevision: number;
+  catalog: SnakeLiveJsonObject;
+}
+
 export interface SnakeLiveDeviceAccess {
   roomId: string;
   deviceId: string;
@@ -232,6 +243,7 @@ export interface RestoreSnakeLivePublicStateInput extends SnakeLiveHostAccess {
 
 export interface SnakeLiveRoomTransport {
   createRoom(input: CreateSnakeLiveRoomInput): Promise<SnakeLiveRoom>;
+  recoverHost(input: RecoverSnakeLiveHostInput): Promise<SnakeLiveRoom>;
   findRoomBySession(sessionId: string): Promise<SnakeLiveRoom | null>;
   findRoomByCode(roomCode: string): Promise<SnakeLiveRoom | null>;
   getRoom(roomId: string): Promise<SnakeLiveRoom | null>;

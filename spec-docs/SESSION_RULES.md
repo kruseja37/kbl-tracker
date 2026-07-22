@@ -630,3 +630,9 @@ real `main`. These four lessons are the process fix, effective immediately:
   harmless, optional dedup.)
 
 - When a lane changes any seeded draw, grep ALL test directories for golden fixtures/pinned hashes derived from that engine's outputs (src/**/tests AND src/**/__tests__), not just the engine's own suite — a stale second pin in src/utils/tests/ survived WT-B's focused gates and only the full merged-tree suite caught it (2026-07-08).
+
+### Pending lesson — live room recovery claims (2026-07-21)
+
+Before telling JK that an active Snake room will survive sign-in, reload, or a preview change,
+prove room-code recovery for the exact active phase and its live player catalog. A browser-local
+host capability does not cross devices or origins. This lesson is pending JK ratification.

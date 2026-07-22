@@ -149,6 +149,7 @@ import {
   patchMlbDraftSessionSnakeCompanions,
   markSnakeRosterHandoff,
   recoverCanonicalMlbSnakePickOrder,
+  restoreSnakeLiveFarmRoomLocally,
   restoreSnakeLiveRoomLocally,
   saveMlbDraftRoomSession,
   updateMlbDraftSessionAtomically,
@@ -368,7 +369,10 @@ function FarmSnakeRoom() {
   const {
     leagues, teams, players, isLoading, error, getMlbDraftSession, saveMlbDraftSession, refresh,
   } = useLeagueBuilderData();
-  const requestedLeagueId = useMemo(() => new URLSearchParams(location.search).get('leagueId'), [location.search]);
+  const farmRoomParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const requestedLeagueId = farmRoomParams.get('leagueId');
+  const recoveryRoomCodeParam = farmRoomParams.get('roomCode') ?? '';
+  const recoverHostRequested = farmRoomParams.get('recover') === '1';
   const league = useMemo(() => leagues.find((row) => row.id === requestedLeagueId) ?? null, [leagues, requestedLeagueId]);
   const leagueTeams = useMemo(() => league?.teamIds.flatMap((id) => {
     const team = teams.find((row) => row.id === id);
@@ -389,6 +393,9 @@ function FarmSnakeRoom() {
   const [recapOpen, setRecapOpen] = useState(false);
   const [recapError, setRecapError] = useState<string | null>(null);
   const [committingRecap, setCommittingRecap] = useState(false);
+  const [recoveryRoomCode, setRecoveryRoomCode] = useState(recoveryRoomCodeParam);
+  const [recoveryWorking, setRecoveryWorking] = useState(false);
+  const [recoveryError, setRecoveryError] = useState<string | null>(null);
   const recapCommitInFlight = useRef(false);
   const persist = useCallback(async (next: NonNullable<typeof session>) => {
     const saved = await saveMlbDraftRoomSession(next, session?.revision ?? 0);
@@ -400,7 +407,24 @@ function FarmSnakeRoom() {
     setLoadDone(false);
     setActionError(null);
     try {
-      await syncEngine.pull({ throwOnError: true });
+      try {
+        await syncEngine.pull({ throwOnError: true });
+      } catch (cause) {
+        if (!recoverHostRequested) throw cause;
+      }
+      let recoveryRoom: Awaited<ReturnType<ReturnType<typeof createSnakeLiveRoomTransport>['findRoomByCode']>> = null;
+      let recoveryPublicSession: LeagueBuilderMlbDraftSession | null = null;
+      if (recoverHostRequested) {
+        if (!/^\d{4}$/.test(recoveryRoomCodeParam)) throw new Error('ENTER THE FOUR-DIGIT FARM ROOM CODE.');
+        recoveryRoom = await createSnakeLiveRoomTransport().findRoomByCode(recoveryRoomCodeParam);
+        if (!recoveryRoom || recoveryRoom.phase !== 'FARM') {
+          throw new Error('NO RECOVERABLE FARM LIVE ROOM MATCHES THIS CODE.');
+        }
+        recoveryPublicSession = readSnakeLivePublicSession(recoveryRoom);
+        if (recoveryPublicSession.draftPhase !== 'FARM') {
+          throw new Error('THE LIVE ROOM DOES NOT CONTAIN A FARM DRAFT.');
+        }
+      }
       const [freshLeagues, freshTeams, freshPlayers] = await Promise.all([
         getAllLeagueTemplates(),
         getAllTeams(),
@@ -408,28 +432,58 @@ function FarmSnakeRoom() {
       ]);
       const freshLeague = freshLeagues.find((row) => row.id === requestedLeagueId) ?? null;
       if (!freshLeague) throw new Error('THE LEAGUE WAS NOT FOUND.');
+      if (recoveryPublicSession && recoveryPublicSession.leagueId !== freshLeague.id) {
+        throw new Error('THE FARM ROOM DOES NOT MATCH THIS LEAGUE.');
+      }
       const freshLeagueTeams = freshLeague.teamIds.flatMap((id) => {
         const team = freshTeams.find((row) => row.id === id);
         return team ? [team] : [];
       });
       if (freshLeagueTeams.length === 0) throw new Error('THIS LEAGUE HAS NO DRAFT CLUBS.');
       if (freshLeague.draftFormat !== 'snake') throw new Error('THIS LEAGUE IS CONFIGURED FOR AN AUCTION DRAFT.');
-      const [storedFarm, storedMlb] = await Promise.all([
+      const [initialStoredFarm, storedMlb] = await Promise.all([
         getMlbDraftSession(freshLeague.id, FARM_SNAKE_SESSION_NUMBER),
         getMlbDraftSession(freshLeague.id, SEASON_NUMBER),
       ]);
-      if (!storedMlb) throw new Error('Finish the MLB snake draft before opening the farm room.');
-      readSnakeDraftTruth(storedMlb, 'MLB');
-      validateSnakeRosterHandoff(storedMlb, 'MLB');
-      await assertSnakeRosterHandoffReady(storedMlb, 'MLB');
-      const stored = storedFarm ?? storedMlb;
-      if (storedFarm?.draftManifest) readSnakeDraftTruth(storedFarm, 'FARM');
       const savedProfiles = await getScoutProfilesForLeague(freshLeague.id);
       const nextScouts = Object.fromEntries(freshLeagueTeams.map((team) => {
         const profile = savedProfiles.find((row) => row.teamId === team.id);
         if (!profile) throw new Error(`Hire the scout for ${team.name} before opening the farm draft.`);
         return [team.id, scoutDescriptor(profile)];
       }));
+      let storedFarm = initialStoredFarm;
+      if (recoveryPublicSession && recoveryRoom) {
+        const recoveryPool = storedFarm?.farmProspectSnapshot
+          ? buildFarmAuctionPoolFromProspects(storedFarm.farmProspectSnapshot)
+          : buildFarmAuctionPool({
+              leagueId: freshLeague.id,
+              seasonNumber: SEASON_NUMBER,
+              seed: recoveryPublicSession.seed,
+              teamDraftOrder: freshLeagueTeams.map((team) => ({ teamId: team.id, teamName: team.name })),
+              scoutsByTeamId: nextScouts,
+            });
+        if (JSON.stringify(recoveryPool.prospects.map((prospect) => prospect.id))
+          !== JSON.stringify(recoveryPublicSession.snakeSetup?.poolPlayerIds ?? [])) {
+          throw new Error('THE FROZEN FARM PROSPECTS COULD NOT BE REBUILT FOR THIS ROOM.');
+        }
+        storedFarm = await restoreSnakeLiveFarmRoomLocally({
+          session: recoveryPublicSession,
+          prospects: recoveryPool.prospects,
+          recovery: {
+            roomId: recoveryRoom.id,
+            roomCode: recoveryRoomCodeParam,
+            publicRevision: recoveryRoom.publicRevision,
+          },
+        });
+      }
+      if (!storedFarm) {
+        if (!storedMlb) throw new Error('Finish the MLB snake draft before opening the farm room.');
+        readSnakeDraftTruth(storedMlb, 'MLB');
+        validateSnakeRosterHandoff(storedMlb, 'MLB');
+        await assertSnakeRosterHandoffReady(storedMlb, 'MLB');
+      }
+      const stored = storedFarm ?? storedMlb!;
+      if (storedFarm?.draftManifest) readSnakeDraftTruth(storedFarm, 'FARM');
       const seed = storedFarm
         ? storedFarm.draftManifest?.seed ?? storedFarm.seed
         : `${stored.draftManifest?.seed ?? stored.seed}:farm`;
@@ -495,9 +549,35 @@ function FarmSnakeRoom() {
     } finally {
       setLoadDone(true);
     }
-  }, [getMlbDraftSession, refresh, requestedLeagueId, saveMlbDraftSession]);
+  }, [getMlbDraftSession, recoverHostRequested, recoveryRoomCodeParam, refresh, requestedLeagueId, saveMlbDraftSession]);
 
   useEffect(() => { void loadFarm(); }, [loadFarm]);
+  useEffect(() => { setRecoveryRoomCode(recoveryRoomCodeParam); }, [recoveryRoomCodeParam]);
+  const recoverOpenFarmRoom = useCallback(async () => {
+    const roomCode = recoveryRoomCode.trim();
+    if (!/^\d{4}$/.test(roomCode)) {
+      setRecoveryError('ENTER THE FOUR-DIGIT ROOM CODE.');
+      return;
+    }
+    setRecoveryWorking(true);
+    setRecoveryError(null);
+    try {
+      if (!supabase) throw new Error('CLOUD SIGN-IN IS NOT CONFIGURED ON THIS PREVIEW.');
+      const { data: { session: cloudSession }, error: authError } = await supabase.auth.getSession();
+      if (authError) throw authError;
+      if (!cloudSession) throw new Error('SIGN IN TO CLOUD SYNC ON THIS PREVIEW, THEN TRY AGAIN.');
+      const room = await createSnakeLiveRoomTransport().findRoomByCode(roomCode);
+      if (!room || room.phase !== 'FARM') throw new Error('NO RECOVERABLE FARM LIVE ROOM MATCHES THIS CODE.');
+      const publicSession = readSnakeLivePublicSession(room);
+      const search = `?phase=farm&leagueId=${encodeURIComponent(publicSession.leagueId)}&roomCode=${roomCode}&recover=1`;
+      if (location.search === search) await loadFarm();
+      else navigate(`/snake-room${search}`, { replace: true });
+    } catch (cause) {
+      setRecoveryError(cause instanceof Error ? cause.message : 'THE FARM LIVE ROOM COULD NOT BE RESTORED.');
+    } finally {
+      setRecoveryWorking(false);
+    }
+  }, [loadFarm, location.search, navigate, recoveryRoomCode]);
   const unavailable = useMemo(() => new Set(session?.completedPicks.map((pick) => pick.playerId) ?? []), [session]);
   const currentSlot = session?.pickOrder[session.currentPickIndex] ?? null;
   const currentTeam = leagueTeams.find((team) => team.id === currentSlot?.teamId) ?? null;
@@ -530,13 +610,20 @@ function FarmSnakeRoom() {
   const farmLiveCatalogTeamIdsKey = session?.snakeSetup?.clubs.map((club) => club.teamId).join('\u0000') ?? '';
   const farmLiveCatalogProspectIdsKey = session?.snakeSetup?.poolPlayerIds.join('\u0000') ?? '';
   const farmLiveCatalog = useMemo(() => {
-    if (!league || !farmPool) return null;
+    if (!league || !farmPool || !session?.snakeSetup) return null;
     const activeTeamIds = farmLiveCatalogTeamIdsKey ? farmLiveCatalogTeamIdsKey.split('\u0000') : [];
     const activeProspectIds = farmLiveCatalogProspectIdsKey ? farmLiveCatalogProspectIdsKey.split('\u0000') : [];
+    const frozenIdentityByTeamId = new Map(session.snakeSetup.clubs.map((club) => [
+      club.teamId,
+      club.archetypeId ?? club.farmArchetypeId,
+    ]));
     try {
       return buildSnakeLiveFarmCatalog({
         league,
-        teams: leagueTeams,
+        teams: leagueTeams.map((team) => ({
+          ...team,
+          farmArchetypeKey: frozenIdentityByTeamId.get(team.id) ?? team.farmArchetypeKey,
+        })),
         prospects: farmPool.prospects,
         existingFarmRostersByTeamId: rostersByTeamId,
         activeTeamIds,
@@ -546,13 +633,14 @@ function FarmSnakeRoom() {
     } catch {
       return null;
     }
-  }, [farmLiveCatalogProspectIdsKey, farmLiveCatalogTeamIdsKey, farmPool, league, leagueTeams, rostersByTeamId]);
+  }, [farmLiveCatalogProspectIdsKey, farmLiveCatalogTeamIdsKey, farmPool, league, leagueTeams, rostersByTeamId, session?.snakeSetup]);
   const [hostDeviceId, setHostDeviceId] = useState<string | null>(null);
   const farmLiveSessionId = session?.id ?? null;
   const liveHost = useSnakeLiveHostRoom({
     session,
     hostDeviceId,
     catalog: farmLiveCatalog,
+    recoverHost: recoverHostRequested,
     enabled: Boolean(session?.snakeCompanions?.roomCode),
   });
   const liveHostRef = useRef(liveHost);
@@ -991,7 +1079,21 @@ function FarmSnakeRoom() {
 
   if (!isSnakeRoomEnabled()) return <main className="ballpark-page"><p>THE ROOM IS NOT ENABLED FOR THIS BUILD.</p></main>;
   if (isLoading || !loadDone) return <main className="ballpark-page"><p>OPENING THE FARM ROOM…</p></main>;
-  if (error || actionError) return <main className="ballpark-page"><h1>THE FARM ROOM COULD NOT OPEN</h1><p className="uppercase">{actionError ?? error}</p><button className="ballpark-press-button ballpark-press-lg ballpark-press-gold mt-5 min-h-11" onClick={() => void loadFarm()}>RETRY</button></main>;
+  if (error || actionError) return <main className="ballpark-page">
+    <h1>THE FARM ROOM COULD NOT OPEN</h1>
+    <p className="uppercase">{actionError ?? error}</p>
+    <div className="mt-5 flex flex-wrap gap-2">
+      <button className="ballpark-press-button ballpark-press-lg ballpark-press-gold min-h-11" onClick={() => void loadFarm()}>RETRY</button>
+      <button className="ballpark-press-button ballpark-press-lg min-h-11" onClick={() => navigate('/')}>HOME</button>
+    </div>
+    <LiveRoomRecoveryPanel
+      roomCode={recoveryRoomCode}
+      working={recoveryWorking}
+      error={recoveryError}
+      onRoomCodeChange={setRecoveryRoomCode}
+      onRestore={() => void recoverOpenFarmRoom()}
+    />
+  </main>;
   if (!league || !session || !farmPool) return <main className="ballpark-page"><p>THE FARM ROOM IS NOT READY.</p></main>;
   const farmRecapPicks = session.draftManifest
     ? readSnakeDraftTruth(session, 'FARM').completedPicks
@@ -1155,6 +1257,7 @@ function MlbSnakeDraftRoom() {
   const sessionSeasonNumber = practiceRequested ? PRACTICE_SEASON_NUMBER : SEASON_NUMBER;
   const requestedLeagueId = useMemo(() => new URLSearchParams(location.search).get('leagueId'), [location.search]);
   const recoveryRoomCodeParam = useMemo(() => new URLSearchParams(location.search).get('roomCode') ?? '', [location.search]);
+  const recoverHostRequested = useMemo(() => new URLSearchParams(location.search).get('recover') === '1', [location.search]);
   const localLeague = useMemo(
     () => requestedLeagueId === null
       ? leagues[0] ?? null
@@ -1265,6 +1368,7 @@ function MlbSnakeDraftRoom() {
     session,
     hostDeviceId,
     catalog: liveCatalog,
+    recoverHost: recoverHostRequested,
     enabled: !practiceMode && liveSessionActive && Boolean(session?.snakeCompanions?.roomCode),
   });
   const cloudCatalog = useMemo(
@@ -1386,11 +1490,15 @@ function MlbSnakeDraftRoom() {
       if (!cloudSession) throw new Error('SIGN IN TO CLOUD SYNC ON THIS PREVIEW, THEN TRY AGAIN.');
       const transport = createSnakeLiveRoomTransport();
       const room = await transport.findRoomByCode(roomCode);
-      if (!room || room.phase !== 'MLB') throw new Error('NO RECOVERABLE MLB LIVE ROOM MATCHES THIS CODE.');
+      if (!room) throw new Error('NO RECOVERABLE LIVE ROOM MATCHES THIS CODE.');
+      const publicSession = readSnakeLivePublicSession(room);
+      if (room.phase === 'FARM') {
+        navigate(`/snake-room?phase=farm&leagueId=${encodeURIComponent(publicSession.leagueId)}&roomCode=${roomCode}&recover=1`, { replace: true });
+        return;
+      }
       const receipt = await transport.getCatalog(room.id);
       const catalog = receipt ? readSnakeLiveCatalog(receipt.catalog) : null;
       if (!catalog) throw new Error('THE LIVE ROOM CATALOG IS NOT AVAILABLE.');
-      const publicSession = readSnakeLivePublicSession(room);
       await restoreSnakeLiveRoomLocally({
         catalog,
         session: publicSession,
@@ -1399,7 +1507,7 @@ function MlbSnakeDraftRoom() {
       if (!await loadSession(catalog.league.id)) {
         throw new Error('THE RESTORED LIVE ROOM COULD NOT OPEN.');
       }
-      navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}`, { replace: true });
+      navigate(`/snake-room?leagueId=${encodeURIComponent(catalog.league.id)}&roomCode=${roomCode}&recover=1`, { replace: true });
     } catch (cause) {
       setRecoveryError(cause instanceof Error ? cause.message : 'THE LIVE ROOM COULD NOT BE RESTORED HERE.');
     } finally {

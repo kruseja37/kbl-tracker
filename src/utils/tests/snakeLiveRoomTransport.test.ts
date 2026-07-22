@@ -280,6 +280,20 @@ describe('Snake live-room transport', () => {
     expect(sql).toContain('FROM PUBLIC, anon, authenticated');
   });
 
+  test('host recovery migration rotates only owner authority and repairs a phase catalog', () => {
+    const sql = readFileSync(
+      'supabase/migrations/20260721173000_snake_live_host_recovery.sql',
+      'utf8',
+    );
+    expect(sql).toContain('kbl_snake_live_recover_host');
+    expect(sql).toContain('kbl_snake_live_assert_owner');
+    expect(sql).toContain("r.status NOT IN ('open', 'complete')");
+    expect(sql).toContain('kbl_snake_live_catalog_matches_phase');
+    expect(sql).toContain("SET host_device_id = p_new_host_device_id");
+    expect(sql).toContain('TO authenticated');
+    expect(sql).not.toContain('public_revision = public_revision + 1');
+  });
+
   test('fails clearly when Supabase is not configured', async () => {
     const transport = createSnakeLiveRoomTransport(null);
     await expect(transport.getRoom('room-1')).rejects.toMatchObject({ code: 'not-configured' });
@@ -355,6 +369,31 @@ describe('Snake live-room transport', () => {
       { name: 'kbl_snake_live_get_catalog', args: { p_room_id: 'room-1' } },
     ]);
     expect(client.from).not.toHaveBeenCalled();
+  });
+
+  test('maps explicit owner host recovery without changing public state locally', async () => {
+    const recoveredRoom = { ...roomRow, host_device_id: 'host-recovered' };
+    const { client, state } = mockClient({ rpcResults: {
+      kbl_snake_live_recover_host: recoveredRoom,
+    } });
+    const transport = createSnakeLiveRoomTransport(client);
+    await expect(transport.recoverHost({
+      roomId: 'room-1',
+      roomCode: '4821',
+      expectedRoomRevision: 7,
+      hostDeviceId: 'host-recovered',
+      hostToken: 'recovered-token'.padEnd(48, 'x'),
+      catalog: catalogPayload,
+    })).resolves.toMatchObject({ hostDeviceId: 'host-recovered', publicRevision: 7 });
+    expect(state.rpcCalls).toEqual([{
+      name: 'kbl_snake_live_recover_host',
+      args: expect.objectContaining({
+        p_room_code: '4821',
+        p_expected_room_revision: 7,
+        p_new_host_device_id: 'host-recovered',
+        p_catalog: catalogPayload,
+      }),
+    }]);
   });
 
   test('uses a token-scoped board RPC and an insert-only host seed RPC', async () => {

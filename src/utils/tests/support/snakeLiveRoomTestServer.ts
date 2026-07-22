@@ -168,6 +168,7 @@ export class SnakeLiveRoomTestServer {
         case 'kbl_snake_live_find_recoverable_room_by_code': return this.findRecoverableRoomByCode(args);
         case 'kbl_snake_live_list_events': return this.listEvents(args);
         case 'kbl_snake_live_seed_catalog': return this.seedCatalog(args);
+        case 'kbl_snake_live_recover_host': return this.recoverHost(args);
         case 'kbl_snake_live_get_catalog': return this.getCatalog(args);
         case 'kbl_snake_live_submit_claim': return this.submitClaim(args);
         case 'kbl_snake_live_list_claims': return this.listClaims(args);
@@ -293,6 +294,55 @@ export class SnakeLiveRoomTestServer {
     this.catalogs.set(String(args.p_room_id), row);
     this.remember(identity, args, row);
     return Promise.resolve({ data: clone(row), error: null });
+  }
+
+  private recoverHost(args: Row): RpcResponse {
+    const room = this.requireRoom(String(args.p_room_id));
+    assertCapabilityToken(args.p_new_host_token);
+    if (room.room_code !== args.p_room_code) return Promise.resolve(error('The live room code does not match.'));
+    if (room.status !== 'open' && room.status !== 'complete') {
+      return Promise.resolve(error('The live room cannot be recovered.'));
+    }
+    if (room.public_revision !== args.p_expected_room_revision) {
+      return Promise.resolve(error('Stale expected revision for the room.'));
+    }
+    if (!isNonEmptyString(args.p_new_host_device_id)) {
+      return Promise.resolve(error('The new host device is invalid.'));
+    }
+    if ([...this.claims.values()].some((claim) => (
+      claim.room_id === room.id
+      && claim.device_id === args.p_new_host_device_id
+      && (claim.status === 'pending' || claim.status === 'approved')
+    ))) return Promise.resolve(error('A companion device cannot become the Hotseat host.'));
+    const publicState = room.public_state;
+    const session = isRow(publicState) ? publicState.session : null;
+    const setup = isRow(session) ? session.snakeSetup : null;
+    const activePoolPlayerIds = isRow(setup) ? setup.poolPlayerIds : null;
+    const activeClubs = isRow(setup) ? setup.clubs : null;
+    const expectedFormat = room.phase === 'FARM'
+      ? 'snake-live-farm-catalog-v1'
+      : 'snake-live-catalog-v1';
+    if (!isRow(args.p_catalog)
+      || args.p_catalog.formatVersion !== expectedFormat
+      || !isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs)) {
+      return Promise.resolve(error('The recovery catalog is invalid or contains private data.'));
+    }
+    const currentCatalog = this.catalogs.get(String(room.id));
+    if (!currentCatalog
+      || !isRow(currentCatalog.catalog)
+      || currentCatalog.catalog.formatVersion !== expectedFormat
+      || !isValidCatalog(currentCatalog.catalog, activePoolPlayerIds, activeClubs)) {
+      this.catalogs.set(String(room.id), {
+        room_id: room.id,
+        catalog_revision: 1,
+        catalog: clone(args.p_catalog),
+        created_at: '2026-07-21T17:30:00.000Z',
+      });
+    }
+    room.host_device_id = args.p_new_host_device_id;
+    room.updated_at = '2026-07-21T17:30:00.000Z';
+    this.hostTokens.set(String(room.id), String(args.p_new_host_token));
+    return Promise.resolve({ data: clone(room), error: null });
   }
 
   private getCatalog(args: Row): RpcResponse {

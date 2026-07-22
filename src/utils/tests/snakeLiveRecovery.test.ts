@@ -29,6 +29,7 @@ import {
   getPlayer,
   getRegisteredPool,
   getTeamRoster,
+  restoreSnakeLiveFarmRoomLocally,
   restoreSnakeLiveRoomLocally,
   type LeagueBuilderMlbDraftSession,
   type LeagueTemplate,
@@ -39,6 +40,7 @@ import { finalizeCompletedSnakeSessionToLeagueRosters } from '../leagueBuilderAu
 import { buildSnakeLiveCatalog, readSnakeLiveCatalog } from '../snakeLiveCatalog';
 import { freezeSnakeDraftSession } from '../snakeDraftManifest';
 import { assertSnakeRosterHandoffReady } from '../snakeRosterHandoff';
+import { buildFarmAuctionPool } from '../farmAuctionPool';
 
 const league: LeagueTemplate = {
   id: 'recovery-league', name: 'Test Mock', createdDate: '2026-07-20T00:00:00.000Z', lastModified: '2026-07-20T00:00:00.000Z',
@@ -94,6 +96,49 @@ beforeEach(() => {
 afterEach(async () => { await clearAllLeagueBuilderData(); __resetLeagueBuilderDatabaseForTests(); });
 
 describe('Snake live-room local recovery', () => {
+  test('restores an exact FARM session with rebuilt private prospects', async () => {
+    const farmPool = buildFarmAuctionPool({
+      leagueId: league.id,
+      seasonNumber: 1,
+      seed: 'recovery-seed:farm',
+      teamDraftOrder: league.teamIds.map((teamId) => ({ teamId, teamName: teamId })),
+    });
+    const farmSession: LeagueBuilderMlbDraftSession = {
+      id: createMlbDraftSessionId(league.id, 2), leagueId: league.id, seasonNumber: 2,
+      seed: 'recovery-seed:farm', workflowVersion: 'snake-v1-farm', engineMethodVersion: 'snake-s6',
+      tier: 'standard', balanceMode: 'taxed', rounds: 10, draftPhase: 'FARM',
+      farmSlotSalaries: [10_000, 10_000],
+      pickOrder: [
+        { round: 1, pick: 1, teamId: 'team-a' },
+        { round: 1, pick: 2, teamId: 'team-b' },
+      ],
+      completedPicks: [], trades: [], currentPickIndex: 0, revision: 4,
+      snakeSetup: {
+        poolPlayerIds: farmPool.prospects.map((prospect) => prospect.id), versionSelections: {},
+        clubs: [
+          { teamId: 'team-a', hotseat: true, archetypeId: 'web-gems' },
+          { teamId: 'team-b', hotseat: false, archetypeId: 'bomba-squad' },
+        ],
+        orderSeed: 'recovery-order',
+      },
+      createdDate: '2026-07-20T01:00:00.000Z', lastModified: '2026-07-20T01:04:00.000Z',
+    };
+
+    await restoreSnakeLiveFarmRoomLocally({
+      session: farmSession,
+      prospects: farmPool.prospects,
+      recovery: { roomId: 'farm-room-1', roomCode: '9412', publicRevision: 4 },
+    });
+
+    await expect(getMlbDraftSession(league.id, 2)).resolves.toMatchObject({
+      id: farmSession.id,
+      draftPhase: 'FARM',
+      farmProspectSnapshot: farmPool.prospects,
+      snakeCompanions: { roomCode: '9412', claims: [] },
+      liveRoomRecovery: { roomId: 'farm-room-1', roomCode: '9412', publicRevision: 4 },
+    });
+  });
+
   test('restores a recoverable room catalog without placing a generic sync write', async () => {
     const catalog = readSnakeLiveCatalog(buildSnakeLiveCatalog({
       league, teams: [team('team-a'), team('team-b')], players: [player('player-a'), player('player-b')], registeredPool: pool,

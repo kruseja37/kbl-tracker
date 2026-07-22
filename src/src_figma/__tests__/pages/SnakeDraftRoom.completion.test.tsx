@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   findRoomByCode: vi.fn(),
   getCatalog: vi.fn(),
   restoreLiveRoom: vi.fn(),
+  restoreFarmLiveRoom: vi.fn(),
   liveSession: null as LeagueBuilderMlbDraftSession | null,
   liveRoomStatus: 'complete' as 'open' | 'complete' | 'closed',
   liveCorrectionAvailable: false,
@@ -83,6 +84,7 @@ vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
     freezeMlbDraftRoomSessionWithRegisteredPool: ({ session }: { session: unknown }) => mocks.saveRoom(session),
     markSnakeRosterHandoff: mocks.markHandoff,
     restoreSnakeLiveRoomLocally: mocks.restoreLiveRoom,
+    restoreSnakeLiveFarmRoomLocally: mocks.restoreFarmLiveRoom,
   };
 });
 vi.mock('../../../utils/snakeRosterHandoff', () => ({
@@ -311,6 +313,10 @@ describe('snake draft durable completion and recap', () => {
       restoredPool: false,
       restoredSession: false,
     });
+    mocks.restoreFarmLiveRoom.mockReset().mockImplementation(async (input: {
+      session: LeagueBuilderMlbDraftSession;
+      prospects: unknown[];
+    }) => ({ ...input.session, farmProspectSnapshot: input.prospects }));
     mocks.closeRoom.mockReset().mockImplementation(async () => ({ status: 'closed' }));
     mocks.lastSaved = null;
     mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
@@ -398,6 +404,70 @@ describe('snake draft durable completion and recap', () => {
     await waitFor(() => expect(mocks.findRoomByCode).toHaveBeenCalledWith('4352'));
     await waitFor(() => expect(mocks.restoreLiveRoom).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('heading', { name: 'MLB DRAFT RECAP' })).toBeInTheDocument();
+  });
+
+  test('a signed-in owner can restore an open farm room from its code without the local farm session', async () => {
+    const farmSession = completedSession('FARM');
+    const prospects = [
+      { ...player('f1', 'Fog', 'One', 'SS'), prospectProfile: { trueGrade: 'A', scoutedGrade: 'B', potentialGrade: 'A', scoutAccuracy: 50, scoutConfidence: 'low', scoutGradeError: 1, scoutSpecialtiesVisible: [], scoutWeaknessesVisible: [], methodVersion: 'v1', source: 'test', draftYear: 1, draftRound: 1, draftPick: 1, teamId: 'pool' } },
+      { ...player('f2', 'Fog', 'Two', 'CF'), prospectProfile: { trueGrade: 'B', scoutedGrade: 'C', potentialGrade: 'B', scoutAccuracy: 50, scoutConfidence: 'low', scoutGradeError: 1, scoutSpecialtiesVisible: [], scoutWeaknessesVisible: [], methodVersion: 'v1', source: 'test', draftYear: 1, draftRound: 1, draftPick: 2, teamId: 'pool' } },
+    ];
+    mocks.farmPool = {
+      leagueId: league.id,
+      seasonNumber: 1,
+      prospects,
+      auctionPlayers: prospects.map((row, index) => ({ id: row.id, iv: 20_000 + index * 10_000 })),
+    };
+    const publicSession = {
+      ...farmSession,
+      completedPicks: farmSession.completedPicks.slice(0, 1),
+      currentPickIndex: 1,
+      revision: 1,
+      snakeCompanions: { roomCode: '9412', claims: [] },
+    };
+    const room = {
+      id: 'live-farm-room',
+      ownerUserId: 'completion-owner',
+      sessionId: publicSession.id,
+      roomCode: '9412',
+      phase: 'FARM' as const,
+      status: 'open' as const,
+      publicRevision: 1,
+      publicState: buildSnakeLivePublicState(publicSession),
+      correctionAvailable: false,
+      hostDeviceId: 'old-farm-host',
+      createdAt: publicSession.createdDate,
+      updatedAt: publicSession.lastModified,
+    };
+    mocks.data = {
+      leagues: [league],
+      teams,
+      players: [],
+      durablePlayers: [],
+      isLoading: false,
+      error: null,
+      getMlbDraftSession: vi.fn(async () => null),
+      getRoster: vi.fn(async (teamId: string) => ({ teamId, mlbRoster: [], farmRoster: [] })),
+      refresh: mocks.refresh,
+    };
+    mocks.findRoomByCode.mockResolvedValue(room);
+
+    renderRoom(`/snake-room?phase=farm&leagueId=${league.id}&roomCode=9412&recover=1`);
+
+    await waitFor(() => expect(mocks.findRoomByCode).toHaveBeenCalledWith('9412'));
+    await waitFor(() => expect(mocks.restoreFarmLiveRoom).toHaveBeenCalledWith({
+      session: expect.objectContaining({ id: publicSession.id, currentPickIndex: 1 }),
+      prospects: expect.arrayContaining([
+        expect.objectContaining({ id: 'f1' }),
+        expect.objectContaining({ id: 'f2' }),
+      ]),
+      recovery: {
+        roomId: room.id,
+        roomCode: '9412',
+        publicRevision: 1,
+      },
+    }));
+    expect(await screen.findByText('COMETS IS REVIEWING THE BOARD')).toBeInTheDocument();
   });
 
   test('a completed MLB reload opens truthful recap and commits once before Scout Hire navigation', async () => {
