@@ -8626,3 +8626,16 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - V1 devices use the owner's same account. A registered companion device id is rejected for host
   rotation; guest-account security remains v2. Re-audit, migration application, one recovery
   preview, and JK's room 9412 browser walk remain.
+
+## 2026-07-21 — FINDING-256 independent approval
+
+- The first re-audit closed four prior findings and found one remaining mutable team-order seam in
+  Farm catalog construction.
+- Commit `296bb5e0` orders public Farm catalog teams by the frozen active club ids, not mutable
+  league order. The regression reverses mutable order and proves the catalog and reader keep frozen
+  order.
+- The same non-builder auditor returned APPROVE, Major 0 / Minor 0. Independent gates passed 99/99
+  focused tests, TypeScript, changed-file ESLint, the 2,744-module production build, and diff
+  integrity.
+- Next: apply the additive Supabase migration, push this branch, publish one preview, and return
+  room 9412 to JK. No merge or production promotion is authorized.

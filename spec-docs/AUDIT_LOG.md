@@ -2137,3 +2137,12 @@ loss. The security claim is also corrected to the ruled v1 model: all devices us
 account, so account ownership is the authority boundary. A registered companion device id cannot
 rotate Hotseat authority; guest-account security remains v2. Re-audit, migration application, one
 preview, and JK's room 9412 walk remain open.
+
+### 2026-07-21 — FINDING-256 independent close
+
+The same non-builder auditor reviewed final head `296bb5e0` and returned **APPROVE — Major 0 /
+Minor 0**. The first re-audit found one remaining mutable team-order seam. Commit `296bb5e0`
+closed it by ordering Farm catalog teams from the frozen room club ids, with a direct regression
+that reverses mutable league order. Independent proof passed 99/99 focused recovery tests,
+TypeScript, changed-file ESLint, the 2,744-module production build, and diff integrity. The
+additive migration, one preview, and JK's browser walk remain open. Production is unchanged.

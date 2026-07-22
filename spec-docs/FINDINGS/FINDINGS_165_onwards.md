@@ -1536,7 +1536,7 @@ stored in this worktree; the unchanged pinned source hash, generator probes, exh
 and new app-asset pin contain that risk. Merge and deployment remain unauthorized.
 
 ### FINDING-256
-**Date:** 2026-07-21 | **Phase:** Farm Snake live room | **Status:** REPAIR AFTER AUDIT BLOCK — RE-AUDIT AND LIVE MIGRATION PENDING
+**Date:** 2026-07-21 | **Phase:** Farm Snake live room | **Status:** FIXED — INDEPENDENTLY APPROVED — LIVE MIGRATION AND JK WALK PENDING
 **Files:** Snake live-room transport/types/hooks, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`,
 Farm recovery storage, migration `20260721173000_snake_live_host_recovery.sql`, and focused tests.
 **Evidence:** After the MLB draft completed, JK opened Farm room 9412. A later host sign-in left no
@@ -1562,5 +1562,10 @@ not a separate hostile principal. Guest-account authorization remains v2 work.
 **Repair:** The recovery path now ignores local Farm session/snapshot/boards, reconstructs from live
 truth, validates exact league/team/prospect order and frozen Farm identity, keeps a catalog-less
 companion polling until the repaired catalog arrives, and keeps a visible room-code recovery control
-when Hotseat access is lost. Focused proof is green. Re-audit, live migration, one preview, and JK's
-room 9412 walk remain open.
+when Hotseat access is lost.
+**Independent close:** The same non-builder auditor reviewed final head `296bb5e0` and returned
+APPROVE, Major 0 / Minor 0. Its first re-audit found one mutable team-order seam in Farm catalog
+construction. The narrow final repair orders catalog team rows by frozen active club ids and adds a
+regression with reversed mutable league order. Independent proof passed 99/99 focused tests,
+TypeScript, changed-file ESLint, the production build, and diff integrity. Live migration, one
+preview, and JK's room 9412 walk remain open.

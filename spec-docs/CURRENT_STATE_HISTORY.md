@@ -1733,3 +1733,11 @@ repairs a separate source-data defect: 197 of 326 pitcher cards carried secondar
 frozen repair preserves every primary role and all protected card data, removes only those fields,
 keeps two-way behavior trait-driven, and has independent APPROVE with zero findings. The new header
 leaves merge/deploy untouched and JK's browser walk as the product gate.
+
+## 2026-07-21 — Outgoing before FINDING-256 live migration and preview
+
+The prior live header recorded the Farm live-room recovery after its first audit block. The same
+non-builder auditor has now approved final head `296bb5e0`, Major 0 / Minor 0. The final narrow
+repair removes mutable league order from Farm catalog team ordering. Independent focused, static,
+build, and diff gates are green. The new live header leaves only the additive migration, one
+preview, and JK's room 9412 browser walk open. Production is unchanged.
