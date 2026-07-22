@@ -195,7 +195,7 @@ describe('Snake live public catalog', () => {
       },
     ];
     const catalog = buildSnakeLiveFarmCatalog({
-      league,
+      league: { ...league, teamIds: ['team-2', 'team-1'] },
       teams: [team('team-2'), team('team-1')],
       prospects,
       activeTeamIds: ['team-1', 'team-2'],

@@ -462,7 +462,7 @@ export function buildSnakeLiveFarmCatalog(source: SnakeLiveFarmCatalogSource): S
   }
   const teamById = new Map(source.teams.map((team) => [team.id, team]));
   if (teamById.size !== source.teams.length) throw new Error('The FARM live catalog has duplicate team ids.');
-  const activeTeams = source.league.teamIds.map((teamId) => teamById.get(teamId));
+  const activeTeams = expectedTeamIds.map((teamId) => teamById.get(teamId));
   if (activeTeams.some((team) => !team)) throw new Error('The FARM live catalog is missing an active team.');
   const missingIdentity = activeTeams.find((team) => !team?.farmArchetypeKey?.trim());
   if (missingIdentity) throw new Error(`The FARM live catalog cannot freeze ${missingIdentity.name} without a FARM identity.`);
