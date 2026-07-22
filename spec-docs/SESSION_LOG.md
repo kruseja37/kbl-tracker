@@ -8614,11 +8614,15 @@ done, state restated; JK present and ruled "commit + continue under AUTH-4" (so 
 - JK's Farm room 9412 became unreachable after host sign-in. Draft Setup offered Run It Back, and
   all companions rejected the Farm player catalog.
 - Added one generic owner recovery path. It finds the Farm room by code, restores its public
-  session, deterministically rebuilds the private prospect snapshot, requires the exact frozen
-  prospect id order, repairs the public Farm catalog from frozen session identity, and rotates the
-  lost Hotseat capability without changing picks or the public revision.
+  session, deterministically rebuilds the private prospect snapshot from frozen room truth,
+  requires the exact frozen prospect and team order, repairs the public Farm catalog from frozen
+  session identity, and rotates the lost Hotseat capability without changing picks or the public
+  revision.
 - Current companions re-read a missing or invalid Farm catalog on their existing five-second live
   refresh and also expose one `REFRESH LIVE ROOM` action. Private board clicks remain local.
-- Focused recovery/live-room/Farm suites, TypeScript, changed-file ESLint, diff integrity, and the
-  2,744-module production/PWA build are green. Separate audit, migration application, one recovery
+- The first separate audit returned BLOCK, Major 5 / Minor 0. The repair now ignores local Farm
+  session/snapshot/boards, enforces exact catalog league/team/prospect order and Farm identity,
+  keeps a missing-catalog companion polling, and leaves recovery visible after normal room load.
+- V1 devices use the owner's same account. A registered companion device id is rejected for host
+  rotation; guest-account security remains v2. Re-audit, migration application, one recovery
   preview, and JK's room 9412 browser walk remain.

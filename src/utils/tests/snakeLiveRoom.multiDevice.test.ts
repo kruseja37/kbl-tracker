@@ -44,6 +44,7 @@ async function roomFixture(server: SnakeLiveRoomTestServer, teamCount = 8): Prom
       currentPickIndex: 0,
       completedPlayerIds: [],
       session: {
+        leagueId: 'league-1',
         snakeSetup: {
           clubs: teamIds.map((teamId) => ({ teamId })),
           poolPlayerIds: ['player-1', 'player-2'],
@@ -197,7 +198,10 @@ describe('Snake live-room multi-device contract', () => {
       createdDate: '2026-07-19T00:00:00.000Z',
       lastModified: '2026-07-19T00:00:00.000Z',
       snakeSetup: {
-        clubs: teamIds.map((teamId) => ({ teamId })),
+        clubs: teamIds.map((teamId, index) => ({
+          teamId,
+          archetypeId: index === 0 ? 'web-gems' : 'bomba-squad',
+        })),
         poolPlayerIds: prospectIds,
         versionSelections: {},
         orderSeed: 'farm-seed',
@@ -886,6 +890,24 @@ describe('Snake live-room multi-device contract', () => {
       },
     };
 
+    const registeredCompanion = device(server, 'registered-companion-mac');
+    await registeredCompanion.transport.submitClaim({
+      roomId: room.id,
+      deviceId: registeredCompanion.id,
+      deviceToken: registeredCompanion.token,
+      requestKey: 'registered-companion-claim',
+      gmName: 'Companion GM',
+      teamId: 'team-1',
+    });
+    await expect(registeredCompanion.transport.recoverHost({
+      roomId: room.id,
+      roomCode: room.roomCode,
+      expectedRoomRevision: 0,
+      hostDeviceId: registeredCompanion.id,
+      hostToken: registeredCompanion.token,
+      catalog,
+    })).rejects.toThrow('A companion device cannot become the Hotseat host.');
+
     await recoveredHost.transport.recoverHost({
       roomId: room.id,
       roomCode: room.roomCode,
@@ -905,13 +927,17 @@ describe('Snake live-room multi-device contract', () => {
       roomId: room.id,
       hostDeviceId: recoveredHost.id,
       hostToken: recoveredHost.token,
-    })).resolves.toEqual([]);
+    })).resolves.toEqual([expect.objectContaining({
+      deviceId: registeredCompanion.id,
+      status: 'pending',
+      teamId: 'team-1',
+    })]);
     await expect(host.transport.listClaims(hostAccess)).rejects.toMatchObject({ code: 'forbidden' });
-    expect(await recoveredHost.transport.listEvents(room.id)).toMatchObject([{
+    expect(await recoveredHost.transport.listEvents(room.id)).toEqual(expect.arrayContaining([expect.objectContaining({
       roomRevision: 0,
       kind: 'ROOM_CREATED',
       publicPayload: { roomRevision: 0, phase: 'MLB' },
-    }]);
+    })]));
   });
 
   test('keeps two Run It Back drafts with the same local id in distinct cloud rooms', async () => {

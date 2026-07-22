@@ -16,6 +16,102 @@ AS $fn$
   END;
 $fn$;
 
+-- Draft order is part of the frozen room. Set equality is not sufficient:
+-- the same people in another order can seed a different FARM pool and desk.
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_matches_active_pool(
+  p_catalog JSONB,
+  p_active_pool_ids JSONB
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $fn$
+DECLARE
+  catalog_items JSONB;
+  catalog_ids JSONB;
+BEGIN
+  IF p_active_pool_ids IS NULL OR jsonb_typeof(p_active_pool_ids) <> 'array' THEN RETURN FALSE; END IF;
+  IF jsonb_array_length(p_active_pool_ids) = 0 OR EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_active_pool_ids) entry
+    WHERE jsonb_typeof(entry) <> 'string' OR length(btrim(entry#>>'{}')) = 0
+  ) OR (
+    SELECT count(*) FROM jsonb_array_elements(p_active_pool_ids)
+  ) <> (
+    SELECT count(DISTINCT entry#>>'{}') FROM jsonb_array_elements(p_active_pool_ids) entry
+  ) THEN
+    RETURN FALSE;
+  END IF;
+
+  catalog_items := CASE p_catalog->>'formatVersion'
+    WHEN 'snake-live-catalog-v1' THEN p_catalog->'players'
+    WHEN 'snake-live-farm-catalog-v1' THEN p_catalog->'prospects'
+    ELSE NULL
+  END;
+  IF catalog_items IS NULL OR jsonb_typeof(catalog_items) <> 'array' THEN RETURN FALSE; END IF;
+  SELECT COALESCE(jsonb_agg(to_jsonb(entry.value->>'id') ORDER BY entry.ordinality), '[]'::jsonb)
+  INTO catalog_ids
+  FROM jsonb_array_elements(catalog_items) WITH ORDINALITY AS entry(value, ordinality);
+  RETURN catalog_ids = p_active_pool_ids;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.kbl_snake_live_catalog_matches_active_teams(
+  p_catalog JSONB,
+  p_active_clubs JSONB
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $fn$
+DECLARE
+  expected_ids JSONB;
+  league_ids JSONB;
+  catalog_team_ids JSONB;
+BEGIN
+  IF p_active_clubs IS NULL
+    OR jsonb_typeof(p_active_clubs) <> 'array'
+    OR jsonb_typeof(p_catalog#>'{league,teamIds}') <> 'array'
+    OR jsonb_typeof(p_catalog->'teams') <> 'array'
+  THEN RETURN FALSE; END IF;
+  IF jsonb_array_length(p_active_clubs) = 0 OR EXISTS(
+    SELECT 1 FROM jsonb_array_elements(p_active_clubs) entry
+    WHERE jsonb_typeof(entry) <> 'object'
+      OR length(btrim(COALESCE(entry->>'teamId', ''))) = 0
+  ) OR (
+    SELECT count(*) FROM jsonb_array_elements(p_active_clubs)
+  ) <> (
+    SELECT count(DISTINCT entry->>'teamId') FROM jsonb_array_elements(p_active_clubs) entry
+  ) THEN
+    RETURN FALSE;
+  END IF;
+
+  SELECT jsonb_agg(to_jsonb(entry.value->>'teamId') ORDER BY entry.ordinality)
+  INTO expected_ids
+  FROM jsonb_array_elements(p_active_clubs) WITH ORDINALITY AS entry(value, ordinality);
+  SELECT COALESCE(jsonb_agg(to_jsonb(entry.value#>>'{}') ORDER BY entry.ordinality), '[]'::jsonb)
+  INTO league_ids
+  FROM jsonb_array_elements(p_catalog#>'{league,teamIds}') WITH ORDINALITY AS entry(value, ordinality);
+  SELECT COALESCE(jsonb_agg(to_jsonb(entry.value->>'id') ORDER BY entry.ordinality), '[]'::jsonb)
+  INTO catalog_team_ids
+  FROM jsonb_array_elements(p_catalog->'teams') WITH ORDINALITY AS entry(value, ordinality);
+  IF league_ids <> expected_ids OR catalog_team_ids <> expected_ids THEN RETURN FALSE; END IF;
+
+  IF p_catalog->>'formatVersion' = 'snake-live-farm-catalog-v1' AND EXISTS(
+    SELECT 1
+    FROM jsonb_array_elements(p_active_clubs) WITH ORDINALITY AS club(value, ordinality)
+    JOIN jsonb_array_elements(p_catalog->'teams') WITH ORDINALITY AS team(value, ordinality)
+      ON team.ordinality = club.ordinality
+    WHERE length(btrim(COALESCE(club.value->>'archetypeId', ''))) = 0
+      OR team.value->>'farmArchetypeKey' <> club.value->>'archetypeId'
+  ) THEN
+    RETURN FALSE;
+  END IF;
+  RETURN TRUE;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION public.kbl_snake_live_seed_catalog(
   p_room_id UUID,
   p_host_device_id TEXT,
@@ -39,6 +135,7 @@ BEGIN
     RAISE EXCEPTION 'Forbidden: the host token does not match.';
   END IF;
   IF NOT public.kbl_snake_live_catalog_matches_phase(p_catalog, r.phase)
+    OR p_catalog#>>'{league,id}' <> r.public_state#>>'{session,leagueId}'
     OR NOT public.kbl_snake_live_catalog_payload_complete(p_catalog)
     OR NOT public.kbl_snake_live_catalog_matches_active_teams(
       p_catalog,
@@ -118,6 +215,7 @@ BEGIN
     RAISE EXCEPTION 'A companion device cannot become the Hotseat host.';
   END IF;
   IF NOT public.kbl_snake_live_catalog_matches_phase(p_catalog, r.phase)
+    OR p_catalog#>>'{league,id}' <> r.public_state#>>'{session,leagueId}'
     OR NOT public.kbl_snake_live_catalog_payload_complete(p_catalog)
     OR NOT public.kbl_snake_live_catalog_matches_active_teams(
       p_catalog,
@@ -135,6 +233,7 @@ BEGIN
   SELECT * INTO c FROM public.snake_live_catalogs WHERE room_id = r.id FOR UPDATE;
   IF FOUND THEN
     catalog_is_valid := public.kbl_snake_live_catalog_matches_phase(c.catalog, r.phase)
+      AND c.catalog#>>'{league,id}' = r.public_state#>>'{session,leagueId}'
       AND public.kbl_snake_live_catalog_payload_complete(c.catalog)
       AND public.kbl_snake_live_catalog_matches_active_teams(
         c.catalog,

@@ -208,6 +208,8 @@ describe('Snake live public catalog', () => {
     });
 
     expect(catalog.formatVersion).toBe('snake-live-farm-catalog-v1');
+    expect(catalog.league.teamIds).toEqual(['team-1', 'team-2']);
+    expect(catalog.teams.map((entry) => entry.id)).toEqual(['team-1', 'team-2']);
     expect(readSnakeLiveFarmCatalog(catalog)).not.toBeNull();
     expect(readSnakeLiveCatalogForPhase(catalog, 'FARM')).not.toBeNull();
     expect(readSnakeLiveCatalogForPhase(catalog, 'MLB')).toBeNull();
@@ -222,6 +224,7 @@ describe('Snake live public catalog', () => {
       prospects: [{ ...(catalog.prospects as Array<Record<string, unknown>>)[0], trueGrade: 'A+' }],
     })).toBeNull();
     expect(readSnakeLiveFarmCatalog({ ...catalog, trueGrade: 'A+' })).toBeNull();
+    expect(readSnakeLiveFarmCatalog({ ...catalog, teams: [...catalog.teams].reverse() })).toBeNull();
     expect(readSnakeLiveFarmCatalog({
       ...catalog,
       league: { ...(catalog.league as Record<string, unknown>), salary: 123_000 },

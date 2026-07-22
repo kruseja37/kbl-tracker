@@ -278,7 +278,7 @@ export class SnakeLiveRoomTestServer {
     const setup = isRow(session) ? session.snakeSetup : null;
     const activePoolPlayerIds = isRow(setup) ? setup.poolPlayerIds : null;
     const activeClubs = isRow(setup) ? setup.clubs : null;
-    if (!isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs)) {
+    if (!isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs, isRow(session) ? session.leagueId : null)) {
       return Promise.resolve(error('The live catalog is invalid or contains private data.'));
     }
     const identity = `catalog:${args.p_room_id}`;
@@ -324,14 +324,14 @@ export class SnakeLiveRoomTestServer {
       : 'snake-live-catalog-v1';
     if (!isRow(args.p_catalog)
       || args.p_catalog.formatVersion !== expectedFormat
-      || !isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs)) {
+      || !isValidCatalog(args.p_catalog, activePoolPlayerIds, activeClubs, isRow(session) ? session.leagueId : null)) {
       return Promise.resolve(error('The recovery catalog is invalid or contains private data.'));
     }
     const currentCatalog = this.catalogs.get(String(room.id));
     if (!currentCatalog
       || !isRow(currentCatalog.catalog)
       || currentCatalog.catalog.formatVersion !== expectedFormat
-      || !isValidCatalog(currentCatalog.catalog, activePoolPlayerIds, activeClubs)) {
+      || !isValidCatalog(currentCatalog.catalog, activePoolPlayerIds, activeClubs, isRow(session) ? session.leagueId : null)) {
       this.catalogs.set(String(room.id), {
         room_id: room.id,
         catalog_revision: 1,
@@ -992,12 +992,18 @@ function isValidTradePayload(payload: Row, teamId: string): boolean {
     && (teamId === buyerTeamId || teamId === sellerTeamId);
 }
 
-function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs: unknown): value is Row {
+function isValidCatalog(
+  value: unknown,
+  expectedPoolIds: unknown,
+  expectedClubs: unknown,
+  expectedLeagueId: unknown,
+): value is Row {
   if (!isRow(value) || snakeLiveCatalogForbiddenPath(value)
     || (value.formatVersion !== 'snake-live-catalog-v1' && value.formatVersion !== 'snake-live-farm-catalog-v1')
     || !isRow(value.league) || !Array.isArray(value.league.teamIds)
     || !Array.isArray(value.teams) || value.teams.length === 0
-    || typeof value.league.id !== 'string' || !value.league.id) return false;
+    || typeof value.league.id !== 'string' || !value.league.id
+    || value.league.id !== expectedLeagueId) return false;
   const ids = (rows: unknown[]): string[] | null => {
     const result: string[] = [];
     for (const row of rows) {
@@ -1023,8 +1029,8 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
     : null;
   const actualTeamIds = ids(value.teams);
   const commonValid = Boolean(teamIds && expectedIds && validExpectedTeamIds && actualTeamIds
-    && teamIds.length === actualTeamIds.length && teamIds.every((id) => actualTeamIds.includes(id))
-    && teamIds.length === validExpectedTeamIds.length && validExpectedTeamIds.every((id) => teamIds.includes(id)));
+    && teamIds.length === actualTeamIds.length && teamIds.every((id, index) => id === actualTeamIds[index])
+    && teamIds.length === validExpectedTeamIds.length && teamIds.every((id, index) => id === validExpectedTeamIds[index]));
   if (!commonValid || !teamIds || !expectedIds) return false;
 
   if (value.formatVersion === 'snake-live-catalog-v1') {
@@ -1034,8 +1040,8 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
     const playerIds = ids(value.players);
     const poolPlayerIds = ids(value.registeredPool.players);
     return Boolean(playerIds && poolPlayerIds
-      && playerIds.length === poolPlayerIds.length && playerIds.every((id) => poolPlayerIds.includes(id))
-      && playerIds.length === expectedIds.length && expectedIds.every((id) => playerIds.includes(id)));
+      && playerIds.length === poolPlayerIds.length && playerIds.every((id, index) => id === poolPlayerIds[index])
+      && playerIds.length === expectedIds.length && playerIds.every((id, index) => id === expectedIds[index]));
   }
 
   if (!onlyKeys(value, [
@@ -1080,5 +1086,13 @@ function isValidCatalog(value: unknown, expectedPoolIds: unknown, expectedClubs:
       && isNonEmptyString(player.name)
       && isNonEmptyString(player.position))) return false;
   }
-  return prospectIds.length === expectedIds.length && expectedIds.every((id) => prospectIds.includes(id));
+  const validFarmArchetypes = Array.isArray(expectedClubs) && value.teams.every((team, index) => (
+    isRow(team)
+    && isRow(expectedClubs[index])
+    && isNonEmptyString(expectedClubs[index].archetypeId)
+    && team.farmArchetypeKey === expectedClubs[index].archetypeId
+  ));
+  return validFarmArchetypes
+    && prospectIds.length === expectedIds.length
+    && prospectIds.every((id, index) => id === expectedIds[index]);
 }

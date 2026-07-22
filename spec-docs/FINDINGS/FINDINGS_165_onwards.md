@@ -1536,7 +1536,7 @@ stored in this worktree; the unchanged pinned source hash, generator probes, exh
 and new app-asset pin contain that risk. Merge and deployment remain unauthorized.
 
 ### FINDING-256
-**Date:** 2026-07-21 | **Phase:** Farm Snake live room | **Status:** BUILDER GREEN — AUDIT AND LIVE MIGRATION PENDING
+**Date:** 2026-07-21 | **Phase:** Farm Snake live room | **Status:** REPAIR AFTER AUDIT BLOCK — RE-AUDIT AND LIVE MIGRATION PENDING
 **Files:** Snake live-room transport/types/hooks, `SnakeDraftRoom.tsx`, `SnakeCompanion.tsx`,
 Farm recovery storage, migration `20260721173000_snake_live_host_recovery.sql`, and focused tests.
 **Evidence:** After the MLB draft completed, JK opened Farm room 9412. A later host sign-in left no
@@ -1548,10 +1548,19 @@ not use them to rebuild the private snapshot. Farm catalog construction also rea
 identity instead of the frozen session identity. A repaired catalog was not re-read by an already
 open companion.
 **Action:** Add owner-only room-code host recovery that rotates the lost Hotseat capability without
-changing draft truth. Rebuild the exact private prospect snapshot from the frozen seed and saved
-scouts, then require an exact ordered-id match. Build the public Farm catalog from frozen session
-identity. Let current companions refresh an invalid catalog while private board work stays local.
-**Builder proof:** Focused recovery, transport, host, companion, Farm page, and completion tests are
-green. TypeScript, changed-file ESLint, diff integrity, and the 2,744-module production/PWA build
-are green. A separate read-only audit, live migration, replacement preview, and JK's room 9412 walk
-remain open.
+changing draft truth. Rebuild the exact private prospect snapshot from the frozen seed, ordered
+clubs, frozen Farm identities, and deterministic scout assignment, then require an exact ordered-id
+match. Build the public Farm catalog from frozen session identity. Let current companions refresh a
+missing or invalid catalog while private board work stays local.
+**Audit result:** The first separate audit returned **BLOCK — Major 5 / Minor 0**. It found that the
+builder still trusted a local Farm snapshot and local boards, accepted unordered catalog identity,
+stopped a companion before polling when the catalog was absent, and hid recovery after a normally
+loaded room lost Hotseat access. It also challenged host recovery security. The v1 ruled model uses
+the owner's same account on every device, so account ownership is the authority boundary; a
+registered pending or approved companion device id is rejected, but a new same-account device is
+not a separate hostile principal. Guest-account authorization remains v2 work.
+**Repair:** The recovery path now ignores local Farm session/snapshot/boards, reconstructs from live
+truth, validates exact league/team/prospect order and frozen Farm identity, keeps a catalog-less
+companion polling until the repaired catalog arrives, and keeps a visible room-code recovery control
+when Hotseat access is lost. Focused proof is green. Re-audit, live migration, one preview, and JK's
+room 9412 walk remain open.

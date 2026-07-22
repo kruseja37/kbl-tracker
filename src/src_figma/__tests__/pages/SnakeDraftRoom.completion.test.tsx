@@ -18,11 +18,14 @@ const mocks = vi.hoisted(() => ({
   getCatalog: vi.fn(),
   restoreLiveRoom: vi.fn(),
   restoreFarmLiveRoom: vi.fn(),
+  buildFarmPool: vi.fn(),
   liveSession: null as LeagueBuilderMlbDraftSession | null,
   liveRoomStatus: 'complete' as 'open' | 'complete' | 'closed',
   liveCorrectionAvailable: false,
   restorePreviousPublicState: vi.fn(),
   forceMissingLiveRoom: false,
+  liveHostError: null as string | null,
+  forceHostAccessLost: false,
   lastSaved: null as LeagueBuilderMlbDraftSession | null,
 }));
 
@@ -59,7 +62,7 @@ vi.mock('../../../utils/leagueBuilderAuctionPipeline', async (importOriginal) =>
 });
 vi.mock('../../../utils/farmAuctionPool', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/farmAuctionPool')>();
-  return { ...actual, buildFarmAuctionPool: () => mocks.farmPool };
+  return { ...actual, buildFarmAuctionPool: mocks.buildFarmPool };
 });
 vi.mock('../../../utils/leagueBuilderStorage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/leagueBuilderStorage')>();
@@ -138,9 +141,9 @@ vi.mock('../../app/components/snake/companion/useSnakeLiveHostRoom', () => ({
       events: [],
       status: room ? 'live' : 'idle',
       subscriptionStatus: room ? 'SUBSCRIBED' : null,
-      error: null,
+      error: mocks.liveHostError,
       working: false,
-      hostAccessReady: Boolean(room),
+      hostAccessReady: Boolean(room) && !mocks.forceHostAccessLost,
       liveRoomReady: Boolean(room),
       refresh: vi.fn(async () => undefined),
       publishSession: vi.fn(),
@@ -302,6 +305,8 @@ describe('snake draft durable completion and recap', () => {
     mocks.liveCorrectionAvailable = false;
     mocks.restorePreviousPublicState.mockReset();
     mocks.forceMissingLiveRoom = false;
+    mocks.liveHostError = null;
+    mocks.forceHostAccessLost = false;
     mocks.getLiveRoom.mockReset().mockResolvedValue(null);
     mocks.findRoomByCode.mockReset().mockResolvedValue(null);
     mocks.getCatalog.mockReset().mockResolvedValue(null);
@@ -317,6 +322,7 @@ describe('snake draft durable completion and recap', () => {
       session: LeagueBuilderMlbDraftSession;
       prospects: unknown[];
     }) => ({ ...input.session, farmProspectSnapshot: input.prospects }));
+    mocks.buildFarmPool.mockReset().mockImplementation(() => mocks.farmPool);
     mocks.closeRoom.mockReset().mockImplementation(async () => ({ status: 'closed' }));
     mocks.lastSaved = null;
     mocks.saveRoom.mockReset().mockImplementation(async (session: LeagueBuilderMlbDraftSession) => {
@@ -420,6 +426,13 @@ describe('snake draft durable completion and recap', () => {
     };
     const publicSession = {
       ...farmSession,
+      snakeSetup: {
+        ...farmSession.snakeSetup!,
+        clubs: [
+          { teamId: 'a', hotseat: true, archetypeId: 'web-gems' },
+          { teamId: 'b', hotseat: true, archetypeId: 'bomba-squad' },
+        ],
+      },
       completedPicks: farmSession.completedPicks.slice(0, 1),
       currentPickIndex: 1,
       revision: 1,
@@ -439,14 +452,20 @@ describe('snake draft durable completion and recap', () => {
       createdAt: publicSession.createdDate,
       updatedAt: publicSession.lastModified,
     };
+    const localFarmRead = vi.fn(async () => ({
+      ...publicSession,
+      seed: 'stale-local-seed',
+      farmProspectSnapshot: [{ ...prospects[0], firstName: 'Stale' }],
+      farmSeatBoards: { a: { rankedPlayerIds: ['stale-player'] } },
+    }));
     mocks.data = {
-      leagues: [league],
+      leagues: [{ ...league, teamIds: ['b', 'a'] }],
       teams,
       players: [],
       durablePlayers: [],
       isLoading: false,
       error: null,
-      getMlbDraftSession: vi.fn(async () => null),
+      getMlbDraftSession: localFarmRead,
       getRoster: vi.fn(async (teamId: string) => ({ teamId, mlbRoster: [], farmRoster: [] })),
       refresh: mocks.refresh,
     };
@@ -455,10 +474,19 @@ describe('snake draft durable completion and recap', () => {
     renderRoom(`/snake-room?phase=farm&leagueId=${league.id}&roomCode=9412&recover=1`);
 
     await waitFor(() => expect(mocks.findRoomByCode).toHaveBeenCalledWith('9412'));
+    expect(localFarmRead).not.toHaveBeenCalled();
+    expect(mocks.buildFarmPool).toHaveBeenCalledWith(expect.objectContaining({
+      seed: publicSession.seed,
+      teamDraftOrder: [
+        { teamId: 'a', teamName: 'Kodiaks' },
+        { teamId: 'b', teamName: 'Comets' },
+      ],
+      scoutsByTeamId: expect.objectContaining({ a: expect.any(Object), b: expect.any(Object) }),
+    }));
     await waitFor(() => expect(mocks.restoreFarmLiveRoom).toHaveBeenCalledWith({
       session: expect.objectContaining({ id: publicSession.id, currentPickIndex: 1 }),
       prospects: expect.arrayContaining([
-        expect.objectContaining({ id: 'f1' }),
+        expect.objectContaining({ id: 'f1', firstName: 'Fog' }),
         expect.objectContaining({ id: 'f2' }),
       ]),
       recovery: {
@@ -468,6 +496,22 @@ describe('snake draft durable completion and recap', () => {
       },
     }));
     expect(await screen.findByText('COMETS IS REVIEWING THE BOARD')).toBeInTheDocument();
+  });
+
+  test('an open local farm room keeps a visible recovery path when Hotseat access is lost', async () => {
+    const openFarm = completedSession('FARM');
+    openFarm.completedPicks = [];
+    openFarm.currentPickIndex = 0;
+    openFarm.revision = 0;
+    openFarm.snakeCompanions = { roomCode: '9412', claims: [] };
+    setFarmData(openFarm);
+    mocks.liveHostError = 'THE HOTSEAT ACCESS IS NOT AVAILABLE.';
+    mocks.forceHostAccessLost = true;
+
+    renderRoom(`/snake-room?phase=farm&leagueId=${league.id}`);
+
+    expect(await screen.findByText('RESTORE LIVE ROOM')).toBeInTheDocument();
+    expect(screen.getByLabelText('Live room code')).toHaveValue('9412');
   });
 
   test('a completed MLB reload opens truthful recap and commits once before Scout Hire navigation', async () => {

@@ -1759,23 +1759,12 @@ export async function restoreSnakeLiveFarmRoomLocally(input: {
   const db = await initLeagueBuilderDatabase();
   const tx = db.transaction(STORES.MLB_DRAFT_SESSIONS, 'readwrite');
   const store = tx.objectStore(STORES.MLB_DRAFT_SESSIONS);
-  const existing = await requestToPromise(store.get(session.id)) as LeagueBuilderMlbDraftSession | undefined;
-  if (existing && (existing.createdDate !== session.createdDate || existing.seed !== session.seed)) {
-    tx.abort();
-    throw new Error('THIS BROWSER ALREADY HAS A DIFFERENT FARM DRAFT RUN FOR THIS LEAGUE.');
-  }
-  if (existing?.farmProspectSnapshot
-    && JSON.stringify(existing.farmProspectSnapshot) !== JSON.stringify(prospects)) {
-    tx.abort();
-    throw new Error('THE LOCAL FARM PROSPECT SNAPSHOT DOES NOT MATCH THE LIVE ROOM.');
-  }
   const recovered: LeagueBuilderMlbDraftSession = {
     ...(structuredClone(session) as LeagueBuilderMlbDraftSession),
     farmProspectSnapshot: prospects.map((prospect) => structuredClone(prospect)),
-    ...(existing?.farmSeatBoards ? { farmSeatBoards: existing.farmSeatBoards } : {}),
     snakeCompanions: {
       roomCode: recovery.roomCode,
-      claims: existing?.snakeCompanions?.claims ?? [],
+      claims: [],
     },
     liveRoomRecovery: {
       roomId: recovery.roomId,

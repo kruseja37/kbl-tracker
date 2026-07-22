@@ -289,6 +289,11 @@ describe('Snake live-room transport', () => {
     expect(sql).toContain('kbl_snake_live_assert_owner');
     expect(sql).toContain("r.status NOT IN ('open', 'complete')");
     expect(sql).toContain('kbl_snake_live_catalog_matches_phase');
+    expect(sql).toContain("p_catalog#>>'{league,id}' <> r.public_state#>>'{session,leagueId}'");
+    expect(sql).toContain('RETURN catalog_ids = p_active_pool_ids');
+    expect(sql).toContain('IF league_ids <> expected_ids OR catalog_team_ids <> expected_ids');
+    expect(sql).toContain("team.value->>'farmArchetypeKey' <> club.value->>'archetypeId'");
+    expect(sql).toContain("claim.status IN ('pending', 'approved')");
     expect(sql).toContain("SET host_device_id = p_new_host_device_id");
     expect(sql).toContain('TO authenticated');
     expect(sql).not.toContain('public_revision = public_revision + 1');

@@ -236,6 +236,9 @@ export function useSnakeLiveCompanionRoom(
       return [teamId, board] as const;
     }));
     if (generation !== generationRef.current || accessRef.current?.roomId !== activeAccess.roomId) return;
+    roomRef.current = nextRoom;
+    catalogRef.current = nextCatalog;
+    claimsRef.current = nextClaims;
     setRoom(nextRoom);
     setCatalog(nextCatalog);
     setPublicSession(readSnakeLivePublicSession(nextRoom));
@@ -339,22 +342,24 @@ export function useSnakeLiveCompanionRoom(
         if (generation === generationRef.current) setStatus('idle');
         return;
       }
-      if (!receivedCatalog) throw new Error('THE LIVE PLAYER CATALOG IS NOT AVAILABLE.');
       const credentials = await capabilities.getRoomCredentials(receivedRoom.id, resume.deviceId);
       const nextAccess: SnakeLiveDeviceAccess = {
         roomId: receivedRoom.id,
         deviceId: resume.deviceId,
         deviceToken: credentials.deviceToken,
       };
+      roomRef.current = receivedRoom;
+      catalogRef.current = receivedCatalog;
       accessRef.current = nextAccess;
       setAccess(nextAccess);
-      await loadScopedState(nextAccess, generation, true);
-      if (generation !== generationRef.current) return;
       setDeviceId(resume.deviceId);
       setCatalog(receivedCatalog);
       setActiveOwnerUserId(ownerUserId);
+      await loadScopedState(nextAccess, generation, true, !receivedCatalog);
+      if (generation !== generationRef.current) return;
       setAccessReady(true);
       setResumedFromCapability(true);
+      if (!catalogRef.current) setError('THE LIVE PLAYER CATALOG IS NOT AVAILABLE YET.');
     })().catch((cause) => {
       if (generation !== generationRef.current) return;
       accessRef.current = null;

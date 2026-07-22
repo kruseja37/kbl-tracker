@@ -156,11 +156,11 @@ import {
   resolveLeagueSalaryCap,
   type Player,
   type LeagueBuilderMlbDraftSession,
-  type LeagueBuilderScoutProfile,
 } from '../../../utils/leagueBuilderStorage';
 import type { ProspectScoutDescriptor } from '../../../utils/prospectScoutingDraftEngine';
 import { commitCompletedSnakeFarmSessionToLeagueRosters, finalizeCompletedSnakeSessionToLeagueRosters } from '../../../utils/leagueBuilderAuctionPipeline';
 import { scoutHireRouteForLeague, staffHireRouteForLeague } from '../utils/draftRouting';
+import { buildLiveScoutPool } from '../utils/draftStaffingPersistence';
 import { loadSnakeSoundsEnabled, saveSnakeSoundsEnabled } from '../../utils/snakeSounds';
 import {
   freezeSnakeDraftSession,
@@ -354,7 +354,12 @@ function hotseatPassName(
   return seat.gmName?.trim() || team.name;
 }
 
-function scoutDescriptor(profile: LeagueBuilderScoutProfile): ProspectScoutDescriptor {
+function scoutDescriptor(profile: {
+  id: string;
+  name: string;
+  specialties: string[];
+  weaknesses: string[];
+}): ProspectScoutDescriptor {
   return {
     scoutId: profile.id,
     scoutName: profile.name,
@@ -435,33 +440,53 @@ function FarmSnakeRoom() {
       if (recoveryPublicSession && recoveryPublicSession.leagueId !== freshLeague.id) {
         throw new Error('THE FARM ROOM DOES NOT MATCH THIS LEAGUE.');
       }
-      const freshLeagueTeams = freshLeague.teamIds.flatMap((id) => {
-        const team = freshTeams.find((row) => row.id === id);
-        return team ? [team] : [];
+      const freshTeamById = new Map(freshTeams.map((team) => [team.id, team]));
+      const frozenRecoveryClubs = recoveryPublicSession?.snakeSetup?.clubs ?? null;
+      const activeTeamIds = frozenRecoveryClubs?.map((club) => club.teamId) ?? freshLeague.teamIds;
+      if (activeTeamIds.length === 0 || new Set(activeTeamIds).size !== activeTeamIds.length) {
+        throw new Error('THE FARM ROOM HAS NO VALID FROZEN CLUB ORDER.');
+      }
+      const freshLeagueTeams = activeTeamIds.flatMap((id) => {
+        const team = freshTeamById.get(id);
+        if (!team) return [];
+        const frozenClub = frozenRecoveryClubs?.find((club) => club.teamId === id);
+        return [{
+          ...team,
+          ...(frozenClub?.archetypeId ? { farmArchetypeKey: frozenClub.archetypeId } : {}),
+        }];
       });
-      if (freshLeagueTeams.length === 0) throw new Error('THIS LEAGUE HAS NO DRAFT CLUBS.');
+      if (freshLeagueTeams.length !== activeTeamIds.length) {
+        throw new Error('THE FARM ROOM CLUBS DO NOT MATCH THIS LEAGUE.');
+      }
       if (freshLeague.draftFormat !== 'snake') throw new Error('THIS LEAGUE IS CONFIGURED FOR AN AUCTION DRAFT.');
-      const [initialStoredFarm, storedMlb] = await Promise.all([
-        getMlbDraftSession(freshLeague.id, FARM_SNAKE_SESSION_NUMBER),
-        getMlbDraftSession(freshLeague.id, SEASON_NUMBER),
-      ]);
-      const savedProfiles = await getScoutProfilesForLeague(freshLeague.id);
-      const nextScouts = Object.fromEntries(freshLeagueTeams.map((team) => {
-        const profile = savedProfiles.find((row) => row.teamId === team.id);
-        if (!profile) throw new Error(`Hire the scout for ${team.name} before opening the farm draft.`);
-        return [team.id, scoutDescriptor(profile)];
-      }));
+      const [initialStoredFarm, storedMlb] = recoveryPublicSession
+        ? [null, null]
+        : await Promise.all([
+            getMlbDraftSession(freshLeague.id, FARM_SNAKE_SESSION_NUMBER),
+            getMlbDraftSession(freshLeague.id, SEASON_NUMBER),
+          ]);
+      const nextScouts = recoveryPublicSession
+        ? Object.fromEntries(buildLiveScoutPool(freshLeague.id, freshLeagueTeams).map((profile) => [
+            profile.teamId,
+            scoutDescriptor(profile),
+          ]))
+        : await (async () => {
+            const savedProfiles = await getScoutProfilesForLeague(freshLeague.id);
+            return Object.fromEntries(freshLeagueTeams.map((team) => {
+              const profile = savedProfiles.find((row) => row.teamId === team.id);
+              if (!profile) throw new Error(`Hire the scout for ${team.name} before opening the farm draft.`);
+              return [team.id, scoutDescriptor(profile)];
+            }));
+          })();
       let storedFarm = initialStoredFarm;
       if (recoveryPublicSession && recoveryRoom) {
-        const recoveryPool = storedFarm?.farmProspectSnapshot
-          ? buildFarmAuctionPoolFromProspects(storedFarm.farmProspectSnapshot)
-          : buildFarmAuctionPool({
-              leagueId: freshLeague.id,
-              seasonNumber: SEASON_NUMBER,
-              seed: recoveryPublicSession.seed,
-              teamDraftOrder: freshLeagueTeams.map((team) => ({ teamId: team.id, teamName: team.name })),
-              scoutsByTeamId: nextScouts,
-            });
+        const recoveryPool = buildFarmAuctionPool({
+          leagueId: freshLeague.id,
+          seasonNumber: SEASON_NUMBER,
+          seed: recoveryPublicSession.seed,
+          teamDraftOrder: freshLeagueTeams.map((team) => ({ teamId: team.id, teamName: team.name })),
+          scoutsByTeamId: nextScouts,
+        });
         if (JSON.stringify(recoveryPool.prospects.map((prospect) => prospect.id))
           !== JSON.stringify(recoveryPublicSession.snakeSetup?.poolPlayerIds ?? [])) {
           throw new Error('THE FROZEN FARM PROSPECTS COULD NOT BE REBUILT FOR THIS ROOM.');
@@ -542,6 +567,9 @@ function FarmSnakeRoom() {
       setExistingFarmRosterIdsByTeamId(Object.fromEntries(rosters.map(([teamId, roster]) => [teamId, [...(roster?.farmRoster ?? [])]])));
       setFarmPool(nextPool);
       setSession(nextSession);
+      if (!recoveryRoomCodeParam && nextSession.snakeCompanions?.roomCode) {
+        setRecoveryRoomCode(nextSession.snakeCompanions.roomCode);
+      }
       setRecapOpen(Boolean(nextSession.draftManifest || nextSession.currentPickIndex >= nextSession.pickOrder.length));
       await refresh();
     } catch (cause) {
@@ -1121,7 +1149,15 @@ function FarmSnakeRoom() {
   const deskHasApprovedCompanion = Boolean(deskTeam && liveHost.claims.some((claim) => (
     claim.teamId === deskTeam.id && claim.status === 'approved'
   )));
-  return <SnakeDraftRoomView
+  return <>
+    {liveHost.error && !liveHost.hostAccessReady && !recoverHostRequested ? <LiveRoomRecoveryPanel
+      roomCode={recoveryRoomCode}
+      working={recoveryWorking}
+      error={recoveryError}
+      onRoomCodeChange={setRecoveryRoomCode}
+      onRestore={() => void recoverOpenFarmRoom()}
+    /> : null}
+    <SnakeDraftRoomView
     onHome={() => navigate('/')}
     teams={leagueTeams.map((team) => ({ id: team.id, name: team.name, abbreviation: team.abbreviation, colors: team.colors, logoUrl: team.logoUrl }))}
     order={session.pickOrder.map((slot, index, all) => ({ pick: slot.pick, teamId: slot.teamId, endpoint: all[index - 1]?.teamId === slot.teamId || all[index + 1]?.teamId === slot.teamId }))}
@@ -1232,8 +1268,9 @@ function FarmSnakeRoom() {
       }
     }}
     onSoundsEnabledChange={(enabled) => { setSoundsEnabled(enabled); saveSnakeSoundsEnabled(enabled); }}
-    onDraftComplete={finishFarm}
-  />;
+      onDraftComplete={finishFarm}
+    />
+  </>;
 }
 
 function MlbSnakeDraftRoom() {

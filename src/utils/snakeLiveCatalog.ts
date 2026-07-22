@@ -199,11 +199,14 @@ function publicTeam(team: Team): Record<string, unknown> {
   });
 }
 
-function publicFarmLeague(league: LeagueTemplate): Record<string, unknown> {
+function publicFarmLeague(
+  league: LeagueTemplate,
+  activeTeamIds: readonly string[],
+): Record<string, unknown> {
   return defined({
     id: league.id,
     name: league.name,
-    teamIds: [...league.teamIds],
+    teamIds: [...activeTeamIds],
     tier: league.tier,
   });
 }
@@ -378,7 +381,7 @@ export function buildSnakeLiveCatalog(source: SnakeLiveCatalogSource): SnakeLive
   }
   const teamById = new Map(source.teams.map((team) => [team.id, team]));
   if (teamById.size !== source.teams.length) throw new Error('The live catalog has duplicate team ids.');
-  const activeTeams = source.league.teamIds.map((teamId) => teamById.get(teamId));
+  const activeTeams = expectedTeamIds.map((teamId) => teamById.get(teamId));
   if (activeTeams.some((team) => !team)) throw new Error('The live catalog is missing an active team.');
   const missingIdentity = activeTeams.find((team) => (
     !team?.mlbArchetypeKey?.trim() || !team.farmArchetypeKey?.trim()
@@ -492,7 +495,7 @@ export function buildSnakeLiveFarmCatalog(source: SnakeLiveFarmCatalogSource): S
 
   const catalog = toJsonObject({
     formatVersion: SNAKE_LIVE_FARM_CATALOG_FORMAT,
-    league: publicFarmLeague(source.league),
+    league: publicFarmLeague(source.league, expectedTeamIds),
     teams: activeTeams.map((team) => publicFarmTeam(team!)),
     prospects: activeProspects.map((prospect) => defined({
       id: prospect!.id,
@@ -522,7 +525,8 @@ export function readSnakeLiveFarmCatalog(catalog: SnakeLiveJsonObject): SnakeLiv
   const teamIds = catalog.league.teamIds;
   if (!teams || !prospects || prospects.size === 0
     || !teamIds.every((id): id is string => typeof id === 'string')
-    || !sameIds(teamIds, teams)) return null;
+    || !sameIds(teamIds, teams)
+    || catalog.teams.some((team, index) => !objectValue(team) || team.id !== teamIds[index])) return null;
   const rosterTeamIds = Object.keys(catalog.existingFarmRostersByTeamId);
   if (rosterTeamIds.length !== teamIds.length || teamIds.some((teamId) => !rosterTeamIds.includes(teamId))) return null;
   for (const teamId of teamIds) {

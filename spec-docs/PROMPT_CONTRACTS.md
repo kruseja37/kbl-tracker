@@ -33100,7 +33100,8 @@ companions must receive the repaired public Farm catalog and continue from the s
 - Recovery must not change public draft truth or its revision.
 - Only the signed-in room owner may rotate the lost Hotseat capability.
 - The private prospect snapshot may be rebuilt only from the frozen public seed, exact team order,
-  saved scouts, and exact ordered prospect ids. Any mismatch stops recovery.
+  frozen Farm identities, deterministic scout assignment, and exact ordered prospect ids. Browser-
+  local Farm sessions, snapshots, and boards are not recovery authority. Any mismatch stops recovery.
 - The live Farm catalog uses the frozen Farm identity stored in the session. Mutable team rows are
   not the identity authority for an active room.
 - Companion polling may repair a missing or invalid phase catalog. It must not move private board
@@ -33112,7 +33113,12 @@ companions must receive the repaired public Farm catalog and continue from the s
 `SnakeCompanion.tsx`, additive Farm recovery storage, one additive Supabase migration, focused
 Snake live-room/Farm recovery tests, and required session records.
 
-**Required proof:** exact Farm prospect reconstruction; wrong code, phase, owner, device, revision,
+**V1 authority boundary:** every device is signed into the league owner's account. Account ownership
+authorizes explicit recovery. A device id with a pending or approved companion claim cannot rotate
+Hotseat authority. A new same-account device cannot be treated as a separate hostile principal;
+guest-account authorization remains v2.
+
+**Required proof:** exact Farm prospect reconstruction; wrong code, phase, owner, registered companion device, revision,
 catalog, team, or pool fails closed; recovery rotates only the host capability; the prior host is
 revoked; companions accept the repaired Farm catalog; page-level room-code recovery; focused tests;
 TypeScript; changed-file ESLint; production build; diff integrity; separate read-only audit; applied

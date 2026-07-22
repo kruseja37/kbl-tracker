@@ -113,6 +113,7 @@ function transportHarness(initialRoom: SnakeLiveRoom = room()) {
   let claims: SnakeLiveClaim[] = [];
   let intents: SnakeLiveIntent[] = [];
   let currentRoom = initialRoom;
+  let currentCatalog: SnakeLiveCatalog | null = liveCatalogReceipt();
   let nextEventId = 1;
   const boards: Record<string, SnakeLiveSeatBoard> = {};
   const serverEvents: SnakeLivePublicEvent[] = [];
@@ -137,7 +138,7 @@ function transportHarness(initialRoom: SnakeLiveRoom = room()) {
     findRoomByCode: vi.fn(async (code: string) => code === '2468' ? currentRoom : null),
     getRoom: vi.fn(async () => currentRoom),
     seedCatalog: vi.fn(),
-    getCatalog: vi.fn(async () => liveCatalogReceipt()),
+    getCatalog: vi.fn(async () => currentCatalog),
     listEvents: vi.fn(async (_roomId: string, afterEventId = 0) => (
       serverEvents.filter((event) => event.id > afterEventId)
     )),
@@ -192,6 +193,7 @@ function transportHarness(initialRoom: SnakeLiveRoom = room()) {
       boards['team-b'] = board('team-b', 4);
     },
     setBoard(teamId: string, revision: number) { boards[teamId] = board(teamId, revision); },
+    setCatalog(nextCatalog: SnakeLiveCatalog | null) { currentCatalog = nextCatalog; },
     advanceRoom() { currentRoom = room({ ...currentRoom, publicRevision: 2 }); },
     addEvent,
     emitEvent(kind?: string, publicPayload?: SnakeLiveJsonObject) {
@@ -447,6 +449,31 @@ describe('useSnakeLiveCompanionRoom', () => {
 
     expect(harness.transport.getCatalog).toHaveBeenCalledTimes(2);
     expect(result.current.catalog).toEqual(liveCatalogReceipt());
+    unmount();
+  });
+
+  it('keeps a resumed companion live while a missing catalog is repaired', async () => {
+    vi.useFakeTimers();
+    const harness = transportHarness();
+    harness.approveAll();
+    harness.setCatalog(null);
+    const capability = capabilityHarness({ user: savedResume });
+    const { result, unmount } = renderHook(() => useSnakeLiveCompanionRoom({
+      ownerUserId: 'user', transport: harness.transport, capabilities: capability.api,
+    }));
+    await flushMicrotasks();
+
+    expect(result.current.accessReady).toBe(true);
+    expect(result.current.activeRoomId).toBe('room-1');
+    expect(result.current.catalog).toBeNull();
+    expect(result.current.error).toBe('THE LIVE PLAYER CATALOG IS NOT AVAILABLE YET.');
+
+    harness.setCatalog(liveCatalogReceipt());
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+
+    expect(result.current.catalog).toEqual(liveCatalogReceipt());
+    expect(result.current.error).toBeNull();
+    expect(result.current.accessReady).toBe(true);
     unmount();
   });
 
